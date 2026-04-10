@@ -86,6 +86,11 @@ class PlaybackConnection @Inject constructor(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
+    // Reactive player reference — updates when the MediaController connects/disconnects.
+    // Collected from the UI so VideoSurface attaches after the async connect completes.
+    private val _playerFlow = MutableStateFlow<Player?>(null)
+    val playerFlow: StateFlow<Player?> = _playerFlow.asStateFlow()
+
     /**
      * Connect to the PlaybackService. Call from Activity onCreate.
      */
@@ -103,6 +108,7 @@ class PlaybackConnection @Inject constructor(
         controllerFuture?.addListener({
             try {
                 controller = controllerFuture?.get()
+                _playerFlow.value = controller       // expose reactively
                 _isConnected.value = true
                 setupPlayerListener()
                 startPositionPolling()
@@ -122,13 +128,14 @@ class PlaybackConnection @Inject constructor(
             MediaController.releaseFuture(it)
         }
         controller = null
+        _playerFlow.value = null
         controllerFuture = null
         _isConnected.value = false
     }
 
     /**
      * Exposes the underlying Player for video surface attachment.
-     * Used by VideoSurface composable to render video frames.
+     * Prefer collecting [playerFlow] for reactive updates.
      */
     fun getPlayer(): Player? = controller
 
@@ -226,6 +233,8 @@ class PlaybackConnection @Inject constructor(
             override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) { updatePlayerState() }
             override fun onTimelineChanged(timeline: Timeline, reason: Int) { updatePlayerState() }
             override fun onIsLoadingChanged(isLoading: Boolean) { updatePlayerState() }
+            // Track changes populate isVideoContent — must be listened to separately
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { updatePlayerState() }
         })
     }
 

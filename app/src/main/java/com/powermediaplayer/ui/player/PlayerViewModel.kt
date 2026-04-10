@@ -46,6 +46,14 @@ class PlayerViewModel @Inject constructor(
         initialValue = PlayerUiState()
     )
 
+    /**
+     * Reactive Player reference — updates when the MediaController finishes connecting.
+     * MUST be collected as state in the UI (not captured with `remember`) so that
+     * VideoSurface attaches correctly after the async connection completes.
+     */
+    val playerFlow = playbackConnection.playerFlow
+
+
     // ── Transport Controls (delegated to PlaybackConnection) ─────
 
     fun playPause() = playbackConnection.playPause()

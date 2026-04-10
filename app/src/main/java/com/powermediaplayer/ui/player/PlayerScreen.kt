@@ -123,8 +123,10 @@ private fun PlayerScreenCompact(
     onShowChapterPicker: () -> Unit,
     horizontalPadding: Int = 0
 ) {
-    // Get the player for video rendering
-    val player = remember(viewModel) { viewModel.getPlayer() }
+    // Collect the player reactively — it starts null until MediaController connects (async).
+    // Using collectAsStateWithLifecycle means VideoSurface recomposes and attaches as soon
+    // as the connection completes, rather than capturing null with remember() at first composition.
+    val player by viewModel.playerFlow.collectAsStateWithLifecycle()
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (uiState.isVideoContent) {

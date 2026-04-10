@@ -13,14 +13,15 @@ import androidx.media3.ui.PlayerView
 import com.powermediaplayer.ui.theme.OledBlack
 
 /**
- * Video surface that renders the ExoPlayer video output using Media3 PlayerView.
+ * Video surface using Media3 PlayerView via AndroidView.
  *
- * IMPORTANT: PlayerView must be created via AndroidView because it is a View-based
- * component — there is no native Compose equivalent for hardware-accelerated video
- * rendering in Media3 as of the current API version.
- *
- * @param player The ExoPlayer/MediaController instance to attach. Null if not yet connected.
- * @param isVideoContent True when the current media item has a video track.
+ * Key design decisions:
+ * - Only rendered when BOTH player is non-null AND isVideoContent is true.
+ * - player is passed as reactive state (collected from playerFlow StateFlow),
+ *   so it recomposes correctly after the async MediaController connect.
+ * - PlayerView.useController = false — we use our own Compose transport controls.
+ * - RESIZE_MODE_FIT maintains aspect ratio; letterboxes/pillarboxes as needed.
+ * - onRelease detaches cleanly WITHOUT releasing the player (lifecycle owned elsewhere).
  */
 @Composable
 fun VideoSurface(
@@ -28,7 +29,15 @@ fun VideoSurface(
     isVideoContent: Boolean,
     modifier: Modifier = Modifier
 ) {
-    if (!isVideoContent || player == null) return
+    if (player == null || !isVideoContent) {
+        // Black fill when video isn't ready — prevents flash of garbage
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(OledBlack)
+        )
+        return
+    }
 
     Box(
         modifier = modifier
@@ -40,21 +49,19 @@ fun VideoSurface(
             factory = { context ->
                 PlayerView(context).apply {
                     this.player = player
-                    // Hide the built-in controls — we use our own Compose controls
                     useController = false
-                    // Maintain aspect ratio (letterbox/pillarbox as needed)
                     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
                 }
             },
             update = { view ->
-                // Re-attach player on recomposition (e.g. after config change)
-                if (view.player != player) {
+                // Re-attach when the player reference changes (e.g. after reconnect)
+                if (view.player !== player) {
                     view.player = player
                 }
             },
             onRelease = { view ->
-                // Detach cleanly but do NOT release the player — lifecycle managed elsewhere
+                // Detach cleanly; do NOT call player.release() — owned by PlaybackService
                 view.player = null
             },
             modifier = Modifier.fillMaxSize()
