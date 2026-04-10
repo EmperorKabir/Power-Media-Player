@@ -55,7 +55,10 @@ data class PlayerUiState(
     val hasChapters: Boolean = false,
 
     // Controls enabled state (for greying out)
-    val controls: ControlsEnabledState = ControlsEnabledState()
+    val controls: ControlsEnabledState = ControlsEnabledState(),
+
+    // Video support
+    val isVideoContent: Boolean = false
 )
 
 /**

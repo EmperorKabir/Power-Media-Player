@@ -181,7 +181,13 @@ class PlayerViewModel @Inject constructor(
                 sleepTimer = hasMedia,
                 trackSlider = hasMedia && playerState.duration > 0,
                 playlistSlider = playerState.isPartOfPlaylist && playerState.totalPlaylistDuration > 0
-            )
+            ),
+            isVideoContent = playerState.isVideoContent
         )
     }
+
+    /**
+     * Provides direct access to the underlying Player for VideoSurface attachment.
+     */
+    fun getPlayer() = playbackConnection.getPlayer()
 }

@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,21 +13,30 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.ui.theme.*
 
 /**
- * 10-band equalizer screen with:
- * - Visual frequency response curve
- * - 10 vertical band sliders (31Hz - 16kHz)
- * - Preset selector (defaults + user presets)
- * - Save/delete preset functionality
+ * 10-band equalizer screen.
+ *
+ * Layout:
+ *  1. Header with preset selector + Reset button
+ *  2. Save / Delete preset buttons
+ *  3. Frequency response curve (Canvas, interactive: clicking graph applies band values)
+ *  4. Band level numeric input grid (replaces messy vertical sliders)
+ *     Each band shows:  [freq label]  [-15..+15 dB text field]  [± nudge buttons]
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +47,7 @@ fun EqualizerScreen(
     var showSaveDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var presetExpanded by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
 
     Column(
         modifier = Modifier
@@ -52,13 +64,11 @@ fun EqualizerScreen(
                 )
             },
             actions = {
-                // Reset button
-                IconButton(onClick = { viewModel.resetToFlat() }) {
-                    Icon(
-                        imageVector = Icons.Filled.RestartAlt,
-                        contentDescription = "Reset to flat",
-                        tint = TextSecondary
-                    )
+                IconButton(onClick = {
+                    focusManager.clearFocus()
+                    viewModel.resetToFlat()
+                }) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = "Reset to flat", tint = TextSecondary)
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
@@ -77,15 +87,13 @@ fun EqualizerScreen(
                 color = TextSecondary,
                 modifier = Modifier.padding(end = 12.dp)
             )
-
             ExposedDropdownMenuBox(
                 expanded = presetExpanded,
                 onExpandedChange = { presetExpanded = !presetExpanded },
                 modifier = Modifier.weight(1f)
             ) {
                 OutlinedTextField(
-                    value = uiState.selectedPresetName +
-                            if (uiState.isCustomModified) " (Modified)" else "",
+                    value = uiState.selectedPresetName + if (uiState.isCustomModified) " (Modified)" else "",
                     onValueChange = {},
                     readOnly = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = presetExpanded) },
@@ -101,7 +109,6 @@ fun EqualizerScreen(
                     ),
                     textStyle = MaterialTheme.typography.bodyLarge
                 )
-
                 ExposedDropdownMenu(
                     expanded = presetExpanded,
                     onDismissRequest = { presetExpanded = false },
@@ -117,15 +124,12 @@ fun EqualizerScreen(
                                     )
                                     if (preset.isDefault) {
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Default",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = TextTertiary
-                                        )
+                                        Text("Default", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
                                     }
                                 }
                             },
                             onClick = {
+                                focusManager.clearFocus()
                                 viewModel.selectPreset(preset)
                                 presetExpanded = false
                             }
@@ -135,7 +139,7 @@ fun EqualizerScreen(
             }
         }
 
-        // ── Save / Delete buttons ────────────────────────────────
+        // ── Save / Delete ───────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -144,27 +148,19 @@ fun EqualizerScreen(
         ) {
             FilledTonalButton(
                 onClick = { showSaveDialog = true },
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = Teal800,
-                    contentColor = TealAccent
-                ),
+                colors = ButtonDefaults.filledTonalButtonColors(containerColor = Teal800, contentColor = TealAccent),
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Save Preset")
             }
-
-            // Only show delete for user (non-default) presets
             val canDelete = uiState.selectedPresetId > 0 &&
                     uiState.presets.find { it.id == uiState.selectedPresetId }?.isDefault == false
-
             OutlinedButton(
                 onClick = { showDeleteDialog = true },
                 enabled = canDelete,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = if (canDelete) ErrorRed else DisabledGrey
-                ),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = if (canDelete) ErrorRed else DisabledGrey),
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -176,80 +172,63 @@ fun EqualizerScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // ── Frequency Response Curve ─────────────────────────────
+        Text(
+            text = "Frequency Response",
+            style = MaterialTheme.typography.labelLarge,
+            color = TextSecondary,
+            modifier = Modifier.padding(start = 24.dp, bottom = 4.dp)
+        )
         FrequencyResponseCurve(
             bandLevels = uiState.bandLevels,
             minLevel = uiState.minLevel,
             maxLevel = uiState.maxLevel,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp)
+                .height(130.dp)
                 .padding(horizontal = 24.dp)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // ── 10 Band Sliders ──────────────────────────────────────
+        // ── Band Numeric Input Grid ──────────────────────────────
         Text(
-            text = "Band Adjustment",
+            text = "Band Levels  (dB)",
             style = MaterialTheme.typography.labelLarge,
             color = TextSecondary,
             modifier = Modifier.padding(start = 24.dp, bottom = 8.dp)
         )
 
-        // dB labels
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("+15dB", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-            Text("0dB", style = MaterialTheme.typography.labelSmall, color = TealAccent)
-            Text("-15dB", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-        }
+        // 5 columns × 2 rows of band inputs
+        val bandCount = uiState.bandLevels.size
+        val cols = 5
+        val rows = (bandCount + cols - 1) / cols
 
-        // Band sliders in a row
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
                 .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            uiState.bandFrequencies.forEachIndexed { index, freq ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
+            for (row in 0 until rows) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // Vertical slider (rotated)
-                    Slider(
-                        value = uiState.bandLevels[index].toFloat(),
-                        onValueChange = { viewModel.setBandLevel(index, it.toInt()) },
-                        valueRange = uiState.minLevel.toFloat()..uiState.maxLevel.toFloat(),
-                        modifier = Modifier
-                            .height(160.dp)
-                            .width(32.dp),
-                        colors = SliderDefaults.colors(
-                            thumbColor = TealAccent,
-                            activeTrackColor = TealAccent,
-                            inactiveTrackColor = DisabledContent
-                        )
-                    )
-
-                    // Frequency label
-                    Text(
-                        text = freq,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary
-                    )
-
-                    // Level value
-                    Text(
-                        text = "${uiState.bandLevels[index] / 100}dB",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TealAccent
-                    )
+                    for (col in 0 until cols) {
+                        val idx = row * cols + col
+                        if (idx < bandCount) {
+                            BandInputCell(
+                                frequency = uiState.bandFrequencies[idx],
+                                levelMillibels = uiState.bandLevels[idx],
+                                minLevel = uiState.minLevel,
+                                maxLevel = uiState.maxLevel,
+                                onLevelChange = { viewModel.setBandLevel(idx, it) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -257,7 +236,7 @@ fun EqualizerScreen(
         Spacer(modifier = Modifier.height(80.dp))
     }
 
-    // ── Save Preset Dialog ───────────────────────────────────────
+    // ── Save Preset Dialog ──────────────────────────────────────
     if (showSaveDialog) {
         SavePresetDialog(
             onDismiss = { showSaveDialog = false },
@@ -268,7 +247,7 @@ fun EqualizerScreen(
         )
     }
 
-    // ── Delete Preset Dialog ─────────────────────────────────────
+    // ── Delete Preset Dialog ────────────────────────────────────
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -283,14 +262,10 @@ fun EqualizerScreen(
                 TextButton(onClick = {
                     viewModel.deletePreset(uiState.selectedPresetId)
                     showDeleteDialog = false
-                }) {
-                    Text("Delete", color = ErrorRed)
-                }
+                }) { Text("Delete", color = ErrorRed) }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
-                }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel", color = TextSecondary) }
             },
             containerColor = SurfaceElevated
         )
@@ -298,7 +273,125 @@ fun EqualizerScreen(
 }
 
 /**
- * Visual frequency response curve drawn with Canvas.
+ * Single band input cell: frequency label + numeric TextField + ±1 nudge buttons.
+ * dB value displayed/entered as integer (-15 to +15); internally stored as millibels.
+ */
+@Composable
+private fun BandInputCell(
+    frequency: String,
+    levelMillibels: Int,
+    minLevel: Int,
+    maxLevel: Int,
+    onLevelChange: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val levelDb = levelMillibels / 100
+    var textValue by remember(levelMillibels) { mutableStateOf(levelDb.toString()) }
+    val minDb = minLevel / 100  // -15
+    val maxDb = maxLevel / 100  // +15
+
+    Surface(
+        color = SurfaceElevated,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+        ) {
+            // Frequency label
+            Text(
+                text = frequency,
+                style = MaterialTheme.typography.labelSmall,
+                color = TealAccent,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // + button
+            IconButton(
+                onClick = {
+                    val newDb = (levelDb + 1).coerceIn(minDb, maxDb)
+                    onLevelChange(newDb * 100)
+                },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = "+1 dB",
+                    tint = TealAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            // Numeric text field
+            OutlinedTextField(
+                value = textValue,
+                onValueChange = { raw ->
+                    textValue = raw
+                    val parsed = raw.toIntOrNull()
+                    if (parsed != null) {
+                        onLevelChange(parsed.coerceIn(minDb, maxDb) * 100)
+                    }
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(onDone = {
+                    val parsed = textValue.toIntOrNull() ?: levelDb
+                    val clamped = parsed.coerceIn(minDb, maxDb)
+                    textValue = clamped.toString()
+                    onLevelChange(clamped * 100)
+                }),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealAccent,
+                    unfocusedBorderColor = DisabledContent,
+                    focusedTextColor = TealAccent,
+                    unfocusedTextColor = TextPrimary,
+                    cursorColor = TealAccent,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated
+                ),
+                shape = MaterialTheme.shapes.small
+            )
+
+            // - button
+            IconButton(
+                onClick = {
+                    val newDb = (levelDb - 1).coerceIn(minDb, maxDb)
+                    onLevelChange(newDb * 100)
+                },
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Remove,
+                    contentDescription = "-1 dB",
+                    tint = Teal300,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            // dB unit hint
+            Text(
+                text = "dB",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/**
+ * Frequency response curve drawn on Canvas using cubic Bézier interpolation.
  */
 @Composable
 private fun FrequencyResponseCurve(
@@ -314,17 +407,11 @@ private fun FrequencyResponseCurve(
         val width = size.width
         val height = size.height
         val range = (maxLevel - minLevel).toFloat()
-
-        // Draw zero line
         val zeroY = height * (maxLevel / range)
-        drawLine(
-            color = gridColor,
-            start = Offset(0f, zeroY),
-            end = Offset(width, zeroY),
-            strokeWidth = 1.dp.toPx()
-        )
 
-        // Draw frequency response path
+        // Zero line
+        drawLine(color = gridColor, start = Offset(0f, zeroY), end = Offset(width, zeroY), strokeWidth = 1.dp.toPx())
+
         if (bandLevels.isNotEmpty()) {
             val path = Path()
             val stepX = width / (bandLevels.size - 1).coerceAtLeast(1)
@@ -337,56 +424,33 @@ private fun FrequencyResponseCurve(
                 if (index == 0) {
                     path.moveTo(x, y)
                 } else {
-                    // Smooth curve using cubic bezier
                     val prevX = (index - 1) * stepX
                     val prevLevel = bandLevels[index - 1]
                     val prevY = (maxLevel - prevLevel) / range * height
                     val cpX = (prevX + x) / 2
-
                     path.cubicTo(cpX, prevY, cpX, y, x, y)
                 }
             }
 
-            drawPath(
-                path = path,
-                color = tealColor,
-                style = Stroke(
-                    width = 3.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-            )
+            drawPath(path = path, color = tealColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
 
-            // Draw dots at each band position
+            // Dots at each band
             bandLevels.forEachIndexed { index, level ->
                 val x = index * stepX
                 val normalizedLevel = (maxLevel - level) / range
                 val y = normalizedLevel * height
-
-                drawCircle(
-                    color = tealColor,
-                    radius = 5.dp.toPx(),
-                    center = Offset(x, y)
-                )
+                drawCircle(color = tealColor, radius = 5.dp.toPx(), center = Offset(x, y))
             }
         }
     }
 }
 
-/**
- * Dialog for naming and saving a custom EQ preset.
- */
 @Composable
-private fun SavePresetDialog(
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit
-) {
+private fun SavePresetDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("Save Preset", color = TealAccent)
-        },
+        title = { Text("Save Preset", color = TealAccent) },
         text = {
             OutlinedTextField(
                 value = name,
@@ -406,18 +470,11 @@ private fun SavePresetDialog(
             )
         },
         confirmButton = {
-            TextButton(
-                onClick = { if (name.isNotBlank()) onSave(name.trim()) },
-                enabled = name.isNotBlank()
-            ) {
+            TextButton(onClick = { if (name.isNotBlank()) onSave(name.trim()) }, enabled = name.isNotBlank()) {
                 Text("Save", color = if (name.isNotBlank()) TealAccent else DisabledGrey)
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel", color = TextSecondary)
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } },
         containerColor = SurfaceElevated
     )
 }

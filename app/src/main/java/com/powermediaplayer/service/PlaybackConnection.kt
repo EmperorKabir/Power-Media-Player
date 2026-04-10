@@ -52,7 +52,8 @@ data class PlayerState(
     val hasChapters: Boolean = false,
     // Media capabilities for button greying
     val isPartOfPlaylist: Boolean = false,
-    val hasCoverArt: Boolean = false
+    val hasCoverArt: Boolean = false,
+    val isVideoContent: Boolean = false
 )
 
 /**
@@ -124,6 +125,12 @@ class PlaybackConnection @Inject constructor(
         controllerFuture = null
         _isConnected.value = false
     }
+
+    /**
+     * Exposes the underlying Player for video surface attachment.
+     * Used by VideoSurface composable to render video frames.
+     */
+    fun getPlayer(): Player? = controller
 
     // ── Transport Controls ───────────────────────────────────────
 
@@ -251,6 +258,11 @@ class PlaybackConnection @Inject constructor(
         val chapters = extractChapters(c)
         val currentChapter = findCurrentChapter(chapters, c.currentPosition)
 
+        // Detect video tracks: check all selected tracks for a video track group
+        val hasVideoTrack = c.currentTracks.groups.any { group ->
+            group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO && group.isSelected
+        }
+
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
             currentPosition = c.currentPosition.coerceAtLeast(0L),
@@ -272,7 +284,8 @@ class PlaybackConnection @Inject constructor(
             currentChapterIndex = currentChapter,
             hasChapters = chapters.isNotEmpty(),
             isPartOfPlaylist = c.mediaItemCount > 1,
-            hasCoverArt = metadata.artworkUri != null || metadata.artworkData != null
+            hasCoverArt = metadata.artworkUri != null || metadata.artworkData != null,
+            isVideoContent = hasVideoTrack
         )
     }
 

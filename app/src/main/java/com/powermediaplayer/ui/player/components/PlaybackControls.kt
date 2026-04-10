@@ -148,11 +148,21 @@ private fun SkipButton(
                 modifier = Modifier.size(32.dp),
                 tint = tint
             )
+            // Number centred over icon
             Text(
                 text = "$seconds",
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                 color = tint,
                 modifier = Modifier.offset(y = 14.dp)
+            )
+            // Small "s" at lower-right corner to indicate seconds
+            Text(
+                text = "s",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
+                color = tint.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 2.dp, y = 2.dp)
             )
         }
     }

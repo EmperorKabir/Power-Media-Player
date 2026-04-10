@@ -84,6 +84,7 @@ fun PlayerScreen(
     if (showSleepTimerDialog) {
         SleepTimerDialog(
             isActive = uiState.sleepTimerActive,
+            sleepTimerFormatted = uiState.sleepTimerFormatted,
             onDismiss = { showSleepTimerDialog = false },
             onSetTimer = { minutes ->
                 viewModel.startSleepTimer(minutes)
@@ -122,14 +123,27 @@ private fun PlayerScreenCompact(
     onShowChapterPicker: () -> Unit,
     horizontalPadding: Int = 0
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        CoverArtBackground(
-            artworkUri = uiState.artworkUri,
-            hasCoverArt = uiState.hasCoverArt,
-            onColorsExtracted = onColorsExtracted
-        )
+    // Get the player for video rendering
+    val player = remember(viewModel) { viewModel.getPlayer() }
 
-        // Gradient scrim for readability
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (uiState.isVideoContent) {
+            // Video content: render the actual video frames
+            VideoSurface(
+                player = player,
+                isVideoContent = true,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            // Audio content: show album art with palette-extracted colours
+            CoverArtBackground(
+                artworkUri = uiState.artworkUri,
+                hasCoverArt = uiState.hasCoverArt,
+                onColorsExtracted = onColorsExtracted
+            )
+        }
+
+        // Gradient scrim for readability over both video and art
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -401,26 +415,87 @@ private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit) {
 @Composable
 private fun SleepTimerDialog(
     isActive: Boolean,
+    sleepTimerFormatted: String,
     onDismiss: () -> Unit,
     onSetTimer: (Int) -> Unit,
     onCancel: () -> Unit
 ) {
-    val presets = listOf(15 to "15 minutes", 30 to "30 minutes", 45 to "45 minutes", 60 to "1 hour", 90 to "1.5 hours", 120 to "2 hours")
+    val presets = listOf(
+        15 to "15 minutes",
+        30 to "30 minutes",
+        45 to "45 minutes",
+        60 to "1 hour",
+        90 to "1.5 hours",
+        120 to "2 hours"
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Sleep Timer", style = MaterialTheme.typography.titleLarge, color = TealAccent) },
         text = {
             Column {
-                presets.forEach { (minutes, label) ->
-                    TextButton(onClick = { onSetTimer(minutes) }, modifier = Modifier.fillMaxWidth()) {
-                        Text(label, style = MaterialTheme.typography.bodyLarge, color = TextPrimary, modifier = Modifier.fillMaxWidth())
+                // Description
+                Text(
+                    text = "App will pause music after this much time:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Active timer countdown
+                if (isActive) {
+                    Surface(
+                        color = Teal800,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Time remaining:",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextSecondary
+                            )
+                            Text(
+                                text = sleepTimerFormatted,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TealAccent
+                            )
+                        }
                     }
                 }
+
+                HorizontalDivider(color = DisabledContent, modifier = Modifier.padding(bottom = 4.dp))
+
+                // Preset buttons
+                presets.forEach { (minutes, label) ->
+                    TextButton(
+                        onClick = { onSetTimer(minutes) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextPrimary,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
                 if (isActive) {
                     HorizontalDivider(color = DisabledContent)
                     TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-                        Text("Cancel Timer", style = MaterialTheme.typography.bodyLarge, color = ErrorRed, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            "Cancel Timer",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = ErrorRed,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
             }
@@ -430,3 +505,4 @@ private fun SleepTimerDialog(
         containerColor = SurfaceElevated
     )
 }
+

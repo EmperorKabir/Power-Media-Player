@@ -12,7 +12,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.powermediaplayer.ui.theme.*
@@ -21,109 +20,63 @@ import com.powermediaplayer.util.BrightnessHelper
 private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
 
 /**
- * Secondary controls:
- * - Playback speed dropdown (Material 3 ExposedDropdownMenuBox)
- * - Screen brightness slider
+ * Volume slider (primary) + Brightness slider (secondary).
+ * Volume comes first as it is the most commonly adjusted control.
+ * Brightness is secondary — dimming the screen is a less frequent action.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SecondaryControls(
-    playbackSpeed: Float,
-    onSpeedChange: (Float) -> Unit,
+fun VolumeAndBrightnessControls(
+    currentVolume: Int,
+    maxVolume: Int,
+    onVolumeChange: (Int) -> Unit,
     brightnessEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var brightness by remember { mutableFloatStateOf(BrightnessHelper.getBrightnessFloat(context)) }
-    var speedMenuExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        // ── Playback Speed Dropdown ──────────────────────────────
+        // ── 1. Volume Slider (first — most used) ─────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Speed",
-                style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.VolumeDown,
+                contentDescription = "Volume down",
+                tint = TextSecondary,
+                modifier = Modifier.size(20.dp)
             )
-
-            ExposedDropdownMenuBox(
-                expanded = speedMenuExpanded,
-                onExpandedChange = { speedMenuExpanded = it },
-                modifier = Modifier.width(110.dp)
-            ) {
-                // Trigger field
-                OutlinedTextField(
-                    value = formatSpeed(playbackSpeed),
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = speedMenuExpanded)
-                    },
-                    modifier = Modifier
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                        .height(44.dp),
-                    textStyle = MaterialTheme.typography.labelLarge,
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TealAccent,
-                        unfocusedBorderColor = DisabledContent,
-                        focusedTextColor = TealAccent,
-                        unfocusedTextColor = TextPrimary,
-                        focusedContainerColor = SurfaceElevated,
-                        unfocusedContainerColor = SurfaceElevated,
-                        focusedTrailingIconColor = TealAccent,
-                        unfocusedTrailingIconColor = TextSecondary
-                    ),
-                    shape = RoundedCornerShape(10.dp)
+            Slider(
+                value = currentVolume.toFloat(),
+                onValueChange = { onVolumeChange(it.toInt()) },
+                valueRange = 0f..maxVolume.toFloat(),
+                steps = (maxVolume - 1).coerceAtLeast(0),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+                    .height(28.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = TealAccent,
+                    activeTrackColor = TealAccent,
+                    inactiveTrackColor = DisabledContent
                 )
-
-                // Dropdown menu
-                ExposedDropdownMenu(
-                    expanded = speedMenuExpanded,
-                    onDismissRequest = { speedMenuExpanded = false },
-                    modifier = Modifier.background(SurfaceElevated)
-                ) {
-                    SPEED_OPTIONS.forEach { speed ->
-                        val isSelected = kotlin.math.abs(playbackSpeed - speed) < 0.01f
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = formatSpeed(speed),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isSelected) TealAccent else TextPrimary
-                                )
-                            },
-                            onClick = {
-                                onSpeedChange(speed)
-                                speedMenuExpanded = false
-                            },
-                            trailingIcon = if (isSelected) {
-                                { Icon(Icons.Filled.Check, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp)) }
-                            } else null,
-                            colors = MenuDefaults.itemColors(
-                                textColor = TextPrimary,
-                                leadingIconColor = TextSecondary
-                            ),
-                            modifier = Modifier.background(
-                                if (isSelected) TealAccent.copy(alpha = 0.1f) else SurfaceElevated
-                            )
-                        )
-                    }
-                }
-            }
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                contentDescription = "Volume up",
+                tint = TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
-        // ── Brightness Slider ────────────────────────────────────
+        // ── 2. Brightness Slider (second — less frequent) ────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -134,7 +87,6 @@ fun SecondaryControls(
                 tint = TextSecondary,
                 modifier = Modifier.size(20.dp)
             )
-
             Slider(
                 value = brightness,
                 onValueChange = { value ->
@@ -157,7 +109,6 @@ fun SecondaryControls(
                     disabledInactiveTrackColor = DisabledContent
                 )
             )
-
             Icon(
                 imageVector = Icons.Filled.BrightnessHigh,
                 contentDescription = "Brightness high",
@@ -180,14 +131,147 @@ fun SecondaryControls(
     }
 }
 
-/** Format speed value: drop trailing zero for whole numbers (e.g. "1.0x" not "1.000x") */
+/**
+ * Playback speed dropdown — Material 3 ExposedDropdownMenuBox.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SpeedControl(
+    playbackSpeed: Float,
+    onSpeedChange: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var speedMenuExpanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "Speed",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSecondary
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = speedMenuExpanded,
+            onExpandedChange = { speedMenuExpanded = it },
+            modifier = Modifier.width(110.dp)
+        ) {
+            OutlinedTextField(
+                value = formatSpeed(playbackSpeed),
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = speedMenuExpanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .height(44.dp),
+                textStyle = MaterialTheme.typography.labelLarge,
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealAccent,
+                    unfocusedBorderColor = DisabledContent,
+                    focusedTextColor = TealAccent,
+                    unfocusedTextColor = TextPrimary,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated,
+                    focusedTrailingIconColor = TealAccent,
+                    unfocusedTrailingIconColor = TextSecondary
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            ExposedDropdownMenu(
+                expanded = speedMenuExpanded,
+                onDismissRequest = { speedMenuExpanded = false },
+                modifier = Modifier.background(SurfaceElevated)
+            ) {
+                SPEED_OPTIONS.forEach { speed ->
+                    val isSelected = kotlin.math.abs(playbackSpeed - speed) < 0.01f
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = formatSpeed(speed),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isSelected) TealAccent else TextPrimary
+                            )
+                        },
+                        onClick = {
+                            onSpeedChange(speed)
+                            speedMenuExpanded = false
+                        },
+                        trailingIcon = if (isSelected) {
+                            { Icon(Icons.Filled.Check, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        modifier = Modifier.background(
+                            if (isSelected) TealAccent.copy(alpha = 0.1f) else SurfaceElevated
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Sleep timer button — shows active countdown if timer is running.
+ */
+@Composable
+fun SleepTimerButton(
+    sleepTimerActive: Boolean,
+    sleepTimerFormatted: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        FilledTonalButton(
+            onClick = onClick,
+            colors = ButtonDefaults.filledTonalButtonColors(
+                containerColor = if (sleepTimerActive) Teal800 else SurfaceElevated,
+                contentColor = if (sleepTimerActive) TealAccent else TextSecondary
+            ),
+            modifier = Modifier.height(40.dp)
+        ) {
+            Icon(
+                imageVector = if (sleepTimerActive) Icons.Filled.TimerOff else Icons.Filled.Timer,
+                contentDescription = "Sleep timer",
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (sleepTimerActive) "Sleep: $sleepTimerFormatted" else "Sleep Timer",
+                style = MaterialTheme.typography.labelMedium
+            )
+        }
+    }
+}
+
 private fun formatSpeed(speed: Float): String {
     return if (speed == speed.toLong().toFloat()) "${speed.toLong()}x" else "${speed}x"
 }
 
-/**
- * Volume and sleep timer controls.
- */
+// ── Legacy alias kept for backward compatibility ──────────────────────
+// (SecondaryControls was the old combined composable; split into
+//  SpeedControl + VolumeAndBrightnessControls + SleepTimerButton)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SecondaryControls(
+    playbackSpeed: Float,
+    onSpeedChange: (Float) -> Unit,
+    brightnessEnabled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    SpeedControl(playbackSpeed = playbackSpeed, onSpeedChange = onSpeedChange, modifier = modifier)
+}
+
 @Composable
 fun TertiaryControls(
     currentVolume: Int,
@@ -198,75 +282,18 @@ fun TertiaryControls(
     onSleepTimerClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    // Kept for legacy call sites in PlayerScreen — wraps the new components
+    VolumeAndBrightnessControls(
+        currentVolume = currentVolume,
+        maxVolume = maxVolume,
+        onVolumeChange = onVolumeChange,
+        brightnessEnabled = true,
         modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-    ) {
-        // ── Volume Slider ────────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // AutoMirrored = correct for RTL locales
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.VolumeDown,
-                contentDescription = "Volume down",
-                tint = TextSecondary,
-                modifier = Modifier.size(20.dp)
-            )
-
-            Slider(
-                value = currentVolume.toFloat(),
-                onValueChange = { onVolumeChange(it.toInt()) },
-                valueRange = 0f..maxVolume.toFloat(),
-                steps = (maxVolume - 1).coerceAtLeast(0),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-                    .height(28.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = TealAccent,
-                    activeTrackColor = TealAccent,
-                    inactiveTrackColor = DisabledContent
-                )
-            )
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                contentDescription = "Volume up",
-                tint = TextSecondary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // ── Sleep Timer ──────────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilledTonalButton(
-                onClick = onSleepTimerClick,
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = if (sleepTimerActive) Teal800 else SurfaceElevated,
-                    contentColor = if (sleepTimerActive) TealAccent else TextSecondary
-                ),
-                modifier = Modifier.height(40.dp)
-            ) {
-                Icon(
-                    imageVector = if (sleepTimerActive) Icons.Filled.TimerOff else Icons.Filled.Timer,
-                    contentDescription = "Sleep timer",
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (sleepTimerActive) "Sleep: $sleepTimerFormatted" else "Sleep Timer",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-        }
-    }
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    SleepTimerButton(
+        sleepTimerActive = sleepTimerActive,
+        sleepTimerFormatted = sleepTimerFormatted,
+        onClick = onSleepTimerClick
+    )
 }
