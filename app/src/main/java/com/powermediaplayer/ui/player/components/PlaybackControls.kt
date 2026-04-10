@@ -14,7 +14,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -127,9 +131,12 @@ fun PlaybackControls(
 }
 
 /**
- * Skip button: the double-arrow icon is rendered semi-transparent, then the
- * number + "s" label is overlaid CENTRED on top of it — matching the sketch
- * where the text clearly reads through the arrows.
+ * Skip button — double-arrow icon with number+"s" overlaid in the centre.
+ *
+ * The label is drawn TWICE, creating an outline effect:
+ *  1. Stroke pass (black/dark, Stroke drawStyle) — forms the contrasting outline
+ *  2. Fill pass (TealAccent) on top — the actual visible text
+ * This ensures the label is readable against both the arrows and any background.
  */
 @Composable
 private fun SkipButton(
@@ -138,8 +145,13 @@ private fun SkipButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val iconTint  = if (enabled) TextPrimary.copy(alpha = 0.55f) else DisabledGrey.copy(alpha = 0.4f)
-    val labelTint = if (enabled) TealAccent else DisabledGrey
+    val iconTint  = if (enabled) TextPrimary.copy(alpha = 0.5f) else DisabledGrey.copy(alpha = 0.35f)
+    val fillColor = if (enabled) TealAccent else DisabledGrey
+    val outlineColor = Color.Black
+
+    // Shared text styles
+    val numStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+    val sStyle   = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
 
     IconButton(
         onClick = onClick,
@@ -150,7 +162,7 @@ private fun SkipButton(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(40.dp)
         ) {
-            // Double-arrow icon — slightly transparent so the overlay label reads clearly
+            // Arrow icon — dimmed so the overlay label reads through
             Icon(
                 imageVector = if (isForward) Icons.Filled.FastForward else Icons.Filled.FastRewind,
                 contentDescription = if (isForward) "Skip forward $seconds s" else "Skip back $seconds s",
@@ -158,28 +170,46 @@ private fun SkipButton(
                 tint = iconTint
             )
 
-            // Number + "s" overlaid in the centre of the arrows
+            // Number + "s" label overlaid centred on the arrows
             Row(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.Center
             ) {
-                Text(
-                    text = "$seconds",
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = labelTint
-                )
-                Text(
-                    text = "s",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = labelTint.copy(alpha = 0.85f),
-                    modifier = Modifier.padding(start = 1.dp, bottom = 1.dp)
-                )
+                // ── Number ──────────────────────────────────────
+                Box {
+                    // Outline pass
+                    Text(
+                        text = "$seconds",
+                        style = numStyle.copy(
+                            drawStyle = Stroke(width = 5f, join = StrokeJoin.Round)
+                        ),
+                        color = outlineColor
+                    )
+                    // Fill pass
+                    Text(
+                        text = "$seconds",
+                        style = numStyle,
+                        color = fillColor
+                    )
+                }
+
+                // ── "s" suffix ───────────────────────────────────
+                Box(modifier = Modifier.padding(start = 1.dp, bottom = 1.dp)) {
+                    // Outline pass
+                    Text(
+                        text = "s",
+                        style = sStyle.copy(
+                            drawStyle = Stroke(width = 4f, join = StrokeJoin.Round)
+                        ),
+                        color = outlineColor
+                    )
+                    // Fill pass
+                    Text(
+                        text = "s",
+                        style = sStyle,
+                        color = fillColor.copy(alpha = 0.9f)
+                    )
+                }
             }
         }
     }

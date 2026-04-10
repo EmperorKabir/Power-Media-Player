@@ -33,16 +33,29 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         // Custom session commands for features not in standard transport controls
-        const val ACTION_SKIP_BACK_5 = "ACTION_SKIP_BACK_5"
-        const val ACTION_SKIP_BACK_10 = "ACTION_SKIP_BACK_10"
-        const val ACTION_SKIP_BACK_15 = "ACTION_SKIP_BACK_15"
-        const val ACTION_SKIP_BACK_20 = "ACTION_SKIP_BACK_20"
-        const val ACTION_SKIP_BACK_30 = "ACTION_SKIP_BACK_30"
-        const val ACTION_SKIP_FORWARD_5 = "ACTION_SKIP_FORWARD_5"
+        const val ACTION_SKIP_BACK_5    = "ACTION_SKIP_BACK_5"
+        const val ACTION_SKIP_BACK_10   = "ACTION_SKIP_BACK_10"
+        const val ACTION_SKIP_BACK_15   = "ACTION_SKIP_BACK_15"
+        const val ACTION_SKIP_BACK_20   = "ACTION_SKIP_BACK_20"
+        const val ACTION_SKIP_BACK_30   = "ACTION_SKIP_BACK_30"
+        const val ACTION_SKIP_FORWARD_5  = "ACTION_SKIP_FORWARD_5"
         const val ACTION_SKIP_FORWARD_10 = "ACTION_SKIP_FORWARD_10"
         const val ACTION_SKIP_FORWARD_15 = "ACTION_SKIP_FORWARD_15"
         const val ACTION_SKIP_FORWARD_20 = "ACTION_SKIP_FORWARD_20"
         const val ACTION_SKIP_FORWARD_30 = "ACTION_SKIP_FORWARD_30"
+
+        /**
+         * Direct reference to the ExoPlayer running inside this service.
+         *
+         * WHY: MediaController is an IPC proxy — it cannot deliver video frames to a Surface.
+         * PlayerView MUST be attached to the real ExoPlayer object in the same process.
+         * Using WeakReference prevents a memory leak if the service dies before the UI.
+         *
+         * Access via: PlaybackService.getExoPlayer()
+         */
+        private var exoPlayerRef: java.lang.ref.WeakReference<ExoPlayer>? = null
+
+        fun getExoPlayer(): ExoPlayer? = exoPlayerRef?.get()
     }
 
     @OptIn(UnstableApi::class)
@@ -65,6 +78,9 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+
+        // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
+        exoPlayerRef = java.lang.ref.WeakReference(player!!)
 
         // Create session activity intent for notification tap
         val sessionActivityIntent = PendingIntent.getActivity(
@@ -96,6 +112,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        exoPlayerRef = null          // clear before release so UI gets null not dead reference
         mediaSession?.run {
             player.release()
             release()

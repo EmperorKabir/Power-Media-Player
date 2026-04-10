@@ -123,16 +123,11 @@ private fun PlayerScreenCompact(
     onShowChapterPicker: () -> Unit,
     horizontalPadding: Int = 0
 ) {
-    // Collect the player reactively — it starts null until MediaController connects (async).
-    // Using collectAsStateWithLifecycle means VideoSurface recomposes and attaches as soon
-    // as the connection completes, rather than capturing null with remember() at first composition.
-    val player by viewModel.playerFlow.collectAsStateWithLifecycle()
-
     Box(modifier = Modifier.fillMaxSize()) {
         if (uiState.isVideoContent) {
             // Video content: render the actual video frames
+            // VideoSurface attaches directly to the ExoPlayer in PlaybackService
             VideoSurface(
-                player = player,
                 isVideoContent = true,
                 modifier = Modifier.fillMaxSize()
             )
@@ -145,21 +140,29 @@ private fun PlayerScreenCompact(
             )
         }
 
-        // Gradient scrim for readability over both video and art
+        // Gradient scrim — for audio: heavy fade so controls are readable over album art.
+        // For video: subtle bottom-only fade so the video picture is not obscured.
+        val scrimColors = if (uiState.isVideoContent) {
+            listOf(
+                Color.Transparent,
+                Color.Transparent,
+                OledBlack.copy(alpha = 0.5f),
+                OledBlack.copy(alpha = 0.9f),
+                OledBlack
+            )
+        } else {
+            listOf(
+                Color.Transparent,
+                OledBlack.copy(alpha = 0.3f),
+                OledBlack.copy(alpha = 0.75f),
+                OledBlack.copy(alpha = 0.97f),
+                OledBlack
+            )
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            OledBlack.copy(alpha = 0.3f),
-                            OledBlack.copy(alpha = 0.75f),
-                            OledBlack.copy(alpha = 0.97f),
-                            OledBlack
-                        )
-                    )
-                )
+                .background(Brush.verticalGradient(colors = scrimColors))
         )
 
         Column(
