@@ -1,0 +1,177 @@
+package com.powermediaplayer.service
+
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.Bundle
+import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.CommandButton
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.powermediaplayer.MainActivity
+import dagger.hilt.android.AndroidEntryPoint
+
+/**
+ * Background media playback service implementing MediaSessionService.
+ * Hosts the ExoPlayer and MediaSession for system-integrated playback
+ * with lock screen controls and notification media controls.
+ */
+@AndroidEntryPoint
+class PlaybackService : MediaSessionService() {
+
+    private var player: ExoPlayer? = null
+    private var mediaSession: MediaSession? = null
+
+    companion object {
+        // Custom session commands for features not in standard transport controls
+        const val ACTION_SKIP_BACK_5 = "ACTION_SKIP_BACK_5"
+        const val ACTION_SKIP_BACK_10 = "ACTION_SKIP_BACK_10"
+        const val ACTION_SKIP_BACK_15 = "ACTION_SKIP_BACK_15"
+        const val ACTION_SKIP_BACK_20 = "ACTION_SKIP_BACK_20"
+        const val ACTION_SKIP_BACK_30 = "ACTION_SKIP_BACK_30"
+        const val ACTION_SKIP_FORWARD_5 = "ACTION_SKIP_FORWARD_5"
+        const val ACTION_SKIP_FORWARD_10 = "ACTION_SKIP_FORWARD_10"
+        const val ACTION_SKIP_FORWARD_15 = "ACTION_SKIP_FORWARD_15"
+        const val ACTION_SKIP_FORWARD_20 = "ACTION_SKIP_FORWARD_20"
+        const val ACTION_SKIP_FORWARD_30 = "ACTION_SKIP_FORWARD_30"
+    }
+
+    @OptIn(UnstableApi::class)
+    override fun onCreate() {
+        super.onCreate()
+
+        // Configure renderers with FFmpeg extension support (when available)
+        val renderersFactory = DefaultRenderersFactory(this)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+
+        // Build ExoPlayer with audio focus and wake lock
+        player = ExoPlayer.Builder(this, renderersFactory)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                /* handleAudioFocus */ true
+            )
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build()
+
+        // Create session activity intent for notification tap
+        val sessionActivityIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // Build MediaSession with custom callback for skip actions
+        mediaSession = MediaSession.Builder(this, player!!)
+            .setSessionActivity(sessionActivityIntent)
+            .setCallback(PlayerSessionCallback())
+            .build()
+    }
+
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        return mediaSession
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Stop playback when user swipes away app from recents
+        val player = mediaSession?.player
+        if (player != null) {
+            if (!player.playWhenReady || player.mediaItemCount == 0) {
+                stopSelf()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        mediaSession?.run {
+            player.release()
+            release()
+        }
+        mediaSession = null
+        player = null
+        super.onDestroy()
+    }
+
+    /**
+     * Custom callback to handle our extended skip actions via custom session commands.
+     */
+    private inner class PlayerSessionCallback : MediaSession.Callback {
+
+        @OptIn(UnstableApi::class)
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            // Register all custom commands
+            val customCommands = listOf(
+                ACTION_SKIP_BACK_5, ACTION_SKIP_BACK_10, ACTION_SKIP_BACK_15,
+                ACTION_SKIP_BACK_20, ACTION_SKIP_BACK_30,
+                ACTION_SKIP_FORWARD_5, ACTION_SKIP_FORWARD_10, ACTION_SKIP_FORWARD_15,
+                ACTION_SKIP_FORWARD_20, ACTION_SKIP_FORWARD_30
+            )
+
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
+                .buildUpon()
+
+            customCommands.forEach { action ->
+                sessionCommands.add(SessionCommand(action, Bundle.EMPTY))
+            }
+
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(sessionCommands.build())
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle
+        ): ListenableFuture<SessionResult> {
+            val player = session.player
+            val currentPos = player.currentPosition
+
+            when (customCommand.customAction) {
+                ACTION_SKIP_BACK_5 -> player.seekTo(maxOf(0, currentPos - 5_000))
+                ACTION_SKIP_BACK_10 -> player.seekTo(maxOf(0, currentPos - 10_000))
+                ACTION_SKIP_BACK_15 -> player.seekTo(maxOf(0, currentPos - 15_000))
+                ACTION_SKIP_BACK_20 -> player.seekTo(maxOf(0, currentPos - 20_000))
+                ACTION_SKIP_BACK_30 -> player.seekTo(maxOf(0, currentPos - 30_000))
+                ACTION_SKIP_FORWARD_5 -> player.seekTo(currentPos + 5_000)
+                ACTION_SKIP_FORWARD_10 -> player.seekTo(currentPos + 10_000)
+                ACTION_SKIP_FORWARD_15 -> player.seekTo(currentPos + 15_000)
+                ACTION_SKIP_FORWARD_20 -> player.seekTo(currentPos + 20_000)
+                ACTION_SKIP_FORWARD_30 -> player.seekTo(currentPos + 30_000)
+            }
+
+            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+        }
+
+        override fun onAddMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>
+        ): ListenableFuture<MutableList<MediaItem>> {
+            // Resolve media items with URIs for playback
+            val resolvedItems = mediaItems.map { item ->
+                item.buildUpon()
+                    .setUri(item.requestMetadata.mediaUri ?: item.mediaId.let { android.net.Uri.parse(it) })
+                    .build()
+            }.toMutableList()
+            return Futures.immediateFuture(resolvedItems)
+        }
+    }
+}
