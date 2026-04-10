@@ -2,6 +2,7 @@ package com.powermediaplayer.ui.equalizer
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -19,6 +20,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.ui.theme.*
+import kotlin.math.roundToInt
 
 /**
  * 10-band equalizer screen.
@@ -182,6 +186,9 @@ fun EqualizerScreen(
             bandLevels = uiState.bandLevels,
             minLevel = uiState.minLevel,
             maxLevel = uiState.maxLevel,
+            onBandChange = { index, levelMillibels ->
+                viewModel.setBandLevel(index, levelMillibels)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(130.dp)
@@ -273,8 +280,8 @@ fun EqualizerScreen(
 }
 
 /**
- * Single band input cell: frequency label + numeric TextField + ±1 nudge buttons.
- * dB value displayed/entered as integer (-15 to +15); internally stored as millibels.
+ * Band numeric input cell: ±1 nudge buttons + OutlinedTextField.
+ * Done key on keyboard both applies and dismisses the keyboard.
  */
 @Composable
 private fun BandInputCell(
@@ -289,6 +296,7 @@ private fun BandInputCell(
     var textValue by remember(levelMillibels) { mutableStateOf(levelDb.toString()) }
     val minDb = minLevel / 100  // -15
     val maxDb = maxLevel / 100  // +15
+    val focusManager = LocalFocusManager.current
 
     Surface(
         color = SurfaceElevated,
@@ -299,7 +307,6 @@ private fun BandInputCell(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
         ) {
-            // Frequency label
             Text(
                 text = frequency,
                 style = MaterialTheme.typography.labelSmall,
@@ -307,10 +314,7 @@ private fun BandInputCell(
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
-
             Spacer(modifier = Modifier.height(4.dp))
-
-            // + button
             IconButton(
                 onClick = {
                     val newDb = (levelDb + 1).coerceIn(minDb, maxDb)
@@ -318,15 +322,8 @@ private fun BandInputCell(
                 },
                 modifier = Modifier.size(28.dp)
             ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "+1 dB",
-                    tint = TealAccent,
-                    modifier = Modifier.size(16.dp)
-                )
+                Icon(Icons.Filled.Add, contentDescription = "+1 dB", tint = TealAccent, modifier = Modifier.size(16.dp))
             }
-
-            // Numeric text field
             OutlinedTextField(
                 value = textValue,
                 onValueChange = { raw ->
@@ -340,12 +337,17 @@ private fun BandInputCell(
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Done
                 ),
-                keyboardActions = KeyboardActions(onDone = {
-                    val parsed = textValue.toIntOrNull() ?: levelDb
-                    val clamped = parsed.coerceIn(minDb, maxDb)
-                    textValue = clamped.toString()
-                    onLevelChange(clamped * 100)
-                }),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        val parsed = textValue.toIntOrNull() ?: levelDb
+                        val clamped = parsed.coerceIn(minDb, maxDb)
+                        textValue = clamped.toString()
+                        onLevelChange(clamped * 100)
+                        // Dismiss keyboard and clear focus
+                        defaultKeyboardAction(ImeAction.Done)
+                        focusManager.clearFocus()
+                    }
+                ),
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -362,8 +364,6 @@ private fun BandInputCell(
                 ),
                 shape = MaterialTheme.shapes.small
             )
-
-            // - button
             IconButton(
                 onClick = {
                     val newDb = (levelDb - 1).coerceIn(minDb, maxDb)
@@ -371,46 +371,73 @@ private fun BandInputCell(
                 },
                 modifier = Modifier.size(28.dp)
             ) {
-                Icon(
-                    Icons.Filled.Remove,
-                    contentDescription = "-1 dB",
-                    tint = Teal300,
-                    modifier = Modifier.size(16.dp)
-                )
+                Icon(Icons.Filled.Remove, contentDescription = "-1 dB", tint = Teal300, modifier = Modifier.size(16.dp))
             }
-
-            // dB unit hint
-            Text(
-                text = "dB",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-                textAlign = TextAlign.Center
-            )
+            Text(text = "dB", style = MaterialTheme.typography.labelSmall, color = TextTertiary, textAlign = TextAlign.Center)
         }
     }
 }
 
 /**
- * Frequency response curve drawn on Canvas using cubic Bézier interpolation.
+ * Interactive frequency response curve.
+ * Drag anywhere on the curve to adjust the nearest band level.
+ * The Y axis maps linearly from maxLevel (top) to minLevel (bottom).
  */
 @Composable
 private fun FrequencyResponseCurve(
     bandLevels: List<Int>,
     minLevel: Int,
     maxLevel: Int,
+    onBandChange: (index: Int, newLevelMillibels: Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val tealColor = TealAccent
+    val teal300Color = Teal300
     val gridColor = DisabledContent
 
-    Canvas(modifier = modifier) {
+    var canvasWidth by remember { mutableFloatStateOf(0f) }
+    var canvasHeight by remember { mutableFloatStateOf(0f) }
+
+    Canvas(
+        modifier = modifier
+            .onSizeChanged { size ->
+                canvasWidth = size.width.toFloat()
+                canvasHeight = size.height.toFloat()
+            }
+            .pointerInput(bandLevels.size, minLevel, maxLevel) {
+                detectDragGestures { change, _ ->
+                    change.consume()
+                    if (canvasWidth <= 0f || canvasHeight <= 0f) return@detectDragGestures
+
+                    val stepX = canvasWidth / (bandLevels.size - 1).coerceAtLeast(1)
+                    // Find the nearest band index based on horizontal drag position
+                    val bandIndex = (change.position.x / stepX)
+                        .roundToInt()
+                        .coerceIn(0, bandLevels.size - 1)
+
+                    // Map Y position to level: top = maxLevel, bottom = minLevel
+                    val range = (maxLevel - minLevel).toFloat()
+                    val normalizedY = (change.position.y / canvasHeight).coerceIn(0f, 1f)
+                    val newLevel = (maxLevel - normalizedY * range)
+                        .toInt()
+                        .coerceIn(minLevel, maxLevel)
+
+                    onBandChange(bandIndex, newLevel)
+                }
+            }
+    ) {
         val width = size.width
         val height = size.height
         val range = (maxLevel - minLevel).toFloat()
         val zeroY = height * (maxLevel / range)
 
         // Zero line
-        drawLine(color = gridColor, start = Offset(0f, zeroY), end = Offset(width, zeroY), strokeWidth = 1.dp.toPx())
+        drawLine(
+            color = gridColor,
+            start = Offset(0f, zeroY),
+            end = Offset(width, zeroY),
+            strokeWidth = 1.dp.toPx()
+        )
 
         if (bandLevels.isNotEmpty()) {
             val path = Path()
@@ -434,12 +461,13 @@ private fun FrequencyResponseCurve(
 
             drawPath(path = path, color = tealColor, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
 
-            // Dots at each band
+            // Dots at band positions — slightly larger to be more tappable
             bandLevels.forEachIndexed { index, level ->
                 val x = index * stepX
                 val normalizedLevel = (maxLevel - level) / range
                 val y = normalizedLevel * height
-                drawCircle(color = tealColor, radius = 5.dp.toPx(), center = Offset(x, y))
+                drawCircle(color = teal300Color, radius = 7.dp.toPx(), center = Offset(x, y))
+                drawCircle(color = tealColor, radius = 4.dp.toPx(), center = Offset(x, y))
             }
         }
     }
