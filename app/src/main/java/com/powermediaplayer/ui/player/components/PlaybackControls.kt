@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powermediaplayer.ui.player.ControlsEnabledState
@@ -126,7 +127,9 @@ fun PlaybackControls(
 }
 
 /**
- * Skip button: icon with seconds label overlaid at bottom.
+ * Skip button: the double-arrow icon is rendered semi-transparent, then the
+ * number + "s" label is overlaid CENTRED on top of it — matching the sketch
+ * where the text clearly reads through the arrows.
  */
 @Composable
 private fun SkipButton(
@@ -135,35 +138,49 @@ private fun SkipButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val tint = if (enabled) TextPrimary else DisabledGrey
+    val iconTint  = if (enabled) TextPrimary.copy(alpha = 0.55f) else DisabledGrey.copy(alpha = 0.4f)
+    val labelTint = if (enabled) TealAccent else DisabledGrey
+
     IconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(48.dp)
+        modifier = Modifier.size(52.dp)
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(40.dp)
+        ) {
+            // Double-arrow icon — slightly transparent so the overlay label reads clearly
             Icon(
                 imageVector = if (isForward) Icons.Filled.FastForward else Icons.Filled.FastRewind,
                 contentDescription = if (isForward) "Skip forward $seconds s" else "Skip back $seconds s",
-                modifier = Modifier.size(32.dp),
-                tint = tint
+                modifier = Modifier.size(38.dp),
+                tint = iconTint
             )
-            // Number centred over icon
-            Text(
-                text = "$seconds",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-                color = tint,
-                modifier = Modifier.offset(y = 14.dp)
-            )
-            // Small "s" at lower-right corner to indicate seconds
-            Text(
-                text = "s",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 7.sp),
-                color = tint.copy(alpha = 0.8f),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 2.dp, y = 2.dp)
-            )
+
+            // Number + "s" overlaid in the centre of the arrows
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "$seconds",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = labelTint
+                )
+                Text(
+                    text = "s",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = labelTint.copy(alpha = 0.85f),
+                    modifier = Modifier.padding(start = 1.dp, bottom = 1.dp)
+                )
+            }
         }
     }
 }
