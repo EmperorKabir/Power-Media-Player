@@ -1,11 +1,12 @@
 package com.powermediaplayer.ui.player.components
 
-import android.media.AudioManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,13 +17,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.util.BrightnessHelper
-import com.powermediaplayer.util.TimeFormatter
+
+private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
 
 /**
- * Secondary controls row:
- * - Playback speed selector (0.5x - 3.0x)
+ * Secondary controls:
+ * - Playback speed dropdown (Material 3 ExposedDropdownMenuBox)
  * - Screen brightness slider
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SecondaryControls(
     playbackSpeed: Float,
@@ -32,40 +35,88 @@ fun SecondaryControls(
 ) {
     val context = LocalContext.current
     var brightness by remember { mutableFloatStateOf(BrightnessHelper.getBrightnessFloat(context)) }
+    var speedMenuExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        // ── Playback Speed ───────────────────────────────────────
-        Text(
-            text = "Speed",
-            style = MaterialTheme.typography.labelSmall,
-            color = TextSecondary,
-            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
-        )
-
-        val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
+        // ── Playback Speed Dropdown ──────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            speeds.forEach { speed ->
-                val isSelected = kotlin.math.abs(playbackSpeed - speed) < 0.01f
-                Box(
+            Text(
+                text = "Speed",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondary
+            )
+
+            ExposedDropdownMenuBox(
+                expanded = speedMenuExpanded,
+                onExpandedChange = { speedMenuExpanded = it },
+                modifier = Modifier.width(110.dp)
+            ) {
+                // Trigger field
+                OutlinedTextField(
+                    value = formatSpeed(playbackSpeed),
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = speedMenuExpanded)
+                    },
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) TealAccent else SurfaceElevated)
-                        .clickable { onSpeedChange(speed) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .height(44.dp),
+                    textStyle = MaterialTheme.typography.labelLarge,
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = TealAccent,
+                        unfocusedBorderColor = DisabledContent,
+                        focusedTextColor = TealAccent,
+                        unfocusedTextColor = TextPrimary,
+                        focusedContainerColor = SurfaceElevated,
+                        unfocusedContainerColor = SurfaceElevated,
+                        focusedTrailingIconColor = TealAccent,
+                        unfocusedTrailingIconColor = TextSecondary
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                // Dropdown menu
+                ExposedDropdownMenu(
+                    expanded = speedMenuExpanded,
+                    onDismissRequest = { speedMenuExpanded = false },
+                    modifier = Modifier.background(SurfaceElevated)
                 ) {
-                    Text(
-                        text = "${speed}x",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isSelected) OledBlack else TextSecondary
-                    )
+                    SPEED_OPTIONS.forEach { speed ->
+                        val isSelected = kotlin.math.abs(playbackSpeed - speed) < 0.01f
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = formatSpeed(speed),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isSelected) TealAccent else TextPrimary
+                                )
+                            },
+                            onClick = {
+                                onSpeedChange(speed)
+                                speedMenuExpanded = false
+                            },
+                            trailingIcon = if (isSelected) {
+                                { Icon(Icons.Filled.Check, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp)) }
+                            } else null,
+                            colors = MenuDefaults.itemColors(
+                                textColor = TextPrimary,
+                                leadingIconColor = TextSecondary
+                            ),
+                            modifier = Modifier.background(
+                                if (isSelected) TealAccent.copy(alpha = 0.1f) else SurfaceElevated
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -79,7 +130,7 @@ fun SecondaryControls(
         ) {
             Icon(
                 imageVector = Icons.Filled.BrightnessLow,
-                contentDescription = "Brightness",
+                contentDescription = "Brightness low",
                 tint = TextSecondary,
                 modifier = Modifier.size(20.dp)
             )
@@ -109,13 +160,13 @@ fun SecondaryControls(
 
             Icon(
                 imageVector = Icons.Filled.BrightnessHigh,
-                contentDescription = "Max brightness",
+                contentDescription = "Brightness high",
                 tint = TextSecondary,
                 modifier = Modifier.size(20.dp)
             )
         }
 
-        // Permission hint if WRITE_SETTINGS not granted
+        // WRITE_SETTINGS permission hint
         if (!BrightnessHelper.canWriteSettings(context)) {
             Text(
                 text = "Tap to grant brightness permission",
@@ -129,8 +180,13 @@ fun SecondaryControls(
     }
 }
 
+/** Format speed value: drop trailing zero for whole numbers (e.g. "1.0x" not "1.000x") */
+private fun formatSpeed(speed: Float): String {
+    return if (speed == speed.toLong().toFloat()) "${speed.toLong()}x" else "${speed}x"
+}
+
 /**
- * Volume and sleep timer controls row.
+ * Volume and sleep timer controls.
  */
 @Composable
 fun TertiaryControls(
@@ -147,13 +203,14 @@ fun TertiaryControls(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
-        // ── Volume Slider (AudioManager) ─────────────────────────
+        // ── Volume Slider ────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // AutoMirrored = correct for RTL locales
             Icon(
-                imageVector = Icons.Filled.VolumeDown,
+                imageVector = Icons.AutoMirrored.Filled.VolumeDown,
                 contentDescription = "Volume down",
                 tint = TextSecondary,
                 modifier = Modifier.size(20.dp)
@@ -163,7 +220,7 @@ fun TertiaryControls(
                 value = currentVolume.toFloat(),
                 onValueChange = { onVolumeChange(it.toInt()) },
                 valueRange = 0f..maxVolume.toFloat(),
-                steps = maxVolume - 1,
+                steps = (maxVolume - 1).coerceAtLeast(0),
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 8.dp)
@@ -176,7 +233,7 @@ fun TertiaryControls(
             )
 
             Icon(
-                imageVector = Icons.Filled.VolumeUp,
+                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                 contentDescription = "Volume up",
                 tint = TextSecondary,
                 modifier = Modifier.size(20.dp)
@@ -185,7 +242,7 @@ fun TertiaryControls(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ── Sleep Timer Button ───────────────────────────────────
+        // ── Sleep Timer ──────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,

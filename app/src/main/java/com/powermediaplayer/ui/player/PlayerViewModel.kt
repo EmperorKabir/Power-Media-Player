@@ -22,7 +22,7 @@ import javax.inject.Inject
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -56,6 +56,10 @@ class PlayerViewModel @Inject constructor(
     fun skipForward(seconds: Int) = playbackConnection.skipForward(seconds)
     fun nextChapter() = playbackConnection.nextChapter()
     fun previousChapter() = playbackConnection.previousChapter()
+    fun seekToChapter(index: Int) {
+        val chapters = playbackConnection.playerState.value.chapters
+        if (index in chapters.indices) playbackConnection.seekTo(chapters[index].startTimeMs)
+    }
 
     fun setPlaybackSpeed(speed: Float) = playbackConnection.setPlaybackSpeed(speed)
 
@@ -152,6 +156,9 @@ class PlayerViewModel @Inject constructor(
             trackIndexDisplay = if (playerState.mediaItemCount > 1) {
                 "${playerState.currentMediaItemIndex + 1} / ${playerState.mediaItemCount}"
             } else "",
+            chapters = playerState.chapters,
+            currentChapterIndex = playerState.currentChapterIndex,
+            hasChapters = playerState.hasChapters,
             controls = ControlsEnabledState(
                 previousTrack = playerState.hasPrevious,
                 nextTrack = playerState.hasNext,

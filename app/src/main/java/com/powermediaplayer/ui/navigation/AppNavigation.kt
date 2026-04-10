@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -21,13 +22,10 @@ import com.powermediaplayer.ui.equalizer.EqualizerScreen
 import com.powermediaplayer.ui.library.LibraryScreen
 import com.powermediaplayer.ui.player.PlayerScreen
 import com.powermediaplayer.ui.settings.SettingsScreen
+import com.powermediaplayer.ui.theme.DisabledGrey
 import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.ui.theme.TealAccent
-import com.powermediaplayer.ui.theme.DisabledGrey
 
-/**
- * Navigation destinations for the bottom navigation bar.
- */
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Player : Screen("player", "Player", Icons.Filled.PlayCircle)
     data object Library : Screen("library", "Library", Icons.Filled.LibraryMusic)
@@ -39,9 +37,10 @@ private val screens = listOf(Screen.Player, Screen.Library, Screen.Equalizer, Sc
 
 /**
  * Main app navigation with bottom navigation bar and NavHost.
+ * Receives WindowSizeClass from MainActivity and passes it to adaptive screens.
  */
 @Composable
-fun AppNavigation() {
+fun AppNavigation(windowSizeClass: WindowSizeClass) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -56,16 +55,10 @@ fun AppNavigation() {
                 screens.forEach { screen ->
                     NavigationBarItem(
                         icon = {
-                            Icon(
-                                imageVector = screen.icon,
-                                contentDescription = screen.title
-                            )
+                            Icon(imageVector = screen.icon, contentDescription = screen.title)
                         },
                         label = {
-                            Text(
-                                text = screen.title,
-                                style = MaterialTheme.typography.labelSmall
-                            )
+                            Text(text = screen.title, style = MaterialTheme.typography.labelSmall)
                         },
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
@@ -94,7 +87,7 @@ fun AppNavigation() {
             startDestination = Screen.Player.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(Screen.Player.route) { PlayerScreen() }
+            composable(Screen.Player.route) { PlayerScreen(windowSizeClass = windowSizeClass) }
             composable(Screen.Library.route) { LibraryScreen() }
             composable(Screen.Equalizer.route) { EqualizerScreen() }
             composable(Screen.Settings.route) { SettingsScreen() }

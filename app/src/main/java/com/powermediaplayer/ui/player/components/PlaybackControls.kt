@@ -1,7 +1,8 @@
 package com.powermediaplayer.ui.player.components
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -11,7 +12,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -23,10 +23,11 @@ import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
 
 /**
- * Full row of all 13 playback transport controls displayed simultaneously.
- * Icons are bold vectors with thick lines. Disabled controls are greyed out.
+ * Full set of 13 playback transport controls, divided across two rows
+ * to guarantee visibility on all screen sizes (phones, tablets, foldables).
  *
- * Layout: |◀◀| ⏪30 | ⏪20 | ⏪15 | ⏪10 | ⏪5 | ▶⏸ | 5⏩ | 10⏩ | 15⏩ | 20⏩ | 30⏩ | ▶▶|
+ * Row 1 (Primary):  |◀◀|    ▶/⏸    |▶▶|   — always centered & fully visible
+ * Row 2 (Skip): |⏪30 ⏪20 ⏪15 ⏪10 ⏪5|     |5⏩ 10⏩ 15⏩ 20⏩ 30⏩|  — horizontally scrollable
  */
 @Composable
 fun PlaybackControls(
@@ -39,151 +40,93 @@ fun PlaybackControls(
     onNextChapter: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Wrap callbacks in remember to prevent unnecessary recompositions
-    val skipBack30 = remember { { onSkipBack(30) } }
-    val skipBack20 = remember { { onSkipBack(20) } }
-    val skipBack15 = remember { { onSkipBack(15) } }
-    val skipBack10 = remember { { onSkipBack(10) } }
-    val skipBack5 = remember { { onSkipBack(5) } }
-    val skipForward5 = remember { { onSkipForward(5) } }
-    val skipForward10 = remember { { onSkipForward(10) } }
-    val skipForward15 = remember { { onSkipForward(15) } }
-    val skipForward20 = remember { { onSkipForward(20) } }
-    val skipForward30 = remember { { onSkipForward(30) } }
-
-    LazyRow(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Previous chapter/track
-        item {
+        // ── Row 1: Primary Controls ──────────────────────────────
+        // Always fully visible — no scrolling needed
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Previous chapter / track
             ControlButton(
                 icon = Icons.Filled.SkipPrevious,
-                label = "Prev",
+                label = "Previous",
                 enabled = controls.previousChapter || controls.previousTrack,
                 onClick = onPreviousChapter,
-                size = 36
+                size = 32
             )
-        }
 
-        // Skip back buttons: 30, 20, 15, 10, 5
-        item {
-            SkipButton(
-                seconds = 30,
-                isForward = false,
-                enabled = controls.skipBack30,
-                onClick = skipBack30
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 20,
-                isForward = false,
-                enabled = controls.skipBack20,
-                onClick = skipBack20
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 15,
-                isForward = false,
-                enabled = controls.skipBack15,
-                onClick = skipBack15
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 10,
-                isForward = false,
-                enabled = controls.skipBack10,
-                onClick = skipBack10
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 5,
-                isForward = false,
-                enabled = controls.skipBack5,
-                onClick = skipBack5
-            )
-        }
+            Spacer(modifier = Modifier.width(16.dp))
 
-        // Play/Pause — larger, central button
-        item {
+            // Play / Pause — large central button
             IconButton(
                 onClick = onPlayPause,
                 enabled = controls.playPause,
-                modifier = Modifier.size(64.dp)
+                modifier = Modifier.size(72.dp)
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.PauseCircle else Icons.Filled.PlayCircle,
                     contentDescription = if (isPlaying) "Pause" else "Play",
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier.size(64.dp),
                     tint = if (controls.playPause) TealAccent else DisabledGrey
                 )
             }
-        }
 
-        // Skip forward buttons: 5, 10, 15, 20, 30
-        item {
-            SkipButton(
-                seconds = 5,
-                isForward = true,
-                enabled = controls.skipForward5,
-                onClick = skipForward5
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 10,
-                isForward = true,
-                enabled = controls.skipForward10,
-                onClick = skipForward10
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 15,
-                isForward = true,
-                enabled = controls.skipForward15,
-                onClick = skipForward15
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 20,
-                isForward = true,
-                enabled = controls.skipForward20,
-                onClick = skipForward20
-            )
-        }
-        item {
-            SkipButton(
-                seconds = 30,
-                isForward = true,
-                enabled = controls.skipForward30,
-                onClick = skipForward30
-            )
-        }
+            Spacer(modifier = Modifier.width(16.dp))
 
-        // Next chapter/track
-        item {
+            // Next chapter / track
             ControlButton(
                 icon = Icons.Filled.SkipNext,
                 label = "Next",
                 enabled = controls.nextChapter || controls.nextTrack,
                 onClick = onNextChapter,
-                size = 36
+                size = 32
             )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // ── Row 2: Skip Buttons ──────────────────────────────────
+        // Horizontally scrollable so all 10 skip buttons are reachable
+        // on any screen width without being cut off
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Skip back: 30, 20, 15, 10, 5
+            SkipButton(seconds = 30, isForward = false, enabled = controls.skipBack30, onClick = { onSkipBack(30) })
+            SkipButton(seconds = 20, isForward = false, enabled = controls.skipBack20, onClick = { onSkipBack(20) })
+            SkipButton(seconds = 15, isForward = false, enabled = controls.skipBack15, onClick = { onSkipBack(15) })
+            SkipButton(seconds = 10, isForward = false, enabled = controls.skipBack10, onClick = { onSkipBack(10) })
+            SkipButton(seconds = 5,  isForward = false, enabled = controls.skipBack5,  onClick = { onSkipBack(5) })
+
+            Spacer(modifier = Modifier.width(20.dp))
+
+            // Skip forward: 5, 10, 15, 20, 30
+            SkipButton(seconds = 5,  isForward = true, enabled = controls.skipForward5,  onClick = { onSkipForward(5) })
+            SkipButton(seconds = 10, isForward = true, enabled = controls.skipForward10, onClick = { onSkipForward(10) })
+            SkipButton(seconds = 15, isForward = true, enabled = controls.skipForward15, onClick = { onSkipForward(15) })
+            SkipButton(seconds = 20, isForward = true, enabled = controls.skipForward20, onClick = { onSkipForward(20) })
+            SkipButton(seconds = 30, isForward = true, enabled = controls.skipForward30, onClick = { onSkipForward(30) })
+
+            Spacer(modifier = Modifier.width(8.dp))
         }
     }
 }
 
 /**
- * Skip button with bold icon and seconds label overlay.
+ * Skip button: icon with seconds label overlaid at bottom.
  */
 @Composable
 private fun SkipButton(
@@ -193,7 +136,6 @@ private fun SkipButton(
     onClick: () -> Unit
 ) {
     val tint = if (enabled) TextPrimary else DisabledGrey
-
     IconButton(
         onClick = onClick,
         enabled = enabled,
@@ -202,7 +144,7 @@ private fun SkipButton(
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = if (isForward) Icons.Filled.FastForward else Icons.Filled.FastRewind,
-                contentDescription = if (isForward) "Skip forward $seconds seconds" else "Skip back $seconds seconds",
+                contentDescription = if (isForward) "Skip forward $seconds s" else "Skip back $seconds s",
                 modifier = Modifier.size(32.dp),
                 tint = tint
             )
@@ -217,7 +159,7 @@ private fun SkipButton(
 }
 
 /**
- * Standard control button with icon.
+ * Generic icon control button (SkipPrevious / SkipNext).
  */
 @Composable
 private fun ControlButton(
@@ -230,7 +172,7 @@ private fun ControlButton(
     IconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(48.dp)
+        modifier = Modifier.size(52.dp)
     ) {
         Icon(
             imageVector = icon,

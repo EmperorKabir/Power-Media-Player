@@ -72,7 +72,7 @@ data class ChapterInfo(
  */
 @Singleton
 class PlaybackConnection @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null

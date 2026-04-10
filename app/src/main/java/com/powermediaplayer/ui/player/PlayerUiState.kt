@@ -49,6 +49,11 @@ data class PlayerUiState(
     val totalTracks: Int = 0,
     val trackIndexDisplay: String = "", // "3 / 12"
 
+    // Chapter support
+    val chapters: List<com.powermediaplayer.service.ChapterInfo> = emptyList(),
+    val currentChapterIndex: Int = -1,
+    val hasChapters: Boolean = false,
+
     // Controls enabled state (for greying out)
     val controls: ControlsEnabledState = ControlsEnabledState()
 )

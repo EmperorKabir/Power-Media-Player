@@ -51,7 +51,7 @@ data class LibraryUiState(
  */
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())

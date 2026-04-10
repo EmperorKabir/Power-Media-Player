@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.ui.Modifier
 import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.ui.navigation.AppNavigation
@@ -16,8 +18,10 @@ import javax.inject.Inject
 
 /**
  * Single activity host for the entire Compose UI.
- * Manages PlaybackConnection lifecycle and edge-to-edge display.
+ * Computes WindowSizeClass once here and passes it to navigation
+ * so all screens can adapt to phone/tablet/foldable widths.
  */
+@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
@@ -30,12 +34,13 @@ class MainActivity : ComponentActivity() {
         playbackConnection.connect()
 
         setContent {
+            val windowSizeClass = calculateWindowSizeClass(this)
             PowerMediaPlayerTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = OledBlack
                 ) {
-                    AppNavigation()
+                    AppNavigation(windowSizeClass = windowSizeClass)
                 }
             }
         }
