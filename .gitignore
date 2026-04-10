@@ -1,0 +1,7 @@
+# Android Build Files and Caches to Ignore
+build/
+app/build/
+.gradle/
+.idea/
+*.apk
+local.properties

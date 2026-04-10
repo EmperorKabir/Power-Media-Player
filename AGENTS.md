@@ -1,0 +1,1 @@
+Before executing any code modifications or file generation, you must autonomously execute a git commit to save the current project state. If a rollback is requested, you must utilize git checkout or git revert to restore the previous commit hash.
