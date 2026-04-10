@@ -216,4 +216,103 @@ class LibraryViewModel @Inject constructor(
 
         return files
     }
+
+    /**
+     * Handle a file picked via SAF (ACTION_OPEN_DOCUMENT).
+     * Creates a MediaFileInfo from the picked URI and adds it to the appropriate list.
+     */
+    fun handlePickedFile(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val fileInfo = resolvePickedFile(uri) ?: return@launch
+
+            val current = _uiState.value
+            if (fileInfo.isVideo) {
+                _uiState.value = current.copy(
+                    videoFiles = listOf(fileInfo) + current.videoFiles,
+                    selectedTab = 1
+                )
+            } else {
+                _uiState.value = current.copy(
+                    audioFiles = listOf(fileInfo) + current.audioFiles,
+                    selectedTab = 0
+                )
+            }
+        }
+    }
+
+    /**
+     * Create a single MediaItem from a picked file URI for immediate playback.
+     */
+    fun createSingleMediaItem(uri: Uri): MediaItem {
+        return MediaItem.Builder()
+            .setMediaId(uri.toString())
+            .setUri(uri)
+            .build()
+    }
+
+    /**
+     * Resolve metadata from a SAF-picked file URI using ContentResolver.
+     */
+    private fun resolvePickedFile(uri: Uri): MediaFileInfo? {
+        return try {
+            val cursor = context.contentResolver.query(
+                uri, null, null, null, null
+            ) ?: return null
+
+            cursor.use {
+                if (!it.moveToFirst()) return null
+
+                val displayName = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    .takeIf { idx -> idx >= 0 }?.let { idx -> it.getString(idx) } ?: "Unknown"
+
+                val size = it.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    .takeIf { idx -> idx >= 0 }?.let { idx -> it.getLong(idx) } ?: 0L
+
+                val mimeType = context.contentResolver.getType(uri) ?: ""
+                val isVideo = mimeType.startsWith("video/")
+
+                // Use MediaMetadataRetriever for duration and tags
+                val retriever = android.media.MediaMetadataRetriever()
+                var title = displayName
+                var artist = ""
+                var album = ""
+                var duration = 0L
+
+                try {
+                    retriever.setDataSource(context, uri)
+                    title = retriever.extractMetadata(
+                        android.media.MediaMetadataRetriever.METADATA_KEY_TITLE
+                    ) ?: displayName
+                    artist = retriever.extractMetadata(
+                        android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST
+                    ) ?: ""
+                    album = retriever.extractMetadata(
+                        android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM
+                    ) ?: ""
+                    duration = retriever.extractMetadata(
+                        android.media.MediaMetadataRetriever.METADATA_KEY_DURATION
+                    )?.toLongOrNull() ?: 0L
+                } catch (_: Exception) {
+                } finally {
+                    try { retriever.release() } catch (_: Exception) {}
+                }
+
+                MediaFileInfo(
+                    id = uri.hashCode().toLong(),
+                    uri = uri,
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    duration = duration,
+                    mimeType = mimeType,
+                    size = size,
+                    dateModified = System.currentTimeMillis() / 1000,
+                    isVideo = isVideo
+                )
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
+

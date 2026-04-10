@@ -73,6 +73,22 @@ fun LibraryScreen(
         }
     }
 
+    // SAF File Picker
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            // Take persistable permission so we can access the file later
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            viewModel.handlePickedFile(uri)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -88,6 +104,19 @@ fun LibraryScreen(
                 )
             },
             actions = {
+                // Open file picker (SAF)
+                IconButton(onClick = {
+                    filePickerLauncher.launch(
+                        arrayOf("audio/*", "video/*", "application/ogg", "application/x-flac")
+                    )
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.FileOpen,
+                        contentDescription = "Open file",
+                        tint = TealAccent
+                    )
+                }
+                // Refresh MediaStore scan
                 IconButton(onClick = { viewModel.refreshMedia() }) {
                     Icon(
                         imageVector = Icons.Filled.Refresh,
