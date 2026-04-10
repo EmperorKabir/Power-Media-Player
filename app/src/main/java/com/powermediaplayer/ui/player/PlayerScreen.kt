@@ -7,7 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -365,7 +365,7 @@ private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit) {
         },
         leadingIcon = {
             Icon(
-                imageVector = if (hasChapters) Icons.Filled.BookmarkBorder else Icons.AutoMirrored.Filled.QueueMusic,
+                imageVector = if (hasChapters) Icons.Filled.BookmarkBorder else Icons.Filled.LibraryMusic,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp)
             )
