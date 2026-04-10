@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.powermediaplayer.service.PlaybackConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,8 @@ data class LibraryUiState(
  */
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val playbackConnection: PlaybackConnection
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())
@@ -88,6 +90,15 @@ class LibraryViewModel @Inject constructor(
                 .build()
         }
         return Pair(items, startIndex)
+    }
+
+    /**
+     * Start playback of [files] starting at [startIndex].
+     * Directly calls PlaybackConnection so nothing is left as a TODO.
+     */
+    fun playFiles(files: List<MediaFileInfo>, startIndex: Int) {
+        val (items, idx) = createMediaItems(files, startIndex)
+        playbackConnection.setMediaItems(items, idx)
     }
 
     private fun scanMedia() {

@@ -44,7 +44,7 @@ fun PlayerScreen(
 
     when (windowSizeClass.widthSizeClass) {
         WindowWidthSizeClass.Expanded -> {
-            // Tablet / landscape foldable: side-by-side layout
+            // Landscape tablet / unfolded foldable in landscape: side-by-side
             PlayerScreenExpanded(
                 uiState = uiState,
                 viewModel = viewModel,
@@ -54,15 +54,28 @@ fun PlayerScreen(
                 onShowChapterPicker = { showChapterPicker = true }
             )
         }
-        else -> {
-            // Phone / small tablet: stacked layout
+        WindowWidthSizeClass.Medium -> {
+            // Large phone / foldable in portrait: wider stacked layout
             PlayerScreenCompact(
                 uiState = uiState,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
                 onShowSleepTimer = { showSleepTimerDialog = true },
-                onShowChapterPicker = { showChapterPicker = true }
+                onShowChapterPicker = { showChapterPicker = true },
+                horizontalPadding = 32 // Extra padding to use the extra width
+            )
+        }
+        else -> {
+            // Compact — standard phone
+            PlayerScreenCompact(
+                uiState = uiState,
+                viewModel = viewModel,
+                coverColors = coverColors,
+                onColorsExtracted = { coverColors = it },
+                onShowSleepTimer = { showSleepTimerDialog = true },
+                onShowChapterPicker = { showChapterPicker = true },
+                horizontalPadding = 0
             )
         }
     }
@@ -106,7 +119,8 @@ private fun PlayerScreenCompact(
     coverColors: CoverArtColors?,
     onColorsExtracted: (CoverArtColors?) -> Unit,
     onShowSleepTimer: () -> Unit,
-    onShowChapterPicker: () -> Unit
+    onShowChapterPicker: () -> Unit,
+    horizontalPadding: Int = 0
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         CoverArtBackground(
@@ -136,7 +150,7 @@ private fun PlayerScreenCompact(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(top = 48.dp),
+                .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Bottom
         ) {

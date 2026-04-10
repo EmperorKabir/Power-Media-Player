@@ -9,12 +9,17 @@ import androidx.compose.ui.unit.dp
 import com.powermediaplayer.ui.theme.*
 
 /**
- * Dual progress sliders for track and playlist scrubbing.
- * Slider 1: Current track/chapter position
- * Slider 2: Total playlist/album/film position
+ * Dual progress sliders — always rendered, disabled when not applicable.
  *
- * Custom touch interpolation prevents audio stuttering during rapid scrubbing
- * by debouncing seek operations.
+ * Slider 1 (Track):    Current chapter/track position within the currently playing file.
+ *                      Enabled when a file with known duration is loaded.
+ *
+ * Slider 2 (Full):     Position within the entire album/audiobook/playlist.
+ *                      Enabled only when playing a multi-item queue.
+ *                      Shown (greyed) always so the layout doesn't jump.
+ *
+ * Custom touch interpolation: seek is deferred until the user lifts their finger
+ * to prevent audio stuttering during drag.
  */
 @Composable
 fun ProgressSliders(
@@ -24,7 +29,7 @@ fun ProgressSliders(
     trackDurationFormatted: String,
     trackSliderEnabled: Boolean,
     onTrackSeek: (Float) -> Unit,
-    // Playlist slider
+    // Full / playlist slider
     playlistPosition: Float,
     playlistPositionFormatted: String,
     playlistDurationFormatted: String,
@@ -39,74 +44,72 @@ fun ProgressSliders(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
-        // ── Track Progress Slider ────────────────────────────────
+        // ── Track Slider — current file position ─────────────────
         Text(
             text = "Track",
             style = MaterialTheme.typography.labelSmall,
-            color = TealAccent,
+            color = if (trackSliderEnabled) TealAccent else DisabledGrey,
             modifier = Modifier.padding(start = 4.dp)
         )
-
-        TrackSlider(
+        PositionSlider(
             position = trackPosition,
             positionFormatted = trackPositionFormatted,
             durationFormatted = trackDurationFormatted,
             enabled = trackSliderEnabled,
-            onSeek = onTrackSeek
+            onSeek = onTrackSeek,
+            activeColor = TealAccent
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // ── Playlist Progress Slider ─────────────────────────────
-        if (playlistSliderEnabled) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Playlist",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Teal300,
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-                if (trackIndexDisplay.isNotEmpty()) {
-                    Text(
-                        text = trackIndexDisplay,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(end = 4.dp)
-                    )
-                }
-            }
-
-            TrackSlider(
-                position = playlistPosition,
-                positionFormatted = playlistPositionFormatted,
-                durationFormatted = playlistDurationFormatted,
-                enabled = playlistSliderEnabled,
-                onSeek = onPlaylistSeek,
-                trackColor = Teal300
+        // ── Full Slider — album/audiobook/playlist total ──────────
+        // Always shown; disabled (greyed) when playing a single un-queued file.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Full",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (playlistSliderEnabled) Teal300 else DisabledGrey,
+                modifier = Modifier.padding(start = 4.dp)
             )
+            if (trackIndexDisplay.isNotEmpty()) {
+                Text(
+                    text = trackIndexDisplay,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (playlistSliderEnabled) TextSecondary else DisabledGrey,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
         }
+        PositionSlider(
+            position = playlistPosition,
+            positionFormatted = playlistPositionFormatted,
+            durationFormatted = playlistDurationFormatted,
+            enabled = playlistSliderEnabled,
+            onSeek = onPlaylistSeek,
+            activeColor = Teal300
+        )
     }
 }
 
 /**
- * Individual slider with time labels and custom teal styling.
- * Uses debounced seeking to prevent stuttering during rapid scrubbing.
+ * Single slider with labelled time positions.
+ * Only fires [onSeek] when the user lifts their finger (onValueChangeFinished),
+ * avoiding stuttering from rapid intermediate seeks.
  */
 @Composable
-private fun TrackSlider(
+private fun PositionSlider(
     position: Float,
     positionFormatted: String,
     durationFormatted: String,
     enabled: Boolean,
     onSeek: (Float) -> Unit,
-    trackColor: androidx.compose.ui.graphics.Color = TealAccent,
+    activeColor: androidx.compose.ui.graphics.Color = TealAccent,
     modifier: Modifier = Modifier
 ) {
-    // Track user dragging state to prevent position updates overwriting drag
     var isDragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
 
@@ -118,21 +121,20 @@ private fun TrackSlider(
                 dragValue = value
             },
             onValueChangeFinished = {
-                // Debounced seek: only seek when user lifts finger
                 onSeek(dragValue)
                 isDragging = false
             },
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp),
+                .height(28.dp),
             colors = SliderDefaults.colors(
-                thumbColor = trackColor,
-                activeTrackColor = trackColor,
-                inactiveTrackColor = DisabledContent,
+                thumbColor = activeColor,
+                activeTrackColor = activeColor,
+                inactiveTrackColor = if (enabled) DisabledContent else DisabledContent.copy(alpha = 0.4f),
                 disabledThumbColor = DisabledGrey,
-                disabledActiveTrackColor = DisabledGrey,
-                disabledInactiveTrackColor = DisabledContent
+                disabledActiveTrackColor = DisabledGrey.copy(alpha = 0.5f),
+                disabledInactiveTrackColor = DisabledContent.copy(alpha = 0.4f)
             )
         )
 

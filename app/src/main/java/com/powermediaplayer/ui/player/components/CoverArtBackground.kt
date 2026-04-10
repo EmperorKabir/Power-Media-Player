@@ -1,7 +1,5 @@
 package com.powermediaplayer.ui.player.components
 
-import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,7 +9,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import coil3.request.SuccessResult
 import coil3.request.allowHardware
+import coil3.toBitmap
 import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.util.CoverArtColors
 import com.powermediaplayer.util.PaletteHelper
@@ -22,6 +22,7 @@ import com.powermediaplayer.util.PaletteHelper
  * Extracts Palette colors when the artwork changes.
  *
  * @param artworkUri URI of the cover art image, or null for no art.
+ * @param hasCoverArt Whether cover art is expected to exist.
  * @param onColorsExtracted Callback when Palette colors are extracted from art.
  */
 @Composable
@@ -38,23 +39,22 @@ fun CoverArtBackground(
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(artworkUri)
-                    .allowHardware(false) // Need software bitmap for Palette
+                    .allowHardware(false) // Disable hardware bitmaps — required for Palette extraction
                     .build(),
                 contentDescription = "Album cover art",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { result ->
-                    // Extract Palette colors from the loaded bitmap
-                    val drawable = result.result.image
-                    // Coil 3 uses Image type; we try to get a Bitmap for Palette
+                    // Coil 3: use toBitmap() extension to safely get a software Bitmap
                     try {
-                        // Attempt to get bitmap from the platform image
-                        val bitmap = (result.result.image as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                        val bitmap = (result.result as? SuccessResult)?.image?.toBitmap()
                         if (bitmap != null) {
                             val colors = PaletteHelper.extractColorSet(bitmap)
                             onColorsExtracted(colors)
+                        } else {
+                            onColorsExtracted(null)
                         }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         onColorsExtracted(null)
                     }
                 },
@@ -63,7 +63,7 @@ fun CoverArtBackground(
                 }
             )
         } else {
-            // Pure OLED black — disables pixels on OLED displays
+            // Pure OLED black — disables pixels on OLED displays for maximum contrast
             Box(
                 modifier = Modifier
                     .fillMaxSize()

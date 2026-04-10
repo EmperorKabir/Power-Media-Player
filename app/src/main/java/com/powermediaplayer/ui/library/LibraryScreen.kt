@@ -34,7 +34,8 @@ import com.powermediaplayer.util.TimeFormatter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
-    viewModel: LibraryViewModel = hiltViewModel()
+    viewModel: LibraryViewModel = hiltViewModel(),
+    onNavigateToPlayer: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -242,8 +243,9 @@ fun LibraryScreen(
                         MediaFileItem(
                             file = file,
                             onClick = {
-                                val (items, startIdx) = viewModel.createMediaItems(files, index)
-                                // TODO: Trigger playback via PlaybackConnection
+                                // Enqueue all visible files, start at tapped index
+                                viewModel.playFiles(files, index)
+                                onNavigateToPlayer()
                             }
                         )
                     }
