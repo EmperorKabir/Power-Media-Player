@@ -105,15 +105,7 @@ fun LibraryScreen(
         TabRow(
             selectedTabIndex = uiState.selectedTab,
             containerColor = OledBlack,
-            contentColor = TealAccent,
-            indicator = { tabPositions ->
-                if (uiState.selectedTab < tabPositions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[uiState.selectedTab]),
-                        color = TealAccent
-                    )
-                }
-            }
+            contentColor = TealAccent
         ) {
             Tab(
                 selected = uiState.selectedTab == 0,

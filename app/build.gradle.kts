@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
@@ -39,9 +38,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+
 
     buildFeatures {
         compose = true
@@ -82,12 +79,14 @@ dependencies {
     // implementation("androidx.media3:media3-decoder-ffmpeg:$media3Version")
 
     // ── FFmpeg Metadata Retriever ────────────────────────────────
-    implementation("wseemann.media:FFmpegMediaMetadataRetriever-core:1.0.19")
-    implementation("wseemann.media:FFmpegMediaMetadataRetriever-native:1.0.19")
+    // NOTE: FFmpegMediaMetadataRetriever has namespace conflicts with AGP 9.
+    // Deep Scan mode falls back to Android's built-in MediaMetadataRetriever.
+    // To enable: resolve namespace conflict or use local AAR build.
+
 
     // ── Hilt Dependency Injection ────────────────────────────────
-    implementation("com.google.dagger:hilt-android:2.56.2")
-    ksp("com.google.dagger:hilt-android-compiler:2.56.2")
+    implementation("com.google.dagger:hilt-android:2.59.2")
+    ksp("com.google.dagger:hilt-android-compiler:2.59.2")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // ── Room Database ────────────────────────────────────────────

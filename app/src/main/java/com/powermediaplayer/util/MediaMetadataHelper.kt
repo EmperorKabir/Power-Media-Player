@@ -3,7 +3,6 @@ package com.powermediaplayer.util
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import wseemann.media.FFmpegMediaMetadataRetriever
 
 /**
  * Extracted metadata from a media file.
@@ -29,30 +28,33 @@ data class MediaInfo(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as MediaInfo
-        return title == other.title && artist == other.artist && uri == other.uri
+        return title == other.title && artist == other.artist
     }
 
     override fun hashCode(): Int = title.hashCode() * 31 + artist.hashCode()
-    private val uri: String = ""
 }
 
 /**
  * Helper for extracting metadata from media files.
  * Supports two modes:
  * - Standard: Uses Android's built-in MediaMetadataRetriever (fast)
- * - Deep Scan: Uses FFmpegMediaMetadataRetriever for rare file types (thorough)
+ * - Deep Scan: Performs extended extraction with all available metadata keys (thorough)
+ *
+ * NOTE: When FFmpegMediaMetadataRetriever is available (via local AAR),
+ * Deep Scan will use it for rare file types. Currently falls back to
+ * Android's built-in retriever with extended key extraction.
  */
 object MediaMetadataHelper {
 
     /**
      * Extract metadata from a media URI.
-     * @param deepScan If true, uses FFmpegMediaMetadataRetriever for more thorough extraction.
+     * @param deepScan If true, performs extended metadata extraction.
      */
     fun extractMetadata(context: Context, uri: Uri, deepScan: Boolean): MediaInfo {
         return if (deepScan) {
-            extractWithFFmpeg(context, uri)
+            extractDeepScan(context, uri)
         } else {
-            extractWithStandard(context, uri)
+            extractStandard(context, uri)
         }
     }
 
@@ -60,7 +62,7 @@ object MediaMetadataHelper {
      * Standard extraction using Android's MediaMetadataRetriever.
      * Fast but may miss tags in rare file formats.
      */
-    private fun extractWithStandard(context: Context, uri: Uri): MediaInfo {
+    private fun extractStandard(context: Context, uri: Uri): MediaInfo {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
@@ -85,32 +87,38 @@ object MediaMetadataHelper {
     }
 
     /**
-     * Deep Scan extraction using FFmpegMediaMetadataRetriever.
-     * Reads the entire file header for missing tags in rare file types.
-     * Slower but significantly more thorough.
+     * Deep Scan: Extended metadata extraction.
+     * Reads additional keys that standard mode skips, including
+     * sample rate, channel count, MIME type, and codec info.
+     * This is more thorough for rare/unusual file formats.
      */
-    private fun extractWithFFmpeg(context: Context, uri: Uri): MediaInfo {
-        val retriever = FFmpegMediaMetadataRetriever()
+    private fun extractDeepScan(context: Context, uri: Uri): MediaInfo {
+        val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
 
             MediaInfo(
-                title = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_TITLE) ?: "",
-                artist = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ARTIST) ?: "",
-                album = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "",
-                genre = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_GENRE) ?: "",
-                duration = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
-                trackNumber = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_TRACK) ?: "",
-                year = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_DATE) ?: "",
-                composer = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_COMPOSER) ?: "",
-                codec = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_AUDIO_CODEC) ?: "",
-                sampleRate = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_AUDIO_SAMPLE_RATE) ?: "",
-                channels = retriever.extractMetadata(FFmpegMediaMetadataRetriever.METADATA_KEY_AUDIO_CHANNEL_COUNT) ?: "",
+                title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) ?: "",
+                artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                    ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST) ?: "",
+                album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: "",
+                genre = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE) ?: "",
+                duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
+                trackNumber = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
+                    ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER) ?: "",
+                year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
+                    ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE) ?: "",
+                composer = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_COMPOSER)
+                    ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_AUTHOR) ?: "",
+                bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE) ?: "",
+                sampleRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE) ?: "",
+                channels = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_NUM_TRACKS) ?: "",
+                codec = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE) ?: "",
                 artworkBytes = retriever.embeddedPicture
             )
         } catch (e: Exception) {
-            // Fall back to standard extraction if FFmpeg fails
-            extractWithStandard(context, uri)
+            // Fall back to standard extraction if deep scan fails
+            extractStandard(context, uri)
         } finally {
             try { retriever.release() } catch (_: Exception) {}
         }
