@@ -217,6 +217,97 @@ fun SpeedControl(
 }
 
 /**
+ * A prepared, modular speed control component.
+ * Places the 'Speed' text nearer to the setting alongside a running guy icon.
+ * Intended to be placed by the coordinator agent.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PreparedSpeedComponent(
+    playbackSpeed: Float,
+    onSpeedChange: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var speedMenuExpanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.DirectionsRun,
+            contentDescription = "Speed Icon",
+            tint = TextSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = "Speed",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSecondary
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = speedMenuExpanded,
+            onExpandedChange = { speedMenuExpanded = it },
+            modifier = Modifier.width(110.dp)
+        ) {
+            OutlinedTextField(
+                value = formatSpeed(playbackSpeed),
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = speedMenuExpanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .height(44.dp),
+                textStyle = MaterialTheme.typography.labelLarge,
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealAccent,
+                    unfocusedBorderColor = DisabledContent,
+                    focusedTextColor = TealAccent,
+                    unfocusedTextColor = TextPrimary,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated,
+                    focusedTrailingIconColor = TealAccent,
+                    unfocusedTrailingIconColor = TextSecondary
+                ),
+                shape = RoundedCornerShape(10.dp)
+            )
+
+            ExposedDropdownMenu(
+                expanded = speedMenuExpanded,
+                onDismissRequest = { speedMenuExpanded = false },
+                modifier = Modifier.background(SurfaceElevated)
+            ) {
+                SPEED_OPTIONS.forEach { speed ->
+                    val isSelected = kotlin.math.abs(playbackSpeed - speed) < 0.01f
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = formatSpeed(speed),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (isSelected) TealAccent else TextPrimary
+                            )
+                        },
+                        onClick = {
+                            onSpeedChange(speed)
+                            speedMenuExpanded = false
+                        },
+                        trailingIcon = if (isSelected) {
+                            { Icon(Icons.Filled.Check, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        modifier = Modifier.background(
+                            if (isSelected) TealAccent.copy(alpha = 0.1f) else SurfaceElevated
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * Sleep timer button — shows active countdown if timer is running.
  */
 @Composable

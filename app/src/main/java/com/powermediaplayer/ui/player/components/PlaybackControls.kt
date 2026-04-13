@@ -236,6 +236,110 @@ private fun ControlButton(
             contentDescription = label,
             modifier = Modifier.size(size.dp),
             tint = if (enabled) TextPrimary else DisabledGrey
-        )
     }
+}
+
+/**
+ * ── Prepared UI Components for Coordinator Agent ──────────────────────
+ * Labeled navigation buttons to explicitly distinguish between
+ * structural skips like 'Chapter / Track' vs entire 'File'.
+ */
+
+@Composable
+fun LabelledNavigationButton(
+    icon: ImageVector,
+    label: String,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Int = 32
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.size(64.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(size.dp),
+                tint = if (enabled) TextPrimary else DisabledGrey
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                color = if (enabled) TextPrimary else DisabledGrey
+            )
+        }
+    }
+}
+
+@Composable
+fun NextChapterTrackButton(
+    enabled: Boolean, 
+    onClick: () -> Unit, 
+    modifier: Modifier = Modifier
+) {
+    LabelledNavigationButton(
+        icon = Icons.Filled.SkipNext,
+        label = "Chapter",
+        contentDescription = "Next Chapter or Track",
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun PrevChapterTrackButton(
+    enabled: Boolean, 
+    onClick: () -> Unit, 
+    modifier: Modifier = Modifier
+) {
+    LabelledNavigationButton(
+        icon = Icons.Filled.SkipPrevious,
+        label = "Chapter",
+        contentDescription = "Previous Chapter or Track",
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun NextFileButton(
+    enabled: Boolean, 
+    onClick: () -> Unit, 
+    modifier: Modifier = Modifier
+) {
+    LabelledNavigationButton(
+        icon = Icons.Filled.SkipNext,
+        label = "File",
+        contentDescription = "Next File",
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun PrevFileButton(
+    enabled: Boolean, 
+    onClick: () -> Unit, 
+    modifier: Modifier = Modifier
+) {
+    LabelledNavigationButton(
+        icon = Icons.Filled.SkipPrevious,
+        label = "File",
+        contentDescription = "Previous File",
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier
+    )
 }

@@ -53,7 +53,8 @@ data class PlayerState(
     // Media capabilities for button greying
     val isPartOfPlaylist: Boolean = false,
     val hasCoverArt: Boolean = false,
-    val isVideoContent: Boolean = false
+    val isVideoContent: Boolean = false,
+    val isSeekable: Boolean = false
 )
 
 /**
@@ -294,7 +295,8 @@ class PlaybackConnection @Inject constructor(
             hasChapters = chapters.isNotEmpty(),
             isPartOfPlaylist = c.mediaItemCount > 1,
             hasCoverArt = metadata.artworkUri != null || metadata.artworkData != null,
-            isVideoContent = hasVideoTrack
+            isVideoContent = hasVideoTrack,
+            isSeekable = c.isCurrentMediaItemSeekable
         )
     }
 

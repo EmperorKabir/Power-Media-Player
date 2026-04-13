@@ -76,6 +76,8 @@ class LibraryViewModel @Inject constructor(
      */
     fun createMediaItems(files: List<MediaFileInfo>, startIndex: Int = 0): Pair<List<MediaItem>, Int> {
         val items = files.map { file ->
+            val extras = com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, file.uri)
+            
             MediaItem.Builder()
                 .setMediaId(file.uri.toString())
                 .setUri(file.uri)
@@ -85,6 +87,7 @@ class LibraryViewModel @Inject constructor(
                         .setArtist(file.artist)
                         .setAlbumTitle(file.album)
                         .setArtworkUri(file.albumArtUri)
+                        .setExtras(extras)
                         .build()
                 )
                 .build()
@@ -255,9 +258,15 @@ class LibraryViewModel @Inject constructor(
      * Create a single MediaItem from a picked file URI for immediate playback.
      */
     fun createSingleMediaItem(uri: Uri): MediaItem {
+        val extras = com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, uri)
         return MediaItem.Builder()
             .setMediaId(uri.toString())
             .setUri(uri)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setExtras(extras)
+                    .build()
+            )
             .build()
     }
 
