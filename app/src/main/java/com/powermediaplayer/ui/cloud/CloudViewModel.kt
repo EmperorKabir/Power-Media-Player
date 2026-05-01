@@ -11,6 +11,7 @@ import com.powermediaplayer.cloud.CloudProviderType
 import com.powermediaplayer.cloud.GoogleDriveProvider
 import com.powermediaplayer.cloud.SpotifyProvider
 import com.powermediaplayer.service.ChapterInfo
+import com.powermediaplayer.service.LocalMetadataOverride
 import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.util.M4bChapterParser
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -173,38 +174,68 @@ class CloudViewModel @Inject constructor(
                 .build()
             playbackConnection.setMediaItems(listOf(mediaItem), 0)
 
-            // Drive M4B / MP4 audio: chapters live in the moov atom which
-            // MediaExtractor cannot reach over an authenticated HTTPS URL.
-            // Download the file in the background, parse chapters, and push
-            // them to the player via setLocalChapters. Streaming continues
-            // unaffected; chapters arrive a few seconds in.
+            // Drive: chapters + metadata + artwork live INSIDE the file
+            // (moov box for MP4/M4B, ID3 for MP3, etc.) and MediaExtractor /
+            // MediaMetadataRetriever cannot reach an authenticated HTTPS URL
+            // directly. Download to cache once, run BOTH parsers, push the
+            // results to the player. Streaming continues unaffected.
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder) {
-                val nameLower = item.name.lowercase()
-                val looksChapterable = nameLower.endsWith(".m4b") ||
-                    nameLower.endsWith(".m4a") ||
-                    nameLower.endsWith(".mp4") ||
-                    item.mimeType.contains("mp4") ||
-                    item.mimeType.contains("m4b")
-                if (looksChapterable) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        val tempFile = driveProvider.downloadToCache(item) ?: return@launch
-                        try {
-                            val bundle = M4bChapterParser.extractChaptersAsBundle(
-                                context, android.net.Uri.fromFile(tempFile)
-                            )
-                            val count = bundle.getInt("chapter_count", 0)
-                            if (count > 0) {
-                                val chapters = (0 until count).mapNotNull { i ->
-                                    val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
-                                    val start = bundle.getLong("chapter_start_$i", -1)
-                                    val end = bundle.getLong("chapter_end_$i", -1)
-                                    if (start >= 0) ChapterInfo(title, start, end, i) else null
+                viewModelScope.launch(Dispatchers.IO) {
+                    val tempFile = driveProvider.downloadToCache(item) ?: return@launch
+                    try {
+                        val tempUri = android.net.Uri.fromFile(tempFile)
+
+                        // Tags + artwork from MediaMetadataRetriever
+                        runCatching {
+                            android.media.MediaMetadataRetriever().use { mmr ->
+                                mmr.setDataSource(context, tempUri)
+                                val title = mmr.extractMetadata(
+                                    android.media.MediaMetadataRetriever.METADATA_KEY_TITLE
+                                )
+                                val artist = mmr.extractMetadata(
+                                    android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST
+                                ) ?: mmr.extractMetadata(
+                                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST
+                                )
+                                val album = mmr.extractMetadata(
+                                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM
+                                )
+                                val artworkUri = mmr.embeddedPicture?.let { bytes ->
+                                    val artFile = java.io.File(
+                                        context.cacheDir, "drive_art_${item.id}.jpg"
+                                    )
+                                    artFile.outputStream().use { it.write(bytes) }
+                                    android.net.Uri.fromFile(artFile)
                                 }
-                                playbackConnection.setLocalChapters(chapters)
+                                if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
+                                    !album.isNullOrBlank() || artworkUri != null) {
+                                    playbackConnection.setLocalMetadata(
+                                        LocalMetadataOverride(
+                                            title = title,
+                                            artist = artist,
+                                            album = album,
+                                            artworkUri = artworkUri
+                                        )
+                                    )
+                                }
                             }
-                        } finally {
-                            tempFile.delete()
                         }
+
+                        // Chapters from the M4B parser (works for any MP4-family
+                        // file; safely returns empty for non-MP4)
+                        val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
+                        val count = bundle.getInt("chapter_count", 0)
+                        if (count > 0) {
+                            val chapters = (0 until count).mapNotNull { i ->
+                                val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
+                                val start = bundle.getLong("chapter_start_$i", -1)
+                                val end = bundle.getLong("chapter_end_$i", -1)
+                                if (start >= 0) ChapterInfo(title, start, end, i) else null
+                            }
+                            playbackConnection.setLocalChapters(chapters)
+                        }
+                    } finally {
+                        tempFile.delete()
                     }
                 }
             }

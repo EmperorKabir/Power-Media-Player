@@ -80,6 +80,18 @@ data class ChapterInfo(
 )
 
 /**
+ * Session-level metadata override for cases where the player's own metadata
+ * is missing/incomplete (e.g. cloud streams whose tags can only be read
+ * after authenticated download).
+ */
+data class LocalMetadataOverride(
+    val title: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+    val artworkUri: Uri? = null
+)
+
+/**
  * Singleton connection manager between the UI and PlaybackService.
  * Manages the MediaController lifecycle and exposes reactive player state via StateFlow.
  * Position updates use coroutine polling (250ms) to avoid callback storms on the UI thread.
@@ -116,6 +128,13 @@ class PlaybackConnection @Inject constructor(
      * the current track. Cleared on every [setMediaItems] call.
      */
     private var localChapters: List<ChapterInfo>? = null
+
+    /**
+     * Title/artist/album/artwork override surfaced from a post-load metadata
+     * scan (Drive items pull these from the downloaded cache file via
+     * MediaMetadataRetriever). Cleared on [setMediaItems].
+     */
+    private var localMetadata: LocalMetadataOverride? = null
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -226,11 +245,21 @@ class PlaybackConnection @Inject constructor(
     fun setMediaItems(items: List<MediaItem>, startIndex: Int = 0) {
         folderChapters = null
         localChapters = null
+        localMetadata = null
         controller?.let { c ->
             c.setMediaItems(items, startIndex, 0L)
             c.prepare()
             c.play()
         }
+    }
+
+    /**
+     * Provide title/artist/album/artwork extracted post-load (e.g. from a
+     * Drive download). null clears.
+     */
+    fun setLocalMetadata(meta: LocalMetadataOverride?) {
+        localMetadata = meta
+        updatePlayerState()
     }
 
     /**
@@ -492,7 +521,14 @@ class PlaybackConnection @Inject constructor(
      */
     private fun updatePlayerState() {
         val c = controller ?: return
+        // Two metadata sources matter here:
+        //   - `metadata` = merged player metadata (file-extracted + MediaItem)
+        //     — what onMediaMetadataChanged delivers, used for title/artist/etc.
+        //   - `itemMetadata` = the unmodified MediaItem.mediaMetadata
+        //     — Media3 1.6's combine logic OVERWRITES extras during merge,
+        //     so our is_video_hint Boolean only survives on the raw item.
         val metadata = c.mediaMetadata
+        val itemMetadata = c.currentMediaItem?.mediaMetadata
         val chapters = extractChapters(c)
         val isFolderMode = folderChapters != null
         val absolutePlaylistPos = calculatePlaylistPosition(c)
@@ -504,34 +540,48 @@ class PlaybackConnection @Inject constructor(
         val preservedDescription = _playerState.value.description
         val preservedError = _playerState.value.playerError
 
-        // Detect video by ANY of three signals so the audio layout never
-        // flashes for a video file:
-        //   (1) ExoPlayer track scan after parsing (authoritative)
-        //   (2) is_video_hint extra packed by library / cloud layers
-        //   (3) URI extension or MIME type — survives MediaController IPC
-        //       even when extras are dropped on minified release builds.
-        val isVideoHint = metadata.extras?.getBoolean("is_video_hint", false) ?: false
+        // Detect video by ANY of FIVE signals — any single positive flips
+        // the UI to the video layout immediately, so the audio layout never
+        // shows for a video file regardless of which signal arrives first:
+        //   (1) ExoPlayer's track presence (no isSelected gate — some
+        //       devices skip selection until the first frame is decoded)
+        //   (2) is_video_hint extra read from the raw MediaItem
+        //   (3) URI ends with a recognised video extension
+        //   (4) URI path contains "/video/" (MediaStore content URIs have
+        //       no extension but always include this segment for video)
+        //   (5) localConfiguration MIME starts with "video/"
+        val isVideoHint = (itemMetadata?.extras ?: metadata.extras)
+            ?.getBoolean("is_video_hint", false) ?: false
         val currentItem = c.currentMediaItem
         val uri = currentItem?.requestMetadata?.mediaUri
             ?: currentItem?.localConfiguration?.uri
-        val uriExt = uri?.toString()?.substringAfterLast('.', "")?.lowercase()
+        val uriString = uri?.toString().orEmpty()
+        val uriExt = uriString.substringAfterLast('.', "").lowercase()
         val isVideoByExt = uriExt in VIDEO_EXTENSIONS
+        val isVideoByPath = "/video/" in uriString
         val mime = currentItem?.localConfiguration?.mimeType.orEmpty()
         val isVideoByMime = mime.startsWith("video/")
         val isVideoByTracks = c.currentTracks.groups.any { group ->
-            group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO && group.isSelected
+            group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO
         }
-        val hasVideoTrack = isVideoByTracks || isVideoHint || isVideoByExt || isVideoByMime
+        val hasVideoTrack = isVideoByTracks || isVideoHint ||
+            isVideoByExt || isVideoByPath || isVideoByMime
+
+        // Apply session-level metadata override on top of player metadata.
+        val overTitle = localMetadata?.title?.takeIf { it.isNotBlank() }
+        val overArtist = localMetadata?.artist?.takeIf { it.isNotBlank() }
+        val overAlbum = localMetadata?.album?.takeIf { it.isNotBlank() }
+        val overArtwork = localMetadata?.artworkUri
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
             currentPosition = c.currentPosition.coerceAtLeast(0L),
             duration = c.duration.let { if (it == C.TIME_UNSET) 0L else it },
             bufferedPercentage = c.bufferedPercentage,
-            title = metadata.title?.toString() ?: "",
-            artist = metadata.artist?.toString() ?: "",
-            album = metadata.albumTitle?.toString() ?: "",
-            artworkUri = metadata.artworkUri,
+            title = overTitle ?: metadata.title?.toString() ?: "",
+            artist = overArtist ?: metadata.artist?.toString() ?: "",
+            album = overAlbum ?: metadata.albumTitle?.toString() ?: "",
+            artworkUri = overArtwork ?: metadata.artworkUri,
             playbackSpeed = c.playbackParameters.speed,
             currentMediaItemIndex = c.currentMediaItemIndex,
             mediaItemCount = c.mediaItemCount,
@@ -546,7 +596,7 @@ class PlaybackConnection @Inject constructor(
             description = preservedDescription,
             playerError = preservedError,
             isPartOfPlaylist = c.mediaItemCount > 1,
-            hasCoverArt = metadata.artworkUri != null || metadata.artworkData != null,
+            hasCoverArt = (overArtwork ?: metadata.artworkUri) != null || metadata.artworkData != null,
             isVideoContent = hasVideoTrack,
             isSeekable = c.isCurrentMediaItemSeekable
         )

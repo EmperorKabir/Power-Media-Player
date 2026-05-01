@@ -5,7 +5,13 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "mcp__context7__resolve-library-id",
-      "mcp__context7__query-docs"
+      "mcp__context7__query-docs",
+      "Bash(./gradlew :app:compileDebugKotlin --quiet)",
+      "Bash(./gradlew :app:compileDebugKotlin)",
+      "Skill(update-config)",
+      "Bash(./gradlew signingReport)",
+      "Bash(./gradlew :app:assembleDebug)",
+      "Bash(./gradlew installDebug)"
     ]
   }
 }
