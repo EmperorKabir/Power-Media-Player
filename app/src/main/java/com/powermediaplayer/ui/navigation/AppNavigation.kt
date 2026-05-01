@@ -2,6 +2,7 @@ package com.powermediaplayer.ui.navigation
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
@@ -20,6 +21,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.powermediaplayer.ui.cloud.CloudBrowserScreen
 import com.powermediaplayer.ui.equalizer.EqualizerScreen
 import com.powermediaplayer.ui.library.LibraryScreen
 import com.powermediaplayer.ui.library.LibraryViewModel
@@ -32,11 +34,12 @@ import com.powermediaplayer.ui.theme.TealAccent
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Player : Screen("player", "Player", Icons.Filled.PlayCircle)
     data object Library : Screen("library", "Library", Icons.Filled.LibraryMusic)
+    data object Cloud : Screen("cloud", "Cloud", Icons.Filled.Cloud)
     data object Equalizer : Screen("equalizer", "EQ", Icons.Filled.Equalizer)
     data object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
 }
 
-private val screens = listOf(Screen.Player, Screen.Library, Screen.Equalizer, Screen.Settings)
+private val screens = listOf(Screen.Player, Screen.Library, Screen.Cloud, Screen.Equalizer, Screen.Settings)
 
 /**
  * Main app navigation. Hosts a SHARED LibraryViewModel across the Library tab
@@ -105,6 +108,9 @@ fun AppNavigation(windowSizeClass: WindowSizeClass) {
                     viewModel = libraryViewModel,
                     onNavigateToPlayer = navigateToPlayer
                 )
+            }
+            composable(Screen.Cloud.route) {
+                CloudBrowserScreen(onNavigateToPlayer = navigateToPlayer)
             }
             composable(Screen.Equalizer.route) { EqualizerScreen() }
             composable(Screen.Settings.route) { SettingsScreen() }

@@ -1,0 +1,167 @@
+package com.powermediaplayer.cloud
+
+import android.accounts.Account
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.Scope
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
+import com.google.api.client.http.javanet.NetHttpTransport
+import com.google.api.client.json.gson.GsonFactory
+import com.google.api.services.drive.Drive
+import com.google.api.services.drive.DriveScopes
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Google Drive integration.
+ *
+ * Authentication: Google Sign-In (Android-type OAuth client, no client secret —
+ * the package name + SHA-1 fingerprint registered in the GCP project identifies
+ * the app to Google's auth servers).
+ *
+ * Listing: Drive REST v3 via google-api-services-drive.
+ *
+ * Streaming: produces a Drive `?alt=media` Uri; the actual Bearer-authenticated
+ * read is handled by [GoogleDriveDataSourceFactory] which plugs into Media3.
+ */
+@Singleton
+class GoogleDriveProvider @Inject constructor(
+    @param:ApplicationContext private val context: Context
+) : CloudStorageProvider {
+
+    override val providerType: CloudProviderType = CloudProviderType.GOOGLE_DRIVE
+
+    private val _isLoggedIn = MutableStateFlow(false)
+    override val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val signInOptions: GoogleSignInOptions = GoogleSignInOptions
+        .Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+        .requestEmail()
+        .requestScopes(Scope(DriveScopes.DRIVE_READONLY))
+        .build()
+
+    private val signInClient: GoogleSignInClient by lazy {
+        GoogleSignIn.getClient(context, signInOptions)
+    }
+
+    private var account: GoogleSignInAccount? = null
+    private var driveService: Drive? = null
+
+    init {
+        // Pick up cached sign-in if present (returning user)
+        GoogleSignIn.getLastSignedInAccount(context)?.let { acc ->
+            attach(acc)
+        }
+    }
+
+    fun buildSignInIntent(): Intent = signInClient.signInIntent
+
+    /**
+     * Hand the activity-result Intent back here from the launcher; this
+     * resolves the GoogleSignInAccount and primes the Drive service.
+     */
+    suspend fun handleSignInResult(data: Intent?): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            val acc = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+            attach(acc)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            _isLoggedIn.value = false
+            Result.failure(e)
+        }
+    }
+
+    private fun attach(acc: GoogleSignInAccount) {
+        account = acc
+        val credential = GoogleAccountCredential
+            .usingOAuth2(context, listOf(DriveScopes.DRIVE_READONLY))
+            .apply { selectedAccount = acc.account ?: Account(acc.email ?: "", "com.google") }
+        driveService = Drive.Builder(
+            NetHttpTransport(),
+            GsonFactory.getDefaultInstance(),
+            credential
+        )
+            .setApplicationName("Power Media Player")
+            .build()
+        _isLoggedIn.value = true
+    }
+
+    override suspend fun authenticate(context: Context): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Use buildSignInIntent + handleSignInResult"))
+
+    override suspend fun signOut(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            signInClient.signOut().result // blocking — already off main
+        } catch (_: Exception) {}
+        account = null
+        driveService = null
+        _isLoggedIn.value = false
+        Result.success(Unit)
+    }
+
+    override suspend fun listFiles(folderId: String?): Result<List<CloudMediaItem>> =
+        withContext(Dispatchers.IO) {
+            val drive = driveService ?: return@withContext Result.failure(
+                IllegalStateException("Not authenticated")
+            )
+            try {
+                val parent = folderId ?: "root"
+                val query = "'$parent' in parents and trashed = false " +
+                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
+                    "or mimeType = 'application/vnd.google-apps.folder')"
+                val result = drive.files().list()
+                    .setQ(query)
+                    .setFields("files(id, name, mimeType, size, parents, thumbnailLink)")
+                    .setPageSize(200)
+                    .execute()
+                val items = result.files.orEmpty().map { f ->
+                    CloudMediaItem(
+                        id = f.id,
+                        name = f.name ?: "Unnamed",
+                        mimeType = f.mimeType ?: "",
+                        size = f.getSize() ?: 0L,
+                        downloadUrl = "https://www.googleapis.com/drive/v3/files/${f.id}?alt=media",
+                        sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                        isFolder = f.mimeType == "application/vnd.google-apps.folder",
+                        parentId = folderId,
+                        thumbnailUri = f.thumbnailLink?.let { Uri.parse(it) }
+                    )
+                }
+                Result.success(items)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    override suspend fun getMediaStreamUri(item: CloudMediaItem): Result<Uri> =
+        Result.success(Uri.parse(item.downloadUrl))
+
+    /**
+     * Synchronously fetches a current OAuth2 access token. MUST be called
+     * off the main thread — GoogleAccountCredential blocks during refresh.
+     * Used by [GoogleDriveDataSourceFactory].
+     */
+    fun fetchAccessTokenBlocking(): String? {
+        val acc = account ?: return null
+        return try {
+            val credential = GoogleAccountCredential
+                .usingOAuth2(context, listOf(DriveScopes.DRIVE_READONLY))
+                .apply { selectedAccount = acc.account ?: Account(acc.email ?: "", "com.google") }
+            credential.token
+        } catch (_: Exception) {
+            null
+        }
+    }
+}

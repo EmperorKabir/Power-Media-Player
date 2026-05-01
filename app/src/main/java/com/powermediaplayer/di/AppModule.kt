@@ -6,6 +6,9 @@ import com.powermediaplayer.data.db.AppDatabase
 import com.powermediaplayer.data.db.dao.EqualizerPresetDao
 import com.powermediaplayer.data.db.dao.FavoriteDao
 import com.powermediaplayer.data.db.dao.PlaybackStateDao
+import com.powermediaplayer.cloud.GoogleDriveProvider
+import com.powermediaplayer.cloud.SpotifyProvider
+import com.powermediaplayer.cloud.SpotifyTokenStore
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import com.powermediaplayer.service.PlaybackConnection
 import dagger.Module
@@ -72,4 +75,23 @@ object AppModule {
     ): PlaybackConnection {
         return PlaybackConnection(context)
     }
+
+    @Provides
+    @Singleton
+    fun provideSpotifyTokenStore(
+        @ApplicationContext context: Context
+    ): SpotifyTokenStore = SpotifyTokenStore(context)
+
+    @Provides
+    @Singleton
+    fun provideSpotifyProvider(
+        @ApplicationContext context: Context,
+        tokenStore: SpotifyTokenStore
+    ): SpotifyProvider = SpotifyProvider(context, tokenStore)
+
+    @Provides
+    @Singleton
+    fun provideGoogleDriveProvider(
+        @ApplicationContext context: Context
+    ): GoogleDriveProvider = GoogleDriveProvider(context)
 }

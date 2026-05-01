@@ -8,11 +8,15 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.mp4.Mp4Extractor
+import com.powermediaplayer.cloud.GoogleDriveProvider
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -30,6 +34,9 @@ import dagger.hilt.android.AndroidEntryPoint
  */
 @AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
+
+    @javax.inject.Inject
+    lateinit var googleDriveProvider: GoogleDriveProvider
 
     private var player: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
@@ -75,7 +82,24 @@ class PlaybackService : MediaSessionService() {
         val extractorsFactory = DefaultExtractorsFactory()
             .setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
 
+        // Stamp googleapis.com requests with the user's Drive OAuth bearer
+        // token before each open(). Non-Drive URIs pass through unchanged.
+        val httpFactory = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+        val resolvingHttpFactory = ResolvingDataSource.Factory(httpFactory) { spec ->
+            if (spec.uri.host?.contains("googleapis.com") == true) {
+                val token = googleDriveProvider.fetchAccessTokenBlocking()
+                if (token != null) {
+                    val newHeaders = spec.httpRequestHeaders.toMutableMap().apply {
+                        put("Authorization", "Bearer $token")
+                    }
+                    spec.buildUpon().setHttpRequestHeaders(newHeaders).build()
+                } else spec
+            } else spec
+        }
+        val dataSourceFactory = DefaultDataSource.Factory(this, resolvingHttpFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
+            .setDataSourceFactory(dataSourceFactory)
 
         // Build ExoPlayer with audio focus and wake lock.
         // Audio offload is left at the default (DISABLED) so AudioSink can

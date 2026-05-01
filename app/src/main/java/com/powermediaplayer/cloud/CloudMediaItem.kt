@@ -4,6 +4,7 @@ import android.net.Uri
 
 enum class CloudProviderType {
     GOOGLE_DRIVE,
+    SPOTIFY,
     ONE_DRIVE,
     DROPBOX
 }

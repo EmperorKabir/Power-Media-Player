@@ -1,9 +1,22 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
 }
+
+// Read OAuth credentials from local.properties (gitignored).
+// Falling back to empty strings keeps the build green when keys are missing —
+// runtime auth will fail with a clear error instead of leaking placeholders
+// into source control.
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(FileInputStream(f))
+}
+fun localProp(key: String): String = localProps.getProperty(key) ?: ""
 
 android {
     namespace = "com.powermediaplayer"
@@ -17,6 +30,15 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // OAuth credentials surfaced to code via BuildConfig.* — never committed.
+        buildConfigField("String", "GDRIVE_ANDROID_CLIENT_ID", "\"${localProp("GDRIVE_ANDROID_CLIENT_ID")}\"")
+        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${localProp("SPOTIFY_CLIENT_ID")}\"")
+        buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"${localProp("SPOTIFY_REDIRECT_URI")}\"")
+
+        // AppAuth needs the redirect URI scheme registered as a manifest
+        // placeholder so its RedirectUriReceiverActivity can be auto-merged.
+        manifestPlaceholders["appAuthRedirectScheme"] = "powermediaplayer"
     }
 
     buildTypes {
@@ -42,6 +64,23 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/license.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/notice.txt",
+                "META-INF/INDEX.LIST",
+                "META-INF/*.kotlin_module"
+            )
+        }
     }
 }
 
@@ -126,6 +165,23 @@ dependencies {
 
     // ── Gson for JSON serialization ──────────────────────────────
     implementation("com.google.code.gson:gson:2.12.1")
+
+    // ── Cloud / OAuth ────────────────────────────────────────────
+    // AppAuth: PKCE OAuth flows with Custom Tabs (Spotify, Drive token refresh)
+    implementation("net.openid:appauth:0.11.1")
+    // OkHttp: Spotify Web API HTTP client + Drive streaming DataSource
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Google Sign-In + Drive REST v3
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
+    implementation("com.google.api-client:google-api-client-android:2.7.0") {
+        exclude(group = "org.apache.httpcomponents")
+    }
+    implementation("com.google.apis:google-api-services-drive:v3-rev20240914-2.0.0") {
+        exclude(group = "org.apache.httpcomponents")
+    }
+    implementation("com.google.http-client:google-http-client-gson:1.45.0") {
+        exclude(group = "org.apache.httpcomponents")
+    }
 
     // ── Testing ──────────────────────────────────────────────────
     testImplementation("junit:junit:4.13.2")
