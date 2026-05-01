@@ -68,10 +68,7 @@ class PlayerViewModel @Inject constructor(
     fun previousChapterOrTrack() = playbackConnection.previousChapterOrTrack()
     fun nextFile() = playbackConnection.nextFile()
     fun previousFile() = playbackConnection.previousFile()
-    fun seekToChapter(index: Int) {
-        val chapters = playbackConnection.playerState.value.chapters
-        if (index in chapters.indices) playbackConnection.seekTo(chapters[index].startTimeMs)
-    }
+    fun seekToChapter(index: Int) = playbackConnection.seekToChapterIndex(index)
 
     fun setPlaybackSpeed(speed: Float) = playbackConnection.setPlaybackSpeed(speed)
 
@@ -115,14 +112,8 @@ class PlayerViewModel @Inject constructor(
 
     // ── Playlist Seek (seek within entire playlist by absolute position) ──
 
-    fun seekToPlaylistPosition(absolutePositionMs: Long) {
-        val state = playbackConnection.playerState.value
-        // Find which track this absolute position falls within
-        var accumulated = 0L
-        // We need to iterate through tracks to find the right one
-        // For now, this is a simplified version
-        playbackConnection.seekTo(absolutePositionMs)
-    }
+    fun seekToPlaylistPosition(absolutePositionMs: Long) =
+        playbackConnection.seekToAbsolutePlaylistPosition(absolutePositionMs)
 
     // ── Set media items for playback ─────────────────────────────
 

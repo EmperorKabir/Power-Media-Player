@@ -12,6 +12,7 @@ import androidx.media3.common.MediaMetadata
 import com.powermediaplayer.data.db.dao.FavoriteDao
 import com.powermediaplayer.data.db.entity.FavoriteEntity
 import com.powermediaplayer.service.PlaybackConnection
+import com.powermediaplayer.util.FolderChapterAggregator
 import com.powermediaplayer.util.TextNormalizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -192,6 +193,23 @@ class LibraryViewModel @Inject constructor(
     fun playFiles(files: List<MediaFileInfo>, startIndex: Int) {
         val (items, idx) = createMediaItems(files, startIndex)
         playbackConnection.setMediaItems(items, idx)
+    }
+
+    /**
+     * Treat a folder of media files as a single audiobook: sort naturally
+     * (so file_2 < file_10), build absolute folder-wide chapters with
+     * [FolderChapterAggregator], and play. Cross-file chapter navigation
+     * works through PlaybackConnection.seekToFolderChapter.
+     */
+    fun playFolder(files: List<MediaFileInfo>, startIndex: Int = 0) {
+        val sorted = FolderChapterAggregator.naturalSort(files)
+        val (items, idx) = createMediaItems(sorted, startIndex)
+        playbackConnection.setMediaItems(items, idx)
+        // setMediaItems clears any prior override — apply the new one after.
+        val chapters = FolderChapterAggregator.aggregate(sorted)
+        if (chapters.isNotEmpty()) {
+            playbackConnection.setFolderChapters(chapters)
+        }
     }
 
     private fun scanMedia() {

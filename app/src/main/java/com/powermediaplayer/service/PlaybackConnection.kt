@@ -93,6 +93,14 @@ class PlaybackConnection @Inject constructor(
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
+    /**
+     * Folder-mode override. When non-null, [extractChapters] returns this
+     * list verbatim (chapters use absolute folder-wide timestamps and
+     * [ChapterInfo.index] holds the target media-item index). Set via
+     * [setFolderChapters] from the library before playFolder.
+     */
+    private var folderChapters: List<ChapterInfo>? = null
+
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
@@ -196,9 +204,11 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
-     * Set media items and start playback.
+     * Set media items and start playback. Clears any folder-chapter override
+     * because callers using setMediaItems() are not in folder mode.
      */
     fun setMediaItems(items: List<MediaItem>, startIndex: Int = 0) {
+        folderChapters = null
         controller?.let { c ->
             c.setMediaItems(items, startIndex, 0L)
             c.prepare()
@@ -207,16 +217,80 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
+     * Set the folder-wide chapter list. Pass null (or empty) to clear and
+     * fall back to per-file chapters from MediaItem extras.
+     */
+    fun setFolderChapters(chapters: List<ChapterInfo>?) {
+        folderChapters = chapters?.takeIf { it.isNotEmpty() }
+        updatePlayerState()
+    }
+
+    /**
+     * Folder-mode seek: jump to the media item identified by the
+     * chapter's [ChapterInfo.index] field, position 0.
+     */
+    fun seekToFolderChapter(idx: Int) {
+        val list = folderChapters ?: return
+        val chapter = list.getOrNull(idx) ?: return
+        controller?.seekTo(chapter.index, 0L)
+    }
+
+    /**
+     * Cross-track absolute seek: find which media item contains
+     * [absolutePositionMs] within the entire playlist, then seek to
+     * that item at the appropriate offset.
+     */
+    fun seekToAbsolutePlaylistPosition(absolutePositionMs: Long) {
+        val c = controller ?: return
+        val timeline = c.currentTimeline
+        val window = Timeline.Window()
+        var cursor = 0L
+        for (i in 0 until timeline.windowCount) {
+            timeline.getWindow(i, window)
+            val winDur = window.durationMs
+            if (winDur <= 0) continue
+            if (absolutePositionMs < cursor + winDur) {
+                c.seekTo(i, absolutePositionMs - cursor)
+                return
+            }
+            cursor += winDur
+        }
+        // Past the end — go to last item end
+        if (timeline.windowCount > 0) {
+            timeline.getWindow(timeline.windowCount - 1, window)
+            c.seekTo(timeline.windowCount - 1, window.durationMs.coerceAtLeast(0L))
+        }
+    }
+
+    /**
      * Chapter-aware forward navigation. If the current file has chapters and
      * we are not at the last one, seek to the next chapter. Otherwise advance
      * to the next file in the queue. This is the "smart next" button.
      */
+    /**
+     * Mode-aware seek-to-chapter — folder mode jumps to the right media item;
+     * single-file mode seeks within the current track to chapter offset.
+     */
+    fun seekToChapterIndex(idx: Int) {
+        val state = _playerState.value
+        val chapter = state.chapters.getOrNull(idx) ?: return
+        if (folderChapters != null) {
+            seekToFolderChapter(idx)
+        } else {
+            seekTo(chapter.startTimeMs)
+        }
+    }
+
     fun nextChapterOrTrack() {
         val state = _playerState.value
         if (state.hasChapters) {
             val nextIdx = state.currentChapterIndex + 1
             if (nextIdx < state.chapters.size) {
-                seekTo(state.chapters[nextIdx].startTimeMs)
+                if (folderChapters != null) {
+                    seekToFolderChapter(nextIdx)
+                } else {
+                    seekTo(state.chapters[nextIdx].startTimeMs)
+                }
                 return
             }
         }
@@ -231,20 +305,30 @@ class PlaybackConnection @Inject constructor(
      */
     fun previousChapterOrTrack() {
         val state = _playerState.value
-        val pos = controller?.currentPosition ?: 0L
+        val isFolderMode = folderChapters != null
+        val absolutePos = controller?.let { calculatePlaylistPosition(it) } ?: 0L
+        val trackPos = controller?.currentPosition ?: 0L
+        val referencePos = if (isFolderMode) absolutePos else trackPos
         if (state.hasChapters) {
             val current = state.chapters.getOrNull(state.currentChapterIndex)
-            // If more than 3 s into the chapter, restart it instead of jumping back
-            if (current != null && pos - current.startTimeMs > 3000L) {
-                seekTo(current.startTimeMs)
+            if (current != null && referencePos - current.startTimeMs > 3000L) {
+                if (isFolderMode) {
+                    seekToFolderChapter(state.currentChapterIndex)
+                } else {
+                    seekTo(current.startTimeMs)
+                }
                 return
             }
             val prevIdx = state.currentChapterIndex - 1
             if (prevIdx >= 0) {
-                seekTo(state.chapters[prevIdx].startTimeMs)
+                if (isFolderMode) {
+                    seekToFolderChapter(prevIdx)
+                } else {
+                    seekTo(state.chapters[prevIdx].startTimeMs)
+                }
                 return
             }
-        } else if (pos > 3000L) {
+        } else if (trackPos > 3000L) {
             seekTo(0)
             return
         }
@@ -369,7 +453,13 @@ class PlaybackConnection @Inject constructor(
         val c = controller ?: return
         val metadata = c.mediaMetadata
         val chapters = extractChapters(c)
-        val currentChapter = findCurrentChapter(chapters, c.currentPosition)
+        val isFolderMode = folderChapters != null
+        val absolutePlaylistPos = calculatePlaylistPosition(c)
+        val currentChapter = if (isFolderMode) {
+            chapters.indexOfLast { absolutePlaylistPos >= it.startTimeMs }
+        } else {
+            findCurrentChapter(chapters, c.currentPosition)
+        }
         val preservedDescription = _playerState.value.description
 
         // Detect video tracks: check all selected tracks for a video track group
@@ -406,11 +496,12 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
-     * Extract chapter markers from the current media item's timeline window.
+     * Extract chapter markers. In folder mode the override is returned
+     * verbatim (chapters carry absolute folder-wide timestamps). Otherwise
+     * we read per-file chapters from the current MediaItem's extras.
      */
     private fun extractChapters(controller: MediaController): List<ChapterInfo> {
-        // Media3 doesn't expose chapters directly in all cases.
-        // We check the media metadata extras for chapter info.
+        folderChapters?.let { return it }
         val metadata = controller.mediaMetadata
         val extras = metadata.extras ?: return emptyList()
 
