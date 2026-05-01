@@ -168,4 +168,41 @@ class GoogleDriveProvider @Inject constructor(
             null
         }
     }
+
+    /**
+     * Download a Drive file fully to cache so out-of-band parsers (M4B
+     * chapter extractor, MediaMetadataRetriever, etc.) can access it via
+     * a regular file URI. Returns null if not authenticated, the file is
+     * larger than [maxBytes], or the download fails.
+     *
+     * Caller is responsible for deleting the cache file when done.
+     */
+    suspend fun downloadToCache(
+        item: CloudMediaItem,
+        maxBytes: Long = 256L * 1024 * 1024  // 256 MB safety cap
+    ): java.io.File? = withContext(Dispatchers.IO) {
+        if (item.size in 1..maxBytes || item.size <= 0) {
+            // Allowed: known-size <= cap, or unknown size (try anyway).
+        } else {
+            return@withContext null
+        }
+        val token = fetchAccessTokenBlocking() ?: return@withContext null
+        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}.tmp")
+        try {
+            val req = okhttp3.Request.Builder()
+                .url(item.downloadUrl)
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            okhttp3.OkHttpClient().newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                resp.body?.byteStream()?.use { input ->
+                    cacheFile.outputStream().use { out -> input.copyTo(out) }
+                }
+            }
+            cacheFile
+        } catch (_: Exception) {
+            cacheFile.delete()
+            null
+        }
+    }
 }

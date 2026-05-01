@@ -84,6 +84,11 @@ data class ChapterInfo(
  * Manages the MediaController lifecycle and exposes reactive player state via StateFlow.
  * Position updates use coroutine polling (250ms) to avoid callback storms on the UI thread.
  */
+private val VIDEO_EXTENSIONS = setOf(
+    "mp4", "m4v", "mkv", "webm", "mov", "avi", "wmv", "flv",
+    "3gp", "3gpp", "mpg", "mpeg", "ts", "mts", "ogv"
+)
+
 @Singleton
 class PlaybackConnection @Inject constructor(
     @param:ApplicationContext private val context: Context
@@ -103,6 +108,14 @@ class PlaybackConnection @Inject constructor(
      * [setFolderChapters] from the library before playFolder.
      */
     private var folderChapters: List<ChapterInfo>? = null
+
+    /**
+     * Single-track session override — used when we extract chapters AFTER
+     * playback starts (e.g. Drive M4Bs whose moov box is only readable once
+     * the file has been downloaded with auth). Timestamps are relative to
+     * the current track. Cleared on every [setMediaItems] call.
+     */
+    private var localChapters: List<ChapterInfo>? = null
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -212,11 +225,23 @@ class PlaybackConnection @Inject constructor(
      */
     fun setMediaItems(items: List<MediaItem>, startIndex: Int = 0) {
         folderChapters = null
+        localChapters = null
         controller?.let { c ->
             c.setMediaItems(items, startIndex, 0L)
             c.prepare()
             c.play()
         }
+    }
+
+    /**
+     * Provide chapters discovered after playback started (e.g. Drive M4B
+     * whose chapter atoms required an authenticated download). Pass null
+     * (or empty) to clear; supersedes per-track extras-based chapters but
+     * is itself superseded by folder mode.
+     */
+    fun setLocalChapters(chapters: List<ChapterInfo>?) {
+        localChapters = chapters?.takeIf { it.isNotEmpty() }
+        updatePlayerState()
     }
 
     /**
@@ -479,14 +504,24 @@ class PlaybackConnection @Inject constructor(
         val preservedDescription = _playerState.value.description
         val preservedError = _playerState.value.playerError
 
-        // Detect video tracks: check selected tracks first (authoritative),
-        // then fall back to the is_video_hint extra packed by the library /
-        // cloud layers. The hint avoids the audio-layout flash before the
-        // player has finished parsing tracks for newly-loaded items.
+        // Detect video by ANY of three signals so the audio layout never
+        // flashes for a video file:
+        //   (1) ExoPlayer track scan after parsing (authoritative)
+        //   (2) is_video_hint extra packed by library / cloud layers
+        //   (3) URI extension or MIME type — survives MediaController IPC
+        //       even when extras are dropped on minified release builds.
         val isVideoHint = metadata.extras?.getBoolean("is_video_hint", false) ?: false
-        val hasVideoTrack = c.currentTracks.groups.any { group ->
+        val currentItem = c.currentMediaItem
+        val uri = currentItem?.requestMetadata?.mediaUri
+            ?: currentItem?.localConfiguration?.uri
+        val uriExt = uri?.toString()?.substringAfterLast('.', "")?.lowercase()
+        val isVideoByExt = uriExt in VIDEO_EXTENSIONS
+        val mime = currentItem?.localConfiguration?.mimeType.orEmpty()
+        val isVideoByMime = mime.startsWith("video/")
+        val isVideoByTracks = c.currentTracks.groups.any { group ->
             group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO && group.isSelected
-        } || isVideoHint
+        }
+        val hasVideoTrack = isVideoByTracks || isVideoHint || isVideoByExt || isVideoByMime
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
@@ -524,6 +559,7 @@ class PlaybackConnection @Inject constructor(
      */
     private fun extractChapters(controller: MediaController): List<ChapterInfo> {
         folderChapters?.let { return it }
+        localChapters?.let { return it }
         val metadata = controller.mediaMetadata
         val extras = metadata.extras ?: return emptyList()
 

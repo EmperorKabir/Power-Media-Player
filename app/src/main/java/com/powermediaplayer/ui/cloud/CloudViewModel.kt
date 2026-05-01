@@ -10,7 +10,9 @@ import com.powermediaplayer.cloud.CloudMediaItem
 import com.powermediaplayer.cloud.CloudProviderType
 import com.powermediaplayer.cloud.GoogleDriveProvider
 import com.powermediaplayer.cloud.SpotifyProvider
+import com.powermediaplayer.service.ChapterInfo
 import com.powermediaplayer.service.PlaybackConnection
+import com.powermediaplayer.util.M4bChapterParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -170,6 +172,42 @@ class CloudViewModel @Inject constructor(
                 )
                 .build()
             playbackConnection.setMediaItems(listOf(mediaItem), 0)
+
+            // Drive M4B / MP4 audio: chapters live in the moov atom which
+            // MediaExtractor cannot reach over an authenticated HTTPS URL.
+            // Download the file in the background, parse chapters, and push
+            // them to the player via setLocalChapters. Streaming continues
+            // unaffected; chapters arrive a few seconds in.
+            if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder) {
+                val nameLower = item.name.lowercase()
+                val looksChapterable = nameLower.endsWith(".m4b") ||
+                    nameLower.endsWith(".m4a") ||
+                    nameLower.endsWith(".mp4") ||
+                    item.mimeType.contains("mp4") ||
+                    item.mimeType.contains("m4b")
+                if (looksChapterable) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        val tempFile = driveProvider.downloadToCache(item) ?: return@launch
+                        try {
+                            val bundle = M4bChapterParser.extractChaptersAsBundle(
+                                context, android.net.Uri.fromFile(tempFile)
+                            )
+                            val count = bundle.getInt("chapter_count", 0)
+                            if (count > 0) {
+                                val chapters = (0 until count).mapNotNull { i ->
+                                    val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
+                                    val start = bundle.getLong("chapter_start_$i", -1)
+                                    val end = bundle.getLong("chapter_end_$i", -1)
+                                    if (start >= 0) ChapterInfo(title, start, end, i) else null
+                                }
+                                playbackConnection.setLocalChapters(chapters)
+                            }
+                        } finally {
+                            tempFile.delete()
+                        }
+                    }
+                }
+            }
         }
     }
 
