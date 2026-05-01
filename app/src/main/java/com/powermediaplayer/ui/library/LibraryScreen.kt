@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -104,6 +105,36 @@ fun LibraryScreen(
                 )
             },
             actions = {
+                // Sort menu
+                var sortMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { sortMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Sort,
+                            contentDescription = "Sort menu",
+                            tint = TealAccent
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = sortMenuExpanded,
+                        onDismissRequest = { sortMenuExpanded = false }
+                    ) {
+                        SortMode.values().forEach { mode ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = sortModeLabel(mode),
+                                        color = if (mode == uiState.sortMode) TealAccent else TextPrimary
+                                    )
+                                },
+                                onClick = {
+                                    viewModel.setSortMode(mode)
+                                    sortMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 // Open file picker (SAF)
                 IconButton(onClick = {
                     filePickerLauncher.launch(
@@ -242,11 +273,13 @@ fun LibraryScreen(
                     itemsIndexed(files, key = { _, file -> file.id }) { index, file ->
                         MediaFileItem(
                             file = file,
+                            isFavorite = file.uri.toString() in uiState.favorites,
                             onClick = {
                                 // Enqueue all visible files, start at tapped index
                                 viewModel.playFiles(files, index)
                                 onNavigateToPlayer()
-                            }
+                            },
+                            onToggleFavorite = { viewModel.toggleFavorite(file.uri) }
                         )
                     }
                 }
@@ -256,12 +289,14 @@ fun LibraryScreen(
 }
 
 /**
- * Single media file list item.
+ * Single media file list item with favorite toggle.
  */
 @Composable
 private fun MediaFileItem(
     file: MediaFileInfo,
-    onClick: () -> Unit
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -280,7 +315,7 @@ private fun MediaFileItem(
         ) {
             Icon(
                 imageVector = if (file.isVideo) Icons.Filled.VideoFile else Icons.Filled.AudioFile,
-                contentDescription = null,
+                contentDescription = if (file.isVideo) "Video file" else "Audio file",
                 tint = TealAccent,
                 modifier = Modifier.size(28.dp)
             )
@@ -319,5 +354,25 @@ private fun MediaFileItem(
                 color = TextTertiary
             )
         }
+
+        // Favorite toggle
+        IconButton(onClick = onToggleFavorite) {
+            Icon(
+                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                tint = if (isFavorite) androidx.compose.ui.graphics.Color.Red else TextTertiary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
+}
+
+private fun sortModeLabel(mode: SortMode): String = when (mode) {
+    SortMode.NAME_ASC -> "Name (A → Z)"
+    SortMode.NAME_DESC -> "Name (Z → A)"
+    SortMode.SIZE_ASC -> "Size (smallest first)"
+    SortMode.SIZE_DESC -> "Size (largest first)"
+    SortMode.TYPE -> "Type"
+    SortMode.DATE_DESC -> "Recently modified"
+    SortMode.FAVORITES_FIRST -> "Favorites first"
 }

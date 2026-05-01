@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.powermediaplayer.data.db.AppDatabase
 import com.powermediaplayer.data.db.dao.EqualizerPresetDao
+import com.powermediaplayer.data.db.dao.FavoriteDao
 import com.powermediaplayer.data.db.dao.PlaybackStateDao
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import com.powermediaplayer.service.PlaybackConnection
@@ -31,7 +32,11 @@ object AppModule {
             context,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
-        ).build()
+        )
+            // v1 → v2 added the `favorite` table; no existing user data needs to
+            // be preserved across this bump, so destructive migration is fine.
+            .fallbackToDestructiveMigration(false)
+            .build()
     }
 
     @Provides
@@ -44,6 +49,12 @@ object AppModule {
     @Singleton
     fun providePlaybackStateDao(database: AppDatabase): PlaybackStateDao {
         return database.playbackStateDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideFavoriteDao(database: AppDatabase): FavoriteDao {
+        return database.favoriteDao()
     }
 
     @Provides

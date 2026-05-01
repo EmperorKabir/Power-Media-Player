@@ -9,13 +9,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.powermediaplayer.data.db.dao.FavoriteDao
+import com.powermediaplayer.data.db.entity.FavoriteEntity
 import com.powermediaplayer.service.PlaybackConnection
+import com.powermediaplayer.util.TextNormalizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -37,13 +41,32 @@ data class MediaFileInfo(
 )
 
 /**
- * UI state for the media library screen.
+ * Sort modes available in the library. NAME uses locale-aware Collator
+ * via TextNormalizer so "É" sorts with "E" and curly apostrophes match
+ * straight ones.
+ */
+enum class SortMode {
+    NAME_ASC,
+    NAME_DESC,
+    SIZE_ASC,
+    SIZE_DESC,
+    TYPE,
+    DATE_DESC,
+    FAVORITES_FIRST
+}
+
+/**
+ * UI state for the media library screen. [audioFiles] and [videoFiles]
+ * are already sorted/filtered for display; the raw scan results live
+ * privately in the ViewModel.
  */
 data class LibraryUiState(
     val audioFiles: List<MediaFileInfo> = emptyList(),
     val videoFiles: List<MediaFileInfo> = emptyList(),
     val isLoading: Boolean = true,
-    val selectedTab: Int = 0 // 0 = Audio, 1 = Video
+    val selectedTab: Int = 0, // 0 = Audio, 1 = Video
+    val sortMode: SortMode = SortMode.NAME_ASC,
+    val favorites: Set<String> = emptySet()
 )
 
 /**
@@ -53,22 +76,89 @@ data class LibraryUiState(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val playbackConnection: PlaybackConnection
+    private val playbackConnection: PlaybackConnection,
+    private val favoriteDao: FavoriteDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
 
+    // Raw, unsorted scan results — kept separately so changing sort or
+    // favorites does not require rescanning the device.
+    private var rawAudio: List<MediaFileInfo> = emptyList()
+    private var rawVideo: List<MediaFileInfo> = emptyList()
+
     init {
         scanMedia()
+        observeFavorites()
     }
 
     fun setSelectedTab(tab: Int) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
     }
 
+    fun setSortMode(mode: SortMode) {
+        _uiState.value = _uiState.value.copy(sortMode = mode)
+        recomputeDisplayed()
+    }
+
+    fun toggleFavorite(uri: Uri) {
+        val key = uri.toString()
+        viewModelScope.launch(Dispatchers.IO) {
+            if (favoriteDao.isFavorite(key)) {
+                favoriteDao.deleteByUri(key)
+            } else {
+                favoriteDao.insert(FavoriteEntity(uri = key))
+            }
+        }
+    }
+
     fun refreshMedia() {
         scanMedia()
+    }
+
+    private fun observeFavorites() {
+        viewModelScope.launch {
+            favoriteDao.observeAllUris().collect { uris ->
+                _uiState.value = _uiState.value.copy(favorites = uris.toSet())
+                recomputeDisplayed()
+            }
+        }
+    }
+
+    private fun recomputeDisplayed() {
+        val state = _uiState.value
+        _uiState.value = state.copy(
+            audioFiles = applySort(rawAudio, state.sortMode, state.favorites),
+            videoFiles = applySort(rawVideo, state.sortMode, state.favorites)
+        )
+    }
+
+    private fun applySort(
+        files: List<MediaFileInfo>,
+        mode: SortMode,
+        favorites: Set<String>
+    ): List<MediaFileInfo> {
+        val byMode: Comparator<MediaFileInfo> = when (mode) {
+            SortMode.NAME_ASC ->
+                Comparator { a, b -> TextNormalizer.compare(a.title, b.title) }
+            SortMode.NAME_DESC ->
+                Comparator { a, b -> TextNormalizer.compare(b.title, a.title) }
+            SortMode.SIZE_ASC -> compareBy { it.size }
+            SortMode.SIZE_DESC -> compareByDescending { it.size }
+            SortMode.TYPE -> compareBy({ it.mimeType }, { TextNormalizer.normalize(it.title) })
+            SortMode.DATE_DESC -> compareByDescending { it.dateModified }
+            SortMode.FAVORITES_FIRST -> Comparator { a, b ->
+                val aFav = a.uri.toString() in favorites
+                val bFav = b.uri.toString() in favorites
+                when {
+                    aFav && !bFav -> -1
+                    !aFav && bFav -> 1
+                    else -> TextNormalizer.compare(a.title, b.title)
+                }
+            }
+        }
+        return files.sortedWith(byMode)
     }
 
     /**
@@ -108,12 +198,13 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
-            val audioFiles = scanAudioFiles()
-            val videoFiles = scanVideoFiles()
+            rawAudio = scanAudioFiles()
+            rawVideo = scanVideoFiles()
 
-            _uiState.value = _uiState.value.copy(
-                audioFiles = audioFiles,
-                videoFiles = videoFiles,
+            val state = _uiState.value
+            _uiState.value = state.copy(
+                audioFiles = applySort(rawAudio, state.sortMode, state.favorites),
+                videoFiles = applySort(rawVideo, state.sortMode, state.favorites),
                 isLoading = false
             )
         }
@@ -239,18 +330,14 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val fileInfo = resolvePickedFile(uri) ?: return@launch
 
-            val current = _uiState.value
             if (fileInfo.isVideo) {
-                _uiState.value = current.copy(
-                    videoFiles = listOf(fileInfo) + current.videoFiles,
-                    selectedTab = 1
-                )
+                rawVideo = listOf(fileInfo) + rawVideo
+                _uiState.value = _uiState.value.copy(selectedTab = 1)
             } else {
-                _uiState.value = current.copy(
-                    audioFiles = listOf(fileInfo) + current.audioFiles,
-                    selectedTab = 0
-                )
+                rawAudio = listOf(fileInfo) + rawAudio
+                _uiState.value = _uiState.value.copy(selectedTab = 0)
             }
+            recomputeDisplayed()
         }
     }
 
