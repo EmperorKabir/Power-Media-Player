@@ -207,7 +207,63 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
-     * Navigate to next chapter within the current media item.
+     * Chapter-aware forward navigation. If the current file has chapters and
+     * we are not at the last one, seek to the next chapter. Otherwise advance
+     * to the next file in the queue. This is the "smart next" button.
+     */
+    fun nextChapterOrTrack() {
+        val state = _playerState.value
+        if (state.hasChapters) {
+            val nextIdx = state.currentChapterIndex + 1
+            if (nextIdx < state.chapters.size) {
+                seekTo(state.chapters[nextIdx].startTimeMs)
+                return
+            }
+        }
+        if (state.hasNext) seekToNext()
+    }
+
+    /**
+     * Chapter-aware backward navigation. Mirrors [nextChapterOrTrack] — if at
+     * the start of a chapter (within a small grace window), seek to the
+     * previous chapter; if at the start of the first chapter, go to previous
+     * file. If position is mid-chapter, restart the current chapter.
+     */
+    fun previousChapterOrTrack() {
+        val state = _playerState.value
+        val pos = controller?.currentPosition ?: 0L
+        if (state.hasChapters) {
+            val current = state.chapters.getOrNull(state.currentChapterIndex)
+            // If more than 3 s into the chapter, restart it instead of jumping back
+            if (current != null && pos - current.startTimeMs > 3000L) {
+                seekTo(current.startTimeMs)
+                return
+            }
+            val prevIdx = state.currentChapterIndex - 1
+            if (prevIdx >= 0) {
+                seekTo(state.chapters[prevIdx].startTimeMs)
+                return
+            }
+        } else if (pos > 3000L) {
+            seekTo(0)
+            return
+        }
+        if (state.hasPrevious) seekToPrevious() else seekTo(0)
+    }
+
+    /** Hard file-boundary forward — always next media item, ignores chapters. */
+    fun nextFile() {
+        if (_playerState.value.hasNext) seekToNext()
+    }
+
+    /** Hard file-boundary backward — always previous media item, ignores chapters. */
+    fun previousFile() {
+        if (_playerState.value.hasPrevious) seekToPrevious() else seekTo(0)
+    }
+
+    /**
+     * Navigate to next chapter within the current media item only (no fallback).
+     * Kept for callers that want strict chapter behaviour.
      */
     fun nextChapter() {
         val state = _playerState.value
@@ -218,9 +274,7 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
-    /**
-     * Navigate to previous chapter within the current media item.
-     */
+    /** Navigate to previous chapter within the current media item only. */
     fun previousChapter() {
         val state = _playerState.value
         if (!state.hasChapters) return

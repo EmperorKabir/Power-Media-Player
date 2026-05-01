@@ -64,6 +64,10 @@ class PlayerViewModel @Inject constructor(
     fun skipForward(seconds: Int) = playbackConnection.skipForward(seconds)
     fun nextChapter() = playbackConnection.nextChapter()
     fun previousChapter() = playbackConnection.previousChapter()
+    fun nextChapterOrTrack() = playbackConnection.nextChapterOrTrack()
+    fun previousChapterOrTrack() = playbackConnection.previousChapterOrTrack()
+    fun nextFile() = playbackConnection.nextFile()
+    fun previousFile() = playbackConnection.previousFile()
     fun seekToChapter(index: Int) {
         val chapters = playbackConnection.playerState.value.chapters
         if (index in chapters.indices) playbackConnection.seekTo(chapters[index].startTimeMs)
@@ -137,23 +141,28 @@ class PlayerViewModel @Inject constructor(
             (playerState.totalPlaylistPosition.toFloat() / playerState.totalPlaylistDuration.toFloat()).coerceIn(0f, 1f)
         } else 0f
 
+        val trackRemaining = (playerState.duration - playerState.currentPosition).coerceAtLeast(0L)
+        val playlistRemaining = (playerState.totalPlaylistDuration - playerState.totalPlaylistPosition).coerceAtLeast(0L)
         return PlayerUiState(
             isPlaying = playerState.isPlaying,
             isLoading = playerState.isLoading,
             title = playerState.title.ifEmpty { "No media loaded" },
             artist = playerState.artist,
             album = playerState.album,
+            description = playerState.description,
             artworkUri = playerState.artworkUri,
             hasCoverArt = playerState.hasCoverArt,
             currentPosition = playerState.currentPosition,
             duration = playerState.duration,
             currentPositionFormatted = TimeFormatter.formatDuration(playerState.currentPosition),
             durationFormatted = TimeFormatter.formatDuration(playerState.duration),
+            trackRemainingFormatted = "-" + TimeFormatter.formatDuration(trackRemaining),
             trackProgress = trackProgress,
             totalPlaylistPosition = playerState.totalPlaylistPosition,
             totalPlaylistDuration = playerState.totalPlaylistDuration,
             playlistPositionFormatted = TimeFormatter.formatDuration(playerState.totalPlaylistPosition),
             playlistDurationFormatted = TimeFormatter.formatDuration(playerState.totalPlaylistDuration),
+            playlistRemainingFormatted = "-" + TimeFormatter.formatDuration(playlistRemaining),
             playlistProgress = playlistProgress,
             playbackSpeed = playerState.playbackSpeed,
             sleepTimerRemainingMs = sleepRemainingMs,
@@ -172,6 +181,10 @@ class PlayerViewModel @Inject constructor(
                 nextTrack = playerState.hasNext,
                 previousChapter = playerState.hasChapters && playerState.currentChapterIndex > 0,
                 nextChapter = playerState.hasChapters && playerState.currentChapterIndex < playerState.chapters.size - 1,
+                previousFile = playerState.hasPrevious,
+                nextFile = playerState.hasNext,
+                previousChapterOrTrack = (playerState.hasChapters && playerState.currentChapterIndex > 0) || playerState.hasPrevious || hasMedia,
+                nextChapterOrTrack = (playerState.hasChapters && playerState.currentChapterIndex < playerState.chapters.size - 1) || playerState.hasNext,
                 skipBack5 = hasMedia && playerState.isSeekable,
                 skipBack10 = hasMedia && playerState.isSeekable,
                 skipBack15 = hasMedia && playerState.isSeekable,

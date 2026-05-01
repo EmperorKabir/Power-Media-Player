@@ -182,11 +182,13 @@ private fun PlayerScreenCompact(
                 trackPosition = uiState.trackProgress,
                 trackPositionFormatted = uiState.currentPositionFormatted,
                 trackDurationFormatted = uiState.durationFormatted,
+                trackRemainingFormatted = uiState.trackRemainingFormatted,
                 trackSliderEnabled = uiState.controls.trackSlider,
                 onTrackSeek = { fraction -> viewModel.seekTo((fraction * uiState.duration).toLong()) },
                 playlistPosition = uiState.playlistProgress,
                 playlistPositionFormatted = uiState.playlistPositionFormatted,
                 playlistDurationFormatted = uiState.playlistDurationFormatted,
+                playlistRemainingFormatted = uiState.playlistRemainingFormatted,
                 playlistSliderEnabled = uiState.controls.playlistSlider,
                 onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
                 trackIndexDisplay = uiState.trackIndexDisplay
@@ -195,17 +197,19 @@ private fun PlayerScreenCompact(
             PlaybackControls(
                 isPlaying = uiState.isPlaying,
                 controls = uiState.controls,
-                onPreviousChapter = { viewModel.previousChapter() },
+                onPreviousFile = { viewModel.previousFile() },
+                onPreviousChapterOrTrack = { viewModel.previousChapterOrTrack() },
                 onSkipBack = { viewModel.skipBack(it) },
                 onPlayPause = { viewModel.playPause() },
                 onSkipForward = { viewModel.skipForward(it) },
-                onNextChapter = { viewModel.nextChapter() }
+                onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
+                onNextFile = { viewModel.nextFile() }
             )
             Spacer(modifier = Modifier.height(4.dp))
-            SecondaryControls(
+            PreparedSpeedComponent(
                 playbackSpeed = uiState.playbackSpeed,
                 onSpeedChange = { viewModel.setPlaybackSpeed(it) },
-                brightnessEnabled = uiState.controls.brightness
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
             Spacer(modifier = Modifier.height(4.dp))
             TertiaryControls(
@@ -284,11 +288,13 @@ private fun PlayerScreenExpanded(
                 trackPosition = uiState.trackProgress,
                 trackPositionFormatted = uiState.currentPositionFormatted,
                 trackDurationFormatted = uiState.durationFormatted,
+                trackRemainingFormatted = uiState.trackRemainingFormatted,
                 trackSliderEnabled = uiState.controls.trackSlider,
                 onTrackSeek = { fraction -> viewModel.seekTo((fraction * uiState.duration).toLong()) },
                 playlistPosition = uiState.playlistProgress,
                 playlistPositionFormatted = uiState.playlistPositionFormatted,
                 playlistDurationFormatted = uiState.playlistDurationFormatted,
+                playlistRemainingFormatted = uiState.playlistRemainingFormatted,
                 playlistSliderEnabled = uiState.controls.playlistSlider,
                 onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
                 trackIndexDisplay = uiState.trackIndexDisplay
@@ -297,17 +303,19 @@ private fun PlayerScreenExpanded(
             PlaybackControls(
                 isPlaying = uiState.isPlaying,
                 controls = uiState.controls,
-                onPreviousChapter = { viewModel.previousChapter() },
+                onPreviousFile = { viewModel.previousFile() },
+                onPreviousChapterOrTrack = { viewModel.previousChapterOrTrack() },
                 onSkipBack = { viewModel.skipBack(it) },
                 onPlayPause = { viewModel.playPause() },
                 onSkipForward = { viewModel.skipForward(it) },
-                onNextChapter = { viewModel.nextChapter() }
+                onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
+                onNextFile = { viewModel.nextFile() }
             )
             Spacer(modifier = Modifier.height(8.dp))
-            SecondaryControls(
+            PreparedSpeedComponent(
                 playbackSpeed = uiState.playbackSpeed,
                 onSpeedChange = { viewModel.setPlaybackSpeed(it) },
-                brightnessEnabled = uiState.controls.brightness
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
             Spacer(modifier = Modifier.height(4.dp))
             TertiaryControls(
@@ -359,6 +367,17 @@ private fun TrackInfoSection(uiState: PlayerUiState, coverColors: CoverArtColors
                 color = TextSecondary,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (uiState.description.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = uiState.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+                textAlign = TextAlign.Center,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
         }

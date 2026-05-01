@@ -15,6 +15,7 @@ data class PlayerUiState(
     val title: String = "No media loaded",
     val artist: String = "",
     val album: String = "",
+    val description: String = "",
 
     // Cover art
     val artworkUri: Uri? = null,
@@ -25,6 +26,7 @@ data class PlayerUiState(
     val duration: Long = 0L,
     val currentPositionFormatted: String = "0:00",
     val durationFormatted: String = "0:00",
+    val trackRemainingFormatted: String = "0:00",
     val trackProgress: Float = 0f, // 0.0 - 1.0
 
     // Progress - total playlist
@@ -32,6 +34,7 @@ data class PlayerUiState(
     val totalPlaylistDuration: Long = 0L,
     val playlistPositionFormatted: String = "0:00",
     val playlistDurationFormatted: String = "0:00",
+    val playlistRemainingFormatted: String = "0:00",
     val playlistProgress: Float = 0f, // 0.0 - 1.0
 
     // Playback parameters
@@ -70,6 +73,13 @@ data class ControlsEnabledState(
     val nextTrack: Boolean = false,
     val previousChapter: Boolean = false,
     val nextChapter: Boolean = false,
+    // File-boundary navigation — distinct from chapter nav (always file boundary,
+    // ignores chapters). Greyed (not hidden) when not part of a multi-file queue.
+    val previousFile: Boolean = false,
+    val nextFile: Boolean = false,
+    // Compound: chapter-aware navigation that falls back to file boundary
+    val previousChapterOrTrack: Boolean = false,
+    val nextChapterOrTrack: Boolean = false,
     val skipBack5: Boolean = true,
     val skipBack10: Boolean = true,
     val skipBack15: Boolean = true,

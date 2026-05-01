@@ -38,11 +38,13 @@ import com.powermediaplayer.ui.theme.TextPrimary
 fun PlaybackControls(
     isPlaying: Boolean,
     controls: ControlsEnabledState,
-    onPreviousChapter: () -> Unit,
+    onPreviousFile: () -> Unit,
+    onPreviousChapterOrTrack: () -> Unit,
     onSkipBack: (Int) -> Unit,
     onPlayPause: () -> Unit,
     onSkipForward: (Int) -> Unit,
-    onNextChapter: () -> Unit,
+    onNextChapterOrTrack: () -> Unit,
+    onNextFile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -50,24 +52,26 @@ fun PlaybackControls(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // ── Row 1: Primary Controls ──────────────────────────────
-        // Always fully visible — no scrolling needed
+        // Five buttons: |◀◀ file| |◀ ch| ▶/⏸ |ch ▶| |file ▶▶|
+        // File buttons greyed (not hidden) when not in a multi-file queue.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Previous chapter / track
-            ControlButton(
-                icon = Icons.Filled.SkipPrevious,
-                label = "Previous",
-                enabled = controls.previousChapter || controls.previousTrack,
-                onClick = onPreviousChapter,
-                size = 32
+            PrevFileButton(
+                enabled = controls.previousFile,
+                onClick = onPreviousFile
             )
 
-            Spacer(modifier = Modifier.width(16.dp))
+            PrevChapterTrackButton(
+                enabled = controls.previousChapterOrTrack,
+                onClick = onPreviousChapterOrTrack
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             // Play / Pause — large central button
             IconButton(
@@ -83,15 +87,16 @@ fun PlaybackControls(
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
-            // Next chapter / track
-            ControlButton(
-                icon = Icons.Filled.SkipNext,
-                label = "Next",
-                enabled = controls.nextChapter || controls.nextTrack,
-                onClick = onNextChapter,
-                size = 32
+            NextChapterTrackButton(
+                enabled = controls.nextChapterOrTrack,
+                onClick = onNextChapterOrTrack
+            )
+
+            NextFileButton(
+                enabled = controls.nextFile,
+                onClick = onNextFile
             )
         }
 

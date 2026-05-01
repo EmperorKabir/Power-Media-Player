@@ -18,8 +18,9 @@ import com.powermediaplayer.util.PaletteHelper
 
 /**
  * Full-screen cover art background with OLED black fallback.
- * Uses ContentScale.Crop to fill edge-to-edge without stretching.
- * Extracts Palette colors when the artwork changes.
+ * Uses ContentScale.Fit so the entire artwork is visible (letterboxed
+ * with OLED-black bars rather than cropped). Extracts Palette colors when
+ * the artwork changes.
  *
  * @param artworkUri URI of the cover art image, or null for no art.
  * @param hasCoverArt Whether cover art is expected to exist.
@@ -32,7 +33,11 @@ fun CoverArtBackground(
     onColorsExtracted: (CoverArtColors?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(OledBlack)
+    ) {
         if (hasCoverArt && artworkUri != null) {
             val context = LocalContext.current
 
@@ -42,7 +47,7 @@ fun CoverArtBackground(
                     .allowHardware(false) // Disable hardware bitmaps — required for Palette extraction
                     .build(),
                 contentDescription = "Album cover art",
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { result ->
                     // Coil 3: use toBitmap() extension to safely get a software Bitmap

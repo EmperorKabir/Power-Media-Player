@@ -27,12 +27,14 @@ fun ProgressSliders(
     trackPosition: Float,
     trackPositionFormatted: String,
     trackDurationFormatted: String,
+    trackRemainingFormatted: String,
     trackSliderEnabled: Boolean,
     onTrackSeek: (Float) -> Unit,
     // Full / playlist slider
     playlistPosition: Float,
     playlistPositionFormatted: String,
     playlistDurationFormatted: String,
+    playlistRemainingFormatted: String,
     playlistSliderEnabled: Boolean,
     onPlaylistSeek: (Float) -> Unit,
     // Track info
@@ -55,6 +57,7 @@ fun ProgressSliders(
             position = trackPosition,
             positionFormatted = trackPositionFormatted,
             durationFormatted = trackDurationFormatted,
+            remainingFormatted = trackRemainingFormatted,
             enabled = trackSliderEnabled,
             onSeek = onTrackSeek,
             activeColor = TealAccent
@@ -88,6 +91,7 @@ fun ProgressSliders(
             position = playlistPosition,
             positionFormatted = playlistPositionFormatted,
             durationFormatted = playlistDurationFormatted,
+            remainingFormatted = playlistRemainingFormatted,
             enabled = playlistSliderEnabled,
             onSeek = onPlaylistSeek,
             activeColor = Teal300
@@ -105,6 +109,7 @@ private fun PositionSlider(
     position: Float,
     positionFormatted: String,
     durationFormatted: String,
+    remainingFormatted: String,
     enabled: Boolean,
     onSeek: (Float) -> Unit,
     activeColor: androidx.compose.ui.graphics.Color = TealAccent,
@@ -142,18 +147,27 @@ private fun PositionSlider(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = positionFormatted,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (enabled) TextSecondary else DisabledGrey
             )
-            Text(
-                text = durationFormatted,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (enabled) TextSecondary else DisabledGrey
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = remainingFormatted,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (enabled) TextSecondary.copy(alpha = 0.75f) else DisabledGrey
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = durationFormatted,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (enabled) TextSecondary else DisabledGrey
+                )
+            }
         }
     }
 }
