@@ -56,6 +56,8 @@ class PlayerViewModel @Inject constructor(
 
     // ── Transport Controls (delegated to PlaybackConnection) ─────
 
+    fun clearError() = playbackConnection.clearError()
+
     fun playPause() = playbackConnection.playPause()
     fun seekTo(positionMs: Long) = playbackConnection.seekTo(positionMs)
     fun seekToNext() = playbackConnection.seekToNext()
@@ -125,14 +127,32 @@ class PlayerViewModel @Inject constructor(
 
     private fun mapToUiState(playerState: PlayerState, sleepRemainingMs: Long): PlayerUiState {
         val hasMedia = playerState.mediaItemCount > 0
-        val trackProgress = if (playerState.duration > 0) {
+
+        // Chapter-relative track slider — when the file has chapters, the
+        // track slider scrubs the CURRENT chapter (start..end) so the user
+        // sees per-chapter progress and remaining; the full slider shows
+        // overall file/playlist progress separately.
+        val currentChapter = playerState.chapters.getOrNull(playerState.currentChapterIndex)
+        val inChapter = playerState.hasChapters && currentChapter != null
+        val chapterStart = if (inChapter) currentChapter!!.startTimeMs else 0L
+        val chapterEnd = if (inChapter) currentChapter!!.endTimeMs else playerState.duration
+        val chapterDuration = (chapterEnd - chapterStart).coerceAtLeast(0L)
+        val chapterPos = (playerState.currentPosition - chapterStart).coerceIn(0L, chapterDuration)
+
+        val trackProgress = if (inChapter && chapterDuration > 0) {
+            (chapterPos.toFloat() / chapterDuration.toFloat()).coerceIn(0f, 1f)
+        } else if (playerState.duration > 0) {
             (playerState.currentPosition.toFloat() / playerState.duration.toFloat()).coerceIn(0f, 1f)
         } else 0f
         val playlistProgress = if (playerState.totalPlaylistDuration > 0) {
             (playerState.totalPlaylistPosition.toFloat() / playerState.totalPlaylistDuration.toFloat()).coerceIn(0f, 1f)
         } else 0f
 
-        val trackRemaining = (playerState.duration - playerState.currentPosition).coerceAtLeast(0L)
+        // Track-slider numerator/denominator follow the chapter scope when
+        // available, so the displayed times match what the slider shows.
+        val displayedTrackPos = if (inChapter) chapterPos else playerState.currentPosition
+        val displayedTrackDur = if (inChapter) chapterDuration else playerState.duration
+        val trackRemaining = (displayedTrackDur - displayedTrackPos).coerceAtLeast(0L)
         val playlistRemaining = (playerState.totalPlaylistDuration - playerState.totalPlaylistPosition).coerceAtLeast(0L)
         return PlayerUiState(
             isPlaying = playerState.isPlaying,
@@ -143,12 +163,15 @@ class PlayerViewModel @Inject constructor(
             description = playerState.description,
             artworkUri = playerState.artworkUri,
             hasCoverArt = playerState.hasCoverArt,
-            currentPosition = playerState.currentPosition,
-            duration = playerState.duration,
-            currentPositionFormatted = TimeFormatter.formatDuration(playerState.currentPosition),
-            durationFormatted = TimeFormatter.formatDuration(playerState.duration),
+            currentPosition = displayedTrackPos,
+            duration = displayedTrackDur,
+            currentPositionFormatted = TimeFormatter.formatDuration(displayedTrackPos),
+            durationFormatted = TimeFormatter.formatDuration(displayedTrackDur),
             trackRemainingFormatted = "-" + TimeFormatter.formatDuration(trackRemaining),
             trackProgress = trackProgress,
+            chapterStartMs = chapterStart,
+            chapterDurationMs = chapterDuration,
+            playerError = playerState.playerError,
             totalPlaylistPosition = playerState.totalPlaylistPosition,
             totalPlaylistDuration = playerState.totalPlaylistDuration,
             playlistPositionFormatted = TimeFormatter.formatDuration(playerState.totalPlaylistPosition),

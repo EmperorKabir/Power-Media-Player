@@ -10,6 +10,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
 import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
@@ -59,6 +60,8 @@ data class PlayerState(
     val hasChapters: Boolean = false,
     // Long-form description extracted from ID3/Vorbis/MP4 metadata at runtime
     val description: String = "",
+    // Last playback error (network 401, codec failure, etc.) — null when ok.
+    val playerError: String? = null,
     // Media capabilities for button greying
     val isPartOfPlaylist: Boolean = false,
     val hasCoverArt: Boolean = false,
@@ -377,8 +380,9 @@ class PlaybackConnection @Inject constructor(
         controller?.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) { updatePlayerState() }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                // Reset description — the new track may not emit metadata immediately
-                _playerState.value = _playerState.value.copy(description = "")
+                // Reset description + previous error — the new track may not emit
+                // metadata immediately and shouldn't inherit the prior failure.
+                _playerState.value = _playerState.value.copy(description = "", playerError = null)
                 updatePlayerState()
             }
             override fun onPlaybackStateChanged(playbackState: Int) { updatePlayerState() }
@@ -394,7 +398,19 @@ class PlaybackConnection @Inject constructor(
                     _playerState.value = _playerState.value.copy(description = desc)
                 }
             }
+            override fun onPlayerError(error: PlaybackException) {
+                _playerState.value = _playerState.value.copy(
+                    playerError = error.errorCodeName + ": " + (error.message ?: "Playback failed")
+                )
+            }
         })
+    }
+
+    /** Clear any displayed error — typically called when the user dismisses it. */
+    fun clearError() {
+        if (_playerState.value.playerError != null) {
+            _playerState.value = _playerState.value.copy(playerError = null)
+        }
     }
 
     /**
@@ -461,6 +477,7 @@ class PlaybackConnection @Inject constructor(
             findCurrentChapter(chapters, c.currentPosition)
         }
         val preservedDescription = _playerState.value.description
+        val preservedError = _playerState.value.playerError
 
         // Detect video tracks: check all selected tracks for a video track group
         val hasVideoTrack = c.currentTracks.groups.any { group ->
@@ -488,6 +505,7 @@ class PlaybackConnection @Inject constructor(
             currentChapterIndex = currentChapter,
             hasChapters = chapters.isNotEmpty(),
             description = preservedDescription,
+            playerError = preservedError,
             isPartOfPlaylist = c.mediaItemCount > 1,
             hasCoverArt = metadata.artworkUri != null || metadata.artworkData != null,
             isVideoContent = hasVideoTrack,

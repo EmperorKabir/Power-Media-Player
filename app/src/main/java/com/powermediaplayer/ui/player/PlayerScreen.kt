@@ -1,19 +1,28 @@
 package com.powermediaplayer.ui.player
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
@@ -123,7 +132,26 @@ private fun PlayerScreenCompact(
     onShowChapterPicker: () -> Unit,
     horizontalPadding: Int = 0
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Video mode: tap to toggle controls; auto-hide after 4s while playing.
+    var controlsVisible by remember(uiState.isVideoContent) {
+        mutableStateOf(true)
+    }
+    LaunchedEffect(uiState.isVideoContent, uiState.isPlaying, controlsVisible) {
+        if (uiState.isVideoContent && uiState.isPlaying && controlsVisible) {
+            delay(4000)
+            controlsVisible = false
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(uiState.isVideoContent) {
+                if (uiState.isVideoContent) {
+                    detectTapGestures(onTap = { controlsVisible = !controlsVisible })
+                }
+            }
+    ) {
         if (uiState.isVideoContent) {
             // Video content: render the actual video frames
             // VideoSurface attaches directly to the ExoPlayer in PlaybackService
@@ -140,31 +168,46 @@ private fun PlayerScreenCompact(
             )
         }
 
-        // Gradient scrim — for audio: heavy fade so controls are readable over album art.
-        // For video: subtle bottom-only fade so the video picture is not obscured.
-        val scrimColors = if (uiState.isVideoContent) {
-            listOf(
-                Color.Transparent,
-                Color.Transparent,
-                OledBlack.copy(alpha = 0.5f),
-                OledBlack.copy(alpha = 0.9f),
-                OledBlack
-            )
-        } else {
-            listOf(
-                Color.Transparent,
-                OledBlack.copy(alpha = 0.3f),
-                OledBlack.copy(alpha = 0.75f),
-                OledBlack.copy(alpha = 0.97f),
-                OledBlack
+        // Scrim + control column animate together in video mode so the video
+        // picture fully fills the screen between taps.
+        val showOverlay = !uiState.isVideoContent || controlsVisible
+
+        AnimatedVisibility(
+            visible = showOverlay,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            // Gradient scrim — heavy fade for audio (album art under controls);
+            // subtle bottom-only fade for video so the picture stays visible.
+            val scrimColors = if (uiState.isVideoContent) {
+                listOf(
+                    Color.Transparent,
+                    Color.Transparent,
+                    OledBlack.copy(alpha = 0.5f),
+                    OledBlack.copy(alpha = 0.9f),
+                    OledBlack
+                )
+            } else {
+                listOf(
+                    Color.Transparent,
+                    OledBlack.copy(alpha = 0.3f),
+                    OledBlack.copy(alpha = 0.75f),
+                    OledBlack.copy(alpha = 0.97f),
+                    OledBlack
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(colors = scrimColors))
             )
         }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(colors = scrimColors))
-        )
 
+        AnimatedVisibility(
+            visible = showOverlay,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -184,7 +227,10 @@ private fun PlayerScreenCompact(
                 trackDurationFormatted = uiState.durationFormatted,
                 trackRemainingFormatted = uiState.trackRemainingFormatted,
                 trackSliderEnabled = uiState.controls.trackSlider,
-                onTrackSeek = { fraction -> viewModel.seekTo((fraction * uiState.duration).toLong()) },
+                onTrackSeek = { fraction ->
+                    val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
+                    viewModel.seekTo(target)
+                },
                 playlistPosition = uiState.playlistProgress,
                 playlistPositionFormatted = uiState.playlistPositionFormatted,
                 playlistDurationFormatted = uiState.playlistDurationFormatted,
@@ -225,6 +271,35 @@ private fun PlayerScreenCompact(
                 CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             }
             Spacer(modifier = Modifier.height(16.dp))
+        }
+        } // close AnimatedVisibility
+
+        // Error banner — surfaces ExoPlayer errors so the user knows the
+        // file failed (e.g. Drive 401, codec failure) instead of seeing a
+        // silent freeze.
+        uiState.playerError?.let { errMsg ->
+            Surface(
+                color = ErrorRed.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = errMsg,
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { viewModel.clearError() }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = TextPrimary)
+                    }
+                }
+            }
         }
     }
 }
@@ -290,7 +365,10 @@ private fun PlayerScreenExpanded(
                 trackDurationFormatted = uiState.durationFormatted,
                 trackRemainingFormatted = uiState.trackRemainingFormatted,
                 trackSliderEnabled = uiState.controls.trackSlider,
-                onTrackSeek = { fraction -> viewModel.seekTo((fraction * uiState.duration).toLong()) },
+                onTrackSeek = { fraction ->
+                    val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
+                    viewModel.seekTo(target)
+                },
                 playlistPosition = uiState.playlistProgress,
                 playlistPositionFormatted = uiState.playlistPositionFormatted,
                 playlistDurationFormatted = uiState.playlistDurationFormatted,

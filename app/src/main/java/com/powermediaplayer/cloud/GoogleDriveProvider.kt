@@ -1,6 +1,5 @@
 package com.powermediaplayer.cloud
 
-import android.accounts.Account
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -85,9 +84,14 @@ class GoogleDriveProvider @Inject constructor(
 
     private fun attach(acc: GoogleSignInAccount) {
         account = acc
+        // Use selectedAccountName (email) — does not require GET_ACCOUNTS
+        // runtime permission. The previous selectedAccount + synthetic
+        // Account(email, "com.google") fallback failed silently for users
+        // who hadn't granted contacts/accounts perms, returning a null
+        // OAuth token at stream time.
         val credential = GoogleAccountCredential
             .usingOAuth2(context, listOf(DriveScopes.DRIVE_READONLY))
-            .apply { selectedAccount = acc.account ?: Account(acc.email ?: "", "com.google") }
+            .apply { selectedAccountName = acc.email }
         driveService = Drive.Builder(
             NetHttpTransport(),
             GsonFactory.getDefaultInstance(),
@@ -158,7 +162,7 @@ class GoogleDriveProvider @Inject constructor(
         return try {
             val credential = GoogleAccountCredential
                 .usingOAuth2(context, listOf(DriveScopes.DRIVE_READONLY))
-                .apply { selectedAccount = acc.account ?: Account(acc.email ?: "", "com.google") }
+                .apply { selectedAccountName = acc.email }
             credential.token
         } catch (_: Exception) {
             null

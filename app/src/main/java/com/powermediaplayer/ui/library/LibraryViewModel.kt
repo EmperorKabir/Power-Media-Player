@@ -67,7 +67,8 @@ data class LibraryUiState(
     val isLoading: Boolean = true,
     val selectedTab: Int = 0, // 0 = Audio, 1 = Video
     val sortMode: SortMode = SortMode.NAME_ASC,
-    val favorites: Set<String> = emptySet()
+    val favorites: Set<String> = emptySet(),
+    val searchQuery: String = ""
 )
 
 /**
@@ -103,6 +104,11 @@ class LibraryViewModel @Inject constructor(
         recomputeDisplayed()
     }
 
+    fun setSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+        recomputeDisplayed()
+    }
+
     fun toggleFavorite(uri: Uri) {
         val key = uri.toString()
         viewModelScope.launch(Dispatchers.IO) {
@@ -129,9 +135,15 @@ class LibraryViewModel @Inject constructor(
 
     private fun recomputeDisplayed() {
         val state = _uiState.value
+        val q = TextNormalizer.normalize(state.searchQuery).lowercase()
+        val filterFn: (MediaFileInfo) -> Boolean = if (q.isBlank()) { _ -> true } else { f ->
+            // Case- and accent-insensitive match across title + artist + album
+            val hay = TextNormalizer.normalize("${f.title} ${f.artist} ${f.album}").lowercase()
+            hay.contains(q)
+        }
         _uiState.value = state.copy(
-            audioFiles = applySort(rawAudio, state.sortMode, state.favorites),
-            videoFiles = applySort(rawVideo, state.sortMode, state.favorites)
+            audioFiles = applySort(rawAudio.filter(filterFn), state.sortMode, state.favorites),
+            videoFiles = applySort(rawVideo.filter(filterFn), state.sortMode, state.favorites)
         )
     }
 

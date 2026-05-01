@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -159,6 +161,35 @@ fun LibraryScreen(
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = OledBlack
             )
+        )
+
+        // ── Search Bar ───────────────────────────────────────────
+        OutlinedTextField(
+            value = uiState.searchQuery,
+            onValueChange = { viewModel.setSearchQuery(it) },
+            placeholder = { Text("Search title, artist, or album", color = TextSecondary) },
+            singleLine = true,
+            leadingIcon = {
+                Icon(Icons.Filled.Search, contentDescription = "Search", tint = TealAccent)
+            },
+            trailingIcon = if (uiState.searchQuery.isNotEmpty()) {
+                {
+                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = TextSecondary)
+                    }
+                }
+            } else null,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = TealAccent,
+                unfocusedBorderColor = DisabledContent,
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary,
+                cursorColor = TealAccent
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
         )
 
         // ── Tabs: Audio | Video ──────────────────────────────────

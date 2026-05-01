@@ -56,6 +56,12 @@ data class PlayerUiState(
     val chapters: List<com.powermediaplayer.service.ChapterInfo> = emptyList(),
     val currentChapterIndex: Int = -1,
     val hasChapters: Boolean = false,
+    // When inside a chapter, [chapterStartMs] / [chapterDurationMs] anchor the
+    // track-slider to chapter-relative progress instead of full-file progress.
+    val chapterStartMs: Long = 0L,
+    val chapterDurationMs: Long = 0L,
+    // Last playback error shown to the user.
+    val playerError: String? = null,
 
     // Controls enabled state (for greying out)
     val controls: ControlsEnabledState = ControlsEnabledState(),
