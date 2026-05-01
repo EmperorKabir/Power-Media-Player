@@ -479,10 +479,14 @@ class PlaybackConnection @Inject constructor(
         val preservedDescription = _playerState.value.description
         val preservedError = _playerState.value.playerError
 
-        // Detect video tracks: check all selected tracks for a video track group
+        // Detect video tracks: check selected tracks first (authoritative),
+        // then fall back to the is_video_hint extra packed by the library /
+        // cloud layers. The hint avoids the audio-layout flash before the
+        // player has finished parsing tracks for newly-loaded items.
+        val isVideoHint = metadata.extras?.getBoolean("is_video_hint", false) ?: false
         val hasVideoTrack = c.currentTracks.groups.any { group ->
             group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO && group.isSelected
-        }
+        } || isVideoHint
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,

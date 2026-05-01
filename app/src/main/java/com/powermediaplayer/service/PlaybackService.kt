@@ -4,9 +4,12 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import androidx.annotation.OptIn
+import androidx.media3.cast.CastPlayer
+import androidx.media3.cast.SessionAvailabilityListener
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -16,6 +19,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.mp4.Mp4Extractor
+import com.google.android.gms.cast.framework.CastContext
 import com.powermediaplayer.cloud.GoogleDriveProvider
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
@@ -39,6 +43,7 @@ class PlaybackService : MediaSessionService() {
     lateinit var googleDriveProvider: GoogleDriveProvider
 
     private var player: ExoPlayer? = null
+    private var castPlayer: CastPlayer? = null
     private var mediaSession: MediaSession? = null
 
     companion object {
@@ -134,6 +139,50 @@ class PlaybackService : MediaSessionService() {
             .setSessionActivity(sessionActivityIntent)
             .setCallback(PlayerSessionCallback())
             .build()
+
+        // Cast: initialize lazily; if Google Play Services is missing the
+        // call throws and we run without cast support.
+        try {
+            val castContext = CastContext.getSharedInstance(this)
+            val cp = CastPlayer(castContext)
+            cp.setSessionAvailabilityListener(object : SessionAvailabilityListener {
+                override fun onCastSessionAvailable() = switchPlayer(cp)
+                override fun onCastSessionUnavailable() = switchPlayer(player!!)
+            })
+            castPlayer = cp
+        } catch (_: Exception) {
+            // No cast — phone has no Play Services or unsupported device.
+        }
+    }
+
+    /**
+     * Migrate the current queue + position from the active player to [target]
+     * so playback continues seamlessly when the user picks/leaves a cast device.
+     */
+    private fun switchPlayer(target: Player) {
+        val ms = mediaSession ?: return
+        val current = ms.player
+        if (current === target) return
+
+        val items = (0 until current.mediaItemCount).map { current.getMediaItemAt(it) }
+        val currentIndex = current.currentMediaItemIndex
+        val currentPosition = current.currentPosition
+        val playWhenReady = current.playWhenReady
+
+        current.stop()
+        ms.player = target
+        if (items.isNotEmpty()) {
+            target.setMediaItems(items, currentIndex, currentPosition)
+            target.playWhenReady = playWhenReady
+            target.prepare()
+        }
+
+        // Re-publish the active player reference for the video surface.
+        if (target is ExoPlayer) {
+            exoPlayerRef = java.lang.ref.WeakReference(target)
+        } else {
+            exoPlayerRef = null
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -152,6 +201,11 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         exoPlayerRef = null          // clear before release so UI gets null not dead reference
+        castPlayer?.run {
+            setSessionAvailabilityListener(null)
+            release()
+        }
+        castPlayer = null
         mediaSession?.run {
             player.release()
             release()
@@ -221,11 +275,19 @@ class PlaybackService : MediaSessionService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
-            // Resolve media items with URIs for playback
+            // Resolve media items with URIs for playback. URI may live in
+            // localConfiguration (same-process MediaController preserves it),
+            // requestMetadata.mediaUri (preserved across IPC), or mediaId
+            // (we set this to the URI string for cloud + library items).
             val resolvedItems = mediaItems.map { item ->
-                item.buildUpon()
-                    .setUri(item.requestMetadata.mediaUri ?: item.mediaId.let { android.net.Uri.parse(it) })
-                    .build()
+                val resolvedUri = item.localConfiguration?.uri
+                    ?: item.requestMetadata.mediaUri
+                    ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull()
+                if (resolvedUri != null) {
+                    item.buildUpon().setUri(resolvedUri).build()
+                } else {
+                    item
+                }
             }.toMutableList()
             return Futures.immediateFuture(resolvedItems)
         }

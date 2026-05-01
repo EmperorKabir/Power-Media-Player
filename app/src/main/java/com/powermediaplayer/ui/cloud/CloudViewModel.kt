@@ -145,12 +145,27 @@ class CloudViewModel @Inject constructor(
                 else -> return@launch
             }
             val uri = streamResult.getOrNull() ?: return@launch
+            // mediaId MUST be the URI string and requestMetadata MUST carry
+            // the URI — MediaController IPC strips localConfiguration.uri
+            // before the service receives the item, so the service-side
+            // PlayerSessionCallback.onAddMediaItems recovers it from one of
+            // those two preserved fields.
+            val isVideo = item.mimeType.startsWith("video/")
+            val extras = android.os.Bundle().apply {
+                putBoolean("is_video_hint", isVideo)
+            }
             val mediaItem = MediaItem.Builder()
-                .setMediaId(item.id)
+                .setMediaId(uri.toString())
                 .setUri(uri)
+                .setRequestMetadata(
+                    MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(uri)
+                        .build()
+                )
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(item.name)
+                        .setExtras(extras)
                         .build()
                 )
                 .build()

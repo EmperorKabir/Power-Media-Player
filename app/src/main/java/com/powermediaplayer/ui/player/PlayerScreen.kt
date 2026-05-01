@@ -274,6 +274,17 @@ private fun PlayerScreenCompact(
         }
         } // close AnimatedVisibility
 
+        // Top-right Cast button — visible only when controls are visible
+        // (in video mode it auto-hides with everything else).
+        AnimatedVisibility(
+            visible = showOverlay,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 16.dp)
+        ) {
+            CastButton(modifier = Modifier.size(40.dp))
+        }
+
         // Error banner — surfaces ExoPlayer errors so the user knows the
         // file failed (e.g. Drive 401, codec failure) instead of seeing a
         // silent freeze.

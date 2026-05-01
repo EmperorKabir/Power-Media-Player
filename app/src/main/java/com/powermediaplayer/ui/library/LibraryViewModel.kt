@@ -180,10 +180,19 @@ class LibraryViewModel @Inject constructor(
     fun createMediaItems(files: List<MediaFileInfo>, startIndex: Int = 0): Pair<List<MediaItem>, Int> {
         val items = files.map { file ->
             val extras = com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, file.uri)
-            
+            // Video hint travels in extras so PlaybackConnection knows the
+            // file is video before the player has finished parsing tracks
+            // (the existing currentTracks-based detection races with the
+            // first compose pass and leaves the UI on the audio layout).
+            extras.putBoolean("is_video_hint", file.isVideo)
             MediaItem.Builder()
                 .setMediaId(file.uri.toString())
                 .setUri(file.uri)
+                .setRequestMetadata(
+                    MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(file.uri)
+                        .build()
+                )
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(file.title)
@@ -376,9 +385,16 @@ class LibraryViewModel @Inject constructor(
      */
     fun createSingleMediaItem(uri: Uri): MediaItem {
         val extras = com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, uri)
+        val mime = context.contentResolver.getType(uri).orEmpty()
+        extras.putBoolean("is_video_hint", mime.startsWith("video/"))
         return MediaItem.Builder()
             .setMediaId(uri.toString())
             .setUri(uri)
+            .setRequestMetadata(
+                MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(uri)
+                    .build()
+            )
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setExtras(extras)

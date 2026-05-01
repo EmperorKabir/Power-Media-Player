@@ -119,6 +119,10 @@ dependencies {
     implementation("androidx.media3:media3-session:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
+    implementation("androidx.media3:media3-cast:$media3Version")
+    // Chromecast: Cast SDK + MediaRouter (button in player UI)
+    implementation("com.google.android.gms:play-services-cast-framework:21.5.0")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
     // FFmpeg extension - requires local build from androidx/media repo
     // implementation("androidx.media3:media3-decoder-ffmpeg:$media3Version")
 
