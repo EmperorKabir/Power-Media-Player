@@ -236,6 +236,7 @@ private fun ControlButton(
             contentDescription = label,
             modifier = Modifier.size(size.dp),
             tint = if (enabled) TextPrimary else DisabledGrey
+        )
     }
 }
 

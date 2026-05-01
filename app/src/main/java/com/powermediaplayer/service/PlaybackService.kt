@@ -10,6 +10,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.mp4.Mp4Extractor
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -66,8 +69,20 @@ class PlaybackService : MediaSessionService() {
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
-        // Build ExoPlayer with audio focus and wake lock
+        // Mp4 extractor with edit-list workaround — required for many M4B
+        // audiobooks (especially Audible-converted) whose elst boxes confuse
+        // the default extractor and cause audio to drop after chapter 1.
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setMp4ExtractorFlags(Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
+
+        // Build ExoPlayer with audio focus and wake lock.
+        // Audio offload is left at the default (DISABLED) so AudioSink can
+        // be re-initialised on sample-rate changes mid-stream — common in
+        // chapter-concatenated M4B files.
         player = ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
