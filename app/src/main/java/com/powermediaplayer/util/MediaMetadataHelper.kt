@@ -20,6 +20,9 @@ data class MediaInfo(
     val sampleRate: String = "",
     val channels: String = "",
     val codec: String = "",
+    val description: String = "",
+    val language: String = "",
+    val narrator: String = "",
     val artworkBytes: ByteArray? = null,
     val hasChapters: Boolean = false,
     val chapterCount: Int = 0
@@ -114,6 +117,7 @@ object MediaMetadataHelper {
                 sampleRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE) ?: "",
                 channels = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_NUM_TRACKS) ?: "",
                 codec = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE) ?: "",
+                narrator = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_AUTHOR) ?: "",
                 artworkBytes = retriever.embeddedPicture
             )
         } catch (e: Exception) {
