@@ -214,15 +214,26 @@ class GoogleDriveProvider @Inject constructor(
     suspend fun downloadToCache(item: CloudMediaItem): java.io.File? =
         downloadRangeToCache(item, 0L, 32L * 1024 * 1024 - 1, "head")
 
-    /** Convenience: last 32 MB — for files whose moov atom is at the end. */
+    /** Last 32 MB — for files whose moov atom is at the end. */
     suspend fun downloadTailToCache(item: CloudMediaItem): java.io.File? {
         val size = item.size
         return if (size > 0) {
             val start = (size - 32L * 1024 * 1024).coerceAtLeast(0L)
             downloadRangeToCache(item, start, size - 1, "tail")
         } else {
-            // Unknown size — request a tail using a negative-prefix range
             downloadRangeToCache(item, null, 32L * 1024 * 1024, "tail")
         }
+    }
+
+    /**
+     * Full-file download — used as a fallback when partial downloads fail to
+     * yield metadata. Capped at 1 GB to avoid eating the user's storage.
+     * Slow, so callers should only invoke this after the head/tail passes
+     * have failed.
+     */
+    suspend fun downloadFullToCache(item: CloudMediaItem): java.io.File? {
+        val cap = 1024L * 1024 * 1024
+        if (item.size > cap) return null
+        return downloadRangeToCache(item, 0L, null, "full")
     }
 }

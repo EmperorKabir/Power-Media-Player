@@ -69,16 +69,19 @@ fun CloudBrowserScreen(
         )
 
         // Provider quick-switch tabs — tap to jump straight to Drive or
-        // Spotify without going back to the selection screen first.
+        // Spotify. Tapping a not-signed-in provider triggers the sign-in
+        // flow rather than no-op'ing.
         ProviderTabRow(
             active = uiState.activeProvider,
             driveLoggedIn = uiState.driveLoggedIn,
             spotifyLoggedIn = uiState.spotifyLoggedIn,
             onSelectDrive = {
                 if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
+                else driveLauncher.launch(viewModel.buildDriveSignInIntent())
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
+                else spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent())
             }
         )
 
@@ -189,7 +192,7 @@ private fun ProviderTab(
         shape = RoundedCornerShape(8.dp),
         modifier = modifier
             .height(40.dp)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(onClick = onClick)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(

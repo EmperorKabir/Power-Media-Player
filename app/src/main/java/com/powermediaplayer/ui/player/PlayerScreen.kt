@@ -209,14 +209,19 @@ private fun PlayerScreenCompact(
         if (!uiState.isVideoContent) controlsVisible = true
     }
 
+    // rememberUpdatedState so the gesture lambda always reads the LATEST
+    // isVideoContent / controlsVisible — without this the lambda captures
+    // the values from the first composition only, causing the toggle to
+    // misbehave once tracks change (was the source of "controls jump").
+    val isVideoContentLive by rememberUpdatedState(uiState.isVideoContent)
+    val controlsVisibleLive by rememberUpdatedState(controlsVisible)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
                 detectTapGestures(onTap = {
-                    // Tap toggles only in video mode; audio mode has no
-                    // hide state to toggle.
-                    if (uiState.isVideoContent) controlsVisible = !controlsVisible
+                    if (isVideoContentLive) controlsVisible = !controlsVisibleLive
                 })
             }
     ) {
@@ -279,10 +284,19 @@ private fun PlayerScreenCompact(
             enter = fadeIn(animationSpec = tween(durationMillis = 500)),
             exit = fadeOut(animationSpec = tween(durationMillis = 1000))
         ) {
+        // Skip verticalScroll in video mode — the scroll state was
+        // re-flowing on every position-poll recomposition and visibly
+        // shifting the controls. Audio mode keeps it because long
+        // descriptions / chapter chips can need scrolling.
+        val scrollMod = if (uiState.isVideoContent) {
+            Modifier
+        } else {
+            Modifier.verticalScroll(rememberScrollState())
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .then(scrollMod)
                 .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Bottom

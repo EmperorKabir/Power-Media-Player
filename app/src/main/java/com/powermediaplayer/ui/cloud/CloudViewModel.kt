@@ -172,7 +172,21 @@ class CloudViewModel @Inject constructor(
                 CloudProviderType.SPOTIFY -> spotifyProvider.getMediaStreamUri(item)
                 else -> return
             }
-            val uri = streamResult.getOrNull() ?: return
+            // If the provider failed to produce a playable URI (e.g. Spotify
+            // track without a preview clip), surface the reason so the user
+            // isn't left staring at a blank player.
+            streamResult.exceptionOrNull()?.let { ex ->
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = ex.message ?: "Cannot play this item"
+                )
+                return
+            }
+            val uri = streamResult.getOrNull() ?: run {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "No playable URL for this item"
+                )
+                return
+            }
             // mediaId MUST be the URI string and requestMetadata MUST carry
             // the URI — MediaController IPC strips localConfiguration.uri
             // before the service receives the item, so the service-side
@@ -209,10 +223,13 @@ class CloudViewModel @Inject constructor(
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder) {
                 viewModelScope.launch(Dispatchers.IO) {
                     playbackConnection.setCloudFetchInProgress(true)
-                    // Two-pass strategy: head 32 MB first (handles moov-at-front,
-                    // typical for streaming-optimised files), then tail 32 MB
-                    // if nothing was extracted (handles moov-at-end, common
-                    // in Audible-converted M4Bs).
+                    // Three-pass strategy:
+                    //   (1) head 32 MB — fast; works for moov-at-front
+                    //   (2) full file (≤1 GB) — slow but reliable;
+                    //       MediaMetadataRetriever needs a complete MP4
+                    //       structure (ftyp + moov + mdat), so partial
+                    //       tail-only downloads can't actually be parsed.
+                    //   (3) skip — file too big or already extracted
                     var found = false
                     var tempFile = try {
                         driveProvider.downloadToCache(item)
@@ -223,7 +240,7 @@ class CloudViewModel @Inject constructor(
                     }
                     if (!found) {
                         tempFile = try {
-                            driveProvider.downloadTailToCache(item)
+                            driveProvider.downloadFullToCache(item)
                         } catch (_: Throwable) { null }
                         if (tempFile != null) {
                             parseAndApply(item, tempFile)
