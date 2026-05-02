@@ -361,17 +361,27 @@ private fun PlayerScreenCompact(
                 enter = fadeIn(animationSpec = tween(durationMillis = 500)),
                 exit = fadeOut(animationSpec = tween(durationMillis = 1000)),
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 16.dp)
-            ) { CastButton(modifier = Modifier.size(40.dp)) }
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BluetoothButton(modifier = Modifier.size(40.dp))
+                    Spacer(Modifier.width(4.dp))
+                    CastButton(modifier = Modifier.size(40.dp))
+                }
+            }
         } else {
             // Audio: render directly, no AnimatedVisibility — controls
             // can never disappear regardless of any state churn.
             OverlayContent()
-            CastButton(
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 16.dp, end = 16.dp)
-                    .size(40.dp)
-            )
+            ) {
+                BluetoothButton(modifier = Modifier.size(40.dp))
+                Spacer(Modifier.width(4.dp))
+                CastButton(modifier = Modifier.size(40.dp))
+            }
         }
     }
 }

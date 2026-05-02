@@ -21,6 +21,9 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.mp4.Mp4Extractor
 import com.google.android.gms.cast.framework.CastContext
 import com.powermediaplayer.cloud.GoogleDriveProvider
+import com.powermediaplayer.data.preferences.BluetoothMediaActions
+import com.powermediaplayer.data.preferences.BtMappingSnapshot
+import com.powermediaplayer.data.preferences.SettingsDataStore
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -28,6 +31,8 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import com.powermediaplayer.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -42,9 +47,28 @@ class PlaybackService : MediaSessionService() {
     @javax.inject.Inject
     lateinit var googleDriveProvider: GoogleDriveProvider
 
+    @javax.inject.Inject
+    lateinit var settingsDataStore: SettingsDataStore
+
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
     private var mediaSession: MediaSession? = null
+
+    // Cached Bluetooth mapping. The MediaSession callback fires on the
+    // binder thread; reading DataStore there would block. We refresh
+    // this snapshot whenever DataStore emits and the callback reads it
+    // lock-free via @Volatile.
+    @Volatile
+    private var btMapping: BtMappingSnapshot = BtMappingSnapshot(
+        prevAction = BluetoothMediaActions.PREV_TRACK,
+        nextAction = BluetoothMediaActions.NEXT_TRACK,
+        skipBackSeconds = 30,
+        skipForwardSeconds = 30
+    )
+
+    private val serviceScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
+    )
 
     companion object {
         // Custom session commands for features not in standard transport controls
@@ -140,6 +164,19 @@ class PlaybackService : MediaSessionService() {
             .setCallback(PlayerSessionCallback())
             .build()
 
+        // Keep the Bluetooth mapping snapshot fresh. Combine into a
+        // single Flow so we set the @Volatile field atomically.
+        serviceScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.btPrevAction,
+                settingsDataStore.btNextAction,
+                settingsDataStore.btSkipBackSeconds,
+                settingsDataStore.btSkipForwardSeconds
+            ) { prev, next, back, fwd ->
+                BtMappingSnapshot(prev, next, back, fwd)
+            }.collect { btMapping = it }
+        }
+
         // Cast: initialize lazily; if Google Play Services is missing the
         // call throws and we run without cast support.
         try {
@@ -200,6 +237,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         exoPlayerRef = null          // clear before release so UI gets null not dead reference
         castPlayer?.run {
             setSessionAvailabilityListener(null)
@@ -270,6 +308,53 @@ class PlaybackService : MediaSessionService() {
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
+        /**
+         * Intercept SEEK_TO_NEXT / SEEK_TO_PREVIOUS so Bluetooth/AVRCP
+         * "next" and "previous" car-stereo presses follow the user's
+         * remapping (skip ±N seconds, restart, chapter-only, etc.).
+         *
+         * Returning Player.RESULT_INFO_SKIPPED tells Media3 NOT to
+         * execute the original command — we then call into the player
+         * directly with the remapped action.
+         *
+         * Note: the in-app PlaybackControls bypass this callback because
+         * they call seekTo() / custom skip commands directly, never the
+         * Player.seekToNextMediaItem() command. So the in-app prev/next
+         * buttons remain hard-mapped to chapter/track navigation, which
+         * is what users expect.
+         */
+        @OptIn(UnstableApi::class)
+        @Deprecated("Hook itself is deprecated in Media3, but still the only stable way to intercept AVRCP next/prev")
+        @Suppress("DEPRECATION")
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            playerCommand: Int
+        ): Int {
+            // Only re-route AVRCP / system MediaController commands —
+            // commands originating from our in-app MediaController
+            // (same package, signed identity) bypass the remap so the
+            // on-screen prev/next behave as labelled.
+            val isExternal = controller.packageName != packageName
+            if (!isExternal) return super.onPlayerCommandRequest(session, controller, playerCommand)
+
+            val player = session.player
+            val mapping = btMapping
+            return when (playerCommand) {
+                Player.COMMAND_SEEK_TO_PREVIOUS,
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                    applyAction(player, mapping.prevAction, mapping.skipBackSeconds, isPrev = true)
+                    SessionResult.RESULT_INFO_SKIPPED
+                }
+                Player.COMMAND_SEEK_TO_NEXT,
+                Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                    applyAction(player, mapping.nextAction, mapping.skipForwardSeconds, isPrev = false)
+                    SessionResult.RESULT_INFO_SKIPPED
+                }
+                else -> @Suppress("DEPRECATION") super.onPlayerCommandRequest(session, controller, playerCommand)
+            }
+        }
+
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -290,6 +375,34 @@ class PlaybackService : MediaSessionService() {
                 }
             }.toMutableList()
             return Futures.immediateFuture(resolvedItems)
+        }
+    }
+
+    /**
+     * Apply a remapped Bluetooth media-button action against the player.
+     * Runs on the binder thread but every Player call below is dispatched
+     * to the application looper internally, so no extra wrapping needed.
+     */
+    private fun applyAction(player: Player, action: String, seconds: Int, isPrev: Boolean) {
+        when (action) {
+            BluetoothMediaActions.PREV_TRACK -> player.seekToPreviousMediaItem()
+            BluetoothMediaActions.NEXT_TRACK -> player.seekToNextMediaItem()
+            BluetoothMediaActions.SKIP_BACK -> {
+                val target = (player.currentPosition - seconds * 1000L).coerceAtLeast(0L)
+                player.seekTo(target)
+            }
+            BluetoothMediaActions.SKIP_FORWARD -> {
+                player.seekTo(player.currentPosition + seconds * 1000L)
+            }
+            BluetoothMediaActions.RESTART_TRACK -> player.seekTo(0L)
+            BluetoothMediaActions.PREV_CHAPTER,
+            BluetoothMediaActions.NEXT_CHAPTER -> {
+                // Chapter navigation lives in PlaybackConnection, not the
+                // service. Fall back to media-item navigation for now —
+                // a future pass can add a custom command roundtrip.
+                if (isPrev) player.seekToPreviousMediaItem() else player.seekToNextMediaItem()
+            }
+            else -> if (isPrev) player.seekToPreviousMediaItem() else player.seekToNextMediaItem()
         }
     }
 }

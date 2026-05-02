@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.powermediaplayer.data.preferences.BluetoothMediaActions
 import com.powermediaplayer.ui.theme.*
 
 /**
@@ -135,6 +136,40 @@ fun SettingsScreen(
             )
         }
 
+        SettingsDivider()
+
+        // ══════════════════════════════════════════════════════════
+        // BLUETOOTH — car media-button remapping
+        // ══════════════════════════════════════════════════════════
+        SettingsSectionHeader("Bluetooth Car Controls")
+        Text(
+            text = "Remap the Previous and Next buttons on your car stereo " +
+                "(or any Bluetooth remote) when playing through this app. " +
+                "Works with any car that already controls media over Bluetooth — " +
+                "no setup needed in the car.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
+
+        BluetoothActionPicker(
+            label = "Previous button does",
+            currentAction = uiState.btPrevAction,
+            seconds = uiState.btSkipBackSeconds,
+            options = PREV_OPTIONS,
+            onActionChange = { viewModel.setBtPrevAction(it) },
+            onSecondsChange = { viewModel.setBtSkipBackSeconds(it) }
+        )
+
+        BluetoothActionPicker(
+            label = "Next button does",
+            currentAction = uiState.btNextAction,
+            seconds = uiState.btSkipForwardSeconds,
+            options = NEXT_OPTIONS,
+            onActionChange = { viewModel.setBtNextAction(it) },
+            onSecondsChange = { viewModel.setBtSkipForwardSeconds(it) }
+        )
+
         Spacer(modifier = Modifier.height(32.dp))
 
         // ══════════════════════════════════════════════════════════
@@ -244,6 +279,140 @@ data class SubtitleFormatInfo(
     val name: String,
     val description: String
 )
+
+// ── Bluetooth car-button mapping options ─────────────────────────────
+private data class BtActionOption(
+    val token: String,
+    val label: String,
+    val needsSeconds: Boolean
+)
+
+private val PREV_OPTIONS = listOf(
+    BtActionOption(BluetoothMediaActions.PREV_TRACK,    "Previous track / chapter", false),
+    BtActionOption(BluetoothMediaActions.SKIP_BACK,     "Skip backward …",          true),
+    BtActionOption(BluetoothMediaActions.RESTART_TRACK, "Restart current track",    false),
+    BtActionOption(BluetoothMediaActions.PREV_CHAPTER,  "Previous chapter only",    false)
+)
+
+private val NEXT_OPTIONS = listOf(
+    BtActionOption(BluetoothMediaActions.NEXT_TRACK,    "Next track / chapter", false),
+    BtActionOption(BluetoothMediaActions.SKIP_FORWARD,  "Skip forward …",       true),
+    BtActionOption(BluetoothMediaActions.NEXT_CHAPTER,  "Next chapter only",    false)
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BluetoothActionPicker(
+    label: String,
+    currentAction: String,
+    seconds: Int,
+    options: List<BtActionOption>,
+    onActionChange: (String) -> Unit,
+    onSecondsChange: (Int) -> Unit
+) {
+    val selected = options.firstOrNull { it.token == currentAction } ?: options.first()
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Spacer(Modifier.height(6.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = menuExpanded,
+            onExpandedChange = { menuExpanded = it },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = selected.label,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealAccent,
+                    unfocusedBorderColor = DisabledContent,
+                    focusedTextColor = TealAccent,
+                    unfocusedTextColor = TextPrimary,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated
+                )
+            )
+            ExposedDropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier.background(SurfaceElevated)
+            ) {
+                options.forEach { opt ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = opt.label,
+                                color = if (opt.token == currentAction) TealAccent else TextPrimary
+                            )
+                        },
+                        onClick = {
+                            onActionChange(opt.token)
+                            menuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        if (selected.needsSeconds) {
+            Spacer(Modifier.height(8.dp))
+            SecondsStepper(
+                seconds = seconds,
+                onChange = onSecondsChange
+            )
+        }
+    }
+}
+
+@Composable
+private fun SecondsStepper(seconds: Int, onChange: (Int) -> Unit) {
+    val presets = listOf(5, 10, 15, 30, 60, 90)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$seconds s",
+            style = MaterialTheme.typography.titleMedium,
+            color = TealAccent,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+        IconButton(onClick = { onChange((seconds - 5).coerceAtLeast(1)) }) {
+            Icon(Icons.Filled.Remove, contentDescription = "Decrease seconds", tint = TealAccent)
+        }
+        IconButton(onClick = { onChange(seconds + 5) }) {
+            Icon(Icons.Filled.Add, contentDescription = "Increase seconds", tint = TealAccent)
+        }
+        Spacer(Modifier.width(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            presets.forEach { p ->
+                AssistChip(
+                    onClick = { onChange(p) },
+                    label = { Text("${p}s", style = MaterialTheme.typography.labelSmall) },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (p == seconds) Teal800 else SurfaceElevated,
+                        labelColor = if (p == seconds) TealAccent else TextSecondary
+                    )
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun SubtitleFormatOption(

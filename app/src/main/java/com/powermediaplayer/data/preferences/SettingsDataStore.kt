@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -28,6 +29,14 @@ class SettingsDataStore @Inject constructor(
         val SLEEP_TIMER_MINUTES = intPreferencesKey("sleep_timer_minutes")
         val LAST_EQ_PRESET_ID = longPreferencesKey("last_eq_preset_id")
         val BRIGHTNESS_OVERRIDE = floatPreferencesKey("brightness_override")
+
+        // Bluetooth media-button remapping. Stored as the action token
+        // strings declared in BluetoothMediaActions to keep the schema
+        // free of magic ints.
+        val BT_PREV_ACTION = stringPreferencesKey("bt_prev_action")
+        val BT_NEXT_ACTION = stringPreferencesKey("bt_next_action")
+        val BT_SKIP_BACK_SECONDS = intPreferencesKey("bt_skip_back_seconds")
+        val BT_SKIP_FORWARD_SECONDS = intPreferencesKey("bt_skip_forward_seconds")
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
@@ -106,4 +115,84 @@ class SettingsDataStore @Inject constructor(
             prefs[Keys.BRIGHTNESS_OVERRIDE] = brightness
         }
     }
+
+    // ── Bluetooth Media-Button Mapping ───────────────────────────
+    val btPrevAction: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BT_PREV_ACTION] ?: BluetoothMediaActions.PREV_TRACK
+    }
+
+    suspend fun setBtPrevAction(action: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BT_PREV_ACTION] = action
+        }
+    }
+
+    val btNextAction: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BT_NEXT_ACTION] ?: BluetoothMediaActions.NEXT_TRACK
+    }
+
+    suspend fun setBtNextAction(action: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BT_NEXT_ACTION] = action
+        }
+    }
+
+    val btSkipBackSeconds: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BT_SKIP_BACK_SECONDS] ?: 30
+    }
+
+    suspend fun setBtSkipBackSeconds(seconds: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BT_SKIP_BACK_SECONDS] = seconds.coerceIn(1, 600)
+        }
+    }
+
+    val btSkipForwardSeconds: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.BT_SKIP_FORWARD_SECONDS] ?: 30
+    }
+
+    suspend fun setBtSkipForwardSeconds(seconds: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BT_SKIP_FORWARD_SECONDS] = seconds.coerceIn(1, 600)
+        }
+    }
+
+    /**
+     * Synchronous snapshot of the Bluetooth mapping — used by
+     * PlaybackService.MediaSession.Callback which is invoked on the
+     * binder thread and cannot block on a Flow.collect.
+     */
+    suspend fun btMappingSnapshot(): BtMappingSnapshot {
+        val prefs = context.dataStore.data.first()
+        return BtMappingSnapshot(
+            prevAction = prefs[Keys.BT_PREV_ACTION] ?: BluetoothMediaActions.PREV_TRACK,
+            nextAction = prefs[Keys.BT_NEXT_ACTION] ?: BluetoothMediaActions.NEXT_TRACK,
+            skipBackSeconds = prefs[Keys.BT_SKIP_BACK_SECONDS] ?: 30,
+            skipForwardSeconds = prefs[Keys.BT_SKIP_FORWARD_SECONDS] ?: 30
+        )
+    }
 }
+
+/**
+ * String tokens for Bluetooth media-button actions. Stored verbatim
+ * in DataStore so a future schema change is grep-able.
+ */
+object BluetoothMediaActions {
+    const val PREV_TRACK = "previous_track"
+    const val NEXT_TRACK = "next_track"
+    const val SKIP_BACK = "skip_back_seconds"
+    const val SKIP_FORWARD = "skip_forward_seconds"
+    const val RESTART_TRACK = "restart_track"
+    const val PREV_CHAPTER = "previous_chapter"
+    const val NEXT_CHAPTER = "next_chapter"
+}
+
+/**
+ * Immutable snapshot for the binder-thread MediaSession.Callback.
+ */
+data class BtMappingSnapshot(
+    val prevAction: String,
+    val nextAction: String,
+    val skipBackSeconds: Int,
+    val skipForwardSeconds: Int
+)

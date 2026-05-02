@@ -2,6 +2,7 @@ package com.powermediaplayer.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.powermediaplayer.data.preferences.BluetoothMediaActions
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -14,7 +15,11 @@ import javax.inject.Inject
 data class SettingsUiState(
     val useDeepScan: Boolean = false,
     val subtitleFormat: String = "SRT",
-    val useSoftwareDecoding: Boolean = false
+    val useSoftwareDecoding: Boolean = false,
+    val btPrevAction: String = BluetoothMediaActions.PREV_TRACK,
+    val btNextAction: String = BluetoothMediaActions.NEXT_TRACK,
+    val btSkipBackSeconds: Int = 30,
+    val btSkipForwardSeconds: Int = 30
 )
 
 /**
@@ -27,14 +32,24 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        settingsDataStore.useDeepScan,
-        settingsDataStore.subtitleFormat,
-        settingsDataStore.useSoftwareDecoding
-    ) { deepScan, subtitleFormat, softwareDecoding ->
+        listOf(
+            settingsDataStore.useDeepScan,
+            settingsDataStore.subtitleFormat,
+            settingsDataStore.useSoftwareDecoding,
+            settingsDataStore.btPrevAction,
+            settingsDataStore.btNextAction,
+            settingsDataStore.btSkipBackSeconds,
+            settingsDataStore.btSkipForwardSeconds
+        )
+    ) { values ->
         SettingsUiState(
-            useDeepScan = deepScan,
-            subtitleFormat = subtitleFormat,
-            useSoftwareDecoding = softwareDecoding
+            useDeepScan = values[0] as Boolean,
+            subtitleFormat = values[1] as String,
+            useSoftwareDecoding = values[2] as Boolean,
+            btPrevAction = values[3] as String,
+            btNextAction = values[4] as String,
+            btSkipBackSeconds = values[5] as Int,
+            btSkipForwardSeconds = values[6] as Int
         )
     }.stateIn(
         scope = viewModelScope,
@@ -43,20 +58,30 @@ class SettingsViewModel @Inject constructor(
     )
 
     fun setDeepScan(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsDataStore.setDeepScan(enabled)
-        }
+        viewModelScope.launch { settingsDataStore.setDeepScan(enabled) }
     }
 
     fun setSubtitleFormat(format: String) {
-        viewModelScope.launch {
-            settingsDataStore.setSubtitleFormat(format)
-        }
+        viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }
     }
 
     fun setSoftwareDecoding(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsDataStore.setSoftwareDecoding(enabled)
-        }
+        viewModelScope.launch { settingsDataStore.setSoftwareDecoding(enabled) }
+    }
+
+    fun setBtPrevAction(action: String) {
+        viewModelScope.launch { settingsDataStore.setBtPrevAction(action) }
+    }
+
+    fun setBtNextAction(action: String) {
+        viewModelScope.launch { settingsDataStore.setBtNextAction(action) }
+    }
+
+    fun setBtSkipBackSeconds(seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setBtSkipBackSeconds(seconds) }
+    }
+
+    fun setBtSkipForwardSeconds(seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setBtSkipForwardSeconds(seconds) }
     }
 }
