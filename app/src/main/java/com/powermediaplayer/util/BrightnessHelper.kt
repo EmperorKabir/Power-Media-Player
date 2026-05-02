@@ -46,19 +46,30 @@ object BrightnessHelper {
 
     /**
      * Set system brightness (0-255). Requires WRITE_SETTINGS permission.
+     *
+     * Skips the BRIGHTNESS_MODE write when already manual. Without this
+     * guard, every slider drag-tick fires two Settings.System.putInt
+     * calls — each one wakes Samsung's MdnieScenarioControlService and
+     * reconfigures the display, which presents as visible "jumps" /
+     * brightness pumping during playback.
      */
     fun setSystemBrightness(context: Context, brightness: Int) {
         if (!canWriteSettings(context)) return
 
-        // Disable auto-brightness first
-        Settings.System.putInt(
-            context.contentResolver,
-            Settings.System.SCREEN_BRIGHTNESS_MODE,
-            Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
-        )
+        val resolver = context.contentResolver
+        val currentMode = runCatching {
+            Settings.System.getInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE)
+        }.getOrDefault(Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+        if (currentMode != Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL) {
+            Settings.System.putInt(
+                resolver,
+                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+            )
+        }
 
         Settings.System.putInt(
-            context.contentResolver,
+            resolver,
             Settings.System.SCREEN_BRIGHTNESS,
             brightness.coerceIn(1, 255)
         )

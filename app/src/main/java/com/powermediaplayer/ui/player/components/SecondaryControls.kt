@@ -89,10 +89,15 @@ fun VolumeAndBrightnessControls(
             )
             Slider(
                 value = brightness,
-                onValueChange = { value ->
-                    brightness = value
+                // While dragging only update local state — committing to
+                // Settings.System for every delta event spammed
+                // MdnieScenarioControlService and caused visible screen
+                // jumps. The actual write happens on release via
+                // onValueChangeFinished.
+                onValueChange = { value -> brightness = value },
+                onValueChangeFinished = {
                     if (BrightnessHelper.canWriteSettings(context)) {
-                        BrightnessHelper.setBrightnessFloat(context, value)
+                        BrightnessHelper.setBrightnessFloat(context, brightness)
                     }
                 },
                 enabled = brightnessEnabled,
