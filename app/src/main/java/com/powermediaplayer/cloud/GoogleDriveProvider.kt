@@ -247,14 +247,21 @@ class GoogleDriveProvider @Inject constructor(
     }
 
     /**
-     * Full-file download — used as a fallback when partial downloads fail to
-     * yield metadata. Capped at 1 GB to avoid eating the user's storage.
-     * Slow, so callers should only invoke this after the head/tail passes
-     * have failed.
+     * Full-file download — used as a fallback when partial downloads fail
+     * to yield metadata. Cap raised to 4 GB so multi-disc Audible audiobooks
+     * (1–2 GB each) actually run the full path; below that the head-only
+     * pass already covers cases with moov-at-front. Logs the cap rejection
+     * so it's diagnosable next time.
      */
     suspend fun downloadFullToCache(item: CloudMediaItem): java.io.File? {
-        val cap = 1024L * 1024 * 1024
-        if (item.size > cap) return null
+        val cap = 4L * 1024 * 1024 * 1024
+        if (item.size > cap) {
+            android.util.Log.w(
+                "PowerMediaPlayer",
+                "Drive full download skipped: ${item.name} size=${item.size} > cap=$cap"
+            )
+            return null
+        }
         return downloadRangeToCache(item, 0L, null, "full")
     }
 }
