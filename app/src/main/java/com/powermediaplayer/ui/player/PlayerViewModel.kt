@@ -43,8 +43,12 @@ class PlayerViewModel @Inject constructor(
         mapToUiState(playerState, sleepRemaining)
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = PlayerUiState()
+        // Eagerly keeps the combiner running so navigation to the player
+        // tab finds the latest state already mapped — eliminates the
+        // brief WhileSubscribed initial-value flash that swapped the
+        // layout between Expanded (audio default) and Compact (video).
+        started = SharingStarted.Eagerly,
+        initialValue = mapToUiState(playbackConnection.playerState.value, 0L)
     )
 
     /**

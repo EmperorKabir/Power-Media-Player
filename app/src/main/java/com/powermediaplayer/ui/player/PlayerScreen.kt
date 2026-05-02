@@ -95,13 +95,18 @@ fun PlayerScreen(
         }
 
         // Cloud-fetch banner + error banner — top-level so they render
-        // above whichever layout is active.
-        if (uiState.cloudFetchInProgress) {
+        // above whichever layout is active. AnimatedVisibility avoids the
+        // sudden appear/disappear that registered as "screen jumps".
+        AnimatedVisibility(
+            visible = uiState.cloudFetchInProgress,
+            enter = fadeIn(animationSpec = tween(durationMillis = 300)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 300)),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
             Surface(
                 color = Teal800.copy(alpha = 0.9f),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .align(Alignment.TopCenter)
                     .padding(top = 24.dp, start = 16.dp, end = 16.dp)
             ) {
                 Row(

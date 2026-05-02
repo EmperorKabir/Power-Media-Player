@@ -116,8 +116,15 @@ fun CloudBrowserScreen(
                         CloudItemRow(
                             item = item,
                             onClick = {
-                                viewModel.openItem(item)
-                                if (!item.isFolder) onNavigateToPlayer()
+                                if (item.isFolder) {
+                                    viewModel.openItem(item)
+                                } else {
+                                    // Navigate ONLY when playback actually
+                                    // starts — failed Spotify previews stay
+                                    // on the cloud screen so the user sees
+                                    // the error banner.
+                                    viewModel.openItem(item, onPlaybackStarted = onNavigateToPlayer)
+                                }
                             }
                         )
                     }

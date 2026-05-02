@@ -139,7 +139,12 @@ class CloudViewModel @Inject constructor(
         }
     }
 
-    fun openItem(item: CloudMediaItem) {
+    /**
+     * @param onPlaybackStarted invoked ONLY when the item actually starts
+     *   playing — used by the UI to navigate to the Player tab. Failures
+     *   (Spotify previews removed, Drive 401, etc.) do not navigate.
+     */
+    fun openItem(item: CloudMediaItem, onPlaybackStarted: () -> Unit = {}) {
         if (item.isFolder) {
             when (item.sourceProvider) {
                 CloudProviderType.GOOGLE_DRIVE -> browseDrive(item.id, item.name)
@@ -147,12 +152,11 @@ class CloudViewModel @Inject constructor(
             }
             return
         }
-        // Defensive — any unexpected throw inside this entire flow used
-        // to bubble up to the default uncaught handler and force-close
-        // the app. Log + display via errorMessage instead.
         viewModelScope.launch {
             try {
-                openItemInternal(item)
+                if (openItemInternal(item)) {
+                    onPlaybackStarted()
+                }
             } catch (t: Throwable) {
                 android.util.Log.e("PowerMediaPlayer", "openItem failed", t)
                 _uiState.value = _uiState.value.copy(
@@ -162,7 +166,12 @@ class CloudViewModel @Inject constructor(
         }
     }
 
-    private suspend fun openItemInternal(item: CloudMediaItem) {
+    /**
+     * Returns true iff playback actually started. False means an error was
+     * recorded into [_uiState.errorMessage] and the caller should NOT
+     * navigate away from the cloud screen.
+     */
+    private suspend fun openItemInternal(item: CloudMediaItem): Boolean {
         // Build a MediaItem and hand it to the playback connection. The
         // PlaybackService DataSource pipeline injects the Drive bearer
         // token automatically for googleapis.com URLs.
@@ -170,7 +179,7 @@ class CloudViewModel @Inject constructor(
             val streamResult = when (item.sourceProvider) {
                 CloudProviderType.GOOGLE_DRIVE -> driveProvider.getMediaStreamUri(item)
                 CloudProviderType.SPOTIFY -> spotifyProvider.getMediaStreamUri(item)
-                else -> return
+                else -> return false
             }
             // If the provider failed to produce a playable URI (e.g. Spotify
             // track without a preview clip), surface the reason so the user
@@ -179,13 +188,13 @@ class CloudViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     errorMessage = ex.message ?: "Cannot play this item"
                 )
-                return
+                return false
             }
             val uri = streamResult.getOrNull() ?: run {
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "No playable URL for this item"
                 )
-                return
+                return false
             }
             // mediaId MUST be the URI string and requestMetadata MUST carry
             // the URI — MediaController IPC strips localConfiguration.uri
@@ -214,6 +223,16 @@ class CloudViewModel @Inject constructor(
             playbackConnection.setMediaItems(listOf(mediaItem), 0)
             // Authoritative video flag from the cloud item's MIME type.
             playbackConnection.setVideoModeHint(item.mimeType.startsWith("video/"))
+            // Instant placeholder metadata: filename as title + Drive's
+            // thumbnail (auto-generated for many files, no auth needed).
+            // Replaced by the post-download tags + embedded artwork when
+            // the background extraction finishes.
+            playbackConnection.setLocalMetadata(
+                LocalMetadataOverride(
+                    title = item.name,
+                    artworkUri = item.thumbnailUri
+                )
+            )
 
             // Drive: chapters + metadata + artwork live INSIDE the file
             // (moov box for MP4/M4B, ID3 for MP3, etc.) and MediaExtractor /
@@ -251,6 +270,9 @@ class CloudViewModel @Inject constructor(
                 }
             }
         }
+        // Reaching here means setMediaItems was called — playback has been
+        // handed to the service and (network permitting) will start.
+        return true
     }
 
     /**
@@ -261,6 +283,10 @@ class CloudViewModel @Inject constructor(
     private fun parseAndApply(item: CloudMediaItem, tempFile: java.io.File): Boolean {
         var found = false
         val tempUri = android.net.Uri.fromFile(tempFile)
+        android.util.Log.i(
+            "PowerMediaPlayer",
+            "parseAndApply: file=${tempFile.absolutePath} bytes=${tempFile.length()}"
+        )
         runCatching {
             android.media.MediaMetadataRetriever().use { mmr ->
                 mmr.setDataSource(context, tempUri)
@@ -280,19 +306,30 @@ class CloudViewModel @Inject constructor(
                     !album.isNullOrBlank() || artBytes != null) {
                     playbackConnection.setLocalMetadata(
                         LocalMetadataOverride(
-                            title = title,
+                            title = title ?: item.name,
                             artist = artist,
                             album = album,
+                            // Preserve the Drive thumbnail as a fallback when
+                            // the file has no embedded picture — otherwise
+                            // updating with artworkBytes=null would wipe the
+                            // placeholder we set instantly on play.
+                            artworkUri = item.thumbnailUri,
                             artworkBytes = artBytes
                         )
                     )
                     if (artBytes != null) found = true
                 }
+                android.util.Log.i(
+                    "PowerMediaPlayer",
+                    "MMR result: title=$title artist=$artist album=$album " +
+                        "artBytes=${artBytes?.size ?: 0}"
+                )
             }
         }
         runCatching {
             val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
             val count = bundle.getInt("chapter_count", 0)
+            android.util.Log.i("PowerMediaPlayer", "M4B parser: chapter_count=$count")
             if (count > 0) {
                 val chapters = (0 until count).mapNotNull { i ->
                     val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"

@@ -188,9 +188,15 @@ class GoogleDriveProvider @Inject constructor(
         rangeEnd: Long?,
         suffix: String = "tmp"
     ): java.io.File? = withContext(Dispatchers.IO) {
-        val token = fetchAccessTokenBlocking() ?: return@withContext null
+        val tag = "PowerMediaPlayer"
+        val token = fetchAccessTokenBlocking()
+        if (token == null) {
+            android.util.Log.e(tag, "Drive download: no access token (signed out?)")
+            return@withContext null
+        }
         val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}_$suffix")
         val rangeHeader = "bytes=${rangeStart ?: ""}-${rangeEnd ?: ""}"
+        android.util.Log.i(tag, "Drive download: ${item.name} ($suffix) range=$rangeHeader size=${item.size}")
         try {
             val req = okhttp3.Request.Builder()
                 .url(item.downloadUrl)
@@ -198,13 +204,28 @@ class GoogleDriveProvider @Inject constructor(
                 .addHeader("Range", rangeHeader)
                 .build()
             okhttp3.OkHttpClient().newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
-                resp.body?.byteStream()?.use { input ->
-                    cacheFile.outputStream().use { out -> input.copyTo(out) }
+                android.util.Log.i(tag, "Drive download response: code=${resp.code} bytes-pending")
+                if (!resp.isSuccessful) {
+                    android.util.Log.e(tag, "Drive download failed: HTTP ${resp.code}")
+                    return@withContext null
                 }
+                var written = 0L
+                resp.body?.byteStream()?.use { input ->
+                    cacheFile.outputStream().use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            written += n
+                        }
+                    }
+                }
+                android.util.Log.i(tag, "Drive download wrote $written bytes to ${cacheFile.name}")
             }
             cacheFile
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.e(tag, "Drive download exception", e)
             runCatching { cacheFile.delete() }
             null
         }

@@ -569,7 +569,7 @@ class PlaybackConnection @Inject constructor(
                         totalPlaylistPosition = calculatePlaylistPosition(c)
                     )
                 }
-                delay(250)
+                delay(500)
             }
         }
     }
