@@ -71,6 +71,8 @@ class SpotifyProvider @Inject constructor(
      * fires this and routes the result to [handleAuthResponse].
      */
     fun buildAuthIntent(): Intent {
+        android.util.Log.i("PMP_DIAG", "Spotify.buildAuthIntent start")
+        val t0 = System.currentTimeMillis()
         val request = AuthorizationRequest.Builder(
             serviceConfig,
             BuildConfig.SPOTIFY_CLIENT_ID,
@@ -79,7 +81,9 @@ class SpotifyProvider @Inject constructor(
         )
             .setScope(scopes)
             .build()
-        return authService.getAuthorizationRequestIntent(request)
+        val intent = authService.getAuthorizationRequestIntent(request)
+        android.util.Log.i("PMP_DIAG", "Spotify.buildAuthIntent done ${System.currentTimeMillis() - t0}ms")
+        return intent
     }
 
     /**
@@ -87,26 +91,39 @@ class SpotifyProvider @Inject constructor(
      * Called from the UI's ActivityResult callback after the Custom Tab returns.
      */
     suspend fun handleAuthResponse(data: Intent?): Result<Unit> = withContext(Dispatchers.IO) {
+        android.util.Log.i("PMP_DIAG", "Spotify.handleAuthResponse start data=${data != null}")
         if (data == null) return@withContext Result.failure(IllegalStateException("No auth result data"))
         val resp = AuthorizationResponse.fromIntent(data)
         val ex = AuthorizationException.fromIntent(data)
+        android.util.Log.i("PMP_DIAG", "Spotify.handleAuthResponse parsed resp=${resp != null} ex=${ex?.message}")
         if (resp == null) return@withContext Result.failure(ex ?: IllegalStateException("Auth canceled"))
 
         val authState = AuthState(serviceConfig).apply { update(resp, ex) }
 
-        suspendCancellableCoroutine<Result<Unit>> { cont ->
+        val t0 = System.currentTimeMillis()
+        val result = suspendCancellableCoroutine<Result<Unit>> { cont ->
             authService.performTokenRequest(resp.createTokenExchangeRequest()) { tokenResp, tokenEx ->
+                android.util.Log.i(
+                    "PMP_DIAG",
+                    "Spotify.tokenRequest cb ${System.currentTimeMillis() - t0}ms ok=${tokenResp != null} ex=${tokenEx?.message}"
+                )
                 authState.update(tokenResp, tokenEx)
                 if (tokenResp != null) {
-                    val json = authState.jsonSerializeString()
-                    kotlinx.coroutines.runBlocking { tokenStore.write(json) }
-                    _isLoggedIn.value = true
                     cont.resume(Result.success(Unit))
                 } else {
                     cont.resume(Result.failure(tokenEx ?: IllegalStateException("Token exchange failed")))
                 }
             }
         }
+        // Persist token on IO thread (NOT inside the AppAuth callback's
+        // runBlocking — that was blocking the AppAuth executor and caused
+        // the post-consent freeze).
+        if (result.isSuccess) {
+            tokenStore.write(authState.jsonSerializeString())
+            _isLoggedIn.value = true
+            android.util.Log.i("PMP_DIAG", "Spotify.handleAuthResponse persisted token")
+        }
+        result
     }
 
     override suspend fun authenticate(context: Context): Result<Unit> {
@@ -128,9 +145,14 @@ class SpotifyProvider @Inject constructor(
      */
     override suspend fun listFiles(folderId: String?): Result<List<CloudMediaItem>> =
         withContext(Dispatchers.IO) {
-            val token = currentAccessToken() ?: return@withContext Result.failure(
-                IllegalStateException("Not authenticated")
-            )
+            android.util.Log.i("PMP_DIAG", "Spotify.listFiles start")
+            val t0 = System.currentTimeMillis()
+            val token = currentAccessToken()
+            if (token == null) {
+                android.util.Log.w("PMP_DIAG", "Spotify.listFiles no token")
+                return@withContext Result.failure(IllegalStateException("Not authenticated"))
+            }
+            android.util.Log.i("PMP_DIAG", "Spotify.listFiles got token ${System.currentTimeMillis() - t0}ms")
 
             val url = "https://api.spotify.com/v1/me/library?type=track,album,playlist&limit=50"
             val req = Request.Builder()
@@ -141,6 +163,7 @@ class SpotifyProvider @Inject constructor(
             val items = mutableListOf<CloudMediaItem>()
             try {
                 http.newCall(req).execute().use { resp ->
+                    android.util.Log.i("PMP_DIAG", "Spotify.listFiles http=${resp.code} ${System.currentTimeMillis() - t0}ms")
                     if (!resp.isSuccessful) {
                         // Fall back to per-type endpoints if generic 404s on this account
                         return@withContext fetchPerType(token)
@@ -154,6 +177,7 @@ class SpotifyProvider @Inject constructor(
                         val item = obj.getAsJsonObject(type) ?: obj
                         items.add(jsonToCloudItem(item, type))
                     }
+                    android.util.Log.i("PMP_DIAG", "Spotify.listFiles parsed=${items.size}")
                 }
             } catch (e: Exception) {
                 return@withContext Result.failure(e)
@@ -211,6 +235,10 @@ class SpotifyProvider @Inject constructor(
      * the Spotify Android SDK + a Premium account, not implemented here.
      */
     override suspend fun getMediaStreamUri(item: CloudMediaItem): Result<Uri> {
+        android.util.Log.i(
+            "PMP_DIAG",
+            "Spotify.getMediaStreamUri name=${item.name} url=${item.downloadUrl.take(80)}"
+        )
         // Tracks without a preview clip have downloadUrl set to spotify:track:…
         // which ExoPlayer cannot resolve — surface a clear error instead of
         // letting it fail later with ERROR_CODE_IO_NETWORK_CONNECTION_FAILED.

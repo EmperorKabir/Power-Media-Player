@@ -70,6 +70,7 @@ class CloudViewModel @Inject constructor(
     }
 
     fun handleSpotifyResult(data: Intent?) {
+        android.util.Log.i("PMP_DIAG", "Cloud.handleSpotifyResult data=${data != null}")
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             val result = spotifyProvider.handleAuthResponse(data)
@@ -145,10 +146,22 @@ class CloudViewModel @Inject constructor(
      *   (Spotify previews removed, Drive 401, etc.) do not navigate.
      */
     fun openItem(item: CloudMediaItem, onPlaybackStarted: () -> Unit = {}) {
+        android.util.Log.i(
+            "PMP_DIAG",
+            "Cloud.openItem name=${item.name} provider=${item.sourceProvider} folder=${item.isFolder} mime=${item.mimeType}"
+        )
         if (item.isFolder) {
             when (item.sourceProvider) {
                 CloudProviderType.GOOGLE_DRIVE -> browseDrive(item.id, item.name)
-                else -> { /* Spotify "folders" (albums/playlists) — paged browse not implemented this round */ }
+                CloudProviderType.SPOTIFY -> {
+                    // Spotify folders (albums/playlists) — paged browsing
+                    // not implemented this round. Make the no-op visible
+                    // instead of silently doing nothing.
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Spotify ${item.mimeType.substringAfter("application/spotify-")} browsing not yet implemented — tap a track instead."
+                    )
+                }
+                else -> { }
             }
             return
         }
