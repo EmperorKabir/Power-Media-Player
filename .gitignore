@@ -4,4 +4,4 @@ app/build/
 .gradle/
 .idea/
 *.apk
-local.properties
+local.propertiesdbg*.png
