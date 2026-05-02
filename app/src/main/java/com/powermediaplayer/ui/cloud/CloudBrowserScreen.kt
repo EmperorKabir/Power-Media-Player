@@ -38,6 +38,17 @@ fun CloudBrowserScreen(
     onNavigateToPlayer: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Toast fires on every NEW non-null error message — guarantees the
+    // user sees the failure even if they don't notice the inline banner.
+    // After showing, clear the message so a repeat tap on the same
+    // failing item re-triggers a fresh Toast.
+    androidx.compose.runtime.LaunchedEffect(uiState.errorMessage) {
+        val msg = uiState.errorMessage ?: return@LaunchedEffect
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+        viewModel.clearError()
+    }
 
     val driveLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
