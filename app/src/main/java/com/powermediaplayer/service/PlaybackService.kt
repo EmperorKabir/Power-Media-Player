@@ -144,18 +144,25 @@ class PlaybackService : MediaSessionService() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
             .setDataSourceFactory(dataSourceFactory)
 
-        // Larger LoadControl buffers (120 s instead of the default ~50 s)
-        // so a "far forward" scrub on a long video still lands inside
-        // already-buffered content, avoiding the decoder re-init that
-        // surfaces as the user-reported "stutter on far forward seeks".
-        // Min playback buffer left at default; only the max is bumped.
+        // LoadControl tuned for snappy local-file seeks:
+        //  - maxBufferMs 120 s so far forward scrubs land inside buffered
+        //    content (avoids decoder re-init).
+        //  - bufferForPlaybackMs 1000 (was 2500): playback starts with
+        //    1 s pre-buffered instead of 2.5 s — visible as faster
+        //    seek-resume after the rebuffer.
+        //  - bufferForPlaybackAfterRebufferMs 1000 (was 5000): the gate
+        //    that controls how quickly playback resumes after a seek
+        //    stalls into BUFFERING. 5 s was a safety cushion for
+        //    network streams; for local files 1 s is plenty and
+        //    eliminates ~4 s of post-seek pause that was contributing
+        //    to the "stutter on backward / large skip" perception.
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 /* minBufferMs */            DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
                 /* maxBufferMs */            120_000,
-                /* bufferForPlaybackMs */    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                /* bufferForPlaybackMs */    1_000,
                 /* bufferForPlaybackAfterRebufferMs */
-                                             DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+                                             1_000
             )
             .build()
 
