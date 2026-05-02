@@ -48,6 +48,7 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val artworkBytes by viewModel.artworkBytes.collectAsStateWithLifecycle()
     var coverColors by remember { mutableStateOf<CoverArtColors?>(null) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showChapterPicker by remember { mutableStateOf(false) }
@@ -59,6 +60,7 @@ fun PlayerScreen(
         when {
             uiState.isVideoContent -> PlayerScreenCompact(
                 uiState = uiState,
+                artworkBytes = artworkBytes,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -68,6 +70,7 @@ fun PlayerScreen(
             )
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded -> PlayerScreenExpanded(
                 uiState = uiState,
+                artworkBytes = artworkBytes,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -76,6 +79,7 @@ fun PlayerScreen(
             )
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium -> PlayerScreenCompact(
                 uiState = uiState,
+                artworkBytes = artworkBytes,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -85,6 +89,7 @@ fun PlayerScreen(
             )
             else -> PlayerScreenCompact(
                 uiState = uiState,
+                artworkBytes = artworkBytes,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -189,6 +194,7 @@ fun PlayerScreen(
 @Composable
 private fun PlayerScreenCompact(
     uiState: PlayerUiState,
+    artworkBytes: ByteArray?,
     viewModel: PlayerViewModel,
     coverColors: CoverArtColors?,
     onColorsExtracted: (CoverArtColors?) -> Unit,
@@ -202,14 +208,9 @@ private fun PlayerScreenCompact(
         mutableStateOf(true)
     }
     LaunchedEffect(uiState.isVideoContent, controlsVisible) {
-        android.util.Log.i(
-            "PowerMediaPlayer",
-            "ControlsState: visible=$controlsVisible isVideo=${uiState.isVideoContent}"
-        )
         if (uiState.isVideoContent && controlsVisible) {
             delay(32_000)
             controlsVisible = false
-            android.util.Log.i("PowerMediaPlayer", "Auto-hide fired (video)")
         }
     }
     LaunchedEffect(uiState.isVideoContent) {
@@ -245,109 +246,35 @@ private fun PlayerScreenCompact(
             // Audio content: show album art with palette-extracted colours
             CoverArtBackground(
                 artworkUri = uiState.artworkUri,
-                artworkBytes = uiState.artworkBytes,
+                artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted
             )
         }
 
-        // Audio mode controls are always rendered without any animation
-        // wrapper — guaranteeing they can't be hidden by any state path.
-        // Video mode wraps everything in AnimatedVisibility for the 32-s
-        // auto-hide + tap toggle.
-        val scrimColors = if (uiState.isVideoContent) {
-            listOf(
-                Color.Transparent,
-                Color.Transparent,
-                OledBlack.copy(alpha = 0.5f),
-                OledBlack.copy(alpha = 0.9f),
-                OledBlack
-            )
-        } else {
-            listOf(
-                Color.Transparent,
-                OledBlack.copy(alpha = 0.3f),
-                OledBlack.copy(alpha = 0.75f),
-                OledBlack.copy(alpha = 0.97f),
-                OledBlack
-            )
-        }
-
-        @Composable fun OverlayContent() {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Brush.verticalGradient(colors = scrimColors))
-            )
-            val scrollMod = if (uiState.isVideoContent) {
-                Modifier
+        // Cache the gradient Brush. Without this, every position-tick
+        // recomposition rebuilds the Brush + Modifier.background pair,
+        // forcing a re-allocation per frame and contributing to stutter
+        // when the player ticks at ~5 Hz on large video files.
+        val scrim: Brush = remember(uiState.isVideoContent) {
+            val cols = if (uiState.isVideoContent) {
+                listOf(
+                    Color.Transparent,
+                    Color.Transparent,
+                    OledBlack.copy(alpha = 0.5f),
+                    OledBlack.copy(alpha = 0.9f),
+                    OledBlack
+                )
             } else {
-                Modifier.verticalScroll(rememberScrollState())
+                listOf(
+                    Color.Transparent,
+                    OledBlack.copy(alpha = 0.3f),
+                    OledBlack.copy(alpha = 0.75f),
+                    OledBlack.copy(alpha = 0.97f),
+                    OledBlack
+                )
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(scrollMod)
-                    .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                TrackInfoSection(uiState, coverColors)
-                Spacer(modifier = Modifier.height(12.dp))
-                ChapterPickerChip(uiState, onShowChapterPicker)
-                Spacer(modifier = Modifier.height(4.dp))
-                ProgressSliders(
-                    trackPosition = uiState.trackProgress,
-                    trackPositionFormatted = uiState.currentPositionFormatted,
-                    trackDurationFormatted = uiState.durationFormatted,
-                    trackRemainingFormatted = uiState.trackRemainingFormatted,
-                    trackSliderEnabled = uiState.controls.trackSlider,
-                    onTrackSeek = { fraction ->
-                        val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
-                        viewModel.seekTo(target)
-                    },
-                    playlistPosition = uiState.playlistProgress,
-                    playlistPositionFormatted = uiState.playlistPositionFormatted,
-                    playlistDurationFormatted = uiState.playlistDurationFormatted,
-                    playlistRemainingFormatted = uiState.playlistRemainingFormatted,
-                    playlistSliderEnabled = uiState.controls.playlistSlider,
-                    onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
-                    trackIndexDisplay = uiState.trackIndexDisplay
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                PlaybackControls(
-                    isPlaying = uiState.isPlaying,
-                    controls = uiState.controls,
-                    onPreviousFile = { viewModel.previousFile() },
-                    onPreviousChapterOrTrack = { viewModel.previousChapterOrTrack() },
-                    onSkipBack = { viewModel.skipBack(it) },
-                    onPlayPause = { viewModel.playPause() },
-                    onSkipForward = { viewModel.skipForward(it) },
-                    onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
-                    onNextFile = { viewModel.nextFile() }
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                PreparedSpeedComponent(
-                    playbackSpeed = uiState.playbackSpeed,
-                    onSpeedChange = { viewModel.setPlaybackSpeed(it) },
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                TertiaryControls(
-                    currentVolume = viewModel.getCurrentVolume(),
-                    maxVolume = viewModel.getMaxVolume(),
-                    onVolumeChange = { viewModel.setVolume(it) },
-                    sleepTimerActive = uiState.sleepTimerActive,
-                    sleepTimerFormatted = uiState.sleepTimerFormatted,
-                    onSleepTimerClick = onShowSleepTimer
-                )
-                if (uiState.isLoading) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            Brush.verticalGradient(colors = cols)
         }
 
         if (uiState.isVideoContent) {
@@ -355,7 +282,17 @@ private fun PlayerScreenCompact(
                 visible = controlsVisible,
                 enter = fadeIn(animationSpec = tween(durationMillis = 500)),
                 exit = fadeOut(animationSpec = tween(durationMillis = 1000))
-            ) { OverlayContent() }
+            ) {
+                OverlayContent(
+                    uiState = uiState,
+                    coverColors = coverColors,
+                    scrim = scrim,
+                    horizontalPadding = horizontalPadding,
+                    viewModel = viewModel,
+                    onShowSleepTimer = onShowSleepTimer,
+                    onShowChapterPicker = onShowChapterPicker
+                )
+            }
             AnimatedVisibility(
                 visible = controlsVisible,
                 enter = fadeIn(animationSpec = tween(durationMillis = 500)),
@@ -371,7 +308,15 @@ private fun PlayerScreenCompact(
         } else {
             // Audio: render directly, no AnimatedVisibility — controls
             // can never disappear regardless of any state churn.
-            OverlayContent()
+            OverlayContent(
+                uiState = uiState,
+                coverColors = coverColors,
+                scrim = scrim,
+                horizontalPadding = horizontalPadding,
+                viewModel = viewModel,
+                onShowSleepTimer = onShowSleepTimer,
+                onShowChapterPicker = onShowChapterPicker
+            )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -386,11 +331,105 @@ private fun PlayerScreenCompact(
     }
 }
 
+/**
+ * Player overlay (gradient scrim + track info + controls). Hoisted to
+ * a top-level composable so it isn't reallocated as a closure on every
+ * recomposition of the parent. With PlayerUiState now @Immutable and
+ * artworkBytes lifted out, Compose's smart-recomposition will skip
+ * this composable when only the position-poll tick changes.
+ */
+@Composable
+private fun OverlayContent(
+    uiState: PlayerUiState,
+    coverColors: CoverArtColors?,
+    scrim: Brush,
+    horizontalPadding: Int,
+    viewModel: PlayerViewModel,
+    onShowSleepTimer: () -> Unit,
+    onShowChapterPicker: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(scrim)
+    )
+    val scrollMod = if (uiState.isVideoContent) {
+        Modifier
+    } else {
+        Modifier.verticalScroll(rememberScrollState())
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(scrollMod)
+            .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Bottom
+    ) {
+        Spacer(modifier = Modifier.weight(1f))
+        TrackInfoSection(uiState, coverColors)
+        Spacer(modifier = Modifier.height(12.dp))
+        ChapterPickerChip(uiState, onShowChapterPicker)
+        Spacer(modifier = Modifier.height(4.dp))
+        ProgressSliders(
+            trackPosition = uiState.trackProgress,
+            trackPositionFormatted = uiState.currentPositionFormatted,
+            trackDurationFormatted = uiState.durationFormatted,
+            trackRemainingFormatted = uiState.trackRemainingFormatted,
+            trackSliderEnabled = uiState.controls.trackSlider,
+            onTrackSeek = { fraction ->
+                val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
+                viewModel.seekTo(target)
+            },
+            playlistPosition = uiState.playlistProgress,
+            playlistPositionFormatted = uiState.playlistPositionFormatted,
+            playlistDurationFormatted = uiState.playlistDurationFormatted,
+            playlistRemainingFormatted = uiState.playlistRemainingFormatted,
+            playlistSliderEnabled = uiState.controls.playlistSlider,
+            onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
+            trackIndexDisplay = uiState.trackIndexDisplay
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        PlaybackControls(
+            isPlaying = uiState.isPlaying,
+            controls = uiState.controls,
+            onPreviousFile = { viewModel.previousFile() },
+            onPreviousChapterOrTrack = { viewModel.previousChapterOrTrack() },
+            onSkipBack = { viewModel.skipBack(it) },
+            onPlayPause = { viewModel.playPause() },
+            onSkipForward = { viewModel.skipForward(it) },
+            onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
+            onNextFile = { viewModel.nextFile() }
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        PreparedSpeedComponent(
+            playbackSpeed = uiState.playbackSpeed,
+            onSpeedChange = { viewModel.setPlaybackSpeed(it) },
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        TertiaryControls(
+            currentVolume = viewModel.getCurrentVolume(),
+            maxVolume = viewModel.getMaxVolume(),
+            onVolumeChange = { viewModel.setVolume(it) },
+            sleepTimerActive = uiState.sleepTimerActive,
+            sleepTimerFormatted = uiState.sleepTimerFormatted,
+            onSleepTimerClick = onShowSleepTimer
+        )
+        if (uiState.isLoading) {
+            Spacer(modifier = Modifier.height(8.dp))
+            CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
 // ── Expanded Layout (Tablet / Landscape Foldable) ─────────────────
 
 @Composable
 private fun PlayerScreenExpanded(
     uiState: PlayerUiState,
+    artworkBytes: ByteArray?,
     viewModel: PlayerViewModel,
     coverColors: CoverArtColors?,
     onColorsExtracted: (CoverArtColors?) -> Unit,
@@ -411,7 +450,7 @@ private fun PlayerScreenExpanded(
         ) {
             CoverArtBackground(
                 artworkUri = uiState.artworkUri,
-                artworkBytes = uiState.artworkBytes,
+                artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted
             )

@@ -1,6 +1,7 @@
 package com.powermediaplayer.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -382,24 +383,37 @@ private fun BluetoothActionPicker(
 @Composable
 private fun SecondsStepper(seconds: Int, onChange: (Int) -> Unit) {
     val presets = listOf(5, 10, 15, 30, 60, 90)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "$seconds s",
-            style = MaterialTheme.typography.titleMedium,
-            color = TealAccent,
-            modifier = Modifier.padding(end = 8.dp)
-        )
-        IconButton(onClick = { onChange((seconds - 5).coerceAtLeast(1)) }) {
-            Icon(Icons.Filled.Remove, contentDescription = "Decrease seconds", tint = TealAccent)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Primary stepper row — fixed (no scroll) so the +/- buttons
+        // are always reachable on the narrowest folded-phone width.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "$seconds s",
+                style = MaterialTheme.typography.titleMedium,
+                color = TealAccent,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            )
+            IconButton(onClick = { onChange((seconds - 5).coerceAtLeast(1)) }) {
+                Icon(Icons.Filled.Remove, contentDescription = "Decrease seconds", tint = TealAccent)
+            }
+            IconButton(onClick = { onChange(seconds + 5) }) {
+                Icon(Icons.Filled.Add, contentDescription = "Increase seconds", tint = TealAccent)
+            }
         }
-        IconButton(onClick = { onChange(seconds + 5) }) {
-            Icon(Icons.Filled.Add, contentDescription = "Increase seconds", tint = TealAccent)
-        }
-        Spacer(Modifier.width(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Spacer(Modifier.height(4.dp))
+        // Preset chips — horizontal-scrollable so 6 chips never clip on
+        // a folded phone or split-screen window.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             presets.forEach { p ->
                 AssistChip(
                     onClick = { onChange(p) },

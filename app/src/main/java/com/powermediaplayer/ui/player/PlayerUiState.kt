@@ -1,15 +1,19 @@
 package com.powermediaplayer.ui.player
 
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 
 /**
  * Complete UI state for the player screen.
  *
- * NOT marked @Immutable — the ByteArray field would violate the contract
- * (ByteArray is mutable), and Compose would silently apply reference-
- * equality skipping which dropped chapter / metadata / artwork updates
- * because the bytes were arriving in new ByteArray instances every time.
+ * @Immutable now safe — the previously-included ByteArray field has
+ * moved to a separate flow ([PlayerViewModel.artworkBytes]) so this
+ * class contains only stable, value-type fields. With it stable,
+ * Compose can skip downstream composables when only the position
+ * ticks change, eliminating the per-tick recomposition that caused
+ * video controls to stutter on large files.
  */
+@Immutable
 data class PlayerUiState(
     // Playback status
     val isPlaying: Boolean = false,
@@ -23,7 +27,6 @@ data class PlayerUiState(
 
     // Cover art
     val artworkUri: Uri? = null,
-    val artworkBytes: ByteArray? = null,
     val hasCoverArt: Boolean = false,
 
     // Progress - current track
@@ -84,6 +87,7 @@ data class PlayerUiState(
  * Determines which controls should be enabled vs greyed out.
  * A control is disabled when the current media doesn't support that action.
  */
+@Immutable
 data class ControlsEnabledState(
     val previousTrack: Boolean = false,
     val nextTrack: Boolean = false,

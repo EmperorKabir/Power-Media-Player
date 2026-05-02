@@ -40,10 +40,6 @@ fun CoverArtBackground(
     artworkBytes: ByteArray? = null,
     modifier: Modifier = Modifier
 ) {
-    android.util.Log.i(
-        "PowerMediaPlayer",
-        "CoverArtBackground compose: bytes=${artworkBytes?.size ?: 0} uri=$artworkUri hasCoverArt=$hasCoverArt"
-    )
     Box(
         modifier = modifier
             .fillMaxSize()

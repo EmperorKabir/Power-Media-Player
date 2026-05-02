@@ -58,6 +58,21 @@ class PlayerViewModel @Inject constructor(
      */
     val playerFlow = playbackConnection.playerFlow
 
+    /**
+     * Cover-art bytes carried in their own flow (not in PlayerUiState),
+     * because ByteArray is unstable in Compose. Keeping it inside the
+     * UI state would force the entire player tree to recompose on every
+     * 500 ms position-poll tick. Distinct value emissions only — when
+     * the underlying reference is unchanged StateFlow conflates.
+     */
+    val artworkBytes: StateFlow<ByteArray?> = playbackConnection.playerState
+        .map { it.artworkBytes }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = playbackConnection.playerState.value.artworkBytes
+        )
+
 
     // ── Transport Controls (delegated to PlaybackConnection) ─────
 
@@ -170,7 +185,6 @@ class PlayerViewModel @Inject constructor(
             album = TextNormalizer.normalize(playerState.album),
             description = TextNormalizer.normalize(playerState.description),
             artworkUri = playerState.artworkUri,
-            artworkBytes = playerState.artworkBytes,
             hasCoverArt = playerState.hasCoverArt,
             currentPosition = displayedTrackPos,
             duration = displayedTrackDur,

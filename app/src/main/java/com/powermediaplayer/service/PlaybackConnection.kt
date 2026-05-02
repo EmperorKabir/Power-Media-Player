@@ -644,11 +644,8 @@ class PlaybackConnection @Inject constructor(
         val overAlbum = localMetadata?.album?.takeIf { it.isNotBlank() }
         val overArtwork = localMetadata?.artworkUri
         val overArtworkBytes = localMetadata?.artworkBytes
-        android.util.Log.i(
-            "PowerMediaPlayer",
-            "updatePlayerState: artBytes=${overArtworkBytes?.size ?: 0} " +
-                "metaArtData=${metadata.artworkData?.size ?: 0}"
-        )
+        // Per-tick log removed — was firing 5–10×/sec on large video files
+        // and contributed measurable jank during playback.
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
