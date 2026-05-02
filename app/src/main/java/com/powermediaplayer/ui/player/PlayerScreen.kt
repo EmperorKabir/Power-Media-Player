@@ -217,21 +217,26 @@ private fun PlayerScreenCompact(
         if (!uiState.isVideoContent) controlsVisible = true
     }
 
-    // rememberUpdatedState so the gesture lambda always reads the LATEST
-    // isVideoContent / controlsVisible — without this the lambda captures
-    // the values from the first composition only, causing the toggle to
-    // misbehave once tracks change (was the source of "controls jump").
-    val isVideoContentLive by rememberUpdatedState(uiState.isVideoContent)
-    val controlsVisibleLive by rememberUpdatedState(controlsVisible)
+    // The tap-to-reveal gesture must NOT be attached when controls are
+    // visible — Compose's parent gesture detector intercepts taps before
+    // they reach child IconButtons, which was causing every skip-button
+    // tap on the visible overlay to toggle controls instead of seeking
+    // ("sometimes skips don't happen" — confirmed via adb logcat: VM.skipBack
+    // never fired even though taps were registered by InputManager).
+    // Auto-hide (32 s) takes care of dismissal so users still don't have
+    // to do anything to hide controls.
+    val tapToRevealModifier = if (uiState.isVideoContent && !controlsVisible) {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = { controlsVisible = true })
+        }
+    } else {
+        Modifier
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                detectTapGestures(onTap = {
-                    if (isVideoContentLive) controlsVisible = !controlsVisibleLive
-                })
-            }
+            .then(tapToRevealModifier)
     ) {
         if (uiState.isVideoContent) {
             // Video content: render the actual video frames
@@ -252,18 +257,18 @@ private fun PlayerScreenCompact(
             )
         }
 
-        // Cache the gradient Brush. Without this, every position-tick
-        // recomposition rebuilds the Brush + Modifier.background pair,
-        // forcing a re-allocation per frame and contributing to stutter
-        // when the player ticks at ~5 Hz on large video files.
+        // Bottom-anchored gradient scrim. For video, kept very subtle
+        // (peak ~3% black) so the controls have a tiny readability lift
+        // without obscuring picture. Audio retains the existing heavier
+        // scrim because there's no picture to compete with.
         val scrim: Brush = remember(uiState.isVideoContent) {
             val cols = if (uiState.isVideoContent) {
                 listOf(
                     Color.Transparent,
                     Color.Transparent,
-                    OledBlack.copy(alpha = 0.5f),
-                    OledBlack.copy(alpha = 0.9f),
-                    OledBlack
+                    Color.Transparent,
+                    OledBlack.copy(alpha = 0.015f),
+                    OledBlack.copy(alpha = 0.03f)
                 )
             } else {
                 listOf(
@@ -298,13 +303,7 @@ private fun PlayerScreenCompact(
                 enter = fadeIn(animationSpec = tween(durationMillis = 500)),
                 exit = fadeOut(animationSpec = tween(durationMillis = 1000)),
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    BluetoothButton(modifier = Modifier.size(40.dp))
-                    Spacer(Modifier.width(4.dp))
-                    CastButton(modifier = Modifier.size(40.dp))
-                }
-            }
+            ) { CastButton(modifier = Modifier.size(40.dp)) }
         } else {
             // Audio: render directly, no AnimatedVisibility — controls
             // can never disappear regardless of any state churn.
@@ -317,16 +316,12 @@ private fun PlayerScreenCompact(
                 onShowSleepTimer = onShowSleepTimer,
                 onShowChapterPicker = onShowChapterPicker
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
+            CastButton(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 16.dp, end = 16.dp)
-            ) {
-                BluetoothButton(modifier = Modifier.size(40.dp))
-                Spacer(Modifier.width(4.dp))
-                CastButton(modifier = Modifier.size(40.dp))
-            }
+                    .size(40.dp)
+            )
         }
     }
 }
@@ -416,6 +411,16 @@ private fun OverlayContent(
             sleepTimerFormatted = uiState.sleepTimerFormatted,
             onSleepTimerClick = onShowSleepTimer
         )
+        Spacer(modifier = Modifier.height(4.dp))
+        // Bluetooth button in the main controls — large enough to be
+        // unmissable, sized to match Sleep Timer height.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BluetoothButton(modifier = Modifier.size(48.dp))
+        }
         if (uiState.isLoading) {
             Spacer(modifier = Modifier.height(8.dp))
             CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)

@@ -150,6 +150,10 @@ private fun SkipButton(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
+    val wrappedClick: () -> Unit = {
+        android.util.Log.i("PMP_DIAG", "SkipBtn click fwd=$isForward sec=$seconds enabled=$enabled")
+        onClick()
+    }
     val iconTint  = if (enabled) TextPrimary.copy(alpha = 0.5f) else DisabledGrey.copy(alpha = 0.35f)
     val fillColor = if (enabled) TealAccent else DisabledGrey
     val outlineColor = Color.Black
@@ -159,7 +163,7 @@ private fun SkipButton(
     val sStyle   = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
 
     IconButton(
-        onClick = onClick,
+        onClick = wrappedClick,
         enabled = enabled,
         modifier = Modifier.size(52.dp)
     ) {

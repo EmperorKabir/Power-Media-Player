@@ -234,7 +234,10 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
-    fun seekTo(positionMs: Long) { controller?.seekTo(positionMs) }
+    fun seekTo(positionMs: Long) {
+        android.util.Log.i("PMP_DIAG", "seekTo target=${positionMs}ms")
+        controller?.seekTo(positionMs)
+    }
     fun seekToNext() { controller?.seekToNextMediaItem() }
     fun seekToPrevious() { controller?.seekToPreviousMediaItem() }
 
@@ -247,6 +250,7 @@ class PlaybackConnection @Inject constructor(
             30 -> PlaybackService.ACTION_SKIP_BACK_30
             else -> return
         }
+        android.util.Log.i("PMP_DIAG", "Conn.skipBack(${seconds}s) action=$action ctrl=${controller != null}")
         controller?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), Bundle.EMPTY)
     }
 
@@ -259,6 +263,7 @@ class PlaybackConnection @Inject constructor(
             30 -> PlaybackService.ACTION_SKIP_FORWARD_30
             else -> return
         }
+        android.util.Log.i("PMP_DIAG", "Conn.skipForward(${seconds}s) action=$action ctrl=${controller != null}")
         controller?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), Bundle.EMPTY)
     }
 
@@ -369,7 +374,12 @@ class PlaybackConnection @Inject constructor(
         scope.launch {
             kotlinx.coroutines.yield()
             updateScheduled = false
+            val t0 = android.os.SystemClock.elapsedRealtimeNanos()
             updatePlayerState()
+            val durMs = (android.os.SystemClock.elapsedRealtimeNanos() - t0) / 1_000_000
+            if (durMs >= 4) {
+                android.util.Log.i("PMP_DIAG", "updatePlayerState dur=${durMs}ms")
+            }
         }
     }
 
@@ -532,18 +542,28 @@ class PlaybackConnection @Inject constructor(
     @OptIn(UnstableApi::class)
     private fun setupPlayerListener() {
         controller?.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) { scheduleUpdate() }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                android.util.Log.i("PMP_DIAG", "evt isPlayingChanged=$isPlaying")
+                scheduleUpdate()
+            }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                android.util.Log.i("PMP_DIAG", "evt mediaItemTransition reason=$reason")
                 // Reset description + previous error — the new track may not emit
                 // metadata immediately and shouldn't inherit the prior failure.
                 _playerState.value = _playerState.value.copy(description = "", playerError = null)
                 scheduleUpdate()
             }
-            override fun onPlaybackStateChanged(playbackState: Int) { scheduleUpdate() }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                android.util.Log.i("PMP_DIAG", "evt playbackState=$playbackState")
+                scheduleUpdate()
+            }
             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) { scheduleUpdate() }
             override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) { scheduleUpdate() }
             override fun onTimelineChanged(timeline: Timeline, reason: Int) { scheduleUpdate() }
-            override fun onIsLoadingChanged(isLoading: Boolean) { scheduleUpdate() }
+            override fun onIsLoadingChanged(isLoading: Boolean) {
+                android.util.Log.i("PMP_DIAG", "evt loadingChanged=$isLoading")
+                scheduleUpdate()
+            }
             // Track changes populate isVideoContent — must be listened to separately
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { scheduleUpdate() }
             override fun onMetadata(metadata: Metadata) {

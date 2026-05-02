@@ -82,8 +82,14 @@ class PlayerViewModel @Inject constructor(
     fun seekTo(positionMs: Long) = playbackConnection.seekTo(positionMs)
     fun seekToNext() = playbackConnection.seekToNext()
     fun seekToPrevious() = playbackConnection.seekToPrevious()
-    fun skipBack(seconds: Int) = playbackConnection.skipBack(seconds)
-    fun skipForward(seconds: Int) = playbackConnection.skipForward(seconds)
+    fun skipBack(seconds: Int) {
+        android.util.Log.i("PMP_DIAG", "VM.skipBack(${seconds}s)")
+        playbackConnection.skipBack(seconds)
+    }
+    fun skipForward(seconds: Int) {
+        android.util.Log.i("PMP_DIAG", "VM.skipForward(${seconds}s)")
+        playbackConnection.skipForward(seconds)
+    }
     fun nextChapter() = playbackConnection.nextChapter()
     fun previousChapter() = playbackConnection.previousChapter()
     fun nextChapterOrTrack() = playbackConnection.nextChapterOrTrack()

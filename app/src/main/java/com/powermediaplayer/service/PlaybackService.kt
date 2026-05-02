@@ -82,6 +82,7 @@ class PlaybackService : MediaSessionService() {
     @Volatile
     private var pendingSeekTarget: Long = -1L
     private var clearPendingSeekJob: kotlinx.coroutines.Job? = null
+    private var debouncedSeekJob: kotlinx.coroutines.Job? = null
 
     companion object {
         // Custom session commands for features not in standard transport controls
@@ -429,16 +430,41 @@ class PlaybackService : MediaSessionService() {
      * player has settled and currentPosition is fresh.
      */
     private fun cumulativeSkip(player: Player, deltaMs: Long) {
-        val base = if (pendingSeekTarget >= 0L) pendingSeekTarget else player.currentPosition
+        val pos = player.currentPosition
+        val base = if (pendingSeekTarget >= 0L) pendingSeekTarget else pos
         val rawTarget = base + deltaMs
         val duration = player.duration.let { if (it == C.TIME_UNSET) Long.MAX_VALUE else it }
         val target = rawTarget.coerceIn(0L, duration)
+        android.util.Log.i(
+            "PMP_DIAG",
+            "skip delta=${deltaMs}ms pos=${pos}ms base=${base}ms target=${target}ms pending=${pendingSeekTarget}"
+        )
         pendingSeekTarget = target
-        player.seekTo(target)
+
+        // Debounce the actual seekTo call. Rapid taps now collapse into a
+        // single seek to the cumulative target — eliminates the stacked
+        // BUFFERING cycles (each seek freezes video for 50–150 ms; five
+        // rapid taps would otherwise produce 500 ms+ of accumulated freeze).
+        // 180 ms catches typical rapid-tap intervals (200–400 ms) while
+        // staying under the perceptible-input-latency threshold.
+        debouncedSeekJob?.cancel()
+        debouncedSeekJob = serviceScope.launch {
+            kotlinx.coroutines.delay(180)
+            val finalTarget = pendingSeekTarget
+            // Skip if already at target (within 250 ms) — avoids a useless
+            // BUFFERING cycle when the cumulative target equals current
+            // position (e.g. multiple back-skips clamped at 0).
+            if (finalTarget >= 0L &&
+                kotlin.math.abs(player.currentPosition - finalTarget) > 250L
+            ) {
+                android.util.Log.i("PMP_DIAG", "debounced seekTo target=${finalTarget}ms")
+                player.seekTo(finalTarget)
+            } else {
+                android.util.Log.i("PMP_DIAG", "debounced seek SKIPPED (within 250ms of target)")
+            }
+        }
+
         clearPendingSeekJob?.cancel()
-        // 1500 ms is generous enough to cover even a slow human cadence
-        // of "one tap per second", while still resetting before the user
-        // moves to a different control.
         clearPendingSeekJob = serviceScope.launch {
             kotlinx.coroutines.delay(1500)
             pendingSeekTarget = -1L
