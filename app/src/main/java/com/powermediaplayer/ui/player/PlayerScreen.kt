@@ -274,6 +274,35 @@ private fun PlayerScreenCompact(
         }
         } // close AnimatedVisibility
 
+        // Cloud-fetch banner — informs the user that chapter / metadata
+        // extraction is in progress for a streaming-only file.
+        if (uiState.cloudFetchInProgress) {
+            Surface(
+                color = Teal800.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        color = TealAccent,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Loading chapters & metadata…",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
         // Top-right Cast button — visible only when controls are visible
         // (in video mode it auto-hides with everything else).
         AnimatedVisibility(

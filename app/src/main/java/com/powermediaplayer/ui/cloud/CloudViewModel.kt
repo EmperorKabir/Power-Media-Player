@@ -173,6 +173,8 @@ class CloudViewModel @Inject constructor(
                 )
                 .build()
             playbackConnection.setMediaItems(listOf(mediaItem), 0)
+            // Authoritative video flag from the cloud item's MIME type.
+            playbackConnection.setVideoModeHint(item.mimeType.startsWith("video/"))
 
             // Drive: chapters + metadata + artwork live INSIDE the file
             // (moov box for MP4/M4B, ID3 for MP3, etc.) and MediaExtractor /
@@ -181,7 +183,12 @@ class CloudViewModel @Inject constructor(
             // results to the player. Streaming continues unaffected.
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder) {
                 viewModelScope.launch(Dispatchers.IO) {
-                    val tempFile = driveProvider.downloadToCache(item) ?: return@launch
+                    playbackConnection.setCloudFetchInProgress(true)
+                    val tempFile = driveProvider.downloadToCache(item)
+                    if (tempFile == null) {
+                        playbackConnection.setCloudFetchInProgress(false)
+                        return@launch
+                    }
                     try {
                         val tempUri = android.net.Uri.fromFile(tempFile)
 
@@ -236,6 +243,7 @@ class CloudViewModel @Inject constructor(
                         }
                     } finally {
                         tempFile.delete()
+                        playbackConnection.setCloudFetchInProgress(false)
                     }
                 }
             }

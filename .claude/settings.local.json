@@ -11,7 +11,11 @@
       "Skill(update-config)",
       "Bash(./gradlew signingReport)",
       "Bash(./gradlew :app:assembleDebug)",
-      "Bash(./gradlew installDebug)"
+      "Bash(./gradlew installDebug)",
+      "Bash(adb uninstall *)",
+      "Bash(./gradlew clean *)",
+      "Bash(\"/c/Users/Kabir/AppData/Local/Android/Sdk/platform-tools/adb\" uninstall *)",
+      "Bash(./gradlew :app:installDebug)"
     ]
   }
 }

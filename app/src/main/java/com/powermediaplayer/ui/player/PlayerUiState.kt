@@ -62,6 +62,8 @@ data class PlayerUiState(
     val chapterDurationMs: Long = 0L,
     // Last playback error shown to the user.
     val playerError: String? = null,
+    // Background cloud cache download in flight (chapters/metadata).
+    val cloudFetchInProgress: Boolean = false,
 
     // Controls enabled state (for greying out)
     val controls: ControlsEnabledState = ControlsEnabledState(),

@@ -62,6 +62,9 @@ data class PlayerState(
     val description: String = "",
     // Last playback error (network 401, codec failure, etc.) — null when ok.
     val playerError: String? = null,
+    // True while a cloud cache download (chapters/metadata extraction)
+    // is in flight, so the UI can show a non-blocking progress hint.
+    val cloudFetchInProgress: Boolean = false,
     // Media capabilities for button greying
     val isPartOfPlaylist: Boolean = false,
     val hasCoverArt: Boolean = false,
@@ -135,6 +138,14 @@ class PlaybackConnection @Inject constructor(
      * MediaMetadataRetriever). Cleared on [setMediaItems].
      */
     private var localMetadata: LocalMetadataOverride? = null
+
+    /**
+     * Authoritative video flag set by callers that already know the content
+     * type (LibraryViewModel.playFiles when file.isVideo, CloudViewModel
+     * when item.mimeType starts with "video/"). Bypasses every fragile
+     * metadata-round-trip detection path. Cleared on [setMediaItems].
+     */
+    private var videoModeHint: Boolean = false
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -246,10 +257,32 @@ class PlaybackConnection @Inject constructor(
         folderChapters = null
         localChapters = null
         localMetadata = null
+        videoModeHint = false
         controller?.let { c ->
             c.setMediaItems(items, startIndex, 0L)
             c.prepare()
             c.play()
+        }
+    }
+
+    /**
+     * Caller-supplied authoritative video flag. Call BEFORE [setMediaItems]
+     * to keep the flag through the queue swap, or AFTER to flip an in-flight
+     * track's layout. Either way it persists until the next [setMediaItems].
+     */
+    fun setVideoModeHint(isVideo: Boolean) {
+        videoModeHint = isVideo
+        updatePlayerState()
+    }
+
+    /**
+     * Lightweight progress flag for callers that download cloud files in
+     * the background (chapter / metadata extraction). Surfaced through
+     * [PlayerState.cloudFetchInProgress] so the UI can show "Loading…".
+     */
+    fun setCloudFetchInProgress(inProgress: Boolean) {
+        if (_playerState.value.cloudFetchInProgress != inProgress) {
+            _playerState.value = _playerState.value.copy(cloudFetchInProgress = inProgress)
         }
     }
 
@@ -539,6 +572,7 @@ class PlaybackConnection @Inject constructor(
         }
         val preservedDescription = _playerState.value.description
         val preservedError = _playerState.value.playerError
+        val preservedFetch = _playerState.value.cloudFetchInProgress
 
         // Detect video by ANY of FIVE signals — any single positive flips
         // the UI to the video layout immediately, so the audio layout never
@@ -564,7 +598,7 @@ class PlaybackConnection @Inject constructor(
         val isVideoByTracks = c.currentTracks.groups.any { group ->
             group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO
         }
-        val hasVideoTrack = isVideoByTracks || isVideoHint ||
+        val hasVideoTrack = videoModeHint || isVideoByTracks || isVideoHint ||
             isVideoByExt || isVideoByPath || isVideoByMime
 
         // Apply session-level metadata override on top of player metadata.
@@ -595,6 +629,7 @@ class PlaybackConnection @Inject constructor(
             hasChapters = chapters.isNotEmpty(),
             description = preservedDescription,
             playerError = preservedError,
+            cloudFetchInProgress = preservedFetch,
             isPartOfPlaylist = c.mediaItemCount > 1,
             hasCoverArt = (overArtwork ?: metadata.artworkUri) != null || metadata.artworkData != null,
             isVideoContent = hasVideoTrack,

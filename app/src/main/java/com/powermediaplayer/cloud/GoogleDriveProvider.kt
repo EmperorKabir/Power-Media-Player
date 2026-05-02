@@ -179,7 +179,7 @@ class GoogleDriveProvider @Inject constructor(
      */
     suspend fun downloadToCache(
         item: CloudMediaItem,
-        maxBytes: Long = 256L * 1024 * 1024  // 256 MB safety cap
+        maxBytes: Long = 4L * 1024 * 1024 * 1024  // 4 GB cap (long audiobooks)
     ): java.io.File? = withContext(Dispatchers.IO) {
         if (item.size in 1..maxBytes || item.size <= 0) {
             // Allowed: known-size <= cap, or unknown size (try anyway).

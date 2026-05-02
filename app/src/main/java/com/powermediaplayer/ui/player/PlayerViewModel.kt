@@ -172,6 +172,7 @@ class PlayerViewModel @Inject constructor(
             chapterStartMs = chapterStart,
             chapterDurationMs = chapterDuration,
             playerError = playerState.playerError,
+            cloudFetchInProgress = playerState.cloudFetchInProgress,
             totalPlaylistPosition = playerState.totalPlaylistPosition,
             totalPlaylistDuration = playerState.totalPlaylistDuration,
             playlistPositionFormatted = TimeFormatter.formatDuration(playerState.totalPlaylistPosition),

@@ -214,6 +214,10 @@ class LibraryViewModel @Inject constructor(
     fun playFiles(files: List<MediaFileInfo>, startIndex: Int) {
         val (items, idx) = createMediaItems(files, startIndex)
         playbackConnection.setMediaItems(items, idx)
+        // Authoritative video flag — caller knows the file is video, no
+        // need to wait for ExoPlayer track parsing or worry about extras
+        // surviving Media3 metadata combine.
+        playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
     }
 
     /**
