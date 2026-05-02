@@ -201,7 +201,25 @@ class CloudViewModel @Inject constructor(
             // before the service receives the item, so the service-side
             // PlayerSessionCallback.onAddMediaItems recovers it from one of
             // those two preserved fields.
-            val isVideo = item.mimeType.startsWith("video/")
+            // Drive labels MP4-container files (including .m4b audiobooks)
+            // with mime "video/mp4" because the container CAN hold video.
+            // The file extension is the authoritative signal — without
+            // this override, M4Bs were being treated as video, triggering
+            // the 32-s auto-hide and replacing the cover-art surface with
+            // an empty video surface. Audio extensions force isVideo=false.
+            val audioExts = setOf(
+                "m4b", "m4a", "m4p", "m4r", "mp3", "flac", "ogg", "oga",
+                "opus", "wav", "wave", "aac", "aiff", "aif", "ape", "wma"
+            )
+            val nameExt = item.name.substringAfterLast('.', "").lowercase()
+            val isVideo = when {
+                nameExt in audioExts -> false
+                else -> item.mimeType.startsWith("video/")
+            }
+            android.util.Log.i(
+                "PowerMediaPlayer",
+                "openItem: name=${item.name} ext=$nameExt mime=${item.mimeType} → isVideo=$isVideo"
+            )
             val extras = android.os.Bundle().apply {
                 putBoolean("is_video_hint", isVideo)
             }
@@ -221,8 +239,8 @@ class CloudViewModel @Inject constructor(
                 )
                 .build()
             playbackConnection.setMediaItems(listOf(mediaItem), 0)
-            // Authoritative video flag from the cloud item's MIME type.
-            playbackConnection.setVideoModeHint(item.mimeType.startsWith("video/"))
+            // Use the same extension-first decision used for is_video_hint.
+            playbackConnection.setVideoModeHint(isVideo)
             // Instant placeholder metadata: filename as title + Drive's
             // thumbnail (auto-generated for many files, no auth needed).
             // Replaced by the post-download tags + embedded artwork when
