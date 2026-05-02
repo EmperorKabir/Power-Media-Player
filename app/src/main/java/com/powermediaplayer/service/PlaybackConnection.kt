@@ -315,6 +315,10 @@ class PlaybackConnection @Inject constructor(
      */
     fun setLocalChapters(chapters: List<ChapterInfo>?) {
         localChapters = chapters?.takeIf { it.isNotEmpty() }
+        android.util.Log.i(
+            "PowerMediaPlayer",
+            "setLocalChapters: count=${localChapters?.size ?: 0}"
+        )
         updatePlayerStateOnMain()
     }
 

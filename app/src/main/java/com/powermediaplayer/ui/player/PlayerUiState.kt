@@ -1,19 +1,15 @@
 package com.powermediaplayer.ui.player
 
 import android.net.Uri
-import androidx.compose.runtime.Immutable
 
 /**
  * Complete UI state for the player screen.
- * All fields needed by Compose to render without additional computation.
  *
- * @Immutable tells Compose this whole type is structurally stable so the
- * skip optimisation can elide recompositions of subtrees that don't read
- * any changed field. Without this, position polling at 250-500 ms was
- * forcing every control to recompose, producing the visible "controls
- * jump and stutter" symptom.
+ * NOT marked @Immutable — the ByteArray field would violate the contract
+ * (ByteArray is mutable), and Compose would silently apply reference-
+ * equality skipping which dropped chapter / metadata / artwork updates
+ * because the bytes were arriving in new ByteArray instances every time.
  */
-@Immutable
 data class PlayerUiState(
     // Playback status
     val isPlaying: Boolean = false,
