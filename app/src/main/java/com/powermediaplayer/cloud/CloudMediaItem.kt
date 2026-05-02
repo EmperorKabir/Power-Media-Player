@@ -18,5 +18,10 @@ data class CloudMediaItem(
     val thumbnailUri: Uri? = null,
     val sourceProvider: CloudProviderType,
     val isFolder: Boolean = false,
-    val parentId: String? = null
+    val parentId: String? = null,
+    // Spotify-only: the spotify:album:XX or spotify:playlist:XX URI
+    // the track was discovered in. Passed as context_uri to
+    // /me/player/play so /next and /previous work within the album
+    // or playlist instead of stopping after this single track.
+    val contextUri: String? = null
 )

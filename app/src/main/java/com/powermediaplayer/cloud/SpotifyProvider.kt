@@ -50,7 +50,12 @@ data class SpotifyPlaybackState(
     val durationMs: Long,
     val isPlaying: Boolean,
     val trackUri: String,
-    val deviceName: String?
+    val deviceName: String?,
+    // Plain (non-synced) lyrics fetched from LRCLib if available.
+    // Spotify Web API does NOT expose lyrics — they're licensed from
+    // Musixmatch and only surface inside the official Spotify clients.
+    // LRCLib is a free, unauthenticated, community-maintained source.
+    val lyrics: String? = null
 )
 
 /**
@@ -262,6 +267,15 @@ class SpotifyProvider @Inject constructor(
         val name = obj.get("name")?.asString ?: "Untitled"
         val preview = obj.get("preview_url")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
         val spotifyUri = obj.get("uri")?.asString.orEmpty()
+        // For tracks the track's album URI gives next/previous a context
+        // to traverse — without it Spotify Connect /next stops after the
+        // single track. For albums and playlists the URI itself IS the
+        // context so we pass it through.
+        val contextUri = when (type) {
+            "track" -> obj.getAsJsonObject("album")?.get("uri")?.takeIf { !it.isJsonNull }?.asString
+            "album", "playlist" -> spotifyUri
+            else -> null
+        }
         return CloudMediaItem(
             id = id,
             name = name,
@@ -269,7 +283,8 @@ class SpotifyProvider @Inject constructor(
             size = 0L,
             downloadUrl = preview.ifEmpty { spotifyUri },
             sourceProvider = CloudProviderType.SPOTIFY,
-            isFolder = type != "track"
+            isFolder = type != "track",
+            contextUri = contextUri
         )
     }
 
@@ -312,13 +327,22 @@ class SpotifyProvider @Inject constructor(
      *     device via /me/player/devices and PUT /me/player to transfer
      *     playback there, then retry the play call.
      */
-    suspend fun playTrackOnConnectDevice(spotifyUri: String): Result<Unit> =
+    suspend fun playTrackOnConnectDevice(
+        spotifyUri: String,
+        contextUri: String? = null
+    ): Result<Unit> =
         withContext(Dispatchers.IO) {
-            android.util.Log.i("PMP_DIAG", "Spotify.playTrackOnConnectDevice $spotifyUri")
+            android.util.Log.i(
+                "PMP_DIAG",
+                "Spotify.playTrackOnConnectDevice $spotifyUri context=$contextUri"
+            )
             val token = currentAccessToken() ?: return@withContext Result.failure(
                 IllegalStateException("Spotify session expired — sign in again")
             )
-            val firstAttempt = playRequest(token, spotifyUri, deviceId = null)
+            // If caller didn't supply a context but the URI is a track,
+            // resolve the track's album so /next + /previous work.
+            val resolvedContext = contextUri ?: resolveTrackAlbumUri(token, spotifyUri)
+            val firstAttempt = playRequest(token, spotifyUri, resolvedContext, deviceId = null)
             if (firstAttempt.isSuccess) return@withContext firstAttempt
 
             // 404 NO_ACTIVE_DEVICE — pick first device and retry.
@@ -343,13 +367,49 @@ class SpotifyProvider @Inject constructor(
             // Tiny gap so Spotify finishes activating the device before
             // we send the play command.
             kotlinx.coroutines.delay(400)
-            playRequest(token, spotifyUri, deviceId = first.first)
+            playRequest(token, spotifyUri, resolvedContext, deviceId = first.first)
         }
 
-    private fun playRequest(token: String, spotifyUri: String, deviceId: String?): Result<Unit> {
+    /**
+     * Look up the album URI for a given spotify:track:ID via
+     * GET /v1/tracks/{id}. Used when the caller doesn't already know
+     * the playback context. Returns null on any failure (caller falls
+     * back to single-URI play).
+     */
+    private fun resolveTrackAlbumUri(token: String, spotifyTrackUri: String): String? {
+        if (!spotifyTrackUri.startsWith("spotify:track:")) return null
+        val trackId = spotifyTrackUri.removePrefix("spotify:track:")
+        val req = Request.Builder()
+            .url("https://api.spotify.com/v1/tracks/$trackId")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        return try {
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val body = resp.body?.string().orEmpty()
+                val root = JsonParser.parseString(body).asJsonObject
+                val album = root.getAsJsonObject("album") ?: return@use null
+                album.get("uri")?.takeIf { !it.isJsonNull }?.asString
+            }
+        } catch (_: Exception) { null }
+    }
+
+    private fun playRequest(
+        token: String,
+        spotifyUri: String,
+        contextUri: String?,
+        deviceId: String?
+    ): Result<Unit> {
         val url = StringBuilder("https://api.spotify.com/v1/me/player/play")
         if (deviceId != null) url.append("?device_id=").append(deviceId)
-        val bodyJson = """{"uris":["$spotifyUri"]}"""
+        // When a context is available, send context_uri + offset so the
+        // Spotify queue is the album/playlist starting at this track.
+        // Without it, fall back to single-track play (legacy behaviour).
+        val bodyJson = if (contextUri != null) {
+            """{"context_uri":"$contextUri","offset":{"uri":"$spotifyUri"}}"""
+        } else {
+            """{"uris":["$spotifyUri"]}"""
+        }
         val body = okhttp3.RequestBody.create(
             "application/json".toMediaTypeOrNull(),
             bodyJson
@@ -429,15 +489,78 @@ class SpotifyProvider @Inject constructor(
         if (pollJob?.isActive == true) return
         android.util.Log.i("PMP_DIAG", "Spotify.startPlaybackPolling")
         pollJob = pollScope.launch {
+            var lastTrackUri = ""
+            var lastLyrics: String? = null
             while (isActive) {
                 val token = currentAccessToken()
                 if (token != null) {
                     val snap = fetchCurrentState(token)
-                    _spotifyState.value = snap
+                    if (snap != null) {
+                        // Re-fetch lyrics only when the track changes —
+                        // LRCLib is gentle but no need to hammer it
+                        // every second.
+                        if (snap.trackUri != lastTrackUri) {
+                            lastTrackUri = snap.trackUri
+                            lastLyrics = fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
+                        }
+                        _spotifyState.value = snap.copy(lyrics = lastLyrics)
+                    } else {
+                        _spotifyState.value = null
+                        lastTrackUri = ""
+                        lastLyrics = null
+                    }
                 }
                 delay(1000)
             }
         }
+    }
+
+    /**
+     * Fetch plain lyrics from LRCLib by track title / artist / album /
+     * duration. Returns null on miss. LRCLib is free and doesn't
+     * require an API key. https://lrclib.net/docs
+     */
+    private fun fetchLyricsLrclib(
+        title: String,
+        artist: String,
+        album: String,
+        durationMs: Long
+    ): String? {
+        if (title.isBlank() || artist.isBlank()) return null
+        val firstArtist = artist.substringBefore(',').trim()
+        val durSec = (durationMs / 1000).toString()
+        val url = "https://lrclib.net/api/get?" +
+            "track_name=" + java.net.URLEncoder.encode(title, "UTF-8") +
+            "&artist_name=" + java.net.URLEncoder.encode(firstArtist, "UTF-8") +
+            "&album_name=" + java.net.URLEncoder.encode(album, "UTF-8") +
+            "&duration=" + durSec
+        val req = Request.Builder().url(url).build()
+        return try {
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val body = resp.body?.string().orEmpty()
+                val root = JsonParser.parseString(body).asJsonObject
+                val plain = root.get("plainLyrics")?.takeIf { !it.isJsonNull }?.asString
+                val synced = root.get("syncedLyrics")?.takeIf { !it.isJsonNull }?.asString
+                // Prefer synced (timestamps look messy as plain text but
+                // are the canonical form); strip [mm:ss.xx] tags for
+                // display since the player UI doesn't render synced yet.
+                val raw = plain ?: synced?.let { stripLrcTimestamps(it) }
+                android.util.Log.i(
+                    "PMP_DIAG",
+                    "Spotify.lyrics LRCLib hit=${raw != null} title='$title' artist='$firstArtist'"
+                )
+                raw
+            }
+        } catch (_: Exception) { null }
+    }
+
+    private fun stripLrcTimestamps(synced: String): String {
+        val re = Regex("\\[\\d{2}:\\d{2}(\\.\\d{1,3})?\\]")
+        return synced.lineSequence()
+            .map { it.replace(re, "").trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString("\n")
     }
 
     fun stopPlaybackPolling() {

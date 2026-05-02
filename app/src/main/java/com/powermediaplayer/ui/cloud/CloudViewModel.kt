@@ -205,7 +205,7 @@ class CloudViewModel @Inject constructor(
                 } else {
                     "spotify:track:${item.id}"
                 }
-                val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri)
+                val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri, item.contextUri)
                 r.onSuccess {
                     spotifyProvider.startPlaybackPolling()
                     _uiState.value = _uiState.value.copy(

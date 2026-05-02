@@ -345,6 +345,7 @@ class PlayerViewModel @Inject constructor(
             description = s.deviceName?.let { "Playing on $it" }.orEmpty(),
             artworkUri = s.artworkUrl?.let { android.net.Uri.parse(it) },
             hasCoverArt = s.artworkUrl != null,
+            lyrics = s.lyrics.orEmpty(),
             currentPosition = pos,
             duration = dur,
             currentPositionFormatted = TimeFormatter.formatDuration(pos),

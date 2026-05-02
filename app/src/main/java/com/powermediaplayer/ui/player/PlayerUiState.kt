@@ -29,6 +29,10 @@ data class PlayerUiState(
     val artworkUri: Uri? = null,
     val hasCoverArt: Boolean = false,
 
+    // Lyrics — populated for Spotify mirroring (LRCLib lookup).
+    // Empty for local files unless a future lyrics file is wired in.
+    val lyrics: String = "",
+
     // Progress - current track
     val currentPosition: Long = 0L,
     val duration: Long = 0L,

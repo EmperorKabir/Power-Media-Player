@@ -578,6 +578,33 @@ private fun TrackInfoSection(uiState: PlayerUiState, coverColors: CoverArtColors
                 overflow = TextOverflow.Ellipsis
             )
         }
+        if (uiState.lyrics.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            // Lyrics — capped height with vertical scroll so a long
+            // song doesn't push the controls off-screen. Source:
+            // LRCLib (Spotify Web API doesn't expose lyrics).
+            Surface(
+                color = OledBlack.copy(alpha = 0.4f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 180.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = uiState.lyrics,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
     }
 }
 
