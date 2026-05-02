@@ -207,9 +207,13 @@ class CloudViewModel @Inject constructor(
                 }
                 val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri)
                 r.onSuccess {
+                    spotifyProvider.startPlaybackPolling()
                     _uiState.value = _uiState.value.copy(
                         errorMessage = "Playing on Spotify: ${item.name}"
                     )
+                    // Navigate to the player tab so the user sees the
+                    // mirrored Spotify state and remote-control buttons.
+                    onPlaybackStarted()
                 }.onFailure { ex ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = ex.message ?: "Spotify playback failed"

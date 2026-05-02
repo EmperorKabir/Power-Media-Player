@@ -28,6 +28,30 @@ import okhttp3.Request
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+/**
+ * Snapshot of what's currently playing on the user's active Spotify
+ * device. Driven by polling /v1/me/player at 1 Hz from
+ * [SpotifyProvider.spotifyState]. All fields nullable / safe defaults
+ * so the consumer (PlayerViewModel) can map straight into PlayerUiState.
+ */
+data class SpotifyPlaybackState(
+    val title: String,
+    val artist: String,
+    val album: String,
+    val artworkUrl: String?,
+    val positionMs: Long,
+    val durationMs: Long,
+    val isPlaying: Boolean,
+    val trackUri: String,
+    val deviceName: String?
+)
 
 /**
  * Spotify Web API integration via OAuth 2.0 + PKCE (no client secret required).
@@ -50,6 +74,16 @@ class SpotifyProvider @Inject constructor(
 
     private val _isLoggedIn = MutableStateFlow(false)
     override val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    // Mirror of what's playing on the active Spotify device. null when
+    // nothing is playing or polling hasn't started. Updated at 1 Hz by
+    // [pollJob] which starts on the first successful playTrack call and
+    // stops automatically when the app is backgrounded for >30 s.
+    private val _spotifyState = MutableStateFlow<SpotifyPlaybackState?>(null)
+    val spotifyState: StateFlow<SpotifyPlaybackState?> = _spotifyState.asStateFlow()
+
+    private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var pollJob: Job? = null
 
     private val authService: AuthorizationService by lazy { AuthorizationService(context) }
     private val gson = Gson()
@@ -384,6 +418,123 @@ class SpotifyProvider @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Start polling /v1/me/player at 1 Hz so the app's Player tab can
+     * mirror what's playing on Spotify. Idempotent — calling twice
+     * doesn't double the polling rate.
+     */
+    fun startPlaybackPolling() {
+        if (pollJob?.isActive == true) return
+        android.util.Log.i("PMP_DIAG", "Spotify.startPlaybackPolling")
+        pollJob = pollScope.launch {
+            while (isActive) {
+                val token = currentAccessToken()
+                if (token != null) {
+                    val snap = fetchCurrentState(token)
+                    _spotifyState.value = snap
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    fun stopPlaybackPolling() {
+        pollJob?.cancel()
+        pollJob = null
+        _spotifyState.value = null
+    }
+
+    private fun fetchCurrentState(token: String): SpotifyPlaybackState? {
+        val req = Request.Builder()
+            .url("https://api.spotify.com/v1/me/player")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        return try {
+            http.newCall(req).execute().use { resp ->
+                if (resp.code == 204 || !resp.isSuccessful) return@use null
+                val body = resp.body?.string().orEmpty()
+                if (body.isBlank()) return@use null
+                val root = JsonParser.parseString(body).asJsonObject
+                val item = root.getAsJsonObject("item") ?: return@use null
+                val artists = item.getAsJsonArray("artists")
+                    ?.joinToString(", ") { it.asJsonObject.get("name")?.asString.orEmpty() }
+                    .orEmpty()
+                val album = item.getAsJsonObject("album")
+                val artwork = album?.getAsJsonArray("images")?.firstOrNull()
+                    ?.asJsonObject?.get("url")?.asString
+                val device = root.getAsJsonObject("device")
+                SpotifyPlaybackState(
+                    title = item.get("name")?.asString.orEmpty(),
+                    artist = artists,
+                    album = album?.get("name")?.asString.orEmpty(),
+                    artworkUrl = artwork,
+                    positionMs = root.get("progress_ms")?.takeIf { !it.isJsonNull }?.asLong ?: 0L,
+                    durationMs = item.get("duration_ms")?.asLong ?: 0L,
+                    isPlaying = root.get("is_playing")?.asBoolean ?: false,
+                    trackUri = item.get("uri")?.asString.orEmpty(),
+                    deviceName = device?.get("name")?.asString
+                )
+            }
+        } catch (_: Exception) { null }
+    }
+
+    suspend fun togglePlayPause(): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired")
+        )
+        val playing = _spotifyState.value?.isPlaying ?: false
+        val endpoint = if (playing) "pause" else "play"
+        simplePut(token, "https://api.spotify.com/v1/me/player/$endpoint")
+    }
+
+    suspend fun skipNext(): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired")
+        )
+        simplePost(token, "https://api.spotify.com/v1/me/player/next")
+    }
+
+    suspend fun skipPrevious(): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired")
+        )
+        simplePost(token, "https://api.spotify.com/v1/me/player/previous")
+    }
+
+    suspend fun seekTo(positionMs: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired")
+        )
+        simplePut(token, "https://api.spotify.com/v1/me/player/seek?position_ms=$positionMs")
+    }
+
+    private fun simplePut(token: String, url: String): Result<Unit> {
+        val req = Request.Builder()
+            .url(url)
+            .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        return execControl(req)
+    }
+
+    private fun simplePost(token: String, url: String): Result<Unit> {
+        val req = Request.Builder()
+            .url(url)
+            .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        return execControl(req)
+    }
+
+    private fun execControl(req: Request): Result<Unit> = try {
+        http.newCall(req).execute().use { resp ->
+            if (resp.code in 200..299) Result.success(Unit)
+            else Result.failure(IllegalStateException("Spotify HTTP ${resp.code}"))
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
     /**

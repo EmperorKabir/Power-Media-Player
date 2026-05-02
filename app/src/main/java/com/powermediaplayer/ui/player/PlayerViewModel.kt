@@ -4,6 +4,8 @@ import android.media.AudioManager
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.powermediaplayer.cloud.SpotifyPlaybackState
+import com.powermediaplayer.cloud.SpotifyProvider
 import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.service.PlayerState
 import com.powermediaplayer.util.TextNormalizer
@@ -23,6 +25,7 @@ import javax.inject.Inject
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
+    private val spotifyProvider: SpotifyProvider,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -35,12 +38,17 @@ class PlayerViewModel @Inject constructor(
     /**
      * The single source of truth for the player UI.
      * Combines PlaybackConnection state with computed display values.
+     * When [spotifyProvider.spotifyState] is non-null, Spotify is the
+     * active source — its title/artist/position/duration overlay the
+     * local player state and transport controls route to Web API.
      */
     val uiState: StateFlow<PlayerUiState> = combine(
         playbackConnection.playerState,
-        _sleepTimerRemainingMs
-    ) { playerState, sleepRemaining ->
-        mapToUiState(playerState, sleepRemaining)
+        _sleepTimerRemainingMs,
+        spotifyProvider.spotifyState
+    ) { playerState, sleepRemaining, spotify ->
+        val base = mapToUiState(playerState, sleepRemaining)
+        if (spotify != null) overlaySpotifyState(base, spotify) else base
     }.stateIn(
         scope = viewModelScope,
         // Eagerly keeps the combiner running so navigation to the player
@@ -50,6 +58,13 @@ class PlayerViewModel @Inject constructor(
         started = SharingStarted.Eagerly,
         initialValue = mapToUiState(playbackConnection.playerState.value, 0L)
     )
+
+    /**
+     * Whether Spotify is the active source — drives the Player tab to
+     * route control taps to the Web API instead of the local ExoPlayer.
+     */
+    private val isSpotifyActive: Boolean
+        get() = spotifyProvider.spotifyState.value != null
 
     /**
      * Reactive Player reference — updates when the MediaController finishes connecting.
@@ -78,24 +93,65 @@ class PlayerViewModel @Inject constructor(
 
     fun clearError() = playbackConnection.clearError()
 
-    fun playPause() = playbackConnection.playPause()
-    fun seekTo(positionMs: Long) = playbackConnection.seekTo(positionMs)
-    fun seekToNext() = playbackConnection.seekToNext()
-    fun seekToPrevious() = playbackConnection.seekToPrevious()
+    fun playPause() {
+        if (isSpotifyActive) {
+            viewModelScope.launch { spotifyProvider.togglePlayPause() }
+        } else {
+            playbackConnection.playPause()
+        }
+    }
+    fun seekTo(positionMs: Long) {
+        if (isSpotifyActive) {
+            viewModelScope.launch { spotifyProvider.seekTo(positionMs) }
+        } else {
+            playbackConnection.seekTo(positionMs)
+        }
+    }
+    fun seekToNext() {
+        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipNext() }
+        else playbackConnection.seekToNext()
+    }
+    fun seekToPrevious() {
+        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipPrevious() }
+        else playbackConnection.seekToPrevious()
+    }
     fun skipBack(seconds: Int) {
         android.util.Log.i("PMP_DIAG", "VM.skipBack(${seconds}s)")
+        if (isSpotifyActive) {
+            val target = ((spotifyProvider.spotifyState.value?.positionMs ?: 0L) - seconds * 1000L)
+                .coerceAtLeast(0L)
+            viewModelScope.launch { spotifyProvider.seekTo(target) }
+            return
+        }
         playbackConnection.skipBack(seconds)
     }
     fun skipForward(seconds: Int) {
         android.util.Log.i("PMP_DIAG", "VM.skipForward(${seconds}s)")
+        if (isSpotifyActive) {
+            val target = (spotifyProvider.spotifyState.value?.positionMs ?: 0L) + seconds * 1000L
+            viewModelScope.launch { spotifyProvider.seekTo(target) }
+            return
+        }
         playbackConnection.skipForward(seconds)
     }
     fun nextChapter() = playbackConnection.nextChapter()
     fun previousChapter() = playbackConnection.previousChapter()
-    fun nextChapterOrTrack() = playbackConnection.nextChapterOrTrack()
-    fun previousChapterOrTrack() = playbackConnection.previousChapterOrTrack()
-    fun nextFile() = playbackConnection.nextFile()
-    fun previousFile() = playbackConnection.previousFile()
+    fun nextChapterOrTrack() {
+        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipNext() }
+        else playbackConnection.nextChapterOrTrack()
+    }
+    fun previousChapterOrTrack() {
+        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipPrevious() }
+        else playbackConnection.previousChapterOrTrack()
+    }
+    fun nextFile() {
+        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipNext() }
+        else playbackConnection.nextFile()
+    }
+    fun previousFile() {
+        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipPrevious() }
+        else playbackConnection.previousFile()
+    }
     fun seekToChapter(index: Int) = playbackConnection.seekToChapterIndex(index)
 
     fun setPlaybackSpeed(speed: Float) = playbackConnection.setPlaybackSpeed(speed)
@@ -266,4 +322,73 @@ class PlayerViewModel @Inject constructor(
      * Provides direct access to the underlying Player for VideoSurface attachment.
      */
     fun getPlayer() = playbackConnection.getPlayer()
+
+    /**
+     * Overlay the polled Spotify state on top of [base]. Only the
+     * fields the Player UI displays (title/artist/album/artwork URI,
+     * position, duration, formatted strings, isPlaying, controls
+     * gating) are replaced — everything else stays at its default so
+     * Compose's smart-skip still saves the static rows from
+     * recomposing each tick.
+     */
+    private fun overlaySpotifyState(base: PlayerUiState, s: SpotifyPlaybackState): PlayerUiState {
+        val pos = s.positionMs.coerceAtLeast(0L)
+        val dur = s.durationMs.coerceAtLeast(0L)
+        val remaining = (dur - pos).coerceAtLeast(0L)
+        val progress = if (dur > 0) (pos.toFloat() / dur.toFloat()).coerceIn(0f, 1f) else 0f
+        return base.copy(
+            isPlaying = s.isPlaying,
+            isLoading = false,
+            title = s.title.ifEmpty { "Spotify track" },
+            artist = s.artist,
+            album = s.album,
+            description = s.deviceName?.let { "Playing on $it" }.orEmpty(),
+            artworkUri = s.artworkUrl?.let { android.net.Uri.parse(it) },
+            hasCoverArt = s.artworkUrl != null,
+            currentPosition = pos,
+            duration = dur,
+            currentPositionFormatted = TimeFormatter.formatDuration(pos),
+            durationFormatted = TimeFormatter.formatDuration(dur),
+            trackRemainingFormatted = "-" + TimeFormatter.formatDuration(remaining),
+            trackProgress = progress,
+            chapterStartMs = 0L,
+            chapterDurationMs = dur,
+            // Hide the playlist slider and chapter info — Spotify Connect
+            // playback doesn't expose a queue or chapter structure here.
+            totalPlaylistPosition = pos,
+            totalPlaylistDuration = dur,
+            playlistPositionFormatted = TimeFormatter.formatDuration(pos),
+            playlistDurationFormatted = TimeFormatter.formatDuration(dur),
+            playlistRemainingFormatted = "-" + TimeFormatter.formatDuration(remaining),
+            playlistProgress = progress,
+            chapters = emptyList(),
+            currentChapterIndex = -1,
+            hasChapters = false,
+            currentTrackIndex = 0,
+            totalTracks = 0,
+            trackIndexDisplay = "",
+            isVideoContent = false,
+            controls = ControlsEnabledState(
+                previousTrack = true,
+                nextTrack = true,
+                previousChapter = false,
+                nextChapter = false,
+                previousFile = true,
+                nextFile = true,
+                previousChapterOrTrack = true,
+                nextChapterOrTrack = true,
+                skipBack5 = true, skipBack10 = true, skipBack15 = true,
+                skipBack20 = true, skipBack30 = true,
+                skipForward5 = true, skipForward10 = true, skipForward15 = true,
+                skipForward20 = true, skipForward30 = true,
+                playPause = true,
+                playbackSpeed = false,
+                brightness = true,
+                volume = true,
+                sleepTimer = true,
+                trackSlider = dur > 0,
+                playlistSlider = false
+            )
+        )
+    }
 }
