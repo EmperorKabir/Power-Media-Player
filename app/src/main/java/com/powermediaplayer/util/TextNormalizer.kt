@@ -28,12 +28,37 @@ object TextNormalizer {
         Collator.getInstance(locale).apply { strength = Collator.PRIMARY }
 
     /**
+     * Repair "mojibake" — UTF-8 bytes mistakenly decoded as Latin-1.
+     * Common in MP4 metadata read by ExoPlayer when the encoding marker
+     * is wrong: â€™ → ', â€" → —, Ã© → é, etc. Idempotent: returns the
+     * original string when re-decoding would lose information.
+     */
+    fun fixMojibake(s: String): String {
+        if (s.isEmpty()) return s
+        if (!s.any { it.code in 0x80..0xFF }) return s  // No Latin-1 high bytes — already clean
+        return try {
+            val bytes = s.toByteArray(Charsets.ISO_8859_1)
+            val candidate = String(bytes, Charsets.UTF_8)
+            // Heuristic: prefer the candidate iff it strictly reduces the
+            // count of high-codepoint chars without producing replacement
+            // markers. Keeps legitimately Latin-1-only strings alone.
+            val hadReplacement = candidate.contains('�')
+            val nonAsciiBefore = s.count { it.code > 127 }
+            val nonAsciiAfter = candidate.count { it.code > 127 }
+            if (!hadReplacement && nonAsciiAfter < nonAsciiBefore) candidate else s
+        } catch (_: Exception) {
+            s
+        }
+    }
+
+    /**
      * Returns a normalized form of [s] suitable for display, search, and
      * comparison. Idempotent — re-normalizing produces the same output.
      */
     fun normalize(s: String): String {
         if (s.isEmpty()) return s
-        val nfc = Normalizer.normalize(s, Normalizer.Form.NFC)
+        val unmojibake = fixMojibake(s)
+        val nfc = Normalizer.normalize(unmojibake, Normalizer.Form.NFC)
         return nfc
             .replace('‘', '\'')   // left single curly
             .replace('’', '\'')   // right single curly / typographic apostrophe

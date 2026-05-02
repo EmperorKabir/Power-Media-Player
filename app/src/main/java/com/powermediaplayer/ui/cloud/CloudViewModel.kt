@@ -138,16 +138,32 @@ class CloudViewModel @Inject constructor(
             }
             return
         }
+        // Defensive — any unexpected throw inside this entire flow used
+        // to bubble up to the default uncaught handler and force-close
+        // the app. Log + display via errorMessage instead.
+        viewModelScope.launch {
+            try {
+                openItemInternal(item)
+            } catch (t: Throwable) {
+                android.util.Log.e("PowerMediaPlayer", "openItem failed", t)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Couldn't play: ${t.javaClass.simpleName}: ${t.message}"
+                )
+            }
+        }
+    }
+
+    private suspend fun openItemInternal(item: CloudMediaItem) {
         // Build a MediaItem and hand it to the playback connection. The
         // PlaybackService DataSource pipeline injects the Drive bearer
         // token automatically for googleapis.com URLs.
-        viewModelScope.launch {
+        run {
             val streamResult = when (item.sourceProvider) {
                 CloudProviderType.GOOGLE_DRIVE -> driveProvider.getMediaStreamUri(item)
                 CloudProviderType.SPOTIFY -> spotifyProvider.getMediaStreamUri(item)
-                else -> return@launch
+                else -> return
             }
-            val uri = streamResult.getOrNull() ?: return@launch
+            val uri = streamResult.getOrNull() ?: return
             // mediaId MUST be the URI string and requestMetadata MUST carry
             // the URI — MediaController IPC strips localConfiguration.uri
             // before the service receives the item, so the service-side

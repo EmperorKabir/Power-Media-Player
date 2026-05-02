@@ -212,12 +212,16 @@ class LibraryViewModel @Inject constructor(
      * Directly calls PlaybackConnection so nothing is left as a TODO.
      */
     fun playFiles(files: List<MediaFileInfo>, startIndex: Int) {
-        val (items, idx) = createMediaItems(files, startIndex)
-        playbackConnection.setMediaItems(items, idx)
-        // Authoritative video flag — caller knows the file is video, no
-        // need to wait for ExoPlayer track parsing or worry about extras
-        // surviving Media3 metadata combine.
-        playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
+        try {
+            val (items, idx) = createMediaItems(files, startIndex)
+            playbackConnection.setMediaItems(items, idx)
+            // Authoritative video flag — caller knows the file is video, no
+            // need to wait for ExoPlayer track parsing or worry about extras
+            // surviving Media3 metadata combine.
+            playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
+        } catch (t: Throwable) {
+            android.util.Log.e("PowerMediaPlayer", "playFiles failed", t)
+        }
     }
 
     /**

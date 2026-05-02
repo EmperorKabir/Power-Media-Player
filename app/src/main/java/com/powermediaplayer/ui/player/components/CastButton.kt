@@ -19,8 +19,11 @@ import com.google.android.gms.cast.framework.CastButtonFactory
 fun CastButton(modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
-            MediaRouteButton(ctx).apply {
-                CastButtonFactory.setUpMediaRouteButton(ctx, this)
+            // Cast SDK init can throw on devices without Play Services
+            // (or Samsung's One UI in some states). Failure must NOT take
+            // down the player — fall back to an invisible empty button.
+            MediaRouteButton(ctx).also { btn ->
+                runCatching { CastButtonFactory.setUpMediaRouteButton(ctx, btn) }
             }
         },
         modifier = modifier

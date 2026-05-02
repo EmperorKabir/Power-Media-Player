@@ -47,14 +47,13 @@ fun VideoSurface(
             factory = { ctx ->
                 TextureView(ctx).apply {
                     isOpaque = true
-                    PlaybackService.getExoPlayer()?.setVideoTextureView(this)
+                    runCatching { PlaybackService.getExoPlayer()?.setVideoTextureView(this) }
                 }
             },
             update = { view ->
-                val exo = PlaybackService.getExoPlayer() ?: return@AndroidView
-                // Re-bind every recompose — cheap, idempotent, and recovers from
-                // the case where the service connected after first compose.
-                exo.setVideoTextureView(view)
+                runCatching {
+                    PlaybackService.getExoPlayer()?.setVideoTextureView(view)
+                }
             },
             onRelease = { view ->
                 runCatching { PlaybackService.getExoPlayer()?.clearVideoTextureView(view) }

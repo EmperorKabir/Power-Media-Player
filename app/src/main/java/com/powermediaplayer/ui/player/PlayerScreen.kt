@@ -375,15 +375,21 @@ private fun PlayerScreenExpanded(
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted
             )
-            // Subtle right-edge fade into black
+            // Subtle right-edge fade into black. Previous gradient had
+            // startX/endX swapped, which produced black-on-LEFT and dimmed
+            // the entire cover. Now: bright art on left, fading to black
+            // at the right edge where the controls panel begins.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(
-                            colors = listOf(Color.Transparent, OledBlack),
-                            startX = Float.POSITIVE_INFINITY,
-                            endX = 0f
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Transparent,
+                                OledBlack.copy(alpha = 0.6f),
+                                OledBlack
+                            )
                         )
                     )
             )

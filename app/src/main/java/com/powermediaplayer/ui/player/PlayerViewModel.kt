@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.service.PlayerState
+import com.powermediaplayer.util.TextNormalizer
 import com.powermediaplayer.util.TimeFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -157,10 +158,13 @@ class PlayerViewModel @Inject constructor(
         return PlayerUiState(
             isPlaying = playerState.isPlaying,
             isLoading = playerState.isLoading,
-            title = playerState.title.ifEmpty { "No media loaded" },
-            artist = playerState.artist,
-            album = playerState.album,
-            description = playerState.description,
+            // Normalize all human-visible strings to repair UTF-8/Latin-1
+            // mojibake (e.g. "Philosopherâ€™s" → "Philosopher's") and
+            // collapse curly quotes / invisible formatting.
+            title = TextNormalizer.normalize(playerState.title).ifEmpty { "No media loaded" },
+            artist = TextNormalizer.normalize(playerState.artist),
+            album = TextNormalizer.normalize(playerState.album),
+            description = TextNormalizer.normalize(playerState.description),
             artworkUri = playerState.artworkUri,
             hasCoverArt = playerState.hasCoverArt,
             currentPosition = displayedTrackPos,
@@ -190,7 +194,7 @@ class PlayerViewModel @Inject constructor(
             trackIndexDisplay = if (playerState.mediaItemCount > 1) {
                 "${playerState.currentMediaItemIndex + 1} / ${playerState.mediaItemCount}"
             } else "",
-            chapters = playerState.chapters,
+            chapters = playerState.chapters.map { it.copy(title = TextNormalizer.normalize(it.title)) },
             currentChapterIndex = playerState.currentChapterIndex,
             hasChapters = playerState.hasChapters,
             controls = ControlsEnabledState(
