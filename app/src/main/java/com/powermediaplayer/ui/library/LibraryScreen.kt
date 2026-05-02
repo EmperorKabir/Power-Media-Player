@@ -413,4 +413,6 @@ private fun sortModeLabel(mode: SortMode): String = when (mode) {
     SortMode.TYPE -> "Type"
     SortMode.DATE_DESC -> "Recently modified"
     SortMode.FAVORITES_FIRST -> "Favorites first"
+    SortMode.DURATION_DESC -> "Duration (longest first)"
+    SortMode.DURATION_ASC -> "Duration (shortest first)"
 }

@@ -142,7 +142,11 @@ private fun BluetoothSheetContent(
             return@Column
         }
 
-        // ── Enable toggle ────────────────────────────────────────
+        // ── Enable toggle + settings link ────────────────────────
+        // Switch acts as on/off: ON path uses ACTION_REQUEST_ENABLE
+        // (system consent dialog). OFF path opens system Bluetooth
+        // settings — Android removed the public BluetoothAdapter.disable()
+        // API for SDK 33+ apps, so this is the cleanest path.
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -153,10 +157,25 @@ private fun BluetoothSheetContent(
                 color = TextPrimary,
                 modifier = Modifier.weight(1f)
             )
-            if (!isEnabled) {
-                FilledTonalButton(onClick = onEnable) { Text("Turn on") }
-            } else {
-                TextButton(onClick = onOpenSettings) { Text("System settings", color = TealAccent) }
+            Switch(
+                checked = isEnabled,
+                onCheckedChange = { wantOn ->
+                    if (wantOn) onEnable() else onOpenSettings()
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = TealAccent,
+                    checkedTrackColor = Teal800,
+                    uncheckedThumbColor = DisabledGrey,
+                    uncheckedTrackColor = SurfaceElevated
+                )
+            )
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onOpenSettings) {
+                Text(
+                    text = "Settings",
+                    color = TealAccent,
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
 

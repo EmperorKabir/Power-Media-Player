@@ -54,7 +54,9 @@ enum class SortMode {
     SIZE_DESC,
     TYPE,
     DATE_DESC,
-    FAVORITES_FIRST
+    FAVORITES_FIRST,
+    DURATION_DESC,   // longest first
+    DURATION_ASC     // shortest first
 }
 
 /**
@@ -171,6 +173,8 @@ class LibraryViewModel @Inject constructor(
                     else -> TextNormalizer.compare(a.title, b.title)
                 }
             }
+            SortMode.DURATION_DESC -> compareByDescending { it.duration }
+            SortMode.DURATION_ASC -> compareBy { it.duration }
         }
         return files.sortedWith(byMode)
     }

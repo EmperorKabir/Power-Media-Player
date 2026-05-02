@@ -247,7 +247,16 @@ class PlayerViewModel @Inject constructor(
                 volume = true,
                 sleepTimer = hasMedia,
                 trackSlider = hasMedia && playerState.duration > 0 && playerState.isSeekable,
-                playlistSlider = playerState.isPartOfPlaylist && playerState.totalPlaylistDuration > 0 && playerState.isSeekable
+                // Full slider enabled when EITHER (a) we're playing a multi-
+                // track queue (cross-track scrubbing) OR (b) the current
+                // file has chapters (chapter slider scrubs within current
+                // chapter; full slider scrubs the entire file). The (b)
+                // path makes Drive M4Bs and other single-file audiobooks
+                // scrubbable end-to-end.
+                playlistSlider = (
+                    (playerState.isPartOfPlaylist && playerState.totalPlaylistDuration > 0) ||
+                    (playerState.hasChapters && playerState.duration > 0)
+                ) && playerState.isSeekable
             ),
             isVideoContent = playerState.isVideoContent
         )

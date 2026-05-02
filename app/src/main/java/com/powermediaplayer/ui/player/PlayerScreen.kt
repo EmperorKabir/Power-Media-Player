@@ -257,18 +257,19 @@ private fun PlayerScreenCompact(
             )
         }
 
-        // Bottom-anchored gradient scrim. For video, kept very subtle
-        // (peak ~3% black) so the controls have a tiny readability lift
-        // without obscuring picture. Audio retains the existing heavier
-        // scrim because there's no picture to compete with.
+        // Bottom-anchored gradient scrim. For video, top 60% transparent,
+        // bottom 40% ramps from light tint to ~55% black so the controls
+        // are clearly readable against bright frames without obscuring
+        // the picture. Audio retains the existing heavier scrim because
+        // there's no picture to compete with.
         val scrim: Brush = remember(uiState.isVideoContent) {
             val cols = if (uiState.isVideoContent) {
                 listOf(
                     Color.Transparent,
                     Color.Transparent,
                     Color.Transparent,
-                    OledBlack.copy(alpha = 0.015f),
-                    OledBlack.copy(alpha = 0.03f)
+                    OledBlack.copy(alpha = 0.25f),
+                    OledBlack.copy(alpha = 0.55f)
                 )
             } else {
                 listOf(
