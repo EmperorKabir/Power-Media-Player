@@ -644,6 +644,11 @@ class PlaybackConnection @Inject constructor(
         val overAlbum = localMetadata?.album?.takeIf { it.isNotBlank() }
         val overArtwork = localMetadata?.artworkUri
         val overArtworkBytes = localMetadata?.artworkBytes
+        android.util.Log.i(
+            "PowerMediaPlayer",
+            "updatePlayerState: artBytes=${overArtworkBytes?.size ?: 0} " +
+                "metaArtData=${metadata.artworkData?.size ?: 0}"
+        )
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,

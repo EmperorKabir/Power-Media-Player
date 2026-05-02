@@ -198,18 +198,20 @@ private fun PlayerScreenCompact(
 ) {
     // Video mode: tap to toggle controls; auto-hide after 32 s.
     // Audio: controls always visible — never auto-hide.
-    // Keys deliberately exclude isPlaying so a brief buffering blip
-    // doesn't reset the timer, which previously made it never fire.
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
     LaunchedEffect(uiState.isVideoContent, controlsVisible) {
+        android.util.Log.i(
+            "PowerMediaPlayer",
+            "ControlsState: visible=$controlsVisible isVideo=${uiState.isVideoContent}"
+        )
         if (uiState.isVideoContent && controlsVisible) {
             delay(32_000)
             controlsVisible = false
+            android.util.Log.i("PowerMediaPlayer", "Auto-hide fired (video)")
         }
     }
-    // Audio mode: ensure controls are visible at all times.
     LaunchedEffect(uiState.isVideoContent) {
         if (!uiState.isVideoContent) controlsVisible = true
     }
