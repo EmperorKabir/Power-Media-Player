@@ -306,8 +306,14 @@ fun LibraryScreen(
                             file = file,
                             isFavorite = file.uri.toString() in uiState.favorites,
                             onClick = {
-                                // Enqueue all visible files, start at tapped index
-                                viewModel.playFiles(files, index)
+                                // Videos play single; audio queues the
+                                // visible list as an album/audiobook so
+                                // chapter / track navigation makes sense.
+                                if (file.isVideo) {
+                                    viewModel.playSingle(file)
+                                } else {
+                                    viewModel.playFiles(files, index)
+                                }
                                 onNavigateToPlayer()
                             },
                             onToggleFavorite = { viewModel.toggleFavorite(file.uri) }

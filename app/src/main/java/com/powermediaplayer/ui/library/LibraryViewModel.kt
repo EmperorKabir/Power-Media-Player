@@ -178,8 +178,18 @@ class LibraryViewModel @Inject constructor(
      * Create Media3 MediaItems from a list of media files for playback.
      */
     fun createMediaItems(files: List<MediaFileInfo>, startIndex: Int = 0): Pair<List<MediaItem>, Int> {
-        val items = files.map { file ->
-            val extras = com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, file.uri)
+        val items = files.mapIndexed { idx, file ->
+            // Chapter extraction opens MediaExtractor on each URI — slow
+            // when the visible list is 40+ items. Only run it for the
+            // tapped item; the rest get a hint-only Bundle so the player
+            // starts immediately. Chapters for other queue items will be
+            // parsed lazily on item transition (cheaper than blocking the
+            // tap-to-play flow).
+            val extras = if (idx == startIndex) {
+                com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, file.uri)
+            } else {
+                android.os.Bundle()
+            }
             // Video hint travels in extras so PlaybackConnection knows the
             // file is video before the player has finished parsing tracks
             // (the existing currentTracks-based detection races with the
@@ -221,6 +231,42 @@ class LibraryViewModel @Inject constructor(
             playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
         } catch (t: Throwable) {
             android.util.Log.e("PowerMediaPlayer", "playFiles failed", t)
+        }
+    }
+
+    /**
+     * Single-file playback — for videos we don't want every file in the
+     * folder to surface as a "playlist / album" with the Full slider and
+     * X / N counter. Audio still uses [playFiles] so albums and audiobook
+     * folders work as expected.
+     */
+    fun playSingle(file: MediaFileInfo) {
+        try {
+            val extras = com.powermediaplayer.util.M4bChapterParser
+                .extractChaptersAsBundle(context, file.uri)
+            extras.putBoolean("is_video_hint", file.isVideo)
+            val item = MediaItem.Builder()
+                .setMediaId(file.uri.toString())
+                .setUri(file.uri)
+                .setRequestMetadata(
+                    MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(file.uri)
+                        .build()
+                )
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(file.title)
+                        .setArtist(file.artist)
+                        .setAlbumTitle(file.album)
+                        .setArtworkUri(file.albumArtUri)
+                        .setExtras(extras)
+                        .build()
+                )
+                .build()
+            playbackConnection.setMediaItems(listOf(item), 0)
+            playbackConnection.setVideoModeHint(file.isVideo)
+        } catch (t: Throwable) {
+            android.util.Log.e("PowerMediaPlayer", "playSingle failed", t)
         }
     }
 

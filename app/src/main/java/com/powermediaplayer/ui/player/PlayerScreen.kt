@@ -1,6 +1,7 @@
 package com.powermediaplayer.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -190,13 +191,13 @@ private fun PlayerScreenCompact(
     onShowChapterPicker: () -> Unit,
     horizontalPadding: Int = 0
 ) {
-    // Video mode: tap to toggle controls; auto-hide after 4s while playing.
+    // Video mode: tap to toggle controls; auto-hide after 32 s while playing.
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
     LaunchedEffect(uiState.isVideoContent, uiState.isPlaying, controlsVisible) {
         if (uiState.isVideoContent && uiState.isPlaying && controlsVisible) {
-            delay(4000)
+            delay(32_000)
             controlsVisible = false
         }
     }
@@ -234,8 +235,8 @@ private fun PlayerScreenCompact(
 
         AnimatedVisibility(
             visible = showOverlay,
-            enter = fadeIn(),
-            exit = fadeOut()
+            enter = fadeIn(animationSpec = tween(durationMillis = 500)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 1000))
         ) {
             // Gradient scrim — heavy fade for audio (album art under controls);
             // subtle bottom-only fade for video so the picture stays visible.
@@ -265,8 +266,8 @@ private fun PlayerScreenCompact(
 
         AnimatedVisibility(
             visible = showOverlay,
-            enter = fadeIn(),
-            exit = fadeOut()
+            enter = fadeIn(animationSpec = tween(durationMillis = 500)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 1000))
         ) {
         Column(
             modifier = Modifier
@@ -375,24 +376,9 @@ private fun PlayerScreenExpanded(
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted
             )
-            // Subtle right-edge fade into black. Previous gradient had
-            // startX/endX swapped, which produced black-on-LEFT and dimmed
-            // the entire cover. Now: bright art on left, fading to black
-            // at the right edge where the controls panel begins.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Transparent,
-                                OledBlack.copy(alpha = 0.6f),
-                                OledBlack
-                            )
-                        )
-                    )
-            )
+            // No overlay — the cover art panel is bounded by the right
+            // panel's OledBlack background; any gradient here just
+            // dimmed the artwork unnecessarily.
         }
 
         // Right panel: all controls

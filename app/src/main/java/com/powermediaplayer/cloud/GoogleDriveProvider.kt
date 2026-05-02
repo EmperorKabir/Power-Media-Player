@@ -179,19 +179,22 @@ class GoogleDriveProvider @Inject constructor(
      */
     suspend fun downloadToCache(
         item: CloudMediaItem,
-        maxBytes: Long = 4L * 1024 * 1024 * 1024  // 4 GB cap (long audiobooks)
+        rangeBytes: Long = 32L * 1024 * 1024  // first 32 MB — covers moov-at-front
     ): java.io.File? = withContext(Dispatchers.IO) {
-        if (item.size in 1..maxBytes || item.size <= 0) {
-            // Allowed: known-size <= cap, or unknown size (try anyway).
-        } else {
-            return@withContext null
-        }
         val token = fetchAccessTokenBlocking() ?: return@withContext null
         val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}.tmp")
         try {
             val req = okhttp3.Request.Builder()
                 .url(item.downloadUrl)
                 .addHeader("Authorization", "Bearer $token")
+                // HTTP Range request — pull only what we need to find moov.
+                // Drive accepts Range and serves a 206 Partial Content. For
+                // the rare M4B with moov at the END, the partial download
+                // won't include chapters; that's accepted as a trade-off
+                // because the full-file path took several minutes for
+                // multi-GB audiobooks and was the source of "metadata
+                // takes forever" complaints.
+                .addHeader("Range", "bytes=0-${rangeBytes - 1}")
                 .build()
             okhttp3.OkHttpClient().newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null

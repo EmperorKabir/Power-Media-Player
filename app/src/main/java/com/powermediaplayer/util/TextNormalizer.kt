@@ -28,20 +28,26 @@ object TextNormalizer {
         Collator.getInstance(locale).apply { strength = Collator.PRIMARY }
 
     /**
-     * Repair "mojibake" — UTF-8 bytes mistakenly decoded as Latin-1.
-     * Common in MP4 metadata read by ExoPlayer when the encoding marker
-     * is wrong: â€™ → ', â€" → —, Ã© → é, etc. Idempotent: returns the
-     * original string when re-decoding would lose information.
+     * Repair "mojibake" — UTF-8 bytes mistakenly decoded as Windows-1252.
+     * The classic example: the right curly apostrophe ' (U+2019) is UTF-8
+     * bytes E2 80 99. Decoded as CP1252 those bytes become "â€™" — three
+     * codepoints (U+00E2, U+20AC, U+2122). ISO-8859-1 has no glyph at
+     * 0x80 (€) or 0x99 (™), so encoding back via Latin-1 would silently
+     * lose those characters. Windows-1252 is the correct round-trip.
+     *
+     * Idempotent: returns the original string when re-decoding would
+     * lose information or fail to improve the result.
      */
     fun fixMojibake(s: String): String {
         if (s.isEmpty()) return s
-        if (!s.any { it.code in 0x80..0xFF }) return s  // No Latin-1 high bytes — already clean
+        // Quick reject — strings with no characters in the Windows-1252
+        // mojibake-suspect range can't possibly be mojibake'd.
+        val mojibakeMarkers = setOf('â', 'Ã', '€', '™', 'š', 'ž', 'œ', '€')
+        if (s.none { it in mojibakeMarkers }) return s
         return try {
-            val bytes = s.toByteArray(Charsets.ISO_8859_1)
+            val cp1252 = java.nio.charset.Charset.forName("windows-1252")
+            val bytes = s.toByteArray(cp1252)
             val candidate = String(bytes, Charsets.UTF_8)
-            // Heuristic: prefer the candidate iff it strictly reduces the
-            // count of high-codepoint chars without producing replacement
-            // markers. Keeps legitimately Latin-1-only strings alone.
             val hadReplacement = candidate.contains('�')
             val nonAsciiBefore = s.count { it.code > 127 }
             val nonAsciiAfter = candidate.count { it.code > 127 }
