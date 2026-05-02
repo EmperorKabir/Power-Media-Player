@@ -275,7 +275,7 @@ class PlaybackConnection @Inject constructor(
      */
     fun setVideoModeHint(isVideo: Boolean) {
         videoModeHint = isVideo
-        updatePlayerState()
+        updatePlayerStateOnMain()
     }
 
     /**
@@ -295,7 +295,7 @@ class PlaybackConnection @Inject constructor(
      */
     fun setLocalMetadata(meta: LocalMetadataOverride?) {
         localMetadata = meta
-        updatePlayerState()
+        updatePlayerStateOnMain()
     }
 
     /**
@@ -303,10 +303,26 @@ class PlaybackConnection @Inject constructor(
      * whose chapter atoms required an authenticated download). Pass null
      * (or empty) to clear; supersedes per-track extras-based chapters but
      * is itself superseded by folder mode.
+     *
+     * SAFE FROM ANY THREAD — reschedules updatePlayerState onto main since
+     * MediaController.getMediaMetadata is main-thread-only.
      */
     fun setLocalChapters(chapters: List<ChapterInfo>?) {
         localChapters = chapters?.takeIf { it.isNotEmpty() }
-        updatePlayerState()
+        updatePlayerStateOnMain()
+    }
+
+    /**
+     * Wrapper that ensures updatePlayerState always runs on the main thread.
+     * Background coroutines (Drive download, parser) call setLocalChapters /
+     * setLocalMetadata / setCloudFetchInProgress / setFolderChapters from
+     * Dispatchers.IO — the underlying MediaController calls are NOT thread
+     * safe, so dispatch back to main first.
+     */
+    private fun updatePlayerStateOnMain() {
+        // scope is Dispatchers.Main.immediate — runs synchronously when
+        // already on main, otherwise posts.
+        scope.launch { updatePlayerState() }
     }
 
     /**
@@ -315,7 +331,7 @@ class PlaybackConnection @Inject constructor(
      */
     fun setFolderChapters(chapters: List<ChapterInfo>?) {
         folderChapters = chapters?.takeIf { it.isNotEmpty() }
-        updatePlayerState()
+        updatePlayerStateOnMain()
     }
 
     /**

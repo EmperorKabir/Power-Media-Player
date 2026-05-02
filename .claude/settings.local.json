@@ -15,7 +15,8 @@
       "Bash(adb uninstall *)",
       "Bash(./gradlew clean *)",
       "Bash(\"/c/Users/Kabir/AppData/Local/Android/Sdk/platform-tools/adb\" uninstall *)",
-      "Bash(./gradlew :app:installDebug)"
+      "Bash(./gradlew :app:installDebug)",
+      "Bash(\"/c/Users/Kabir/AppData/Local/Android/Sdk/platform-tools/adb\" logcat *)"
     ]
   }
 }
