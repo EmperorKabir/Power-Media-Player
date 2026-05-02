@@ -14,6 +14,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
@@ -70,6 +71,17 @@ class PlaybackService : MediaSessionService() {
     private val serviceScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
     )
+
+    /**
+     * Running target for skip-button taps so 5 rapid skip-back-30 taps
+     * cumulatively move 150 s back instead of all reading the same stale
+     * currentPosition and effectively landing at -30 s. Cleared 600 ms
+     * after the last tap (the player has by then settled at the seek
+     * target and currentPosition is fresh again).
+     */
+    @Volatile
+    private var pendingSeekTarget: Long = -1L
+    private var clearPendingSeekJob: kotlinx.coroutines.Job? = null
 
     companion object {
         // Custom session commands for features not in standard transport controls
@@ -131,12 +143,28 @@ class PlaybackService : MediaSessionService() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
             .setDataSourceFactory(dataSourceFactory)
 
+        // Larger LoadControl buffers (120 s instead of the default ~50 s)
+        // so a "far forward" scrub on a long video still lands inside
+        // already-buffered content, avoiding the decoder re-init that
+        // surfaces as the user-reported "stutter on far forward seeks".
+        // Min playback buffer left at default; only the max is bumped.
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                /* minBufferMs */            DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                /* maxBufferMs */            120_000,
+                /* bufferForPlaybackMs */    DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                /* bufferForPlaybackAfterRebufferMs */
+                                             DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+            )
+            .build()
+
         // Build ExoPlayer with audio focus and wake lock.
         // Audio offload is left at the default (DISABLED) so AudioSink can
         // be re-initialised on sample-rate changes mid-stream — common in
         // chapter-concatenated M4B files.
         player = ExoPlayer.Builder(this, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -148,15 +176,18 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
 
-        // Snap seeks to the nearest keyframe instead of decoding from the
-        // previous keyframe to the exact frame. Backward seeks on H.264/
-        // HEVC 4K content are catastrophically slow with the default EXACT
-        // mode (decoder must rewind a whole GOP and re-decode forward,
-        // sometimes 200–500 ms of stall during which the video freezes).
-        // CLOSEST_SYNC trades a few frames of seek precision for instant
-        // response — what the user perceives as "scrubbing back" stutter
-        // and "skip-button" lag.
-        player!!.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+        // PREVIOUS_SYNC always seeks to the keyframe BEFORE the requested
+        // position. Two reasons over the previous CLOSEST_SYNC:
+        //   1. Always responsive — the decoder never has to decode forward
+        //      from a prior keyframe to reach the exact target.
+        //   2. Direction-correct — a back-skip with CLOSEST_SYNC could
+        //      snap to a keyframe AHEAD of the requested target, making
+        //      the skip appear not to happen. PREVIOUS_SYNC guarantees
+        //      every back-skip moves backward and every fwd-skip lands
+        //      at-or-before the requested position (visible as a few
+        //      seconds of imprecision, which is what every other media
+        //      player does).
+        player!!.setSeekParameters(SeekParameters.PREVIOUS_SYNC)
 
         // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
         exoPlayerRef = java.lang.ref.WeakReference(player!!)
@@ -300,22 +331,20 @@ class PlaybackService : MediaSessionService() {
             customCommand: SessionCommand,
             args: Bundle
         ): ListenableFuture<SessionResult> {
-            val player = session.player
-            val currentPos = player.currentPosition
-
-            when (customCommand.customAction) {
-                ACTION_SKIP_BACK_5 -> player.seekTo(maxOf(0, currentPos - 5_000))
-                ACTION_SKIP_BACK_10 -> player.seekTo(maxOf(0, currentPos - 10_000))
-                ACTION_SKIP_BACK_15 -> player.seekTo(maxOf(0, currentPos - 15_000))
-                ACTION_SKIP_BACK_20 -> player.seekTo(maxOf(0, currentPos - 20_000))
-                ACTION_SKIP_BACK_30 -> player.seekTo(maxOf(0, currentPos - 30_000))
-                ACTION_SKIP_FORWARD_5 -> player.seekTo(currentPos + 5_000)
-                ACTION_SKIP_FORWARD_10 -> player.seekTo(currentPos + 10_000)
-                ACTION_SKIP_FORWARD_15 -> player.seekTo(currentPos + 15_000)
-                ACTION_SKIP_FORWARD_20 -> player.seekTo(currentPos + 20_000)
-                ACTION_SKIP_FORWARD_30 -> player.seekTo(currentPos + 30_000)
+            val deltaMs: Long = when (customCommand.customAction) {
+                ACTION_SKIP_BACK_5 -> -5_000
+                ACTION_SKIP_BACK_10 -> -10_000
+                ACTION_SKIP_BACK_15 -> -15_000
+                ACTION_SKIP_BACK_20 -> -20_000
+                ACTION_SKIP_BACK_30 -> -30_000
+                ACTION_SKIP_FORWARD_5 -> 5_000
+                ACTION_SKIP_FORWARD_10 -> 10_000
+                ACTION_SKIP_FORWARD_15 -> 15_000
+                ACTION_SKIP_FORWARD_20 -> 20_000
+                ACTION_SKIP_FORWARD_30 -> 30_000
+                else -> return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
-
+            cumulativeSkip(session.player, deltaMs)
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
@@ -386,6 +415,33 @@ class PlaybackService : MediaSessionService() {
                 }
             }.toMutableList()
             return Futures.immediateFuture(resolvedItems)
+        }
+    }
+
+    /**
+     * Cumulative skip handler — each tap adds [deltaMs] to a running
+     * pending target so 5 rapid skip-back-30 taps move 150 s back, not
+     * 30 s. Without this, every tap reads the same stale currentPosition
+     * (the player's position hasn't updated yet between taps), so taps
+     * blur together and the user perceives "some skips don't happen".
+     *
+     * Pending target clears 600 ms after the last tap — by then the
+     * player has settled and currentPosition is fresh.
+     */
+    private fun cumulativeSkip(player: Player, deltaMs: Long) {
+        val base = if (pendingSeekTarget >= 0L) pendingSeekTarget else player.currentPosition
+        val rawTarget = base + deltaMs
+        val duration = player.duration.let { if (it == C.TIME_UNSET) Long.MAX_VALUE else it }
+        val target = rawTarget.coerceIn(0L, duration)
+        pendingSeekTarget = target
+        player.seekTo(target)
+        clearPendingSeekJob?.cancel()
+        // 1500 ms is generous enough to cover even a slow human cadence
+        // of "one tap per second", while still resetting before the user
+        // moves to a different control.
+        clearPendingSeekJob = serviceScope.launch {
+            kotlinx.coroutines.delay(1500)
+            pendingSeekTarget = -1L
         }
     }
 
