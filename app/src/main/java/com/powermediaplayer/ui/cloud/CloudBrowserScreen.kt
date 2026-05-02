@@ -112,9 +112,55 @@ fun CloudBrowserScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
+                    // Favourites strip — only at Drive root, only when
+                    // there's at least one favourite. Single horizontal
+                    // section above the regular file list.
+                    val showFavourites = uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE &&
+                        uiState.folderStack.size <= 1 &&
+                        uiState.driveFavourites.isNotEmpty()
+                    if (showFavourites) {
+                        item(key = "fav_header") {
+                            Text(
+                                text = "Favourite folders",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TealAccent,
+                                modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)
+                            )
+                        }
+                        items(uiState.driveFavourites, key = { "fav_${it.id}" }) { fav ->
+                            FavouriteFolderRow(
+                                fav = fav,
+                                onClick = { viewModel.openDriveFavourite(fav) },
+                                onUnstar = {
+                                    viewModel.toggleDriveFavourite(
+                                        CloudMediaItem(
+                                            id = fav.id,
+                                            name = fav.name,
+                                            mimeType = "application/vnd.google-apps.folder",
+                                            size = 0L,
+                                            downloadUrl = "",
+                                            sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                                            isFolder = true
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                        item(key = "fav_divider") {
+                            HorizontalDivider(
+                                color = SurfaceElevated,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
                     items(uiState.items, key = { it.id }) { item ->
+                        val isFav = uiState.driveFavourites.any { it.id == item.id }
+                        val canFavourite = item.isFolder && item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
                         CloudItemRow(
                             item = item,
+                            isFavourite = isFav,
+                            canFavourite = canFavourite,
+                            onToggleFavourite = { viewModel.toggleDriveFavourite(item) },
                             onClick = {
                                 if (item.isFolder) {
                                     viewModel.openItem(item)
@@ -297,7 +343,13 @@ private fun ProviderCard(
 }
 
 @Composable
-private fun CloudItemRow(item: CloudMediaItem, onClick: () -> Unit) {
+private fun CloudItemRow(
+    item: CloudMediaItem,
+    onClick: () -> Unit,
+    isFavourite: Boolean = false,
+    canFavourite: Boolean = false,
+    onToggleFavourite: () -> Unit = {}
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -329,5 +381,62 @@ private fun CloudItemRow(item: CloudMediaItem, onClick: () -> Unit) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (canFavourite) {
+            IconButton(onClick = onToggleFavourite, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = if (isFavourite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                    contentDescription = if (isFavourite) "Remove from favourites" else "Add to favourites",
+                    tint = if (isFavourite) TealAccent else TextTertiary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FavouriteFolderRow(
+    fav: com.powermediaplayer.data.preferences.DriveFavouriteFolder,
+    onClick: () -> Unit,
+    onUnstar: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Teal800),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.Star,
+                contentDescription = "Favourite folder",
+                tint = TealAccent,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = fav.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onUnstar, modifier = Modifier.size(36.dp)) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = "Remove from favourites",
+                tint = TealAccent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }

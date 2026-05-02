@@ -298,7 +298,15 @@ fun LibraryScreen(
                     }
                 }
             } else {
+                // Auto-scroll to top whenever the sort mode (or active tab)
+                // changes — otherwise the list keeps its previous scroll
+                // offset which is disorienting when items have re-ordered.
+                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                LaunchedEffect(uiState.sortMode, uiState.selectedTab) {
+                    listState.scrollToItem(0)
+                }
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {

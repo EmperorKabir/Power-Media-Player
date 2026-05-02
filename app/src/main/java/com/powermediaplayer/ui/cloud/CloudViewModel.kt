@@ -10,6 +10,8 @@ import com.powermediaplayer.cloud.CloudMediaItem
 import com.powermediaplayer.cloud.CloudProviderType
 import com.powermediaplayer.cloud.GoogleDriveProvider
 import com.powermediaplayer.cloud.SpotifyProvider
+import com.powermediaplayer.data.preferences.DriveFavouriteFolder
+import com.powermediaplayer.data.preferences.SettingsDataStore
 import com.powermediaplayer.service.ChapterInfo
 import com.powermediaplayer.service.LocalMetadataOverride
 import com.powermediaplayer.service.PlaybackConnection
@@ -31,7 +33,8 @@ data class CloudUiState(
     val errorMessage: String? = null,
     val activeProvider: CloudProviderType? = null,
     val items: List<CloudMediaItem> = emptyList(),
-    val folderStack: List<Pair<String?, String>> = listOf(null to "Root")
+    val folderStack: List<Pair<String?, String>> = listOf(null to "Root"),
+    val driveFavourites: List<DriveFavouriteFolder> = emptyList()
 )
 
 @HiltViewModel
@@ -39,7 +42,8 @@ class CloudViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val driveProvider: GoogleDriveProvider,
     private val spotifyProvider: SpotifyProvider,
-    private val playbackConnection: PlaybackConnection
+    private val playbackConnection: PlaybackConnection,
+    private val settingsDataStore: SettingsDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CloudUiState())
@@ -52,6 +56,29 @@ class CloudViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(driveLoggedIn = d, spotifyLoggedIn = s)
                 }
         }
+        viewModelScope.launch {
+            settingsDataStore.driveFavouriteFolders.collect { favs ->
+                _uiState.value = _uiState.value.copy(driveFavourites = favs)
+            }
+        }
+    }
+
+    /**
+     * Toggle a Drive folder's favourite status. Used by the star icon
+     * next to each folder row in the Drive browser.
+     */
+    fun toggleDriveFavourite(item: CloudMediaItem) {
+        if (!item.isFolder || item.sourceProvider != CloudProviderType.GOOGLE_DRIVE) return
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsDataStore.toggleDriveFavouriteFolder(item.id, item.name)
+        }
+    }
+
+    /**
+     * Open a previously-favourited Drive folder.
+     */
+    fun openDriveFavourite(fav: DriveFavouriteFolder) {
+        browseDrive(fav.id, fav.name)
     }
 
     fun buildDriveSignInIntent(): Intent = driveProvider.buildSignInIntent()

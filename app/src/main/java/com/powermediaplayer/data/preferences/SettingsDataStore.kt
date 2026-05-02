@@ -37,6 +37,11 @@ class SettingsDataStore @Inject constructor(
         val BT_NEXT_ACTION = stringPreferencesKey("bt_next_action")
         val BT_SKIP_BACK_SECONDS = intPreferencesKey("bt_skip_back_seconds")
         val BT_SKIP_FORWARD_SECONDS = intPreferencesKey("bt_skip_forward_seconds")
+
+        // Drive favourite folders. Each entry is "id|displayName" so we
+        // preserve the human label without an extra round-trip to the
+        // Drive API on every browse.
+        val DRIVE_FAVOURITE_FOLDERS = stringSetPreferencesKey("drive_favourite_folders")
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
@@ -157,6 +162,31 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    // ── Drive favourite folders ──────────────────────────────────
+    val driveFavouriteFolders: Flow<List<DriveFavouriteFolder>> =
+        context.dataStore.data.map { prefs ->
+            (prefs[Keys.DRIVE_FAVOURITE_FOLDERS] ?: emptySet())
+                .mapNotNull { entry ->
+                    val sep = entry.indexOf('|')
+                    if (sep <= 0) return@mapNotNull null
+                    DriveFavouriteFolder(
+                        id = entry.substring(0, sep),
+                        name = entry.substring(sep + 1)
+                    )
+                }
+                .sortedBy { it.name.lowercase() }
+        }
+
+    suspend fun toggleDriveFavouriteFolder(id: String, name: String) {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[Keys.DRIVE_FAVOURITE_FOLDERS] ?: emptySet()).toMutableSet()
+            val existing = current.firstOrNull { it.startsWith("$id|") }
+            if (existing != null) current.remove(existing)
+            else current.add("$id|$name")
+            prefs[Keys.DRIVE_FAVOURITE_FOLDERS] = current
+        }
+    }
+
     /**
      * Synchronous snapshot of the Bluetooth mapping — used by
      * PlaybackService.MediaSession.Callback which is invoked on the
@@ -186,6 +216,11 @@ object BluetoothMediaActions {
     const val PREV_CHAPTER = "previous_chapter"
     const val NEXT_CHAPTER = "next_chapter"
 }
+
+/**
+ * Persisted reference to a Drive folder the user has starred.
+ */
+data class DriveFavouriteFolder(val id: String, val name: String)
 
 /**
  * Immutable snapshot for the binder-thread MediaSession.Callback.
