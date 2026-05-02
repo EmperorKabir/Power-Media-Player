@@ -116,7 +116,16 @@ class CloudViewModel @Inject constructor(
 
     fun navigateUp() {
         val stack = _uiState.value.folderStack
-        if (stack.size <= 1) return
+        // At root of a provider → leave the provider, go back to the
+        // provider-selection screen so the user can pick a different one.
+        if (stack.size <= 1) {
+            _uiState.value = _uiState.value.copy(
+                activeProvider = null,
+                items = emptyList(),
+                folderStack = listOf(null to "Root")
+            )
+            return
+        }
         val parent = stack.dropLast(1).last()
         val active = _uiState.value.activeProvider
         if (active == CloudProviderType.GOOGLE_DRIVE) {
@@ -229,21 +238,15 @@ class CloudViewModel @Inject constructor(
                                 val album = mmr.extractMetadata(
                                     android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM
                                 )
-                                val artworkUri = mmr.embeddedPicture?.let { bytes ->
-                                    val artFile = java.io.File(
-                                        context.cacheDir, "drive_art_${item.id}.jpg"
-                                    )
-                                    artFile.outputStream().use { it.write(bytes) }
-                                    android.net.Uri.fromFile(artFile)
-                                }
+                                val artBytes = mmr.embeddedPicture
                                 if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
-                                    !album.isNullOrBlank() || artworkUri != null) {
+                                    !album.isNullOrBlank() || artBytes != null) {
                                     playbackConnection.setLocalMetadata(
                                         LocalMetadataOverride(
                                             title = title,
                                             artist = artist,
                                             album = album,
-                                            artworkUri = artworkUri
+                                            artworkBytes = artBytes
                                         )
                                     )
                                 }

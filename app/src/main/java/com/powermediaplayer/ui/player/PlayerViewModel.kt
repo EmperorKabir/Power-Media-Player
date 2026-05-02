@@ -166,6 +166,7 @@ class PlayerViewModel @Inject constructor(
             album = TextNormalizer.normalize(playerState.album),
             description = TextNormalizer.normalize(playerState.description),
             artworkUri = playerState.artworkUri,
+            artworkBytes = playerState.artworkBytes,
             hasCoverArt = playerState.hasCoverArt,
             currentPosition = displayedTrackPos,
             duration = displayedTrackDur,

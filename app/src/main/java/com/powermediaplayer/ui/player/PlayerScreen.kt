@@ -53,19 +53,13 @@ fun PlayerScreen(
     var showChapterPicker by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Video forces the Compact layout regardless of window size — the
-        // Expanded (side-by-side) layout has no video surface, which is why
-        // unfolded foldables saw the audio layout for video files.
+        // Layout is chosen by SCREEN SIZE only — no longer toggled by
+        // isVideoContent so the layout doesn't tear down and rebuild
+        // every time the video flag flips during initial load (root
+        // cause of the "screen jumps" and "controls jump" symptoms).
+        // PlayerScreenExpanded now hosts VideoSurface in its left panel
+        // when video, CoverArtBackground when audio.
         when {
-            uiState.isVideoContent -> PlayerScreenCompact(
-                uiState = uiState,
-                viewModel = viewModel,
-                coverColors = coverColors,
-                onColorsExtracted = { coverColors = it },
-                onShowSleepTimer = { showSleepTimerDialog = true },
-                onShowChapterPicker = { showChapterPicker = true },
-                horizontalPadding = 0
-            )
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded -> PlayerScreenExpanded(
                 uiState = uiState,
                 viewModel = viewModel,
@@ -191,24 +185,33 @@ private fun PlayerScreenCompact(
     onShowChapterPicker: () -> Unit,
     horizontalPadding: Int = 0
 ) {
-    // Video mode: tap to toggle controls; auto-hide after 32 s while playing.
+    // Video mode: tap to toggle controls; auto-hide after 32 s.
+    // Audio: controls always visible — never auto-hide.
+    // Keys deliberately exclude isPlaying so a brief buffering blip
+    // doesn't reset the timer, which previously made it never fire.
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
-    LaunchedEffect(uiState.isVideoContent, uiState.isPlaying, controlsVisible) {
-        if (uiState.isVideoContent && uiState.isPlaying && controlsVisible) {
+    LaunchedEffect(uiState.isVideoContent, controlsVisible) {
+        if (uiState.isVideoContent && controlsVisible) {
             delay(32_000)
             controlsVisible = false
         }
+    }
+    // Audio mode: ensure controls are visible at all times.
+    LaunchedEffect(uiState.isVideoContent) {
+        if (!uiState.isVideoContent) controlsVisible = true
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(uiState.isVideoContent) {
-                if (uiState.isVideoContent) {
-                    detectTapGestures(onTap = { controlsVisible = !controlsVisible })
-                }
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = {
+                    // Tap toggles only in video mode; audio mode has no
+                    // hide state to toggle.
+                    if (uiState.isVideoContent) controlsVisible = !controlsVisible
+                })
             }
     ) {
         if (uiState.isVideoContent) {
@@ -224,6 +227,7 @@ private fun PlayerScreenCompact(
             // Audio content: show album art with palette-extracted colours
             CoverArtBackground(
                 artworkUri = uiState.artworkUri,
+                artworkBytes = uiState.artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted
             )
@@ -365,20 +369,27 @@ private fun PlayerScreenExpanded(
             .fillMaxSize()
             .background(OledBlack)
     ) {
-        // Left panel: cover art fills half the screen
+        // Left panel: video frame OR cover art (swap content, NOT layout)
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
         ) {
-            CoverArtBackground(
-                artworkUri = uiState.artworkUri,
-                hasCoverArt = uiState.hasCoverArt,
-                onColorsExtracted = onColorsExtracted
-            )
-            // No overlay — the cover art panel is bounded by the right
-            // panel's OledBlack background; any gradient here just
-            // dimmed the artwork unnecessarily.
+            if (uiState.isVideoContent) {
+                VideoSurface(
+                    isVideoContent = true,
+                    videoWidth = uiState.videoWidth,
+                    videoHeight = uiState.videoHeight,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                CoverArtBackground(
+                    artworkUri = uiState.artworkUri,
+                    artworkBytes = uiState.artworkBytes,
+                    hasCoverArt = uiState.hasCoverArt,
+                    onColorsExtracted = onColorsExtracted
+                )
+            }
         }
 
         // Right panel: all controls

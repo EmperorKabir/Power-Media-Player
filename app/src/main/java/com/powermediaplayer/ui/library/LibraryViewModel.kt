@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -431,6 +432,9 @@ class LibraryViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(selectedTab = 0)
             }
             recomputeDisplayed()
+            // Auto-play the picked file — previously the user picked a file
+            // and nothing happened; they had to manually find it in the list.
+            withContext(Dispatchers.Main) { playSingle(fileInfo) }
         }
     }
 

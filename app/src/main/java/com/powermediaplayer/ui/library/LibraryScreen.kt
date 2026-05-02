@@ -89,6 +89,7 @@ fun LibraryScreen(
                 )
             } catch (_: Exception) {}
             viewModel.handlePickedFile(uri)
+            onNavigateToPlayer()
         }
     }
 

@@ -31,6 +31,7 @@ fun CoverArtBackground(
     artworkUri: Any?,
     hasCoverArt: Boolean,
     onColorsExtracted: (CoverArtColors?) -> Unit = {},
+    artworkBytes: ByteArray? = null,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -38,12 +39,15 @@ fun CoverArtBackground(
             .fillMaxSize()
             .background(OledBlack)
     ) {
-        if (hasCoverArt && artworkUri != null) {
+        // Prefer raw bytes when available — bypasses every URI-permission
+        // / file-scheme issue we hit with cloud-extracted artwork.
+        val model: Any? = artworkBytes ?: artworkUri
+        if (hasCoverArt && model != null) {
             val context = LocalContext.current
 
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(artworkUri)
+                    .data(model)
                     .allowHardware(false) // Disable hardware bitmaps — required for Palette extraction
                     .build(),
                 contentDescription = "Album cover art",

@@ -44,6 +44,7 @@ data class PlayerState(
     val artist: String = "",
     val album: String = "",
     val artworkUri: Uri? = null,
+    val artworkBytes: ByteArray? = null,
     val artworkBitmap: Bitmap? = null,
     val playbackSpeed: Float = 1.0f,
     val currentMediaItemIndex: Int = 0,
@@ -94,7 +95,8 @@ data class LocalMetadataOverride(
     val title: String? = null,
     val artist: String? = null,
     val album: String? = null,
-    val artworkUri: Uri? = null
+    val artworkUri: Uri? = null,
+    val artworkBytes: ByteArray? = null
 )
 
 /**
@@ -633,6 +635,7 @@ class PlaybackConnection @Inject constructor(
         val overArtist = localMetadata?.artist?.takeIf { it.isNotBlank() }
         val overAlbum = localMetadata?.album?.takeIf { it.isNotBlank() }
         val overArtwork = localMetadata?.artworkUri
+        val overArtworkBytes = localMetadata?.artworkBytes
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
@@ -643,6 +646,7 @@ class PlaybackConnection @Inject constructor(
             artist = overArtist ?: metadata.artist?.toString() ?: "",
             album = overAlbum ?: metadata.albumTitle?.toString() ?: "",
             artworkUri = overArtwork ?: metadata.artworkUri,
+            artworkBytes = overArtworkBytes ?: metadata.artworkData,
             playbackSpeed = c.playbackParameters.speed,
             currentMediaItemIndex = c.currentMediaItemIndex,
             mediaItemCount = c.mediaItemCount,
@@ -660,7 +664,8 @@ class PlaybackConnection @Inject constructor(
             videoWidth = preservedVw,
             videoHeight = preservedVh,
             isPartOfPlaylist = c.mediaItemCount > 1,
-            hasCoverArt = (overArtwork ?: metadata.artworkUri) != null || metadata.artworkData != null,
+            hasCoverArt = (overArtwork ?: metadata.artworkUri) != null ||
+                (overArtworkBytes ?: metadata.artworkData) != null,
             isVideoContent = hasVideoTrack,
             isSeekable = c.isCurrentMediaItemSeekable
         )

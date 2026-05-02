@@ -19,6 +19,7 @@ data class PlayerUiState(
 
     // Cover art
     val artworkUri: Uri? = null,
+    val artworkBytes: ByteArray? = null,
     val hasCoverArt: Boolean = false,
 
     // Progress - current track

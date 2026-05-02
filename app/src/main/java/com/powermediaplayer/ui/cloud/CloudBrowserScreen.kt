@@ -55,9 +55,13 @@ fun CloudBrowserScreen(
         TopAppBar(
             title = { Text("Cloud", style = MaterialTheme.typography.headlineMedium, color = TealAccent) },
             navigationIcon = {
-                if (uiState.activeProvider != null && uiState.folderStack.size > 1) {
+                if (uiState.activeProvider != null) {
                     IconButton(onClick = { viewModel.navigateUp() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Up", tint = TealAccent)
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (uiState.folderStack.size > 1) "Up a folder" else "Back to providers",
+                            tint = TealAccent
+                        )
                     }
                 }
             },
