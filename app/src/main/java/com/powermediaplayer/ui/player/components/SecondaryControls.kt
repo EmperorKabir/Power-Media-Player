@@ -231,9 +231,11 @@ fun SpeedControl(
 fun PreparedSpeedComponent(
     playbackSpeed: Float,
     onSpeedChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     var speedMenuExpanded by remember { mutableStateOf(false) }
+    val tint = if (enabled) TextSecondary else DisabledGrey
 
     Row(
         modifier = modifier,
@@ -243,27 +245,28 @@ fun PreparedSpeedComponent(
         Icon(
             imageVector = Icons.Filled.DirectionsRun,
             contentDescription = "Speed Icon",
-            tint = TextSecondary,
+            tint = tint,
             modifier = Modifier.size(20.dp)
         )
         Text(
             text = "Speed",
             style = MaterialTheme.typography.labelMedium,
-            color = TextSecondary
+            color = tint
         )
 
         ExposedDropdownMenuBox(
-            expanded = speedMenuExpanded,
-            onExpandedChange = { speedMenuExpanded = it },
+            expanded = enabled && speedMenuExpanded,
+            onExpandedChange = { if (enabled) speedMenuExpanded = it },
             modifier = Modifier.width(110.dp)
         ) {
             OutlinedTextField(
                 value = formatSpeed(playbackSpeed),
                 onValueChange = {},
                 readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = speedMenuExpanded) },
+                enabled = enabled,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = enabled && speedMenuExpanded) },
                 modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = enabled)
                     .height(44.dp),
                 textStyle = MaterialTheme.typography.labelLarge,
                 singleLine = true,
@@ -275,13 +278,17 @@ fun PreparedSpeedComponent(
                     focusedContainerColor = SurfaceElevated,
                     unfocusedContainerColor = SurfaceElevated,
                     focusedTrailingIconColor = TealAccent,
-                    unfocusedTrailingIconColor = TextSecondary
+                    unfocusedTrailingIconColor = TextSecondary,
+                    disabledBorderColor = DisabledGrey,
+                    disabledTextColor = DisabledGrey,
+                    disabledTrailingIconColor = DisabledGrey,
+                    disabledContainerColor = SurfaceElevated.copy(alpha = 0.5f)
                 ),
                 shape = RoundedCornerShape(10.dp)
             )
 
             ExposedDropdownMenu(
-                expanded = speedMenuExpanded,
+                expanded = enabled && speedMenuExpanded,
                 onDismissRequest = { speedMenuExpanded = false },
                 modifier = Modifier.background(SurfaceElevated)
             ) {

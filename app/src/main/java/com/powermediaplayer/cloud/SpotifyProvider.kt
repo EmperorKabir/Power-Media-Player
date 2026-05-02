@@ -55,8 +55,15 @@ data class SpotifyPlaybackState(
     // Spotify Web API does NOT expose lyrics — they're licensed from
     // Musixmatch and only surface inside the official Spotify clients.
     // LRCLib is a free, unauthenticated, community-maintained source.
-    val lyrics: String? = null
+    val lyrics: String? = null,
+    // Synced lyrics (when LRCLib has them) — parsed [mm:ss.xx]Line
+    // pairs. Empty when only plain text is available. Drives the
+    // current-line highlight + tap-to-seek in the player UI.
+    val syncedLyrics: List<LyricLine> = emptyList()
 )
+
+/** A single time-tagged line from a LRC-format lyric file. */
+data class LyricLine(val timeMs: Long, val text: String)
 
 /**
  * Spotify Web API integration via OAuth 2.0 + PKCE (no client secret required).
@@ -491,6 +498,7 @@ class SpotifyProvider @Inject constructor(
         pollJob = pollScope.launch {
             var lastTrackUri = ""
             var lastLyrics: String? = null
+            var lastSynced: List<LyricLine> = emptyList()
             while (isActive) {
                 val token = currentAccessToken()
                 if (token != null) {
@@ -501,13 +509,16 @@ class SpotifyProvider @Inject constructor(
                         // every second.
                         if (snap.trackUri != lastTrackUri) {
                             lastTrackUri = snap.trackUri
-                            lastLyrics = fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
+                            val pair = fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
+                            lastLyrics = pair?.first
+                            lastSynced = pair?.second.orEmpty()
                         }
-                        _spotifyState.value = snap.copy(lyrics = lastLyrics)
+                        _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
                     } else {
                         _spotifyState.value = null
                         lastTrackUri = ""
                         lastLyrics = null
+                        lastSynced = emptyList()
                     }
                 }
                 delay(1000)
@@ -525,7 +536,7 @@ class SpotifyProvider @Inject constructor(
         artist: String,
         album: String,
         durationMs: Long
-    ): String? {
+    ): Pair<String, List<LyricLine>>? {
         if (title.isBlank() || artist.isBlank()) return null
         val firstArtist = artist.substringBefore(',').trim()
         val durSec = (durationMs / 1000).toString()
@@ -541,24 +552,41 @@ class SpotifyProvider @Inject constructor(
                 val body = resp.body?.string().orEmpty()
                 val root = JsonParser.parseString(body).asJsonObject
                 val plain = root.get("plainLyrics")?.takeIf { !it.isJsonNull }?.asString
-                val synced = root.get("syncedLyrics")?.takeIf { !it.isJsonNull }?.asString
-                // Prefer synced (timestamps look messy as plain text but
-                // are the canonical form); strip [mm:ss.xx] tags for
-                // display since the player UI doesn't render synced yet.
-                val raw = plain ?: synced?.let { stripLrcTimestamps(it) }
+                val syncedRaw = root.get("syncedLyrics")?.takeIf { !it.isJsonNull }?.asString
+                val parsed = syncedRaw?.let { parseLrc(it) }.orEmpty()
+                val plainFallback = plain ?: syncedRaw?.let { stripLrcTimestamps(it) }
                 android.util.Log.i(
                     "PMP_DIAG",
-                    "Spotify.lyrics LRCLib hit=${raw != null} title='$title' artist='$firstArtist'"
+                    "Spotify.lyrics LRCLib synced=${parsed.size} plain=${plainFallback?.length ?: 0} title='$title' artist='$firstArtist'"
                 )
-                raw
+                if (plainFallback == null && parsed.isEmpty()) null
+                else (plainFallback.orEmpty()) to parsed
             }
         } catch (_: Exception) { null }
     }
 
+    private val lrcTagRegex = Regex("\\[(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?\\]")
+
+    private fun parseLrc(synced: String): List<LyricLine> {
+        val out = mutableListOf<LyricLine>()
+        for (rawLine in synced.lineSequence()) {
+            val matches = lrcTagRegex.findAll(rawLine).toList()
+            if (matches.isEmpty()) continue
+            val text = rawLine.replace(lrcTagRegex, "").trim()
+            for (m in matches) {
+                val mins = m.groupValues[1].toLong()
+                val secs = m.groupValues[2].toLong()
+                val frac = m.groupValues[3].padEnd(3, '0').take(3).toLongOrNull() ?: 0L
+                val timeMs = (mins * 60 + secs) * 1000 + frac
+                out.add(LyricLine(timeMs, text))
+            }
+        }
+        return out.sortedBy { it.timeMs }
+    }
+
     private fun stripLrcTimestamps(synced: String): String {
-        val re = Regex("\\[\\d{2}:\\d{2}(\\.\\d{1,3})?\\]")
         return synced.lineSequence()
-            .map { it.replace(re, "").trim() }
+            .map { it.replace(lrcTagRegex, "").trim() }
             .filter { it.isNotEmpty() }
             .joinToString("\n")
     }

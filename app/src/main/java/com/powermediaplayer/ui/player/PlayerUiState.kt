@@ -32,6 +32,10 @@ data class PlayerUiState(
     // Lyrics — populated for Spotify mirroring (LRCLib lookup).
     // Empty for local files unless a future lyrics file is wired in.
     val lyrics: String = "",
+    // Synced lyrics for the highlight + tap-to-seek path. Each entry
+    // is a (timeMs, text) pair from a parsed LRC file. Empty when only
+    // plain lyrics are available.
+    val syncedLyrics: List<com.powermediaplayer.cloud.LyricLine> = emptyList(),
 
     // Progress - current track
     val currentPosition: Long = 0L,

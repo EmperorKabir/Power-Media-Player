@@ -346,6 +346,7 @@ class PlayerViewModel @Inject constructor(
             artworkUri = s.artworkUrl?.let { android.net.Uri.parse(it) },
             hasCoverArt = s.artworkUrl != null,
             lyrics = s.lyrics.orEmpty(),
+            syncedLyrics = s.syncedLyrics,
             currentPosition = pos,
             duration = dur,
             currentPositionFormatted = TimeFormatter.formatDuration(pos),

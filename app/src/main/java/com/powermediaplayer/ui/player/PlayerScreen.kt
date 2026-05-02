@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -403,7 +404,8 @@ private fun OverlayContent(
         PreparedSpeedComponent(
             playbackSpeed = uiState.playbackSpeed,
             onSpeedChange = { viewModel.setPlaybackSpeed(it) },
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier.padding(horizontal = 16.dp),
+            enabled = uiState.controls.playbackSpeed
         )
         Spacer(modifier = Modifier.height(4.dp))
         TertiaryControls(
@@ -578,11 +580,18 @@ private fun TrackInfoSection(uiState: PlayerUiState, coverColors: CoverArtColors
                 overflow = TextOverflow.Ellipsis
             )
         }
-        if (uiState.lyrics.isNotEmpty()) {
+        if (uiState.syncedLyrics.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
-            // Lyrics — capped height with vertical scroll so a long
-            // song doesn't push the controls off-screen. Source:
-            // LRCLib (Spotify Web API doesn't expose lyrics).
+            SyncedLyricsPanel(
+                lines = uiState.syncedLyrics,
+                positionMs = uiState.currentPosition,
+                onLineTap = { /* set in caller */ }
+            )
+        } else if (uiState.lyrics.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            // Plain (non-synced) lyrics — capped height with vertical
+            // scroll so a long song doesn't push the controls off-screen.
+            // Source: LRCLib (Spotify Web API doesn't expose lyrics).
             Surface(
                 color = OledBlack.copy(alpha = 0.4f),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
@@ -603,6 +612,69 @@ private fun TrackInfoSection(uiState: PlayerUiState, coverColors: CoverArtColors
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Synced lyrics panel for Spotify mirror playback. Highlights the
+ * line whose timestamp is the latest <= current playback position,
+ * auto-scrolls it into view, and lets the user tap any line to jump
+ * Spotify Connect to that timestamp. The tap goes through the
+ * existing PlayerViewModel.seekTo path which routes to the Web API
+ * /me/player/seek endpoint when Spotify is the active source.
+ */
+@Composable
+private fun SyncedLyricsPanel(
+    lines: List<com.powermediaplayer.cloud.LyricLine>,
+    positionMs: Long,
+    onLineTap: (Long) -> Unit
+) {
+    val viewModel = androidx.hilt.navigation.compose.hiltViewModel<PlayerViewModel>()
+    val activeIndex = remember(lines, positionMs) {
+        // indexOfLast where line.timeMs <= positionMs; -1 if before first.
+        var idx = -1
+        for (i in lines.indices) {
+            if (lines[i].timeMs <= positionMs) idx = i else break
+        }
+        idx
+    }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(activeIndex) {
+        if (activeIndex >= 0) {
+            // Centre the active line in the panel by leaving ~2 lines
+            // of context above it.
+            listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+        }
+    }
+    Surface(
+        color = OledBlack.copy(alpha = 0.4f),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 220.dp)
+    ) {
+        androidx.compose.foundation.lazy.LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            itemsIndexed(
+                items = lines,
+                key = { i: Int, l: com.powermediaplayer.cloud.LyricLine -> "$i:${l.timeMs}" }
+            ) { idx: Int, line: com.powermediaplayer.cloud.LyricLine ->
+                val isActive = idx == activeIndex
+                Text(
+                    text = line.text.ifEmpty { "♪" },
+                    style = if (isActive) MaterialTheme.typography.bodyMedium
+                            else MaterialTheme.typography.bodySmall,
+                    color = if (isActive) TealAccent else TextSecondary.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.seekTo(line.timeMs) }
+                        .padding(vertical = 4.dp)
+                )
             }
         }
     }
