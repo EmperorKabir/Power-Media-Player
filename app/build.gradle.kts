@@ -148,6 +148,11 @@ dependencies {
 
     // ── Coil Image Loading ───────────────────────────────────────
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
+    // Network fetcher — required for Coil 3 to load HTTP/HTTPS URLs
+    // (e.g. Spotify CDN album art at https://i.scdn.co/image/...).
+    // Without this, AsyncImage fails with
+    // "Unable to create a fetcher that supports: https://..."
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
 
     // ── Palette API ──────────────────────────────────────────────
     implementation("androidx.palette:palette-ktx:1.0.0")

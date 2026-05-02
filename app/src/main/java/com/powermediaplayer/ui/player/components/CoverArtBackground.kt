@@ -91,6 +91,10 @@ fun CoverArtBackground(
 
         if (hasCoverArt && artworkUri != null) {
             val context = LocalContext.current
+            android.util.Log.i(
+                "PMP_DIAG",
+                "CoverArt AsyncImage building uri=$artworkUri"
+            )
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(artworkUri)
@@ -100,14 +104,25 @@ fun CoverArtBackground(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { result ->
+                    android.util.Log.i("PMP_DIAG", "CoverArt AsyncImage onSuccess uri=$artworkUri")
                     runCatching {
                         val bm = (result.result as? SuccessResult)?.image?.toBitmap()
                         onColorsExtracted(bm?.let { PaletteHelper.extractColorSet(it) })
                     }.onFailure { onColorsExtracted(null) }
                 },
-                onError = { onColorsExtracted(null) }
+                onError = { err ->
+                    android.util.Log.w(
+                        "PMP_DIAG",
+                        "CoverArt AsyncImage onError uri=$artworkUri throwable=${err.result.throwable}"
+                    )
+                    onColorsExtracted(null)
+                }
             )
         } else {
+            android.util.Log.i(
+                "PMP_DIAG",
+                "CoverArt skip: hasCoverArt=$hasCoverArt artworkUri=$artworkUri"
+            )
             onColorsExtracted(null)
         }
     }

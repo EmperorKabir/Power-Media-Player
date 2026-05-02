@@ -588,6 +588,10 @@ class SpotifyProvider @Inject constructor(
                 val artwork = album?.getAsJsonArray("images")?.firstOrNull()
                     ?.asJsonObject?.get("url")?.asString
                 val device = root.getAsJsonObject("device")
+                android.util.Log.i(
+                    "PMP_DIAG",
+                    "Spotify.fetchCurrentState artwork=${artwork ?: "null"}"
+                )
                 SpotifyPlaybackState(
                     title = item.get("name")?.asString.orEmpty(),
                     artist = artists,
