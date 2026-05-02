@@ -249,132 +249,128 @@ private fun PlayerScreenCompact(
             )
         }
 
-        // Scrim + control column animate together in video mode so the video
-        // picture fully fills the screen between taps.
-        val showOverlay = !uiState.isVideoContent || controlsVisible
+        // Audio mode controls are always rendered without any animation
+        // wrapper — guaranteeing they can't be hidden by any state path.
+        // Video mode wraps everything in AnimatedVisibility for the 32-s
+        // auto-hide + tap toggle.
+        val scrimColors = if (uiState.isVideoContent) {
+            listOf(
+                Color.Transparent,
+                Color.Transparent,
+                OledBlack.copy(alpha = 0.5f),
+                OledBlack.copy(alpha = 0.9f),
+                OledBlack
+            )
+        } else {
+            listOf(
+                Color.Transparent,
+                OledBlack.copy(alpha = 0.3f),
+                OledBlack.copy(alpha = 0.75f),
+                OledBlack.copy(alpha = 0.97f),
+                OledBlack
+            )
+        }
 
-        AnimatedVisibility(
-            visible = showOverlay,
-            enter = fadeIn(animationSpec = tween(durationMillis = 500)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 1000))
-        ) {
-            // Gradient scrim — heavy fade for audio (album art under controls);
-            // subtle bottom-only fade for video so the picture stays visible.
-            val scrimColors = if (uiState.isVideoContent) {
-                listOf(
-                    Color.Transparent,
-                    Color.Transparent,
-                    OledBlack.copy(alpha = 0.5f),
-                    OledBlack.copy(alpha = 0.9f),
-                    OledBlack
-                )
-            } else {
-                listOf(
-                    Color.Transparent,
-                    OledBlack.copy(alpha = 0.3f),
-                    OledBlack.copy(alpha = 0.75f),
-                    OledBlack.copy(alpha = 0.97f),
-                    OledBlack
-                )
-            }
+        @Composable fun OverlayContent() {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Brush.verticalGradient(colors = scrimColors))
             )
-        }
-
-        AnimatedVisibility(
-            visible = showOverlay,
-            enter = fadeIn(animationSpec = tween(durationMillis = 500)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 1000))
-        ) {
-        // Skip verticalScroll in video mode — the scroll state was
-        // re-flowing on every position-poll recomposition and visibly
-        // shifting the controls. Audio mode keeps it because long
-        // descriptions / chapter chips can need scrolling.
-        val scrollMod = if (uiState.isVideoContent) {
-            Modifier
-        } else {
-            Modifier.verticalScroll(rememberScrollState())
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(scrollMod)
-                .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Bottom
-        ) {
-            Spacer(modifier = Modifier.weight(1f))
-            TrackInfoSection(uiState, coverColors)
-            Spacer(modifier = Modifier.height(12.dp))
-            ChapterPickerChip(uiState, onShowChapterPicker)
-            Spacer(modifier = Modifier.height(4.dp))
-            ProgressSliders(
-                trackPosition = uiState.trackProgress,
-                trackPositionFormatted = uiState.currentPositionFormatted,
-                trackDurationFormatted = uiState.durationFormatted,
-                trackRemainingFormatted = uiState.trackRemainingFormatted,
-                trackSliderEnabled = uiState.controls.trackSlider,
-                onTrackSeek = { fraction ->
-                    val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
-                    viewModel.seekTo(target)
-                },
-                playlistPosition = uiState.playlistProgress,
-                playlistPositionFormatted = uiState.playlistPositionFormatted,
-                playlistDurationFormatted = uiState.playlistDurationFormatted,
-                playlistRemainingFormatted = uiState.playlistRemainingFormatted,
-                playlistSliderEnabled = uiState.controls.playlistSlider,
-                onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
-                trackIndexDisplay = uiState.trackIndexDisplay
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            PlaybackControls(
-                isPlaying = uiState.isPlaying,
-                controls = uiState.controls,
-                onPreviousFile = { viewModel.previousFile() },
-                onPreviousChapterOrTrack = { viewModel.previousChapterOrTrack() },
-                onSkipBack = { viewModel.skipBack(it) },
-                onPlayPause = { viewModel.playPause() },
-                onSkipForward = { viewModel.skipForward(it) },
-                onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
-                onNextFile = { viewModel.nextFile() }
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            PreparedSpeedComponent(
-                playbackSpeed = uiState.playbackSpeed,
-                onSpeedChange = { viewModel.setPlaybackSpeed(it) },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            TertiaryControls(
-                currentVolume = viewModel.getCurrentVolume(),
-                maxVolume = viewModel.getMaxVolume(),
-                onVolumeChange = { viewModel.setVolume(it) },
-                sleepTimerActive = uiState.sleepTimerActive,
-                sleepTimerFormatted = uiState.sleepTimerFormatted,
-                onSleepTimerClick = onShowSleepTimer
-            )
-            if (uiState.isLoading) {
-                Spacer(modifier = Modifier.height(8.dp))
-                CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            val scrollMod = if (uiState.isVideoContent) {
+                Modifier
+            } else {
+                Modifier.verticalScroll(rememberScrollState())
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(scrollMod)
+                    .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+                TrackInfoSection(uiState, coverColors)
+                Spacer(modifier = Modifier.height(12.dp))
+                ChapterPickerChip(uiState, onShowChapterPicker)
+                Spacer(modifier = Modifier.height(4.dp))
+                ProgressSliders(
+                    trackPosition = uiState.trackProgress,
+                    trackPositionFormatted = uiState.currentPositionFormatted,
+                    trackDurationFormatted = uiState.durationFormatted,
+                    trackRemainingFormatted = uiState.trackRemainingFormatted,
+                    trackSliderEnabled = uiState.controls.trackSlider,
+                    onTrackSeek = { fraction ->
+                        val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
+                        viewModel.seekTo(target)
+                    },
+                    playlistPosition = uiState.playlistProgress,
+                    playlistPositionFormatted = uiState.playlistPositionFormatted,
+                    playlistDurationFormatted = uiState.playlistDurationFormatted,
+                    playlistRemainingFormatted = uiState.playlistRemainingFormatted,
+                    playlistSliderEnabled = uiState.controls.playlistSlider,
+                    onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
+                    trackIndexDisplay = uiState.trackIndexDisplay
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                PlaybackControls(
+                    isPlaying = uiState.isPlaying,
+                    controls = uiState.controls,
+                    onPreviousFile = { viewModel.previousFile() },
+                    onPreviousChapterOrTrack = { viewModel.previousChapterOrTrack() },
+                    onSkipBack = { viewModel.skipBack(it) },
+                    onPlayPause = { viewModel.playPause() },
+                    onSkipForward = { viewModel.skipForward(it) },
+                    onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
+                    onNextFile = { viewModel.nextFile() }
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                PreparedSpeedComponent(
+                    playbackSpeed = uiState.playbackSpeed,
+                    onSpeedChange = { viewModel.setPlaybackSpeed(it) },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                TertiaryControls(
+                    currentVolume = viewModel.getCurrentVolume(),
+                    maxVolume = viewModel.getMaxVolume(),
+                    onVolumeChange = { viewModel.setVolume(it) },
+                    sleepTimerActive = uiState.sleepTimerActive,
+                    sleepTimerFormatted = uiState.sleepTimerFormatted,
+                    onSleepTimerClick = onShowSleepTimer
+                )
+                if (uiState.isLoading) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         }
-        } // close AnimatedVisibility
 
-        // Top-right Cast button — visible only when controls are visible
-        // (in video mode it auto-hides with everything else).
-        AnimatedVisibility(
-            visible = showOverlay,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 16.dp)
-        ) {
-            CastButton(modifier = Modifier.size(40.dp))
+        if (uiState.isVideoContent) {
+            AnimatedVisibility(
+                visible = controlsVisible,
+                enter = fadeIn(animationSpec = tween(durationMillis = 500)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 1000))
+            ) { OverlayContent() }
+            AnimatedVisibility(
+                visible = controlsVisible,
+                enter = fadeIn(animationSpec = tween(durationMillis = 500)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 1000)),
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 16.dp)
+            ) { CastButton(modifier = Modifier.size(40.dp)) }
+        } else {
+            // Audio: render directly, no AnimatedVisibility — controls
+            // can never disappear regardless of any state churn.
+            OverlayContent()
+            CastButton(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 16.dp, end = 16.dp)
+                    .size(40.dp)
+            )
         }
-
     }
 }
 

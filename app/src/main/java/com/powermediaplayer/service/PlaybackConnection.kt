@@ -297,6 +297,10 @@ class PlaybackConnection @Inject constructor(
      */
     fun setLocalMetadata(meta: LocalMetadataOverride?) {
         localMetadata = meta
+        android.util.Log.i(
+            "PowerMediaPlayer",
+            "setLocalMetadata: title=${meta?.title} artBytes=${meta?.artworkBytes?.size ?: 0} artUri=${meta?.artworkUri}"
+        )
         updatePlayerStateOnMain()
     }
 

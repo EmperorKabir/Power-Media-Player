@@ -1,5 +1,6 @@
 package com.powermediaplayer.ui.player.components
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,22 +19,18 @@ import coil3.toBitmap
 import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.util.CoverArtColors
 import com.powermediaplayer.util.PaletteHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
- * Full-screen cover art background with OLED black fallback.
+ * Full-screen cover art background.
  *
- * - When raw bytes are supplied (e.g. from `mmr.embeddedPicture`) we decode
- *   them with `BitmapFactory.decodeByteArray` and render via `Image`.
- *   Coil 3.1's data(ByteArray) path silently returned no image for the
- *   Audible-converted Harry Potter M4Bs (688 KB JPEG inside a ByteArray);
- *   manual decode is bulletproof and frees us from any Coil quirks.
- * - When only a URI is supplied (Drive thumbnail, MediaStore album art),
- *   AsyncImage handles the network/IO load.
- *
- * @param artworkUri  remote/file URI to load via Coil — used when bytes absent
- * @param artworkBytes raw image bytes (preferred when present)
- * @param hasCoverArt whether ANY artwork is expected — gates the empty fallback
- * @param onColorsExtracted Palette callback once a Bitmap is available
+ * Three rendering paths:
+ *   1. [artworkBytes] non-null → decode with BitmapFactory off the main
+ *      thread, render via Image. Bypasses Coil entirely (its data(ByteArray)
+ *      path silently fails on Audible-style M4B JPEGs).
+ *   2. [artworkUri] non-null → AsyncImage via Coil for URI/file fetching.
+ *   3. neither → OLED-black fallback.
  */
 @Composable
 fun CoverArtBackground(
@@ -48,23 +45,43 @@ fun CoverArtBackground(
             .fillMaxSize()
             .background(OledBlack)
     ) {
-        // ── Bytes path: decode + Image (bypasses Coil) ──────────────────
-        val decodedBitmap = remember(artworkBytes) {
-            artworkBytes?.let { bytes ->
-                runCatching {
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                }.getOrNull()
+        // Decode off-main so a 688 KB JPEG doesn't stutter the frame clock.
+        val decoded by produceState<Bitmap?>(
+            initialValue = null,
+            key1 = artworkBytes
+        ) {
+            val bytes = artworkBytes
+            value = if (bytes != null && bytes.isNotEmpty()) {
+                withContext(Dispatchers.Default) {
+                    runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
+                        .onFailure {
+                            android.util.Log.w(
+                                "PowerMediaPlayer",
+                                "Cover decode failed for ${bytes.size} bytes",
+                                it
+                            )
+                        }
+                        .getOrNull()
+                }.also {
+                    android.util.Log.i(
+                        "PowerMediaPlayer",
+                        "Cover decoded: bytes=${bytes.size} bitmap=${it != null} " +
+                            "size=${it?.width}x${it?.height}"
+                    )
+                }
+            } else {
+                null
             }
         }
-        if (decodedBitmap != null) {
-            // Palette extraction on decoded bitmap — same UX as URI path.
-            LaunchedEffect(decodedBitmap) {
-                runCatching { PaletteHelper.extractColorSet(decodedBitmap) }
+
+        if (decoded != null) {
+            LaunchedEffect(decoded) {
+                runCatching { PaletteHelper.extractColorSet(decoded!!) }
                     .getOrNull()
                     .let(onColorsExtracted)
             }
             Image(
-                bitmap = decodedBitmap.asImageBitmap(),
+                bitmap = decoded!!.asImageBitmap(),
                 contentDescription = "Album cover art",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize()
@@ -72,13 +89,12 @@ fun CoverArtBackground(
             return@Box
         }
 
-        // ── URI path: Coil AsyncImage ──────────────────────────────────
         if (hasCoverArt && artworkUri != null) {
             val context = LocalContext.current
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(artworkUri)
-                    .allowHardware(false) // need software bitmap for Palette
+                    .allowHardware(false)
                     .build(),
                 contentDescription = "Album cover art",
                 contentScale = ContentScale.Fit,
@@ -92,7 +108,6 @@ fun CoverArtBackground(
                 onError = { onColorsExtracted(null) }
             )
         } else {
-            // OLED-black fallback (already painted by the parent Box bg)
             onColorsExtracted(null)
         }
     }
