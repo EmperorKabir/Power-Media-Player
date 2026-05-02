@@ -184,7 +184,13 @@ class CloudViewModel @Inject constructor(
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder) {
                 viewModelScope.launch(Dispatchers.IO) {
                     playbackConnection.setCloudFetchInProgress(true)
-                    val tempFile = driveProvider.downloadToCache(item)
+                    val tempFile = try {
+                        driveProvider.downloadToCache(item)
+                    } catch (e: Throwable) {
+                        // Catch Errors too — OutOfMemoryError on huge files
+                        // would otherwise crash the whole process.
+                        null
+                    }
                     if (tempFile == null) {
                         playbackConnection.setCloudFetchInProgress(false)
                         return@launch
@@ -228,21 +234,26 @@ class CloudViewModel @Inject constructor(
                             }
                         }
 
-                        // Chapters from the M4B parser (works for any MP4-family
-                        // file; safely returns empty for non-MP4)
-                        val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
-                        val count = bundle.getInt("chapter_count", 0)
-                        if (count > 0) {
-                            val chapters = (0 until count).mapNotNull { i ->
-                                val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
-                                val start = bundle.getLong("chapter_start_$i", -1)
-                                val end = bundle.getLong("chapter_end_$i", -1)
-                                if (start >= 0) ChapterInfo(title, start, end, i) else null
+                        // Chapters from the M4B parser — guarded so a parser
+                        // bug never tears down the whole process.
+                        runCatching {
+                            val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
+                            val count = bundle.getInt("chapter_count", 0)
+                            if (count > 0) {
+                                val chapters = (0 until count).mapNotNull { i ->
+                                    val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
+                                    val start = bundle.getLong("chapter_start_$i", -1)
+                                    val end = bundle.getLong("chapter_end_$i", -1)
+                                    if (start >= 0) ChapterInfo(title, start, end, i) else null
+                                }
+                                playbackConnection.setLocalChapters(chapters)
                             }
-                            playbackConnection.setLocalChapters(chapters)
                         }
+                    } catch (_: Throwable) {
+                        // Defensive — the file we just wrote is being read
+                        // by external parsers; any failure here is recoverable.
                     } finally {
-                        tempFile.delete()
+                        runCatching { tempFile.delete() }
                         playbackConnection.setCloudFetchInProgress(false)
                     }
                 }

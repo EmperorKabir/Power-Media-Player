@@ -64,6 +64,9 @@ data class PlayerUiState(
     val playerError: String? = null,
     // Background cloud cache download in flight (chapters/metadata).
     val cloudFetchInProgress: Boolean = false,
+    // Source video dimensions for aspect-ratio sizing (0 = unknown).
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0,
 
     // Controls enabled state (for greying out)
     val controls: ControlsEnabledState = ControlsEnabledState(),

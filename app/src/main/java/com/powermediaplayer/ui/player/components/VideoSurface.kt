@@ -1,32 +1,34 @@
 package com.powermediaplayer.ui.player.components
 
-import android.view.LayoutInflater
+import android.view.TextureView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.ui.PlayerView
-import com.powermediaplayer.R
 import com.powermediaplayer.service.PlaybackService
 import com.powermediaplayer.ui.theme.OledBlack
 
 /**
- * Video surface backed by Media3 PlayerView inflated from XML so
- * surface_type=texture_view is applied. TextureView composites into the
- * Compose draw tree (unlike SurfaceView which punches a window hole and
- * is occluded by overlying Compose scrims), so the video picture is
- * visible under transparent scrims and aspect ratio is preserved by
- * AspectRatioFrameLayout.
+ * Video surface — raw TextureView wired directly to ExoPlayer.setVideoTextureView.
  *
- * Attached to PlaybackService.getExoPlayer() (real in-process player) —
- * MediaController IPC proxies cannot deliver decoded frames to a Surface.
+ * Why not Media3 PlayerView? PlayerView's surface management has subtle quirks
+ * with Compose interop (the inflated child layout doesn't always reach
+ * fillMaxSize, and surface_type=texture_view requires a specific XML setup).
+ * A bare TextureView is the simplest possible path: ExoPlayer pushes decoded
+ * frames straight to it, and Compose lays it out predictably.
+ *
+ * @param videoWidth source video width (0 → unknown, falls back to fillMaxSize)
+ * @param videoHeight source video height
  */
 @Composable
 fun VideoSurface(
     isVideoContent: Boolean,
+    videoWidth: Int,
+    videoHeight: Int,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -35,19 +37,29 @@ fun VideoSurface(
     ) {
         if (!isVideoContent) return@Box
 
+        val aspectMod = if (videoWidth > 0 && videoHeight > 0) {
+            Modifier.aspectRatio(videoWidth.toFloat() / videoHeight.toFloat())
+        } else {
+            Modifier.fillMaxSize()
+        }
+
         AndroidView(
-            factory = { context ->
-                val view = LayoutInflater.from(context)
-                    .inflate(R.layout.exo_player_texture, null) as PlayerView
-                view.player = PlaybackService.getExoPlayer()
-                view
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    isOpaque = true
+                    PlaybackService.getExoPlayer()?.setVideoTextureView(this)
+                }
             },
             update = { view ->
-                val exo = PlaybackService.getExoPlayer()
-                if (view.player !== exo) view.player = exo
+                val exo = PlaybackService.getExoPlayer() ?: return@AndroidView
+                // Re-bind every recompose — cheap, idempotent, and recovers from
+                // the case where the service connected after first compose.
+                exo.setVideoTextureView(view)
             },
-            onRelease = { view -> view.player = null },
-            modifier = Modifier.fillMaxSize()
+            onRelease = { view ->
+                runCatching { PlaybackService.getExoPlayer()?.clearVideoTextureView(view) }
+            },
+            modifier = aspectMod
         )
     }
 }

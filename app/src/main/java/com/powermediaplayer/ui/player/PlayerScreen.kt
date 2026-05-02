@@ -51,33 +51,12 @@ fun PlayerScreen(
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showChapterPicker by remember { mutableStateOf(false) }
 
-    when (windowSizeClass.widthSizeClass) {
-        WindowWidthSizeClass.Expanded -> {
-            // Landscape tablet / unfolded foldable in landscape: side-by-side
-            PlayerScreenExpanded(
-                uiState = uiState,
-                viewModel = viewModel,
-                coverColors = coverColors,
-                onColorsExtracted = { coverColors = it },
-                onShowSleepTimer = { showSleepTimerDialog = true },
-                onShowChapterPicker = { showChapterPicker = true }
-            )
-        }
-        WindowWidthSizeClass.Medium -> {
-            // Large phone / foldable in portrait: wider stacked layout
-            PlayerScreenCompact(
-                uiState = uiState,
-                viewModel = viewModel,
-                coverColors = coverColors,
-                onColorsExtracted = { coverColors = it },
-                onShowSleepTimer = { showSleepTimerDialog = true },
-                onShowChapterPicker = { showChapterPicker = true },
-                horizontalPadding = 32 // Extra padding to use the extra width
-            )
-        }
-        else -> {
-            // Compact — standard phone
-            PlayerScreenCompact(
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Video forces the Compact layout regardless of window size — the
+        // Expanded (side-by-side) layout has no video surface, which is why
+        // unfolded foldables saw the audio layout for video files.
+        when {
+            uiState.isVideoContent -> PlayerScreenCompact(
                 uiState = uiState,
                 viewModel = viewModel,
                 coverColors = coverColors,
@@ -86,6 +65,85 @@ fun PlayerScreen(
                 onShowChapterPicker = { showChapterPicker = true },
                 horizontalPadding = 0
             )
+            windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded -> PlayerScreenExpanded(
+                uiState = uiState,
+                viewModel = viewModel,
+                coverColors = coverColors,
+                onColorsExtracted = { coverColors = it },
+                onShowSleepTimer = { showSleepTimerDialog = true },
+                onShowChapterPicker = { showChapterPicker = true }
+            )
+            windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium -> PlayerScreenCompact(
+                uiState = uiState,
+                viewModel = viewModel,
+                coverColors = coverColors,
+                onColorsExtracted = { coverColors = it },
+                onShowSleepTimer = { showSleepTimerDialog = true },
+                onShowChapterPicker = { showChapterPicker = true },
+                horizontalPadding = 32
+            )
+            else -> PlayerScreenCompact(
+                uiState = uiState,
+                viewModel = viewModel,
+                coverColors = coverColors,
+                onColorsExtracted = { coverColors = it },
+                onShowSleepTimer = { showSleepTimerDialog = true },
+                onShowChapterPicker = { showChapterPicker = true },
+                horizontalPadding = 0
+            )
+        }
+
+        // Cloud-fetch banner + error banner — top-level so they render
+        // above whichever layout is active.
+        if (uiState.cloudFetchInProgress) {
+            Surface(
+                color = Teal800.copy(alpha = 0.9f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        color = TealAccent,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Loading chapters & metadata…",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+        uiState.playerError?.let { errMsg ->
+            Surface(
+                color = ErrorRed.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = errMsg,
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { viewModel.clearError() }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = TextPrimary)
+                    }
+                }
+            }
         }
     }
 
@@ -157,6 +215,8 @@ private fun PlayerScreenCompact(
             // VideoSurface attaches directly to the ExoPlayer in PlaybackService
             VideoSurface(
                 isVideoContent = true,
+                videoWidth = uiState.videoWidth,
+                videoHeight = uiState.videoHeight,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -274,35 +334,6 @@ private fun PlayerScreenCompact(
         }
         } // close AnimatedVisibility
 
-        // Cloud-fetch banner — informs the user that chapter / metadata
-        // extraction is in progress for a streaming-only file.
-        if (uiState.cloudFetchInProgress) {
-            Surface(
-                color = Teal800.copy(alpha = 0.85f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CircularProgressIndicator(
-                        color = TealAccent,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Loading chapters & metadata…",
-                        color = TextPrimary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
         // Top-right Cast button — visible only when controls are visible
         // (in video mode it auto-hides with everything else).
         AnimatedVisibility(
@@ -314,33 +345,6 @@ private fun PlayerScreenCompact(
             CastButton(modifier = Modifier.size(40.dp))
         }
 
-        // Error banner — surfaces ExoPlayer errors so the user knows the
-        // file failed (e.g. Drive 401, codec failure) instead of seeing a
-        // silent freeze.
-        uiState.playerError?.let { errMsg ->
-            Surface(
-                color = ErrorRed.copy(alpha = 0.85f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = errMsg,
-                        color = TextPrimary,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = { viewModel.clearError() }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = TextPrimary)
-                    }
-                }
-            }
-        }
     }
 }
 

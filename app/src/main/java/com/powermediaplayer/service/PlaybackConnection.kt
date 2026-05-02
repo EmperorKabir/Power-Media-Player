@@ -65,6 +65,9 @@ data class PlayerState(
     // True while a cloud cache download (chapters/metadata extraction)
     // is in flight, so the UI can show a non-blocking progress hint.
     val cloudFetchInProgress: Boolean = false,
+    // Video frame size (used by VideoSurface for aspect-ratio sizing).
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0,
     // Media capabilities for button greying
     val isPartOfPlaylist: Boolean = false,
     val hasCoverArt: Boolean = false,
@@ -490,6 +493,12 @@ class PlaybackConnection @Inject constructor(
                     playerError = error.errorCodeName + ": " + (error.message ?: "Playback failed")
                 )
             }
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                _playerState.value = _playerState.value.copy(
+                    videoWidth = videoSize.width,
+                    videoHeight = videoSize.height
+                )
+            }
         })
     }
 
@@ -573,6 +582,8 @@ class PlaybackConnection @Inject constructor(
         val preservedDescription = _playerState.value.description
         val preservedError = _playerState.value.playerError
         val preservedFetch = _playerState.value.cloudFetchInProgress
+        val preservedVw = _playerState.value.videoWidth
+        val preservedVh = _playerState.value.videoHeight
 
         // Detect video by ANY of FIVE signals — any single positive flips
         // the UI to the video layout immediately, so the audio layout never
@@ -630,6 +641,8 @@ class PlaybackConnection @Inject constructor(
             description = preservedDescription,
             playerError = preservedError,
             cloudFetchInProgress = preservedFetch,
+            videoWidth = preservedVw,
+            videoHeight = preservedVh,
             isPartOfPlaylist = c.mediaItemCount > 1,
             hasCoverArt = (overArtwork ?: metadata.artworkUri) != null || metadata.artworkData != null,
             isVideoContent = hasVideoTrack,
