@@ -192,21 +192,30 @@ class CloudViewModel @Inject constructor(
             }
             return
         }
-        // Spotify track with no preview URL — Spotify Web API returns
-        // preview_url=null for most tracks now. Instead of failing
-        // silently or just showing an error, deep-link into the
-        // Spotify app so the user can actually play the track. The
-        // SpotifyProvider's downloadUrl carries the spotify:track:ID
-        // URI when no preview is available.
-        if (item.sourceProvider == CloudProviderType.SPOTIFY &&
-            item.downloadUrl.startsWith("spotify:")
-        ) {
-            val handled = launchSpotifyApp(item.downloadUrl)
-            if (handled) return
-            // Spotify app not installed → fall through to error message.
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "No preview available and Spotify app isn't installed. Install Spotify to play this track."
-            )
+        // Spotify track: free-tier preview URLs are mostly null in 2026,
+        // and Premium full-track playback needs the Spotify Connect API
+        // (PUT /v1/me/player/play). Premium users tap → the track is sent
+        // to their currently-active Spotify device. If no device is
+        // active they get a clear error explaining they need to open
+        // Spotify on a device first.
+        if (item.sourceProvider == CloudProviderType.SPOTIFY) {
+            viewModelScope.launch {
+                val spotifyUri = if (item.downloadUrl.startsWith("spotify:")) {
+                    item.downloadUrl
+                } else {
+                    "spotify:track:${item.id}"
+                }
+                val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri)
+                r.onSuccess {
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = "Playing on Spotify: ${item.name}"
+                    )
+                }.onFailure { ex ->
+                    _uiState.value = _uiState.value.copy(
+                        errorMessage = ex.message ?: "Spotify playback failed"
+                    )
+                }
+            }
             return
         }
         viewModelScope.launch {
@@ -220,28 +229,6 @@ class CloudViewModel @Inject constructor(
                     errorMessage = "Couldn't play: ${t.javaClass.simpleName}: ${t.message}"
                 )
             }
-        }
-    }
-
-    /**
-     * Open the given spotify: URI in the Spotify Android app. Returns
-     * true if the app was launched, false if Spotify isn't installed.
-     */
-    private fun launchSpotifyApp(spotifyUri: String): Boolean {
-        return try {
-            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(spotifyUri)).apply {
-                setPackage("com.spotify.music")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-            android.util.Log.i("PMP_DIAG", "Cloud.launchSpotifyApp ok uri=$spotifyUri")
-            true
-        } catch (_: android.content.ActivityNotFoundException) {
-            android.util.Log.w("PMP_DIAG", "Cloud.launchSpotifyApp Spotify not installed")
-            false
-        } catch (t: Throwable) {
-            android.util.Log.w("PMP_DIAG", "Cloud.launchSpotifyApp failed", t)
-            false
         }
     }
 

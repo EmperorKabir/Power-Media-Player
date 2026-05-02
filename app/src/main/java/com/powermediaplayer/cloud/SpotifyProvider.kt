@@ -22,6 +22,7 @@ import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Inject
@@ -59,11 +60,19 @@ class SpotifyProvider @Inject constructor(
         Uri.parse("https://accounts.spotify.com/api/token")
     )
 
+    // Premium-only scopes for full-track playback via Spotify Connect.
+    // user-modify-playback-state lets us PUT /v1/me/player/play; the
+    // read scopes let us list devices and read current state. Premium
+    // is required by Spotify for these endpoints to function — free
+    // accounts get HTTP 403 on /me/player/play.
     private val scopes = listOf(
         "user-library-read",
         "user-read-email",
         "user-read-private",
-        "playlist-read-private"
+        "playlist-read-private",
+        "user-modify-playback-state",
+        "user-read-playback-state",
+        "streaming"
     ).joinToString(" ")
 
     /**
@@ -254,6 +263,127 @@ class SpotifyProvider @Inject constructor(
             )
         }
         return Result.success(Uri.parse(item.downloadUrl))
+    }
+
+    /**
+     * Premium-only: tell Spotify Connect to play [spotifyUri] on the
+     * user's currently-active device. Returns success on HTTP 204.
+     *
+     * Failure modes the UI translates to user-readable messages:
+     *   • 401: token expired and refresh failed → user must re-auth
+     *   • 403: account is not Premium
+     *   • 404: NO_ACTIVE_DEVICE — user needs to open Spotify on a
+     *     phone or other Spotify Connect device first. Before
+     *     reporting this, we try to auto-pick the first available
+     *     device via /me/player/devices and PUT /me/player to transfer
+     *     playback there, then retry the play call.
+     */
+    suspend fun playTrackOnConnectDevice(spotifyUri: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            android.util.Log.i("PMP_DIAG", "Spotify.playTrackOnConnectDevice $spotifyUri")
+            val token = currentAccessToken() ?: return@withContext Result.failure(
+                IllegalStateException("Spotify session expired — sign in again")
+            )
+            val firstAttempt = playRequest(token, spotifyUri, deviceId = null)
+            if (firstAttempt.isSuccess) return@withContext firstAttempt
+
+            // 404 NO_ACTIVE_DEVICE — pick first device and retry.
+            val errMsg = firstAttempt.exceptionOrNull()?.message.orEmpty()
+            if (!errMsg.contains("NO_ACTIVE_DEVICE", ignoreCase = true) &&
+                !errMsg.contains("404")
+            ) {
+                return@withContext firstAttempt
+            }
+
+            android.util.Log.i("PMP_DIAG", "Spotify.play no active device — listing")
+            val devices = listDevices(token)
+            val first = devices.firstOrNull()
+                ?: return@withContext Result.failure(
+                    IllegalStateException(
+                        "No Spotify device found. Open Spotify on this phone or another device first."
+                    )
+                )
+            android.util.Log.i("PMP_DIAG", "Spotify.play activating device ${first.first} (${first.second})")
+            val transferred = transferPlayback(token, first.first)
+            if (transferred.isFailure) return@withContext transferred
+            // Tiny gap so Spotify finishes activating the device before
+            // we send the play command.
+            kotlinx.coroutines.delay(400)
+            playRequest(token, spotifyUri, deviceId = first.first)
+        }
+
+    private fun playRequest(token: String, spotifyUri: String, deviceId: String?): Result<Unit> {
+        val url = StringBuilder("https://api.spotify.com/v1/me/player/play")
+        if (deviceId != null) url.append("?device_id=").append(deviceId)
+        val bodyJson = """{"uris":["$spotifyUri"]}"""
+        val body = okhttp3.RequestBody.create(
+            "application/json".toMediaTypeOrNull(),
+            bodyJson
+        )
+        val req = Request.Builder()
+            .url(url.toString())
+            .put(body)
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Content-Type", "application/json")
+            .build()
+        return try {
+            http.newCall(req).execute().use { resp ->
+                android.util.Log.i("PMP_DIAG", "Spotify.playRequest http=${resp.code}")
+                when (resp.code) {
+                    in 200..299 -> Result.success(Unit)
+                    401 -> Result.failure(IllegalStateException("Spotify session expired — sign in again"))
+                    403 -> Result.failure(IllegalStateException("Spotify Premium required for full playback. If you have Premium, sign out and sign in again to grant the new playback permissions."))
+                    404 -> Result.failure(IllegalStateException("NO_ACTIVE_DEVICE"))
+                    else -> Result.failure(IllegalStateException("Spotify HTTP ${resp.code}: ${resp.body?.string()?.take(200)}"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun listDevices(token: String): List<Pair<String, String>> {
+        val req = Request.Builder()
+            .url("https://api.spotify.com/v1/me/player/devices")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        return try {
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use emptyList<Pair<String, String>>()
+                val body = resp.body?.string().orEmpty()
+                val arr = JsonParser.parseString(body).asJsonObject
+                    .getAsJsonArray("devices") ?: return@use emptyList()
+                arr.mapNotNull {
+                    val o = it.asJsonObject
+                    val id = o.get("id")?.asString ?: return@mapNotNull null
+                    val name = o.get("name")?.asString ?: id
+                    id to name
+                }
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun transferPlayback(token: String, deviceId: String): Result<Unit> {
+        val bodyJson = """{"device_ids":["$deviceId"],"play":false}"""
+        val body = okhttp3.RequestBody.create(
+            "application/json".toMediaTypeOrNull(),
+            bodyJson
+        )
+        val req = Request.Builder()
+            .url("https://api.spotify.com/v1/me/player")
+            .put(body)
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Content-Type", "application/json")
+            .build()
+        return try {
+            http.newCall(req).execute().use { resp ->
+                android.util.Log.i("PMP_DIAG", "Spotify.transferPlayback http=${resp.code}")
+                if (resp.code in 200..299) Result.success(Unit)
+                else Result.failure(IllegalStateException("Transfer playback HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**
