@@ -53,13 +53,19 @@ fun PlayerScreen(
     var showChapterPicker by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Layout is chosen by SCREEN SIZE only — no longer toggled by
-        // isVideoContent so the layout doesn't tear down and rebuild
-        // every time the video flag flips during initial load (root
-        // cause of the "screen jumps" and "controls jump" symptoms).
-        // PlayerScreenExpanded now hosts VideoSurface in its left panel
-        // when video, CoverArtBackground when audio.
+        // Video ALWAYS uses the Compact layout regardless of screen size,
+        // so the picture fills the whole screen on phones, tablets, and
+        // unfolded foldables. Audio uses the size-appropriate layout.
         when {
+            uiState.isVideoContent -> PlayerScreenCompact(
+                uiState = uiState,
+                viewModel = viewModel,
+                coverColors = coverColors,
+                onColorsExtracted = { coverColors = it },
+                onShowSleepTimer = { showSleepTimerDialog = true },
+                onShowChapterPicker = { showChapterPicker = true },
+                horizontalPadding = 0
+            )
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded -> PlayerScreenExpanded(
                 uiState = uiState,
                 viewModel = viewModel,
@@ -369,27 +375,19 @@ private fun PlayerScreenExpanded(
             .fillMaxSize()
             .background(OledBlack)
     ) {
-        // Left panel: video frame OR cover art (swap content, NOT layout)
+        // Left panel: cover art only — video uses the Compact layout for
+        // full-screen playback regardless of size class.
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
         ) {
-            if (uiState.isVideoContent) {
-                VideoSurface(
-                    isVideoContent = true,
-                    videoWidth = uiState.videoWidth,
-                    videoHeight = uiState.videoHeight,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                CoverArtBackground(
-                    artworkUri = uiState.artworkUri,
-                    artworkBytes = uiState.artworkBytes,
-                    hasCoverArt = uiState.hasCoverArt,
-                    onColorsExtracted = onColorsExtracted
-                )
-            }
+            CoverArtBackground(
+                artworkUri = uiState.artworkUri,
+                artworkBytes = uiState.artworkBytes,
+                hasCoverArt = uiState.hasCoverArt,
+                onColorsExtracted = onColorsExtracted
+            )
         }
 
         // Right panel: all controls

@@ -211,8 +211,19 @@ class SpotifyProvider @Inject constructor(
      * the Spotify Android SDK + a Premium account, not implemented here.
      */
     override suspend fun getMediaStreamUri(item: CloudMediaItem): Result<Uri> {
+        // Tracks without a preview clip have downloadUrl set to spotify:track:…
+        // which ExoPlayer cannot resolve — surface a clear error instead of
+        // letting it fail later with ERROR_CODE_IO_NETWORK_CONNECTION_FAILED.
         if (item.downloadUrl.isBlank()) {
-            return Result.failure(IllegalStateException("No playable URL"))
+            return Result.failure(IllegalStateException("No playable URL for this track"))
+        }
+        if (item.downloadUrl.startsWith("spotify:")) {
+            return Result.failure(
+                IllegalStateException(
+                    "Spotify removed the 30-second preview for this track. " +
+                        "Full-track playback requires the Spotify Android SDK + Premium."
+                )
+            )
         }
         return Result.success(Uri.parse(item.downloadUrl))
     }

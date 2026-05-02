@@ -177,24 +177,25 @@ class GoogleDriveProvider @Inject constructor(
      *
      * Caller is responsible for deleting the cache file when done.
      */
-    suspend fun downloadToCache(
+    /**
+     * Download a byte range of a Drive file to cache. [rangeStart] / [rangeEnd]
+     * are inclusive. Pass null for either to anchor to the start or end of
+     * the file. Returns null on auth/network failure.
+     */
+    suspend fun downloadRangeToCache(
         item: CloudMediaItem,
-        rangeBytes: Long = 32L * 1024 * 1024  // first 32 MB — covers moov-at-front
+        rangeStart: Long?,
+        rangeEnd: Long?,
+        suffix: String = "tmp"
     ): java.io.File? = withContext(Dispatchers.IO) {
         val token = fetchAccessTokenBlocking() ?: return@withContext null
-        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}.tmp")
+        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}_$suffix")
+        val rangeHeader = "bytes=${rangeStart ?: ""}-${rangeEnd ?: ""}"
         try {
             val req = okhttp3.Request.Builder()
                 .url(item.downloadUrl)
                 .addHeader("Authorization", "Bearer $token")
-                // HTTP Range request — pull only what we need to find moov.
-                // Drive accepts Range and serves a 206 Partial Content. For
-                // the rare M4B with moov at the END, the partial download
-                // won't include chapters; that's accepted as a trade-off
-                // because the full-file path took several minutes for
-                // multi-GB audiobooks and was the source of "metadata
-                // takes forever" complaints.
-                .addHeader("Range", "bytes=0-${rangeBytes - 1}")
+                .addHeader("Range", rangeHeader)
                 .build()
             okhttp3.OkHttpClient().newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
@@ -204,8 +205,24 @@ class GoogleDriveProvider @Inject constructor(
             }
             cacheFile
         } catch (_: Exception) {
-            cacheFile.delete()
+            runCatching { cacheFile.delete() }
             null
+        }
+    }
+
+    /** Convenience: first 32 MB. */
+    suspend fun downloadToCache(item: CloudMediaItem): java.io.File? =
+        downloadRangeToCache(item, 0L, 32L * 1024 * 1024 - 1, "head")
+
+    /** Convenience: last 32 MB — for files whose moov atom is at the end. */
+    suspend fun downloadTailToCache(item: CloudMediaItem): java.io.File? {
+        val size = item.size
+        return if (size > 0) {
+            val start = (size - 32L * 1024 * 1024).coerceAtLeast(0L)
+            downloadRangeToCache(item, start, size - 1, "tail")
+        } else {
+            // Unknown size — request a tail using a negative-prefix range
+            downloadRangeToCache(item, null, 32L * 1024 * 1024, "tail")
         }
     }
 }

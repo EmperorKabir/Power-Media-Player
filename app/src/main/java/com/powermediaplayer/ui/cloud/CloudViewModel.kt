@@ -209,75 +209,85 @@ class CloudViewModel @Inject constructor(
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder) {
                 viewModelScope.launch(Dispatchers.IO) {
                     playbackConnection.setCloudFetchInProgress(true)
-                    val tempFile = try {
+                    // Two-pass strategy: head 32 MB first (handles moov-at-front,
+                    // typical for streaming-optimised files), then tail 32 MB
+                    // if nothing was extracted (handles moov-at-end, common
+                    // in Audible-converted M4Bs).
+                    var found = false
+                    var tempFile = try {
                         driveProvider.downloadToCache(item)
-                    } catch (e: Throwable) {
-                        // Catch Errors too — OutOfMemoryError on huge files
-                        // would otherwise crash the whole process.
-                        null
-                    }
-                    if (tempFile == null) {
-                        playbackConnection.setCloudFetchInProgress(false)
-                        return@launch
-                    }
-                    try {
-                        val tempUri = android.net.Uri.fromFile(tempFile)
-
-                        // Tags + artwork from MediaMetadataRetriever
-                        runCatching {
-                            android.media.MediaMetadataRetriever().use { mmr ->
-                                mmr.setDataSource(context, tempUri)
-                                val title = mmr.extractMetadata(
-                                    android.media.MediaMetadataRetriever.METADATA_KEY_TITLE
-                                )
-                                val artist = mmr.extractMetadata(
-                                    android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST
-                                ) ?: mmr.extractMetadata(
-                                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST
-                                )
-                                val album = mmr.extractMetadata(
-                                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM
-                                )
-                                val artBytes = mmr.embeddedPicture
-                                if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
-                                    !album.isNullOrBlank() || artBytes != null) {
-                                    playbackConnection.setLocalMetadata(
-                                        LocalMetadataOverride(
-                                            title = title,
-                                            artist = artist,
-                                            album = album,
-                                            artworkBytes = artBytes
-                                        )
-                                    )
-                                }
-                            }
-                        }
-
-                        // Chapters from the M4B parser — guarded so a parser
-                        // bug never tears down the whole process.
-                        runCatching {
-                            val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
-                            val count = bundle.getInt("chapter_count", 0)
-                            if (count > 0) {
-                                val chapters = (0 until count).mapNotNull { i ->
-                                    val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
-                                    val start = bundle.getLong("chapter_start_$i", -1)
-                                    val end = bundle.getLong("chapter_end_$i", -1)
-                                    if (start >= 0) ChapterInfo(title, start, end, i) else null
-                                }
-                                playbackConnection.setLocalChapters(chapters)
-                            }
-                        }
-                    } catch (_: Throwable) {
-                        // Defensive — the file we just wrote is being read
-                        // by external parsers; any failure here is recoverable.
-                    } finally {
+                    } catch (_: Throwable) { null }
+                    if (tempFile != null) {
+                        found = parseAndApply(item, tempFile)
                         runCatching { tempFile.delete() }
-                        playbackConnection.setCloudFetchInProgress(false)
                     }
+                    if (!found) {
+                        tempFile = try {
+                            driveProvider.downloadTailToCache(item)
+                        } catch (_: Throwable) { null }
+                        if (tempFile != null) {
+                            parseAndApply(item, tempFile)
+                            runCatching { tempFile.delete() }
+                        }
+                    }
+                    playbackConnection.setCloudFetchInProgress(false)
                 }
             }
         }
+    }
+
+    /**
+     * Run MediaMetadataRetriever + M4B chapter parser against a downloaded
+     * Drive byte range. Pushes any extracted artwork / tags / chapters to
+     * the player state. Returns true iff at least one was extracted.
+     */
+    private fun parseAndApply(item: CloudMediaItem, tempFile: java.io.File): Boolean {
+        var found = false
+        val tempUri = android.net.Uri.fromFile(tempFile)
+        runCatching {
+            android.media.MediaMetadataRetriever().use { mmr ->
+                mmr.setDataSource(context, tempUri)
+                val title = mmr.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_TITLE
+                )
+                val artist = mmr.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST
+                ) ?: mmr.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST
+                )
+                val album = mmr.extractMetadata(
+                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM
+                )
+                val artBytes = mmr.embeddedPicture
+                if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
+                    !album.isNullOrBlank() || artBytes != null) {
+                    playbackConnection.setLocalMetadata(
+                        LocalMetadataOverride(
+                            title = title,
+                            artist = artist,
+                            album = album,
+                            artworkBytes = artBytes
+                        )
+                    )
+                    if (artBytes != null) found = true
+                }
+            }
+        }
+        runCatching {
+            val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
+            val count = bundle.getInt("chapter_count", 0)
+            if (count > 0) {
+                val chapters = (0 until count).mapNotNull { i ->
+                    val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
+                    val start = bundle.getLong("chapter_start_$i", -1)
+                    val end = bundle.getLong("chapter_end_$i", -1)
+                    if (start >= 0) ChapterInfo(title, start, end, i) else null
+                }
+                playbackConnection.setLocalChapters(chapters)
+                found = true
+            }
+        }
+        return found
     }
 
     fun signOutDrive() {

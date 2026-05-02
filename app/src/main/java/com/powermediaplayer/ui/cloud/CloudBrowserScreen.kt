@@ -68,6 +68,20 @@ fun CloudBrowserScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
 
+        // Provider quick-switch tabs — tap to jump straight to Drive or
+        // Spotify without going back to the selection screen first.
+        ProviderTabRow(
+            active = uiState.activeProvider,
+            driveLoggedIn = uiState.driveLoggedIn,
+            spotifyLoggedIn = uiState.spotifyLoggedIn,
+            onSelectDrive = {
+                if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
+            },
+            onSelectSpotify = {
+                if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
+            }
+        )
+
         if (uiState.activeProvider == null) {
             // Provider selection / sign-in state
             ProviderCards(
@@ -117,6 +131,72 @@ fun CloudBrowserScreen(
                     modifier = Modifier.padding(12.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ProviderTabRow(
+    active: CloudProviderType?,
+    driveLoggedIn: Boolean,
+    spotifyLoggedIn: Boolean,
+    onSelectDrive: () -> Unit,
+    onSelectSpotify: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ProviderTab(
+            name = "Google Drive",
+            isActive = active == CloudProviderType.GOOGLE_DRIVE,
+            enabled = driveLoggedIn,
+            onClick = onSelectDrive,
+            modifier = Modifier.weight(1f)
+        )
+        ProviderTab(
+            name = "Spotify",
+            isActive = active == CloudProviderType.SPOTIFY,
+            enabled = spotifyLoggedIn,
+            onClick = onSelectSpotify,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ProviderTab(
+    name: String,
+    isActive: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val container = when {
+        isActive -> Teal800
+        enabled -> SurfaceElevated
+        else -> SurfaceElevated.copy(alpha = 0.4f)
+    }
+    val content = when {
+        isActive -> TealAccent
+        enabled -> TextPrimary
+        else -> TextTertiary
+    }
+    Surface(
+        color = container,
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier
+            .height(40.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = name + if (!enabled) " (sign in)" else "",
+                color = content,
+                style = MaterialTheme.typography.labelLarge
+            )
         }
     }
 }
