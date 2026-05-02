@@ -155,6 +155,22 @@ class PlaybackConnection @Inject constructor(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
+    /**
+     * Coalescer for [updatePlayerState]. Each ExoPlayer seek fires up to
+     * 8 listener callbacks in a few ms — without coalescing, every one
+     * runs ~10 main-thread MediaController IPC calls and rebuilds the
+     * whole PlayerState. Five rapid skip-back taps produced 231/374
+     * "high input latency" frames in the gfxinfo profile.
+     *
+     * Strategy: on first dirty event in a frame, schedule a single
+     * deferred update with a 16 ms delay (one frame at 60 Hz). Any
+     * additional events in that window flip the flag but do not queue
+     * extra work. The deferred job clears the flag, then runs the real
+     * update once.
+     */
+    @Volatile
+    private var updateScheduled = false
+
     // Reactive player reference — updates when the MediaController connects/disconnects.
     // Collected from the UI so VideoSurface attaches after the async connect completes.
     private val _playerFlow = MutableStateFlow<Player?>(null)
@@ -332,7 +348,29 @@ class PlaybackConnection @Inject constructor(
     private fun updatePlayerStateOnMain() {
         // scope is Dispatchers.Main.immediate — runs synchronously when
         // already on main, otherwise posts.
-        scope.launch { updatePlayerState() }
+        scope.launch { scheduleUpdate() }
+    }
+
+    /**
+     * Coalesce listener-driven updates so a single seek fires only one
+     * heavy update instead of 8. ExoPlayer dispatches its 8 listener
+     * callbacks back-to-back on the main thread; yield() defers our
+     * update until after that batch finishes, so all of them collapse
+     * into one [updatePlayerState] (which does ~15 main-thread IPC
+     * calls plus a full PlayerState rebuild — that pile-up was the
+     * scrub-back / skip-button stutter).
+     *
+     * No delay() — yield() reschedules to the back of the immediate
+     * queue, so we don't introduce any artificial UI latency.
+     */
+    private fun scheduleUpdate() {
+        if (updateScheduled) return
+        updateScheduled = true
+        scope.launch {
+            kotlinx.coroutines.yield()
+            updateScheduled = false
+            updatePlayerState()
+        }
     }
 
     /**
@@ -494,20 +532,20 @@ class PlaybackConnection @Inject constructor(
     @OptIn(UnstableApi::class)
     private fun setupPlayerListener() {
         controller?.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) { updatePlayerState() }
+            override fun onIsPlayingChanged(isPlaying: Boolean) { scheduleUpdate() }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 // Reset description + previous error — the new track may not emit
                 // metadata immediately and shouldn't inherit the prior failure.
                 _playerState.value = _playerState.value.copy(description = "", playerError = null)
-                updatePlayerState()
+                scheduleUpdate()
             }
-            override fun onPlaybackStateChanged(playbackState: Int) { updatePlayerState() }
-            override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) { updatePlayerState() }
-            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) { updatePlayerState() }
-            override fun onTimelineChanged(timeline: Timeline, reason: Int) { updatePlayerState() }
-            override fun onIsLoadingChanged(isLoading: Boolean) { updatePlayerState() }
+            override fun onPlaybackStateChanged(playbackState: Int) { scheduleUpdate() }
+            override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) { scheduleUpdate() }
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) { scheduleUpdate() }
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) { scheduleUpdate() }
+            override fun onIsLoadingChanged(isLoading: Boolean) { scheduleUpdate() }
             // Track changes populate isVideoContent — must be listened to separately
-            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { updatePlayerState() }
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { scheduleUpdate() }
             override fun onMetadata(metadata: Metadata) {
                 val desc = extractDescription(metadata)
                 if (desc.isNotEmpty() && desc != _playerState.value.description) {

@@ -16,6 +16,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.extractor.mp4.Mp4Extractor
@@ -146,6 +147,16 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+
+        // Snap seeks to the nearest keyframe instead of decoding from the
+        // previous keyframe to the exact frame. Backward seeks on H.264/
+        // HEVC 4K content are catastrophically slow with the default EXACT
+        // mode (decoder must rewind a whole GOP and re-decode forward,
+        // sometimes 200–500 ms of stall during which the video freezes).
+        // CLOSEST_SYNC trades a few frames of seek precision for instant
+        // response — what the user perceives as "scrubbing back" stutter
+        // and "skip-button" lag.
+        player!!.setSeekParameters(SeekParameters.CLOSEST_SYNC)
 
         // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
         exoPlayerRef = java.lang.ref.WeakReference(player!!)
