@@ -631,6 +631,73 @@ private fun PlayerScreenExpanded(
                 sleepTimerFormatted = uiState.sleepTimerFormatted,
                 onSleepTimerClick = onShowSleepTimer
             )
+            Spacer(modifier = Modifier.height(4.dp))
+            // Power-user controls row (audio-tablet parity with Compact):
+            // A-B loop + frame step + bookmark + Bluetooth toggle.
+            val abStartE by viewModel.abLoopStart.collectAsStateWithLifecycle()
+            val abEndE by viewModel.abLoopEnd.collectAsStateWithLifecycle()
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
+                        tint = TealAccent)
+                }
+                FilledTonalButton(
+                    onClick = { viewModel.toggleAbLoop() },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (abEndE != null) Teal800 else SurfaceElevated,
+                        contentColor = TealAccent
+                    )
+                ) {
+                    Text(
+                        text = when {
+                            abEndE != null -> "A–B ON"
+                            abStartE != null -> "A set — tap for B"
+                            else -> "A–B Loop"
+                        },
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+                IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
+                        tint = TealAccent)
+                }
+                IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
+                        tint = TealAccent)
+                }
+                BluetoothButton(modifier = Modifier.size(48.dp))
+            }
+            val bookmarksE by viewModel.bookmarks.collectAsStateWithLifecycle()
+            if (bookmarksE.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    bookmarksE.forEach { b ->
+                        AssistChip(
+                            onClick = { viewModel.seekToBookmark(b) },
+                            label = { Text(b.label, style = MaterialTheme.typography.labelSmall) },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { viewModel.deleteBookmark(b) },
+                                    modifier = Modifier.size(18.dp)
+                                ) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Remove",
+                                        tint = ErrorRed, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        )
+                    }
+                }
+            }
         }
     }
 }
