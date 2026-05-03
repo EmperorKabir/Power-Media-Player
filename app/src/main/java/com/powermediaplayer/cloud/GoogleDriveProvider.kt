@@ -3,40 +3,41 @@ package com.powermediaplayer.cloud
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.Scope
-import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
-import com.google.api.client.http.javanet.NetHttpTransport
-import com.google.api.client.json.gson.GsonFactory
-import com.google.api.services.drive.Drive
-import com.google.api.services.drive.DriveScopes
+import androidx.documentfile.provider.DocumentFile
+import com.powermediaplayer.data.preferences.DrivePickedRoot
+import com.powermediaplayer.data.preferences.SettingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Google Drive integration.
+ * Cloud / external folder integration via the Storage Access Framework.
  *
- * Authentication: Google Sign-In (Android-type OAuth client, no client secret —
- * the package name + SHA-1 fingerprint registered in the GCP project identifies
- * the app to Google's auth servers).
+ * Despite the legacy class name, this provider is no longer Drive-specific:
+ * it works with any DocumentsProvider Android knows about (Google Drive,
+ * OneDrive, Dropbox, USB-OTG, network shares). The user picks a folder
+ * once via [buildSignInIntent] (which fires ACTION_OPEN_DOCUMENT_TREE);
+ * Android grants the app a persistent `content://` tree URI; we
+ * enumerate via DocumentFile and stream via ContentResolver. No OAuth,
+ * no Google verification, no API keys.
  *
- * Listing: Drive REST v3 via google-api-services-drive.
- *
- * Streaming: produces a Drive `?alt=media` Uri; the actual Bearer-authenticated
- * read is handled by [GoogleDriveDataSourceFactory] which plugs into Media3.
+ * Class name retained for binary compatibility with the rest of the
+ * codebase — the public surface (buildSignInIntent / handleSignInResult /
+ * listFiles / etc.) is unchanged so existing call sites keep working.
  */
 @Singleton
 class GoogleDriveProvider @Inject constructor(
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val settingsDataStore: SettingsDataStore
 ) : CloudStorageProvider {
 
     override val providerType: CloudProviderType = CloudProviderType.GOOGLE_DRIVE
@@ -44,105 +45,137 @@ class GoogleDriveProvider @Inject constructor(
     private val _isLoggedIn = MutableStateFlow(false)
     override val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
-    private val signInOptions: GoogleSignInOptions = GoogleSignInOptions
-        .Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-        .requestEmail()
-        .requestScopes(Scope(DriveScopes.DRIVE_READONLY))
-        .build()
-
-    private val signInClient: GoogleSignInClient by lazy {
-        GoogleSignIn.getClient(context, signInOptions)
-    }
-
-    private var account: GoogleSignInAccount? = null
-    private var driveService: Drive? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
-        // Pick up cached sign-in if present (returning user)
-        GoogleSignIn.getLastSignedInAccount(context)?.let { acc ->
-            attach(acc)
+        // "Logged in" semantics under SAF: at least one root has been
+        // picked. Track the picked-roots flow so the cloud UI lights up
+        // / dims as the user adds or removes roots.
+        scope.launch {
+            settingsDataStore.drivePickedRoots.collect { roots ->
+                _isLoggedIn.value = roots.isNotEmpty()
+            }
         }
     }
 
-    fun buildSignInIntent(): Intent = signInClient.signInIntent
+    /**
+     * Returns an Intent that fires the Android system folder picker. The
+     * cloud screen launches it via ActivityResultContracts, then hands
+     * the result to [handleSignInResult].
+     */
+    fun buildSignInIntent(): Intent =
+        Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            )
+        }
 
     /**
-     * Hand the activity-result Intent back here from the launcher; this
-     * resolves the GoogleSignInAccount and primes the Drive service.
+     * Process the picker result: take a persistable URI permission so
+     * the grant survives reboots, then persist the tree URI + display
+     * name in DataStore.
      */
     suspend fun handleSignInResult(data: Intent?): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            val acc = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
-            attach(acc)
+            val treeUri = data?.data
+                ?: return@withContext Result.failure(IllegalStateException("No folder picked"))
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(treeUri, takeFlags)
+            } catch (e: SecurityException) {
+                // Some DocumentsProviders (e.g. internal storage on
+                // ancient devices) don't support persistable grants —
+                // fall through; the URI works for this session only.
+                android.util.Log.w("PMP_DIAG", "Drive: takePersistableUriPermission failed", e)
+            }
+            val displayName = DocumentFile.fromTreeUri(context, treeUri)?.name
+                ?: "Picked folder"
+            settingsDataStore.addDrivePickedRoot(treeUri.toString(), displayName)
+            android.util.Log.i("PMP_DIAG", "Drive picked root: $displayName ($treeUri)")
             Result.success(Unit)
         } catch (e: Exception) {
-            _isLoggedIn.value = false
             Result.failure(e)
         }
     }
 
-    private fun attach(acc: GoogleSignInAccount) {
-        account = acc
-        // Use selectedAccountName (email) — does not require GET_ACCOUNTS
-        // runtime permission. The previous selectedAccount + synthetic
-        // Account(email, "com.google") fallback failed silently for users
-        // who hadn't granted contacts/accounts perms, returning a null
-        // OAuth token at stream time.
-        val credential = GoogleAccountCredential
-            .usingOAuth2(context, listOf(DriveScopes.DRIVE_READONLY))
-            .apply { selectedAccountName = acc.email }
-        driveService = Drive.Builder(
-            NetHttpTransport(),
-            GsonFactory.getDefaultInstance(),
-            credential
-        )
-            .setApplicationName("Power Media Player")
-            .build()
-        _isLoggedIn.value = true
+    /**
+     * Release every persisted URI permission and clear the DataStore
+     * list. UI state ([_isLoggedIn]) reacts via the picked-roots flow.
+     */
+    override suspend fun signOut(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val roots = settingsDataStore.drivePickedRoots.first()
+            roots.forEach { root ->
+                runCatching {
+                    context.contentResolver.releasePersistableUriPermission(
+                        Uri.parse(root.treeUri),
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+            }
+            settingsDataStore.clearDrivePickedRoots()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Remove a single picked root (release its persisted permission too).
+     */
+    suspend fun forgetPickedRoot(treeUri: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            runCatching {
+                context.contentResolver.releasePersistableUriPermission(
+                    Uri.parse(treeUri),
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            settingsDataStore.removeDrivePickedRoot(treeUri)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     override suspend fun authenticate(context: Context): Result<Unit> =
         Result.failure(UnsupportedOperationException("Use buildSignInIntent + handleSignInResult"))
 
-    override suspend fun signOut(): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            signInClient.signOut().result // blocking — already off main
-        } catch (_: Exception) {}
-        account = null
-        driveService = null
-        _isLoggedIn.value = false
-        Result.success(Unit)
-    }
-
+    /**
+     * List children of [folderId]. When [folderId] is null, return the
+     * picked roots as virtual folders (so the user lands on a list of
+     * "Music", "Audiobooks", etc. — whatever they picked). When
+     * [folderId] is a `content://document/` URI, return its direct
+     * children, filtered to audio/video plus sub-folders.
+     */
     override suspend fun listFiles(folderId: String?): Result<List<CloudMediaItem>> =
         withContext(Dispatchers.IO) {
-            val drive = driveService ?: return@withContext Result.failure(
-                IllegalStateException("Not authenticated")
-            )
             try {
-                val parent = folderId ?: "root"
-                val query = "'$parent' in parents and trashed = false " +
-                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
-                    "or mimeType = 'application/vnd.google-apps.folder')"
-                val result = drive.files().list()
-                    .setQ(query)
-                    .setFields("files(id, name, mimeType, size, parents, thumbnailLink)")
-                    .setPageSize(200)
-                    .execute()
-                val items = result.files.orEmpty().map { f ->
-                    CloudMediaItem(
-                        id = f.id,
-                        name = f.name ?: "Unnamed",
-                        mimeType = f.mimeType ?: "",
-                        size = f.getSize() ?: 0L,
-                        downloadUrl = "https://www.googleapis.com/drive/v3/files/${f.id}?alt=media",
-                        sourceProvider = CloudProviderType.GOOGLE_DRIVE,
-                        isFolder = f.mimeType == "application/vnd.google-apps.folder",
-                        parentId = folderId,
-                        thumbnailUri = f.thumbnailLink?.let { Uri.parse(it) }
-                    )
+                if (folderId == null) {
+                    val roots = settingsDataStore.drivePickedRoots.first()
+                    val items = roots.map { root ->
+                        CloudMediaItem(
+                            id = root.treeUri,
+                            name = root.name,
+                            mimeType = MIME_FOLDER,
+                            size = 0L,
+                            downloadUrl = root.treeUri,
+                            sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                            isFolder = true,
+                            parentId = null
+                        )
+                    }
+                    return@withContext Result.success(items)
                 }
+                val docFile = resolveFolder(folderId)
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Cannot open folder (permission revoked?)")
+                    )
+                val items = docFile.listFiles()
+                    .mapNotNull { child -> toCloudItem(child, parentId = folderId) }
+                    .sortedWith(compareByDescending<CloudMediaItem> { it.isFolder }
+                        .thenBy { it.name.lowercase() })
                 Result.success(items)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -150,77 +183,77 @@ class GoogleDriveProvider @Inject constructor(
         }
 
     /**
-     * Search across the user's whole Drive for media files matching a
-     * free-text query. Uses Drive's `name contains` operator. Limited
-     * to audio/video MIME types so the result list isn't polluted with
-     * documents.
+     * Search across every picked root. Uses [DocumentFile] recursive
+     * walk; matches case-insensitive substring on file name. Folders
+     * are NOT returned by search — only playable files. Limited to 200
+     * matches per call so a typo on a 50k-file tree doesn't lock the UI.
      */
     suspend fun searchFiles(query: String): Result<List<CloudMediaItem>> =
         withContext(Dispatchers.IO) {
-            val drive = driveService ?: return@withContext Result.failure(
-                IllegalStateException("Not authenticated")
-            )
             if (query.isBlank()) return@withContext Result.success(emptyList())
-            val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
             try {
-                val q = "name contains '$escaped' and trashed = false " +
-                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
-                    "or mimeType = 'application/vnd.google-apps.folder')"
-                val result = drive.files().list()
-                    .setQ(q)
-                    .setFields("files(id, name, mimeType, size, parents, thumbnailLink)")
-                    .setPageSize(100)
-                    .execute()
-                val items = result.files.orEmpty().map { f ->
-                    CloudMediaItem(
-                        id = f.id,
-                        name = f.name ?: "Unnamed",
-                        mimeType = f.mimeType ?: "",
-                        size = f.getSize() ?: 0L,
-                        downloadUrl = "https://www.googleapis.com/drive/v3/files/${f.id}?alt=media",
-                        sourceProvider = CloudProviderType.GOOGLE_DRIVE,
-                        isFolder = f.mimeType == "application/vnd.google-apps.folder",
-                        thumbnailUri = f.thumbnailLink?.let { Uri.parse(it) }
-                    )
+                val needle = query.lowercase()
+                val roots = settingsDataStore.drivePickedRoots.first()
+                val out = mutableListOf<CloudMediaItem>()
+                for (root in roots) {
+                    val rootDoc = DocumentFile.fromTreeUri(context, Uri.parse(root.treeUri))
+                        ?: continue
+                    walkForSearch(rootDoc, needle, out, parentTreeUri = root.treeUri)
+                    if (out.size >= 200) break
                 }
-                Result.success(items)
+                Result.success(out.take(200))
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
 
+    private fun walkForSearch(
+        node: DocumentFile,
+        needle: String,
+        out: MutableList<CloudMediaItem>,
+        parentTreeUri: String
+    ) {
+        if (out.size >= 200) return
+        for (child in node.listFiles()) {
+            if (out.size >= 200) return
+            if (child.isDirectory) {
+                walkForSearch(child, needle, out, parentTreeUri)
+            } else {
+                val name = child.name.orEmpty()
+                val mime = child.type.orEmpty()
+                if (!isPlayable(mime, name)) continue
+                if (!name.lowercase().contains(needle)) continue
+                toCloudItem(child, parentId = parentTreeUri)?.let { out.add(it) }
+            }
+        }
+    }
+
+    /**
+     * Stream URI for [item]. Under SAF the `content://` URI in
+     * `item.downloadUrl` is itself the playable URI — no token, no
+     * redirect. ExoPlayer's DefaultDataSource handles `content://`
+     * URIs natively via ContentResolver, so the existing pipeline in
+     * PlaybackService works unchanged.
+     */
     override suspend fun getMediaStreamUri(item: CloudMediaItem): Result<Uri> =
         Result.success(Uri.parse(item.downloadUrl))
 
     /**
-     * Synchronously fetches a current OAuth2 access token. MUST be called
-     * off the main thread — GoogleAccountCredential blocks during refresh.
-     * Used by [GoogleDriveDataSourceFactory].
+     * Compatibility stub. The OAuth token flow is gone — SAF authorises
+     * via persistent URI grants instead. Returns null so PlaybackService's
+     * ResolvingDataSource hook becomes a no-op for `content://` URIs
+     * (the host check skips them anyway).
      */
-    fun fetchAccessTokenBlocking(): String? {
-        val acc = account ?: return null
-        return try {
-            val credential = GoogleAccountCredential
-                .usingOAuth2(context, listOf(DriveScopes.DRIVE_READONLY))
-                .apply { selectedAccountName = acc.email }
-            credential.token
-        } catch (_: Exception) {
-            null
-        }
-    }
+    fun fetchAccessTokenBlocking(): String? = null
 
     /**
-     * Download a Drive file fully to cache so out-of-band parsers (M4B
-     * chapter extractor, MediaMetadataRetriever, etc.) can access it via
-     * a regular file URI. Returns null if not authenticated, the file is
-     * larger than [maxBytes], or the download fails.
+     * Download a byte range to local cache. Used by the M4B chapter
+     * parser, MediaMetadataRetriever, and other off-band parsers that
+     * cannot read directly from a `content://` URI without seeking.
      *
-     * Caller is responsible for deleting the cache file when done.
-     */
-    /**
-     * Download a byte range of a Drive file to cache. [rangeStart] / [rangeEnd]
-     * are inclusive. Pass null for either to anchor to the start or end of
-     * the file. Returns null on auth/network failure.
+     * SAF-friendly implementation: opens a ParcelFileDescriptor, wraps
+     * it in FileInputStream, seeks via channel.position() and writes
+     * to a cache file.
      */
     suspend fun downloadRangeToCache(
         item: CloudMediaItem,
@@ -229,43 +262,44 @@ class GoogleDriveProvider @Inject constructor(
         suffix: String = "tmp"
     ): java.io.File? = withContext(Dispatchers.IO) {
         val tag = "PowerMediaPlayer"
-        val token = fetchAccessTokenBlocking()
-        if (token == null) {
-            android.util.Log.e(tag, "Drive download: no access token (signed out?)")
-            return@withContext null
-        }
-        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}_$suffix")
-        val rangeHeader = "bytes=${rangeStart ?: ""}-${rangeEnd ?: ""}"
-        android.util.Log.i(tag, "Drive download: ${item.name} ($suffix) range=$rangeHeader size=${item.size}")
+        val sourceUri = runCatching { Uri.parse(item.downloadUrl) }.getOrNull()
+            ?: return@withContext null
+        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_$suffix")
+        val start = rangeStart ?: 0L
+        val end = rangeEnd ?: Long.MAX_VALUE
+        android.util.Log.i(
+            tag,
+            "Drive cache download: ${item.name} ($suffix) start=$start end=$end size=${item.size}"
+        )
         try {
-            val req = okhttp3.Request.Builder()
-                .url(item.downloadUrl)
-                .addHeader("Authorization", "Bearer $token")
-                .addHeader("Range", rangeHeader)
-                .build()
-            okhttp3.OkHttpClient().newCall(req).execute().use { resp ->
-                android.util.Log.i(tag, "Drive download response: code=${resp.code} bytes-pending")
-                if (!resp.isSuccessful) {
-                    android.util.Log.e(tag, "Drive download failed: HTTP ${resp.code}")
-                    return@withContext null
-                }
-                var written = 0L
-                resp.body?.byteStream()?.use { input ->
+            context.contentResolver.openFileDescriptor(sourceUri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).use { fis ->
+                    val channel = fis.channel
+                    channel.position(start.coerceAtLeast(0L))
+                    val maxBytes = if (end == Long.MAX_VALUE) Long.MAX_VALUE
+                    else (end - start + 1).coerceAtLeast(0L)
                     cacheFile.outputStream().use { out ->
                         val buf = ByteArray(64 * 1024)
+                        var written = 0L
                         while (true) {
-                            val n = input.read(buf)
+                            val toRead = if (maxBytes == Long.MAX_VALUE) buf.size
+                            else minOf(buf.size.toLong(), maxBytes - written).toInt()
+                            if (toRead <= 0) break
+                            val n = fis.read(buf, 0, toRead)
                             if (n < 0) break
                             out.write(buf, 0, n)
                             written += n
                         }
+                        android.util.Log.i(tag, "Drive cache wrote $written bytes to ${cacheFile.name}")
                     }
                 }
-                android.util.Log.i(tag, "Drive download wrote $written bytes to ${cacheFile.name}")
+            } ?: run {
+                android.util.Log.e(tag, "Drive cache: openFileDescriptor returned null for $sourceUri")
+                return@withContext null
             }
             cacheFile
         } catch (e: Exception) {
-            android.util.Log.e(tag, "Drive download exception", e)
+            android.util.Log.e(tag, "Drive cache download exception", e)
             runCatching { cacheFile.delete() }
             null
         }
@@ -287,15 +321,14 @@ class GoogleDriveProvider @Inject constructor(
     }
 
     /**
-     * Full-file download — used as a fallback when partial downloads fail
-     * to yield metadata. Cap raised to 4 GB so multi-disc Audible audiobooks
-     * (1–2 GB each) actually run the full path; below that the head-only
-     * pass already covers cases with moov-at-front. Logs the cap rejection
-     * so it's diagnosable next time.
+     * Full-file download (≤4 GB) — used as a fallback when partial reads
+     * yield no metadata. Real-world ceiling is whatever the SAF provider
+     * is willing to stream; on Drive's Android client this is bounded
+     * by available storage rather than a fixed size.
      */
     suspend fun downloadFullToCache(item: CloudMediaItem): java.io.File? {
         val cap = 4L * 1024 * 1024 * 1024
-        if (item.size > cap) {
+        if (item.size in 1L..Long.MAX_VALUE && item.size > cap) {
             android.util.Log.w(
                 "PowerMediaPlayer",
                 "Drive full download skipped: ${item.name} size=${item.size} > cap=$cap"
@@ -303,5 +336,58 @@ class GoogleDriveProvider @Inject constructor(
             return null
         }
         return downloadRangeToCache(item, 0L, null, "full")
+    }
+
+    // ── Helpers ─────────────────────────────────────────────────
+
+    private fun resolveFolder(folderId: String): DocumentFile? {
+        val uri = runCatching { Uri.parse(folderId) }.getOrNull() ?: return null
+        // A picked root URI (tree-only) — use fromTreeUri.
+        // A nested folder URI that already includes /document/ — use the
+        // tree's root and walk via children. DocumentFile.fromTreeUri
+        // accepts both forms in practice on AOSP since 23+.
+        return DocumentFile.fromTreeUri(context, uri)
+    }
+
+    private fun toCloudItem(file: DocumentFile, parentId: String?): CloudMediaItem? {
+        val name = file.name ?: return null
+        val mime = file.type.orEmpty()
+        val isFolder = file.isDirectory
+        if (!isFolder && !isPlayable(mime, name)) return null
+        return CloudMediaItem(
+            id = file.uri.toString(),
+            name = name,
+            mimeType = if (isFolder) MIME_FOLDER else mime,
+            size = if (isFolder) 0L else file.length().coerceAtLeast(0L),
+            downloadUrl = file.uri.toString(),
+            sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+            isFolder = isFolder,
+            parentId = parentId,
+            thumbnailUri = null
+        )
+    }
+
+    /**
+     * Decide whether a SAF entry should appear in the cloud browser.
+     * MIME from DocumentsProviders is reliable for media — fall back to
+     * extension matching when the provider returns "application/octet-
+     * stream" (common for cloud providers that don't sniff content).
+     */
+    private fun isPlayable(mime: String, name: String): Boolean {
+        if (mime.startsWith("audio/") || mime.startsWith("video/")) return true
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return ext in PLAYABLE_EXTENSIONS
+    }
+
+    companion object {
+        private const val MIME_FOLDER = "vnd.android.document/directory"
+        private val PLAYABLE_EXTENSIONS = setOf(
+            // Audio
+            "mp3", "flac", "ogg", "oga", "opus", "wav", "wave", "aac",
+            "m4a", "m4b", "m4p", "m4r", "aiff", "aif", "ape", "wma",
+            // Video
+            "mp4", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts", "m4v",
+            "3gp", "3g2"
+        )
     }
 }

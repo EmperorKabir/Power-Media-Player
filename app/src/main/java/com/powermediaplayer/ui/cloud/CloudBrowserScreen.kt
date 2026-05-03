@@ -423,12 +423,16 @@ private fun ProviderCards(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         ProviderCard(
-            name = "Google Drive",
-            description = "Stream audio and video files stored in your Drive.",
+            name = "Cloud / external folders",
+            description = "Pick a folder from Google Drive, OneDrive, Dropbox, " +
+                "or your phone's storage. Browse and play media inside it. " +
+                "Add as many folders as you like.",
             loggedIn = driveLoggedIn,
             onConnect = onConnectDrive,
             onBrowse = onBrowseDrive,
-            onSignOut = onSignOutDrive
+            onSignOut = onSignOutDrive,
+            connectLabel = "Pick a folder",
+            signOutLabel = "Forget all folders"
         )
         ProviderCard(
             name = "Spotify",
@@ -448,7 +452,9 @@ private fun ProviderCard(
     loggedIn: Boolean,
     onConnect: () -> Unit,
     onBrowse: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    connectLabel: String = "Connect $name",
+    signOutLabel: String = "Sign out"
 ) {
     Surface(
         color = SurfaceElevated,
@@ -473,8 +479,15 @@ private fun ProviderCard(
                             contentColor = TealAccent
                         )
                     ) { Text("Browse") }
+                    FilledTonalButton(
+                        onClick = onConnect,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Teal800,
+                            contentColor = TealAccent
+                        )
+                    ) { Text("Add folder") }
                     OutlinedButton(onClick = onSignOut) {
-                        Text("Sign out", color = TextSecondary)
+                        Text(signOutLabel, color = TextSecondary)
                     }
                 }
             } else {
@@ -484,7 +497,7 @@ private fun ProviderCard(
                         containerColor = Teal800,
                         contentColor = TealAccent
                     )
-                ) { Text("Connect $name") }
+                ) { Text(connectLabel) }
             }
         }
     }

@@ -197,21 +197,16 @@ dependencies {
     implementation("com.google.code.gson:gson:2.12.1")
 
     // ── Cloud / OAuth ────────────────────────────────────────────
-    // AppAuth: PKCE OAuth flows with Custom Tabs (Spotify, Drive token refresh)
+    // AppAuth: PKCE OAuth flows with Custom Tabs (Spotify only — Drive
+    // moved to Storage Access Framework, no OAuth required).
     implementation("net.openid:appauth:0.11.1")
-    // OkHttp: Spotify Web API HTTP client + Drive streaming DataSource
+    // OkHttp: Spotify Web API HTTP client.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // Google Sign-In + Drive REST v3
-    implementation("com.google.android.gms:play-services-auth:21.3.0")
-    implementation("com.google.api-client:google-api-client-android:2.7.0") {
-        exclude(group = "org.apache.httpcomponents")
-    }
-    implementation("com.google.apis:google-api-services-drive:v3-rev20240914-2.0.0") {
-        exclude(group = "org.apache.httpcomponents")
-    }
-    implementation("com.google.http-client:google-http-client-gson:1.45.0") {
-        exclude(group = "org.apache.httpcomponents")
-    }
+    // Storage Access Framework: DocumentFile wrapper for the system
+    // folder picker. Used by the cloud browser to enumerate user-granted
+    // Drive / OneDrive / Dropbox / USB folders without requiring per-
+    // provider OAuth or Google verification.
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // ── Testing ──────────────────────────────────────────────────
     testImplementation("junit:junit:4.13.2")

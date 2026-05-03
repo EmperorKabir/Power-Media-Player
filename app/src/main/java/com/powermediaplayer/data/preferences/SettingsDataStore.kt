@@ -70,6 +70,47 @@ class SettingsDataStore @Inject constructor(
         val PREFETCH_NEXT_CLOUD = booleanPreferencesKey("prefetch_next_cloud")
 
         val LIBRARY_SORT_MODE = stringPreferencesKey("library_sort_mode")
+
+        // Storage Access Framework: tree URIs the user has granted via
+        // ACTION_OPEN_DOCUMENT_TREE. Each entry is "treeUri|displayName".
+        val DRIVE_PICKED_ROOTS = stringSetPreferencesKey("drive_picked_roots")
+    }
+
+    // ── Drive (SAF) picked roots ────────────────────────────────
+    val drivePickedRoots: Flow<List<DrivePickedRoot>> =
+        context.dataStore.data.map { prefs ->
+            (prefs[Keys.DRIVE_PICKED_ROOTS] ?: emptySet()).mapNotNull { entry ->
+                val sep = entry.indexOf('|')
+                if (sep <= 0) null
+                else DrivePickedRoot(
+                    treeUri = entry.substring(0, sep),
+                    name = entry.substring(sep + 1)
+                )
+            }.sortedBy { it.name.lowercase() }
+        }
+
+    suspend fun addDrivePickedRoot(treeUri: String, name: String) {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[Keys.DRIVE_PICKED_ROOTS] ?: emptySet()).toMutableSet()
+            // De-dupe by treeUri prefix so re-picking the same folder is a no-op.
+            current.removeAll { it.startsWith("$treeUri|") }
+            current.add("$treeUri|$name")
+            prefs[Keys.DRIVE_PICKED_ROOTS] = current
+        }
+    }
+
+    suspend fun removeDrivePickedRoot(treeUri: String) {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[Keys.DRIVE_PICKED_ROOTS] ?: emptySet()).toMutableSet()
+            current.removeAll { it.startsWith("$treeUri|") }
+            prefs[Keys.DRIVE_PICKED_ROOTS] = current
+        }
+    }
+
+    suspend fun clearDrivePickedRoots() {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DRIVE_PICKED_ROOTS] = emptySet()
+        }
     }
 
     val librarySortMode: Flow<String> = context.dataStore.data.map {
@@ -337,6 +378,14 @@ object BluetoothMediaActions {
  * Persisted reference to a Drive folder the user has starred.
  */
 data class DriveFavouriteFolder(val id: String, val name: String)
+
+/**
+ * Persisted reference to a Storage Access Framework tree URI the user
+ * has picked via the system folder picker. `treeUri` is the
+ * `content://` URI returned by ACTION_OPEN_DOCUMENT_TREE; `name` is
+ * the human-readable name shown in the cloud browser root.
+ */
+data class DrivePickedRoot(val treeUri: String, val name: String)
 
 /**
  * Persisted reference to a Spotify URI the user has starred.

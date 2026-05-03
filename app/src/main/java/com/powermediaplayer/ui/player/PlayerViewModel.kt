@@ -33,13 +33,37 @@ class PlayerViewModel @Inject constructor(
 ) : ViewModel() {
 
     /**
+     * Resolve the bookmark key for whatever's currently playing. For
+     * local + Drive (SAF) playback this is the ExoPlayer mediaId — a
+     * file URI / content:// URI. For Spotify, the local ExoPlayer
+     * mediaId is stale (Spotify Connect drives playback off-device);
+     * use the Spotify track URI from the polled mirror state instead.
+     */
+    private fun currentBookmarkKey(): String? {
+        spotifyProvider.spotifyState.value?.let { s ->
+            if (s.trackUri.isNotBlank()) return s.trackUri
+        }
+        return playbackConnection.getPlayer()?.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Current playback position regardless of source. Spotify mirror
+     * wins when active (its position is fresher than the local
+     * MediaController's, which idles when Spotify is the source).
+     */
+    private fun currentBookmarkPositionMs(): Long {
+        spotifyProvider.spotifyState.value?.let { return it.positionMs.coerceAtLeast(0L) }
+        return playbackConnection.getPlayer()?.currentPosition?.coerceAtLeast(0L) ?: 0L
+    }
+
+    /**
      * Add a bookmark at current playback position. Label is the
      * formatted timestamp; user can edit later (out-of-scope here).
+     * Works uniformly across local / Drive (SAF) / Spotify sources.
      */
     fun addBookmarkHere() {
-        val player = playbackConnection.getPlayer() ?: return
-        val mediaUri = player.currentMediaItem?.mediaId ?: return
-        val pos = player.currentPosition.coerceAtLeast(0L)
+        val mediaUri = currentBookmarkKey() ?: return
+        val pos = currentBookmarkPositionMs()
         viewModelScope.launch(Dispatchers.IO) {
             bookmarkDao.insert(
                 com.powermediaplayer.data.db.entity.BookmarkEntity(
@@ -52,14 +76,21 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /** Bookmarks for the currently playing item. Empty when none / no item. */
+    /**
+     * Bookmarks for the currently playing item. Empty when none / no
+     * item. Re-keys when the active track changes — for Spotify the
+     * trigger is the polled trackUri, for local/Drive it's the
+     * ExoPlayer media-item title (cheap proxy for "track changed").
+     */
     val bookmarks: StateFlow<List<com.powermediaplayer.data.db.entity.BookmarkEntity>> =
-        playbackConnection.playerState
-            .map { it.title }   // re-key when track switches; cheap proxy
-            .flatMapLatest {
-                val mediaUri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
-                if (mediaUri.isNullOrBlank()) flowOf(emptyList())
-                else bookmarkDao.observeForMedia(mediaUri)
+        kotlinx.coroutines.flow.combine(
+            playbackConnection.playerState.map { it.title },
+            spotifyProvider.spotifyState.map { it?.trackUri }
+        ) { _, _ -> currentBookmarkKey() }
+            .distinctUntilChanged()
+            .flatMapLatest { key ->
+                if (key.isNullOrBlank()) flowOf(emptyList())
+                else bookmarkDao.observeForMedia(key)
             }
             .stateIn(
                 scope = viewModelScope,
@@ -67,8 +98,17 @@ class PlayerViewModel @Inject constructor(
                 initialValue = emptyList()
             )
 
+    /**
+     * Seek to a bookmark's saved position. Routes through Spotify
+     * Connect when Spotify is the active source so the seek lands on
+     * the user's remote device, not the silent local ExoPlayer.
+     */
     fun seekToBookmark(b: com.powermediaplayer.data.db.entity.BookmarkEntity) {
-        playbackConnection.seekTo(b.positionMs)
+        if (isSpotifyActive) {
+            viewModelScope.launch { spotifyProvider.seekTo(b.positionMs) }
+        } else {
+            playbackConnection.seekTo(b.positionMs)
+        }
     }
     fun deleteBookmark(b: com.powermediaplayer.data.db.entity.BookmarkEntity) {
         viewModelScope.launch(Dispatchers.IO) { bookmarkDao.delete(b.id) }

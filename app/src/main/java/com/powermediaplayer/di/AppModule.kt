@@ -110,6 +110,7 @@ object AppModule {
     @Provides
     @Singleton
     fun provideGoogleDriveProvider(
-        @ApplicationContext context: Context
-    ): GoogleDriveProvider = GoogleDriveProvider(context)
+        @ApplicationContext context: Context,
+        settingsDataStore: SettingsDataStore
+    ): GoogleDriveProvider = GoogleDriveProvider(context, settingsDataStore)
 }
