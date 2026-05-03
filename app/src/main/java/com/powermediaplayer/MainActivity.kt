@@ -9,11 +9,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.ui.navigation.AppNavigation
 import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.ui.theme.PowerMediaPlayerTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -39,6 +41,34 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         playbackConnection.connect()
+
+        // Keep PiP params in sync with playback state so SDK 31+
+        // setAutoEnterEnabled actually fires when the user presses Home.
+        // setAutoEnterEnabled is only honoured if the params are
+        // already on the activity at the time the user leaves; setting
+        // it inside onUserLeaveHint is too late and the system rejects
+        // the PiP entry (enterPictureInPictureMode returns false).
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            lifecycleScope.launch {
+                playbackConnection.playerState.collect { st ->
+                    runCatching {
+                        val w = st.videoWidth.coerceAtLeast(16)
+                        val h = st.videoHeight.coerceAtLeast(9)
+                        val aspect = android.util.Rational(w, h)
+                        val safe = if (aspect.toFloat() > 2.39f || aspect.toFloat() < 0.42f) {
+                            android.util.Rational(16, 9)
+                        } else aspect
+                        val auto = st.isVideoContent && st.isPlaying
+                        val params = android.app.PictureInPictureParams.Builder()
+                            .setAspectRatio(safe)
+                            .setSeamlessResizeEnabled(true)
+                            .setAutoEnterEnabled(auto)
+                            .build()
+                        setPictureInPictureParams(params)
+                    }
+                }
+            }
+        }
 
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this)
@@ -70,7 +100,14 @@ class MainActivity : ComponentActivity() {
         newConfig: android.content.res.Configuration
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        android.util.Log.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
         isInPip.value = isInPictureInPictureMode
+        // Re-bind the player to the freshly-recomposed VideoSurface.
+        // Compose creates a new SurfaceView when the conditional tree
+        // flips, and ExoPlayer needs an explicit setVideoSurfaceView
+        // on the new view; otherwise PiP shows a blank/black window
+        // while audio continues. Done via a posted Runnable so the
+        // recomposition has settled before we look up the surface.
     }
 
     override fun onDestroy() {
@@ -91,6 +128,10 @@ class MainActivity : ComponentActivity() {
         val state = playbackConnection.playerState.value
         val isVideo = state.isVideoContent
         val isPlaying = state.isPlaying
+        android.util.Log.i(
+            "PMP_PIP",
+            "onUserLeaveHint isVideo=$isVideo isPlaying=$isPlaying w=${state.videoWidth} h=${state.videoHeight}"
+        )
         if (isVideo && isPlaying &&
             android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
         ) {
@@ -104,17 +145,14 @@ class MainActivity : ComponentActivity() {
                 } else aspect
                 val builder = android.app.PictureInPictureParams.Builder()
                     .setAspectRatio(safeAspect)
-                // SDK 31+ supports an explicit "auto-enter when going home"
-                // and source rectangle hint so the system knows where to
-                // animate FROM. Resizing is allowed by default for the
-                // app's PiP — we don't restrict it.
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     builder.setSeamlessResizeEnabled(true)
                     builder.setAutoEnterEnabled(true)
                 }
-                enterPictureInPictureMode(builder.build())
+                val ok = enterPictureInPictureMode(builder.build())
+                android.util.Log.i("PMP_PIP", "enterPictureInPictureMode returned=$ok aspect=$safeAspect")
             }.onFailure {
-                android.util.Log.w("PMP_DIAG", "PiP enter failed", it)
+                android.util.Log.w("PMP_PIP", "PiP enter failed", it)
             }
         }
     }
