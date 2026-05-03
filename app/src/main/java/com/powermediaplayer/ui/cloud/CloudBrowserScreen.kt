@@ -79,6 +79,31 @@ fun CloudBrowserScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
 
+        // Search bar — debounced (300 ms) lookup against the active
+        // provider. Drive uses files.list with `name contains`,
+        // Spotify uses /v1/search across track/album/playlist/show/
+        // episode. Empty query hides results so normal browse view
+        // remains the default.
+        if (uiState.activeProvider != null) {
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = { viewModel.setSearchQuery(it) },
+                placeholder = { Text("Search ${uiState.activeProvider?.name?.replace('_',' ')?.lowercase()}…") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = TealAccent) },
+                trailingIcon = if (uiState.searchQuery.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Clear", tint = TextSecondary)
+                        }
+                    }
+                } else null,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+        }
+
         // Provider quick-switch tabs — tap to jump straight to Drive or
         // Spotify. Tapping a not-signed-in provider triggers the sign-in
         // flow rather than no-op'ing.
@@ -117,6 +142,30 @@ fun CloudBrowserScreen(
             } else if (uiState.items.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Empty folder", color = TextSecondary)
+                }
+            } else if (uiState.searchQuery.isNotBlank()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    items(uiState.searchResults, key = { "search_${it.id}_${it.sourceProvider}" }) { item ->
+                        CloudItemRow(
+                            item = item,
+                            onClick = {
+                                viewModel.openItem(item, onPlaybackStarted = onNavigateToPlayer)
+                            }
+                        )
+                    }
+                    if (uiState.searchResults.isEmpty()) {
+                        item(key = "search_empty") {
+                            Text(
+                                text = "No results for \"${uiState.searchQuery}\"",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextTertiary,
+                                modifier = Modifier.padding(24.dp)
+                            )
+                        }
+                    }
                 }
             } else {
                 LazyColumn(

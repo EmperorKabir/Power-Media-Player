@@ -88,8 +88,27 @@ data class PlayerUiState(
     val controls: ControlsEnabledState = ControlsEnabledState(),
 
     // Video support
-    val isVideoContent: Boolean = false
+    val isVideoContent: Boolean = false,
+
+    // Content kind drives the dynamic label on Prev/Next buttons
+    // (Track/Album/Chapter/Episode/etc.). Inferred in PlayerViewModel
+    // from playerState fields; UNKNOWN falls back to File/Chapter.
+    val mediaKind: MediaKind = MediaKind.UNKNOWN
 )
+
+/**
+ * Coarse content type used only for control labelling. Independent of
+ * playback wiring — purely a display hint.
+ */
+enum class MediaKind {
+    MUSIC,           // single audio track
+    ALBUM,           // multi-track audio album
+    AUDIOBOOK,       // long-form audio with chapters
+    PODCAST,         // podcast episode
+    SPOTIFY_TRACK,   // Spotify Connect mirror
+    VIDEO,           // any video file
+    UNKNOWN
+}
 
 /**
  * Determines which controls should be enabled vs greyed out.

@@ -34,7 +34,9 @@ data class CloudUiState(
     val activeProvider: CloudProviderType? = null,
     val items: List<CloudMediaItem> = emptyList(),
     val folderStack: List<Pair<String?, String>> = listOf(null to "Root"),
-    val driveFavourites: List<DriveFavouriteFolder> = emptyList()
+    val driveFavourites: List<DriveFavouriteFolder> = emptyList(),
+    val searchQuery: String = "",
+    val searchResults: List<CloudMediaItem> = emptyList()
 )
 
 @HiltViewModel
@@ -439,6 +441,30 @@ class CloudViewModel @Inject constructor(
             }
         }
         return found
+    }
+
+    private var searchJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Search the active provider. Debounced 300 ms so a fast typist's
+     * keystrokes don't trigger an API call per character.
+     */
+    fun setSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(300)
+            val provider = _uiState.value.activeProvider
+            val results = when {
+                query.isBlank() -> emptyList()
+                provider == CloudProviderType.GOOGLE_DRIVE ->
+                    driveProvider.searchFiles(query).getOrDefault(emptyList())
+                provider == CloudProviderType.SPOTIFY ->
+                    spotifyProvider.search(query).getOrDefault(emptyList())
+                else -> emptyList()
+            }
+            _uiState.value = _uiState.value.copy(searchResults = results)
+        }
     }
 
     /**

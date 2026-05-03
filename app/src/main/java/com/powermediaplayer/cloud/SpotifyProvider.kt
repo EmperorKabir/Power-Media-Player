@@ -504,6 +504,53 @@ class SpotifyProvider @Inject constructor(
      * mirror what's playing on Spotify. Idempotent — calling twice
      * doesn't double the polling rate.
      */
+    /**
+     * Spotify Web API /v1/search across track + album + playlist +
+     * show + episode. Returns a flat CloudMediaItem list; tracks are
+     * tappable, the rest currently land on the "browse not implemented"
+     * error path until the section UI lands.
+     */
+    suspend fun search(query: String): Result<List<CloudMediaItem>> =
+        withContext(Dispatchers.IO) {
+            if (query.isBlank()) return@withContext Result.success(emptyList())
+            val token = currentAccessToken() ?: return@withContext Result.failure(
+                IllegalStateException("Not authenticated")
+            )
+            val url = "https://api.spotify.com/v1/search?" +
+                "q=" + java.net.URLEncoder.encode(query, "UTF-8") +
+                "&type=track,album,playlist,show,episode&limit=10"
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            val results = mutableListOf<CloudMediaItem>()
+            try {
+                http.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        return@withContext Result.failure(
+                            IllegalStateException("Spotify search HTTP ${resp.code}")
+                        )
+                    }
+                    val body = resp.body?.string().orEmpty()
+                    val root = JsonParser.parseString(body).asJsonObject
+                    listOf("tracks" to "track", "albums" to "album",
+                           "playlists" to "playlist", "shows" to "show",
+                           "episodes" to "episode").forEach { (key, type) ->
+                        val arr = root.getAsJsonObject(key)
+                            ?.getAsJsonArray("items") ?: return@forEach
+                        for (el in arr) {
+                            val obj = el.asJsonObject
+                            results.add(jsonToCloudItem(obj, type))
+                        }
+                    }
+                }
+                android.util.Log.i("PMP_DIAG", "Spotify.search q='$query' n=${results.size}")
+                Result.success(results)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
     fun startPlaybackPolling() {
         if (pollJob?.isActive == true) return
         android.util.Log.i("PMP_DIAG", "Spotify.startPlaybackPolling")

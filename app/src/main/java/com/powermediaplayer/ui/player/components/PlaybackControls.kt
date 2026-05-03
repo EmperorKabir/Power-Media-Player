@@ -45,8 +45,26 @@ fun PlaybackControls(
     onSkipForward: (Int) -> Unit,
     onNextChapterOrTrack: () -> Unit,
     onNextFile: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    mediaKind: com.powermediaplayer.ui.player.MediaKind = com.powermediaplayer.ui.player.MediaKind.UNKNOWN
 ) {
+    // Label mapping per content type:
+    //   MUSIC          → File="Track",  Chapter="Track"
+    //   ALBUM          → File="Album",  Chapter="Track"
+    //   AUDIOBOOK      → File="Book",   Chapter="Chapter"
+    //   PODCAST        → File="Show",   Chapter="Episode"
+    //   SPOTIFY_TRACK  → File="Track",  Chapter="Track"
+    //   VIDEO          → File="Video",  Chapter="Chapter"
+    //   UNKNOWN        → File / Chapter (legacy fallback)
+    val (fileLabel, chapterLabel) = when (mediaKind) {
+        com.powermediaplayer.ui.player.MediaKind.MUSIC -> "Track" to "Track"
+        com.powermediaplayer.ui.player.MediaKind.ALBUM -> "Album" to "Track"
+        com.powermediaplayer.ui.player.MediaKind.AUDIOBOOK -> "Book" to "Chapter"
+        com.powermediaplayer.ui.player.MediaKind.PODCAST -> "Show" to "Episode"
+        com.powermediaplayer.ui.player.MediaKind.SPOTIFY_TRACK -> "Track" to "Track"
+        com.powermediaplayer.ui.player.MediaKind.VIDEO -> "Video" to "Chapter"
+        com.powermediaplayer.ui.player.MediaKind.UNKNOWN -> "File" to "Chapter"
+    }
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -63,12 +81,14 @@ fun PlaybackControls(
         ) {
             PrevFileButton(
                 enabled = controls.previousFile,
-                onClick = onPreviousFile
+                onClick = onPreviousFile,
+                label = fileLabel
             )
 
             PrevChapterTrackButton(
                 enabled = controls.previousChapterOrTrack,
-                onClick = onPreviousChapterOrTrack
+                onClick = onPreviousChapterOrTrack,
+                label = chapterLabel
             )
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -91,12 +111,14 @@ fun PlaybackControls(
 
             NextChapterTrackButton(
                 enabled = controls.nextChapterOrTrack,
-                onClick = onNextChapterOrTrack
+                onClick = onNextChapterOrTrack,
+                label = chapterLabel
             )
 
             NextFileButton(
                 enabled = controls.nextFile,
-                onClick = onNextFile
+                onClick = onNextFile,
+                label = fileLabel
             )
         }
 
@@ -293,14 +315,15 @@ fun LabelledNavigationButton(
 
 @Composable
 fun NextChapterTrackButton(
-    enabled: Boolean, 
-    onClick: () -> Unit, 
-    modifier: Modifier = Modifier
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Chapter"
 ) {
     LabelledNavigationButton(
         icon = Icons.Filled.SkipNext,
-        label = "Chapter",
-        contentDescription = "Next Chapter or Track",
+        label = label,
+        contentDescription = "Next $label",
         enabled = enabled,
         onClick = onClick,
         modifier = modifier
@@ -309,14 +332,15 @@ fun NextChapterTrackButton(
 
 @Composable
 fun PrevChapterTrackButton(
-    enabled: Boolean, 
-    onClick: () -> Unit, 
-    modifier: Modifier = Modifier
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Chapter"
 ) {
     LabelledNavigationButton(
         icon = Icons.Filled.SkipPrevious,
-        label = "Chapter",
-        contentDescription = "Previous Chapter or Track",
+        label = label,
+        contentDescription = "Previous $label",
         enabled = enabled,
         onClick = onClick,
         modifier = modifier
@@ -325,14 +349,15 @@ fun PrevChapterTrackButton(
 
 @Composable
 fun NextFileButton(
-    enabled: Boolean, 
-    onClick: () -> Unit, 
-    modifier: Modifier = Modifier
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "File"
 ) {
     LabelledNavigationButton(
         icon = Icons.Filled.SkipNext,
-        label = "File",
-        contentDescription = "Next File",
+        label = label,
+        contentDescription = "Next $label",
         enabled = enabled,
         onClick = onClick,
         modifier = modifier
@@ -341,14 +366,15 @@ fun NextFileButton(
 
 @Composable
 fun PrevFileButton(
-    enabled: Boolean, 
-    onClick: () -> Unit, 
-    modifier: Modifier = Modifier
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "File"
 ) {
     LabelledNavigationButton(
         icon = Icons.Filled.SkipPrevious,
-        label = "File",
-        contentDescription = "Previous File",
+        label = label,
+        contentDescription = "Previous $label",
         enabled = enabled,
         onClick = onClick,
         modifier = modifier

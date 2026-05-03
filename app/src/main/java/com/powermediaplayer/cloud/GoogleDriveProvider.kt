@@ -149,6 +149,46 @@ class GoogleDriveProvider @Inject constructor(
             }
         }
 
+    /**
+     * Search across the user's whole Drive for media files matching a
+     * free-text query. Uses Drive's `name contains` operator. Limited
+     * to audio/video MIME types so the result list isn't polluted with
+     * documents.
+     */
+    suspend fun searchFiles(query: String): Result<List<CloudMediaItem>> =
+        withContext(Dispatchers.IO) {
+            val drive = driveService ?: return@withContext Result.failure(
+                IllegalStateException("Not authenticated")
+            )
+            if (query.isBlank()) return@withContext Result.success(emptyList())
+            val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
+            try {
+                val q = "name contains '$escaped' and trashed = false " +
+                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
+                    "or mimeType = 'application/vnd.google-apps.folder')"
+                val result = drive.files().list()
+                    .setQ(q)
+                    .setFields("files(id, name, mimeType, size, parents, thumbnailLink)")
+                    .setPageSize(100)
+                    .execute()
+                val items = result.files.orEmpty().map { f ->
+                    CloudMediaItem(
+                        id = f.id,
+                        name = f.name ?: "Unnamed",
+                        mimeType = f.mimeType ?: "",
+                        size = f.getSize() ?: 0L,
+                        downloadUrl = "https://www.googleapis.com/drive/v3/files/${f.id}?alt=media",
+                        sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                        isFolder = f.mimeType == "application/vnd.google-apps.folder",
+                        thumbnailUri = f.thumbnailLink?.let { Uri.parse(it) }
+                    )
+                }
+                Result.success(items)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
     override suspend fun getMediaStreamUri(item: CloudMediaItem): Result<Uri> =
         Result.success(Uri.parse(item.downloadUrl))
 

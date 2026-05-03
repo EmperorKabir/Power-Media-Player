@@ -325,8 +325,23 @@ class PlayerViewModel @Inject constructor(
                     (playerState.hasChapters && playerState.duration > 0)
                 ) && playerState.isSeekable
             ),
-            isVideoContent = playerState.isVideoContent
+            isVideoContent = playerState.isVideoContent,
+            mediaKind = inferMediaKind(playerState)
         )
+    }
+
+    /**
+     * Coarse content classification used to label Prev/Next
+     * buttons. Spotify mirror always wins; otherwise we inspect
+     * tracks, chapters, and queue size.
+     */
+    private fun inferMediaKind(s: PlayerState): MediaKind = when {
+        s.isVideoContent -> MediaKind.VIDEO
+        s.hasChapters && s.duration > 60 * 60 * 1000L -> MediaKind.AUDIOBOOK
+        s.hasChapters -> MediaKind.AUDIOBOOK
+        s.mediaItemCount > 1 -> MediaKind.ALBUM
+        s.mediaItemCount == 1 -> MediaKind.MUSIC
+        else -> MediaKind.UNKNOWN
     }
 
     /**
@@ -381,6 +396,7 @@ class PlayerViewModel @Inject constructor(
             totalTracks = 0,
             trackIndexDisplay = "",
             isVideoContent = false,
+            mediaKind = MediaKind.SPOTIFY_TRACK,
             controls = ControlsEnabledState(
                 previousTrack = true,
                 nextTrack = true,

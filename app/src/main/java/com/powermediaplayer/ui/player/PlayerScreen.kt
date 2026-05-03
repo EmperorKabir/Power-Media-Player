@@ -431,7 +431,8 @@ private fun OverlayContent(
             onPlayPause = { viewModel.playPause() },
             onSkipForward = { viewModel.skipForward(it) },
             onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
-            onNextFile = { viewModel.nextFile() }
+            onNextFile = { viewModel.nextFile() },
+            mediaKind = uiState.mediaKind
         )
         Spacer(modifier = Modifier.height(4.dp))
         PreparedSpeedComponent(
