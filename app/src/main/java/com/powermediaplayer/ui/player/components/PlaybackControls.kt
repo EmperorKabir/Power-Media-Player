@@ -121,7 +121,7 @@ fun PlaybackControls(
             SkipButton(seconds = 10, isForward = false, enabled = controls.skipBack10, onClick = { onSkipBack(10) })
             SkipButton(seconds = 5,  isForward = false, enabled = controls.skipBack5,  onClick = { onSkipBack(5) })
 
-            Spacer(modifier = Modifier.width(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
             // Skip forward: 5, 10, 15, 20, 30
             SkipButton(seconds = 5,  isForward = true, enabled = controls.skipForward5,  onClick = { onSkipForward(5) })
@@ -158,9 +158,10 @@ private fun SkipButton(
     val fillColor = if (enabled) TealAccent else DisabledGrey
     val outlineColor = Color.Black
 
-    // Shared text styles
-    val numStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-    val sStyle   = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+    // Shared text styles — labels ~25 % larger so "30s" reads from a
+    // distance without overlapping the arrow icon.
+    val numStyle = TextStyle(fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
+    val sStyle   = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
 
     IconButton(
         onClick = wrappedClick,
@@ -190,7 +191,7 @@ private fun SkipButton(
                     Text(
                         text = "$seconds",
                         style = numStyle.copy(
-                            drawStyle = Stroke(width = 5f, join = StrokeJoin.Round)
+                            drawStyle = Stroke(width = 6f, join = StrokeJoin.Round)
                         ),
                         color = outlineColor
                     )
@@ -208,7 +209,7 @@ private fun SkipButton(
                     Text(
                         text = "s",
                         style = sStyle.copy(
-                            drawStyle = Stroke(width = 4f, join = StrokeJoin.Round)
+                            drawStyle = Stroke(width = 5f, join = StrokeJoin.Round)
                         ),
                         color = outlineColor
                     )

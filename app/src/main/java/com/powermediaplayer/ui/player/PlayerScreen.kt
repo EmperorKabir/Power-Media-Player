@@ -210,7 +210,7 @@ private fun PlayerScreenCompact(
     }
     LaunchedEffect(uiState.isVideoContent, controlsVisible) {
         if (uiState.isVideoContent && controlsVisible) {
-            delay(32_000)
+            delay(4_000)            // 4 s — short, per user spec
             controlsVisible = false
         }
     }
@@ -218,18 +218,19 @@ private fun PlayerScreenCompact(
         if (!uiState.isVideoContent) controlsVisible = true
     }
 
-    // The tap-to-reveal gesture must NOT be attached when controls are
-    // visible — Compose's parent gesture detector intercepts taps before
-    // they reach child IconButtons, which was causing every skip-button
-    // tap on the visible overlay to toggle controls instead of seeking
-    // ("sometimes skips don't happen" — confirmed via adb logcat: VM.skipBack
-    // never fired even though taps were registered by InputManager).
-    // Auto-hide (32 s) takes care of dismissal so users still don't have
-    // to do anything to hide controls.
-    val tapToRevealModifier = if (uiState.isVideoContent && !controlsVisible) {
-        Modifier.pointerInput(Unit) {
-            detectTapGestures(onTap = { controlsVisible = true })
-        }
+    // Tap toggle for video controls. Modifier.clickable on the parent
+    // Box propagates correctly with child IconButton clickables — child
+    // wins for taps in its bounds (so skip buttons fire), parent wins
+    // for taps in bare video area (so controls toggle). The previous
+    // detectTapGestures approach consumed the down event before
+    // children, which ate skip-button clicks.
+    val parentTapInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val parentTapModifier = if (uiState.isVideoContent) {
+        Modifier.clickable(
+            interactionSource = parentTapInteraction,
+            indication = null,
+            onClick = { controlsVisible = !controlsVisible }
+        )
     } else {
         Modifier
     }
@@ -237,7 +238,7 @@ private fun PlayerScreenCompact(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .then(tapToRevealModifier)
+            .then(parentTapModifier)
     ) {
         if (uiState.isVideoContent) {
             // Video content: render the actual video frames
@@ -270,9 +271,9 @@ private fun PlayerScreenCompact(
                 listOf(
                     Color.Transparent,
                     Color.Transparent,
-                    OledBlack.copy(alpha = 0.40f),
-                    OledBlack.copy(alpha = 0.85f),
-                    OledBlack.copy(alpha = 0.97f)
+                    OledBlack.copy(alpha = 0.55f),
+                    OledBlack.copy(alpha = 0.95f),
+                    OledBlack
                 )
             } else {
                 listOf(
@@ -514,7 +515,8 @@ private fun PlayerScreenExpanded(
             PreparedSpeedComponent(
                 playbackSpeed = uiState.playbackSpeed,
                 onSpeedChange = { viewModel.setPlaybackSpeed(it) },
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = 16.dp),
+                enabled = uiState.controls.playbackSpeed
             )
             Spacer(modifier = Modifier.height(4.dp))
             TertiaryControls(
@@ -641,8 +643,19 @@ private fun SyncedLyricsPanel(
         idx
     }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Grace period after the user manually scrolls before we re-centre
+    // the active line. Set to "now + 2 s" whenever scroll-in-progress
+    // starts; auto-recentre is suppressed until that timestamp passes.
+    var userScrollUntilMs by remember { mutableStateOf(0L) }
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            userScrollUntilMs = android.os.SystemClock.elapsedRealtime() + 2_000L
+        }
+    }
     LaunchedEffect(activeIndex) {
-        if (activeIndex >= 0) {
+        if (activeIndex >= 0 &&
+            android.os.SystemClock.elapsedRealtime() >= userScrollUntilMs
+        ) {
             // Centre the active line in the panel by leaving ~2 lines
             // of context above it.
             listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))

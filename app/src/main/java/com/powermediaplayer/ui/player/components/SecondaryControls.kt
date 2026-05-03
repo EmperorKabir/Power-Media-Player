@@ -245,6 +245,8 @@ fun PreparedSpeedComponent(
         Icon(
             imageVector = Icons.Filled.DirectionsRun,
             contentDescription = "Speed Icon",
+            // Greyed when speed control is disabled (e.g. Spotify mirror —
+            // Spotify Connect Web API has no playback-speed endpoint).
             tint = tint,
             modifier = Modifier.size(20.dp)
         )
@@ -315,6 +317,22 @@ fun PreparedSpeedComponent(
                     )
                 }
             }
+        }
+        // Reset speed → 1×. Greyed alongside the dropdown when speed
+        // control is disabled (e.g. Spotify mirror).
+        TextButton(
+            onClick = { if (enabled) onSpeedChange(1.0f) },
+            enabled = enabled,
+            colors = ButtonDefaults.textButtonColors(
+                contentColor = TealAccent,
+                disabledContentColor = DisabledGrey
+            ),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "Reset Speed",
+                style = MaterialTheme.typography.labelMedium
+            )
         }
     }
 }
