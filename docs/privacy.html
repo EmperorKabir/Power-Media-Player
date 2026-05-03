@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Power Media Player</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 760px;
+    margin: 2rem auto;
+    padding: 0 1.25rem;
+    line-height: 1.6;
+    color: #1f1f1f;
+    background: #fafafa;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e6e6; background: #121212; }
+    a { color: #6cb4ff; }
+    code { background: #1f1f1f; }
+  }
+  h1 { border-bottom: 2px solid #2aa198; padding-bottom: .35rem; }
+  h2 { margin-top: 2rem; color: #2aa198; }
+  code { background: #eee; padding: 1px 5px; border-radius: 3px; font-size: .92em; }
+  .meta { color: #888; font-size: .9em; }
+  ul { padding-left: 1.25rem; }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy — Power Media Player</h1>
+<p class="meta">Last updated: 3 May 2026</p>
+
+<p>
+  Power Media Player ("the App") is an offline-first audio and video player for Android, developed
+  as a personal/hobby project by Kabir Bhasin ("the Developer"). This policy explains what data the
+  App accesses and how it is handled.
+</p>
+
+<h2>Summary</h2>
+<ul>
+  <li>The App does <strong>not</strong> collect, transmit, sell, or share personal data with the Developer or any third party.</li>
+  <li>The App has <strong>no analytics, no advertising, no tracking, and no remote servers</strong> operated by the Developer.</li>
+  <li>All media metadata, playback history, equaliser settings, and preferences are stored <strong>locally on your device only</strong>.</li>
+  <li>Optional cloud integrations (Google Drive, Spotify) connect <strong>directly</strong> from your device to those providers using their official OAuth flows.</li>
+</ul>
+
+<h2>Data the App Accesses on Your Device</h2>
+<ul>
+  <li><strong>Local audio and video files</strong> (<code>READ_MEDIA_AUDIO</code>, <code>READ_MEDIA_VIDEO</code>, <code>READ_EXTERNAL_STORAGE</code> on Android 12 and below): used solely to scan and play your media library. File metadata never leaves your device.</li>
+  <li><strong>Bluetooth devices</strong> (<code>BLUETOOTH_CONNECT</code>, <code>BLUETOOTH_SCAN</code>): used only to display the audio output picker so you can route playback to paired or nearby A2DP/AVRCP devices. The App does not log, store, or transmit Bluetooth device information.</li>
+  <li><strong>Network state and Internet</strong> (<code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code>): used for streaming network media (HLS/DASH/RTSP), Chromecast discovery, and the optional cloud integrations described below.</li>
+  <li><strong>Foreground service and wake lock</strong> (<code>FOREGROUND_SERVICE_MEDIA_PLAYBACK</code>, <code>WAKE_LOCK</code>): required to keep playback running when the screen is off or the App is in the background.</li>
+  <li><strong>Notifications</strong> (<code>POST_NOTIFICATIONS</code>): used only to display the standard media playback notification with transport controls.</li>
+  <li><strong>System settings</strong> (<code>WRITE_SETTINGS</code>): used only when you opt in to override screen brightness during video playback. Reverted on exit.</li>
+</ul>
+
+<h2>Optional Cloud Integrations</h2>
+
+<h3>Google Drive</h3>
+<ul>
+  <li>If you choose to sign in with Google, the App requests permission to access files on your Google Drive in order to stream audio and video.</li>
+  <li>Authentication uses Google's official OAuth 2.0 flow. The Developer never sees your Google password.</li>
+  <li>OAuth tokens are stored only on your device using Android's secure account / token storage.</li>
+  <li>Drive file lists and content are streamed directly from Google to your device. They are not routed through any server operated by the Developer.</li>
+  <li>Sign out from within the App or revoke access at any time at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</li>
+</ul>
+
+<h3>Spotify</h3>
+<ul>
+  <li>If you choose to sign in with Spotify, the App requests permission to browse your library and control playback. Premium is required by Spotify for full audio playback.</li>
+  <li>Authentication uses Spotify's official OAuth 2.0 (Authorization Code with PKCE) flow. The Developer never sees your Spotify password.</li>
+  <li>OAuth tokens are stored only on your device.</li>
+  <li>All Spotify data is exchanged directly between your device and Spotify's servers. It is not routed through any server operated by the Developer.</li>
+  <li>Revoke access at any time at <a href="https://www.spotify.com/account/apps/" target="_blank" rel="noopener">spotify.com/account/apps</a>.</li>
+</ul>
+
+<h3>Chromecast</h3>
+<ul>
+  <li>The App uses the Google Cast SDK to discover and stream to Chromecast devices on your local network.</li>
+  <li>No Chromecast-related data is transmitted to the Developer.</li>
+</ul>
+
+<h2>Data Retention</h2>
+<ul>
+  <li>All App data lives on your device. Uninstalling the App removes all locally stored data, including OAuth tokens, playback history, and preferences.</li>
+</ul>
+
+<h2>Children</h2>
+<ul>
+  <li>The App is not directed at children under 13 and does not knowingly collect data from anyone.</li>
+</ul>
+
+<h2>Changes to this Policy</h2>
+<ul>
+  <li>Material changes will be reflected on this page with an updated "Last updated" date.</li>
+</ul>
+
+<h2>Contact</h2>
+<ul>
+  <li>Email: <a href="mailto:bhasin.kabir@gmail.com">bhasin.kabir@gmail.com</a></li>
+  <li>Source / issues: <a href="https://github.com/EmperorKabir/Power-Media-Player" target="_blank" rel="noopener">github.com/EmperorKabir/Power-Media-Player</a></li>
+</ul>
+
+</body>
+</html>
