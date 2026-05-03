@@ -11,6 +11,9 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,14 +74,20 @@ fun MiniPlayerBar(
                 contentAlignment = Alignment.Center
             ) {
                 if (art != null) {
-                    val bmp = remember(art) {
-                        runCatching {
-                            android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size)
-                        }.getOrNull()
+                    // Decode off the composition (Main) thread via
+                    // produceState so a large embedded JPEG doesn't
+                    // stutter the bar's first frame.
+                    val bmp by produceState<android.graphics.Bitmap?>(initialValue = null, art) {
+                        value = withContext(Dispatchers.Default) {
+                            runCatching {
+                                android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size)
+                            }.getOrNull()
+                        }
                     }
-                    if (bmp != null) {
+                    val b = bmp
+                    if (b != null) {
                         androidx.compose.foundation.Image(
-                            bitmap = bmp.asImageBitmap(),
+                            bitmap = b.asImageBitmap(),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -135,7 +144,3 @@ fun MiniPlayerBar(
     }
 }
 
-@Composable
-private fun <T> remember(key: T, calculation: () -> android.graphics.Bitmap?): android.graphics.Bitmap? {
-    return androidx.compose.runtime.remember(key) { calculation() }
-}

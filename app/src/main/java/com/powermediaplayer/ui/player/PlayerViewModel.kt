@@ -409,7 +409,7 @@ class PlayerViewModel @Inject constructor(
             }
             _abLoopEnd.value == null -> {
                 val end = playbackConnection.playerState.value.currentPosition
-                val start = _abLoopStart.value!!
+                val start = _abLoopStart.value ?: return
                 if (end <= start + 1_000) {
                     // Too close — treat as clear.
                     _abLoopStart.value = null
@@ -512,8 +512,8 @@ class PlayerViewModel @Inject constructor(
         // overall file/playlist progress separately.
         val currentChapter = playerState.chapters.getOrNull(playerState.currentChapterIndex)
         val inChapter = playerState.hasChapters && currentChapter != null
-        val chapterStart = if (inChapter) currentChapter!!.startTimeMs else 0L
-        val chapterEnd = if (inChapter) currentChapter!!.endTimeMs else playerState.duration
+        val chapterStart = currentChapter?.startTimeMs?.takeIf { inChapter } ?: 0L
+        val chapterEnd = currentChapter?.endTimeMs?.takeIf { inChapter } ?: playerState.duration
         val chapterDuration = (chapterEnd - chapterStart).coerceAtLeast(0L)
         val chapterPos = (playerState.currentPosition - chapterStart).coerceIn(0L, chapterDuration)
 

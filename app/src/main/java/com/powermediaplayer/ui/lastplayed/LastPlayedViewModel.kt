@@ -24,7 +24,8 @@ import javax.inject.Inject
 @HiltViewModel
 class LastPlayedViewModel @Inject constructor(
     private val repo: LastPlayedRepository,
-    private val playbackConnection: PlaybackConnection
+    private val playbackConnection: PlaybackConnection,
+    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
 ) : ViewModel() {
 
     val dynamic: StateFlow<List<LastPlayedRepository.HistoryItem>> =
@@ -63,6 +64,15 @@ class LastPlayedViewModel @Inject constructor(
      * provider VMs by the Screen layer (this VM only handles LOCAL).
      */
     fun playLocalAt(item: LastPlayedRepository.HistoryItem) {
+        // Mirror cleanup matches LibraryViewModel.stopSpotifyMirrorIfActive
+        // so the Player tab doesn't keep displaying Spotify metadata
+        // while local audio plays underneath.
+        if (spotifyProvider.spotifyState.value != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { spotifyProvider.pause() }
+            }
+            spotifyProvider.stopPlaybackPolling()
+        }
         val uri = runCatching { Uri.parse(item.mediaUri) }.getOrNull() ?: return
         val mediaItem = androidx.media3.common.MediaItem.Builder()
             .setMediaId(item.mediaUri)

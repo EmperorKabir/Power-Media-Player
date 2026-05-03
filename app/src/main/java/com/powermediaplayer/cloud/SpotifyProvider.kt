@@ -219,6 +219,10 @@ class SpotifyProvider @Inject constructor(
     }
 
     override suspend fun signOut(): Result<Unit> = withContext(Dispatchers.IO) {
+        // Tear down the polling job + spotify mirror state so the
+        // Player tab doesn't keep showing the last-known track after
+        // sign-out.
+        stopPlaybackPolling()
         tokenStore.write(null)
         _isLoggedIn.value = false
         Result.success(Unit)

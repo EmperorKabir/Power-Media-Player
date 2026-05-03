@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
@@ -163,24 +164,27 @@ class LibraryViewModel @Inject constructor(
     private fun observeFavorites() {
         viewModelScope.launch {
             favoriteDao.observeAllUris().collect { uris ->
-                _uiState.value = _uiState.value.copy(favorites = uris.toSet())
+                _uiState.update { it.copy(favorites = uris.toSet()) }
                 recomputeDisplayed()
             }
         }
     }
 
     private fun recomputeDisplayed() {
-        val state = _uiState.value
-        val q = TextNormalizer.normalize(state.searchQuery).lowercase()
-        val filterFn: (MediaFileInfo) -> Boolean = if (q.isBlank()) { _ -> true } else { f ->
-            // Case- and accent-insensitive match across title + artist + album
-            val hay = TextNormalizer.normalize("${f.title} ${f.artist} ${f.album}").lowercase()
-            hay.contains(q)
+        // Read-modify-write inside update {} so a concurrent
+        // search-bar keystroke or sort-change collector can't lose
+        // its emission to this rewrite.
+        _uiState.update { state ->
+            val q = TextNormalizer.normalize(state.searchQuery).lowercase()
+            val filterFn: (MediaFileInfo) -> Boolean = if (q.isBlank()) { _ -> true } else { f ->
+                val hay = TextNormalizer.normalize("${f.title} ${f.artist} ${f.album}").lowercase()
+                hay.contains(q)
+            }
+            state.copy(
+                audioFiles = applySort(rawAudio.filter(filterFn), state.sortMode, state.favorites),
+                videoFiles = applySort(rawVideo.filter(filterFn), state.sortMode, state.favorites)
+            )
         }
-        _uiState.value = state.copy(
-            audioFiles = applySort(rawAudio.filter(filterFn), state.sortMode, state.favorites),
-            videoFiles = applySort(rawVideo.filter(filterFn), state.sortMode, state.favorites)
-        )
     }
 
     private fun applySort(

@@ -53,9 +53,6 @@ class PlaybackService : MediaSessionService() {
     @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
 
-    private val initScope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
-    )
 
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
@@ -280,7 +277,11 @@ class PlaybackService : MediaSessionService() {
             val cp = CastPlayer(castContext)
             cp.setSessionAvailabilityListener(object : SessionAvailabilityListener {
                 override fun onCastSessionAvailable() = switchPlayer(cp)
-                override fun onCastSessionUnavailable() = switchPlayer(player!!)
+                override fun onCastSessionUnavailable() {
+                    // Guard against NPE if cast session ends after the
+                    // service has already torn down (player = null).
+                    player?.let { switchPlayer(it) }
+                }
             })
             castPlayer = cp
         } catch (_: Exception) {

@@ -20,6 +20,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -84,35 +85,38 @@ class CloudViewModel @Inject constructor(
     val uiState: StateFlow<CloudUiState> = _uiState.asStateFlow()
 
     init {
+        // Six concurrent collectors all writing _uiState — switched to
+        // StateFlow.update {} to atomically read-modify-write so two
+        // simultaneous emissions can't drop each other's changes.
         viewModelScope.launch {
             combine(driveProvider.isLoggedIn, spotifyProvider.isLoggedIn) { d, s -> d to s }
                 .collect { (d, s) ->
-                    _uiState.value = _uiState.value.copy(driveLoggedIn = d, spotifyLoggedIn = s)
+                    _uiState.update { it.copy(driveLoggedIn = d, spotifyLoggedIn = s) }
                 }
         }
         viewModelScope.launch {
             settingsDataStore.driveFavouriteFolders.collect { favs ->
-                _uiState.value = _uiState.value.copy(driveFavourites = favs)
+                _uiState.update { it.copy(driveFavourites = favs) }
             }
         }
         viewModelScope.launch {
             settingsDataStore.driveFavouriteTracks.collect { favs ->
-                _uiState.value = _uiState.value.copy(driveFavouriteTracks = favs)
+                _uiState.update { it.copy(driveFavouriteTracks = favs) }
             }
         }
         viewModelScope.launch {
             settingsDataStore.spotifyFavouriteTracks.collect { favs ->
-                _uiState.value = _uiState.value.copy(spotifyFavTracks = favs)
+                _uiState.update { it.copy(spotifyFavTracks = favs) }
             }
         }
         viewModelScope.launch {
             settingsDataStore.spotifyFavouriteAlbums.collect { favs ->
-                _uiState.value = _uiState.value.copy(spotifyFavAlbums = favs)
+                _uiState.update { it.copy(spotifyFavAlbums = favs) }
             }
         }
         viewModelScope.launch {
             settingsDataStore.spotifyFavouritePodcasts.collect { favs ->
-                _uiState.value = _uiState.value.copy(spotifyFavPodcasts = favs)
+                _uiState.update { it.copy(spotifyFavPodcasts = favs) }
             }
         }
     }

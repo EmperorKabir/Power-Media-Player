@@ -15,6 +15,10 @@ interface PlaybackHistoryDao {
     @Query("SELECT * FROM playback_history ORDER BY lastPlayedAt DESC")
     fun observeAll(): Flow<List<PlaybackHistoryEntity>>
 
+    /** One-shot snapshot — used by trimToCap so we don't subscribe a Flow per recordPlay. */
+    @Query("SELECT * FROM playback_history ORDER BY lastPlayedAt DESC")
+    suspend fun snapshot(): List<PlaybackHistoryEntity>
+
     @Query("SELECT * FROM playback_history ORDER BY lastPlayedAt DESC LIMIT 1")
     suspend fun mostRecent(): PlaybackHistoryEntity?
 

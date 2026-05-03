@@ -15,8 +15,13 @@ import com.powermediaplayer.ui.navigation.AppNavigation
 import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.ui.theme.PowerMediaPlayerTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+/** Tuple-of-4 for distinctUntilChanged on PiP-relevant fields. */
+private data class Quad(val a: Int, val b: Int, val c: Boolean, val d: Boolean)
 
 /**
  * Single activity host for the entire Compose UI.
@@ -49,24 +54,31 @@ class MainActivity : ComponentActivity() {
         // it inside onUserLeaveHint is too late and the system rejects
         // the PiP entry (enterPictureInPictureMode returns false).
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            // Filter out the 500 ms position-poll noise — only update
+            // the PiP params when the *PiP-relevant* state changes
+            // (video dimensions, video-mode flag, isPlaying). The
+            // previous unfiltered collector fired setPictureInPictureParams
+            // (a system IPC) twice per second forever even during audio.
             lifecycleScope.launch {
-                playbackConnection.playerState.collect { st ->
-                    runCatching {
-                        val w = st.videoWidth.coerceAtLeast(16)
-                        val h = st.videoHeight.coerceAtLeast(9)
-                        val aspect = android.util.Rational(w, h)
-                        val safe = if (aspect.toFloat() > 2.39f || aspect.toFloat() < 0.42f) {
-                            android.util.Rational(16, 9)
-                        } else aspect
-                        val auto = st.isVideoContent && st.isPlaying
-                        val params = android.app.PictureInPictureParams.Builder()
-                            .setAspectRatio(safe)
-                            .setSeamlessResizeEnabled(true)
-                            .setAutoEnterEnabled(auto)
-                            .build()
-                        setPictureInPictureParams(params)
+                playbackConnection.playerState
+                    .map { Quad(it.videoWidth, it.videoHeight, it.isVideoContent, it.isPlaying) }
+                    .distinctUntilChanged()
+                    .collect { (w0, h0, isVideo, isPlaying) ->
+                        runCatching {
+                            val w = w0.coerceAtLeast(16)
+                            val h = h0.coerceAtLeast(9)
+                            val aspect = android.util.Rational(w, h)
+                            val safe = if (aspect.toFloat() > 2.39f || aspect.toFloat() < 0.42f) {
+                                android.util.Rational(16, 9)
+                            } else aspect
+                            val params = android.app.PictureInPictureParams.Builder()
+                                .setAspectRatio(safe)
+                                .setSeamlessResizeEnabled(true)
+                                .setAutoEnterEnabled(isVideo && isPlaying)
+                                .build()
+                            setPictureInPictureParams(params)
+                        }
                     }
-                }
             }
         }
 

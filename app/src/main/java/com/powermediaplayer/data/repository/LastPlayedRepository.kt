@@ -6,7 +6,6 @@ import com.powermediaplayer.data.db.entity.HistoryFavouriteEntity
 import com.powermediaplayer.data.db.entity.PlaybackHistoryEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -133,7 +132,9 @@ class LastPlayedRepository @Inject constructor(
 
     private suspend fun trimToCap() {
         val pinnedUris = favDao.snapshot().map { it.mediaUri }.toSet()
-        val rows = historyDao.observeAll().first().filterNot { pinnedUris.contains(it.mediaUri) }
+        // Use the one-shot DAO snapshot — observeAll().first() would
+        // subscribe + unsubscribe the whole table on every recordPlay.
+        val rows = historyDao.snapshot().filterNot { pinnedUris.contains(it.mediaUri) }
         if (rows.size > 10) {
             val toDelete = rows.drop(10).map { it.mediaUri }
             historyDao.deleteMany(toDelete)
