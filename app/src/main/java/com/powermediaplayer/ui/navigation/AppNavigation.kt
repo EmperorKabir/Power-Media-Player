@@ -64,13 +64,23 @@ fun AppNavigation(windowSizeClass: WindowSizeClass) {
         }
     }
 
+    val isPlayerRoute = currentDestination?.hierarchy?.any { it.route == Screen.Player.route } == true
+
     Scaffold(
         containerColor = OledBlack,
         bottomBar = {
-            NavigationBar(
-                containerColor = OledBlack,
-                contentColor = TealAccent
-            ) {
+            androidx.compose.foundation.layout.Column {
+                // MiniPlayerBar — visible on every non-Player tab.
+                // Tapping the bar navigates to the Player tab.
+                if (!isPlayerRoute) {
+                    com.powermediaplayer.ui.components.MiniPlayerBar(
+                        onClick = navigateToPlayer
+                    )
+                }
+                NavigationBar(
+                    containerColor = OledBlack,
+                    contentColor = TealAccent
+                ) {
                 screens.forEach { screen ->
                     NavigationBarItem(
                         icon = { Icon(imageVector = screen.icon, contentDescription = screen.title) },
@@ -91,6 +101,7 @@ fun AppNavigation(windowSizeClass: WindowSizeClass) {
                             indicatorColor = OledBlack
                         )
                     )
+                }
                 }
             }
         }
