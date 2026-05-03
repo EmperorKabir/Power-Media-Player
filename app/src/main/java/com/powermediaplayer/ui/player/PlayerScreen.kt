@@ -302,12 +302,14 @@ private fun PlayerScreenCompact(
         // the controls fade out together.
         val scrim: Brush = remember(uiState.isVideoContent) {
             val cols = if (uiState.isVideoContent) {
+                // Reverted to lighter pre-prompt values — heavier scrim
+                // was contributing to overdraw cost during seeks.
                 listOf(
                     Color.Transparent,
                     Color.Transparent,
-                    OledBlack.copy(alpha = 0.55f),
-                    OledBlack.copy(alpha = 0.95f),
-                    OledBlack
+                    OledBlack.copy(alpha = 0.40f),
+                    OledBlack.copy(alpha = 0.85f),
+                    OledBlack.copy(alpha = 0.97f)
                 )
             } else {
                 listOf(

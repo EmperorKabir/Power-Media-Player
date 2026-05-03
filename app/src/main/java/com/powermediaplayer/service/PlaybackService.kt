@@ -215,14 +215,9 @@ class PlaybackService : MediaSessionService() {
         //      seconds of imprecision, which is what every other media
         //      player does).
         player!!.setSeekParameters(SeekParameters.PREVIOUS_SYNC)
-        // Stop ExoPlayer from requesting display-refresh-rate changes
-        // around video seeks. The SurfaceFlinger transition that follows
-        // a frame-rate switch (60→24, 60→30, etc.) costs one full
-        // composition cycle and shows up as a stutter on backward seeks
-        // for content whose target frame rate doesn't equal the panel's.
-        player!!.setVideoChangeFrameRateStrategy(
-            androidx.media3.common.C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
-        )
+        // Frame-rate strategy left at default. Forcing OFF on a Z Fold
+        // 6 (1-120Hz adaptive panel) made things worse — the panel
+        // can match content rate which is usually best.
 
         // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
         exoPlayerRef = java.lang.ref.WeakReference(player!!)

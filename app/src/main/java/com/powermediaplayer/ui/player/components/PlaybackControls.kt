@@ -180,10 +180,10 @@ private fun SkipButton(
     val fillColor = if (enabled) TealAccent else DisabledGrey
     val outlineColor = Color.Black
 
-    // Shared text styles — labels ~25 % larger so "30s" reads from a
-    // distance without overlapping the arrow icon.
-    val numStyle = TextStyle(fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
-    val sStyle   = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+    // Shared text styles — reverted to original sizes to avoid the
+    // heavier text rendering cost the user noticed as stutter.
+    val numStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+    val sStyle   = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
 
     IconButton(
         onClick = wrappedClick,
@@ -213,7 +213,7 @@ private fun SkipButton(
                     Text(
                         text = "$seconds",
                         style = numStyle.copy(
-                            drawStyle = Stroke(width = 6f, join = StrokeJoin.Round)
+                            drawStyle = Stroke(width = 5f, join = StrokeJoin.Round)
                         ),
                         color = outlineColor
                     )
@@ -231,7 +231,7 @@ private fun SkipButton(
                     Text(
                         text = "s",
                         style = sStyle.copy(
-                            drawStyle = Stroke(width = 5f, join = StrokeJoin.Round)
+                            drawStyle = Stroke(width = 4f, join = StrokeJoin.Round)
                         ),
                         color = outlineColor
                     )

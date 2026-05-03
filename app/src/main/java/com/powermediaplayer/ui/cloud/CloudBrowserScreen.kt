@@ -138,10 +138,6 @@ fun CloudBrowserScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = TealAccent)
                 }
-            } else if (uiState.items.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Empty folder", color = TextSecondary)
-                }
             } else if (uiState.activeProvider == CloudProviderType.SPOTIFY &&
                        uiState.spotifySection == null) {
                 // Spotify section picker — landing screen when entering
@@ -297,6 +293,16 @@ fun CloudBrowserScreen(
                                 }
                             }
                         )
+                    }
+                    if (uiState.items.isEmpty() && uiState.driveFavourites.isEmpty()) {
+                        item(key = "empty_folder") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(40.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Empty folder", color = TextSecondary)
+                            }
+                        }
                     }
                 }
             }
