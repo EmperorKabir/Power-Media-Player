@@ -501,6 +501,12 @@ private fun OverlayContent(
                 Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
                     tint = TealAccent)
             }
+            // Video effects (mirror H/V, B&W, rotation) — visible only
+            // when the current media is a video. Audio playback never
+            // sees this button.
+            if (uiState.isVideoContent) {
+                VideoEffectsButton()
+            }
             BluetoothButton(modifier = Modifier.size(48.dp))
         }
         // Bookmark chips for the currently playing item.

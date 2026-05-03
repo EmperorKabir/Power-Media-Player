@@ -405,34 +405,51 @@ class PlayerViewModel @Inject constructor(
      * enforced by a polling job that seeks back to A whenever
      * currentPosition crosses B.
      */
+    /** Current playback position regardless of source (Spotify mirror or local). */
+    private fun currentPositionMsAnySource(): Long =
+        if (isSpotifyActive) spotifyProvider.spotifyState.value?.positionMs ?: 0L
+        else playbackConnection.playerState.value.currentPosition
+
+    /** Seek regardless of source. Spotify routes through Connect /me/player/seek. */
+    private fun seekToAnySource(positionMs: Long) {
+        if (isSpotifyActive) {
+            viewModelScope.launch { spotifyProvider.seekTo(positionMs) }
+        } else {
+            playbackConnection.seekTo(positionMs)
+        }
+    }
+
     fun toggleAbLoop() {
         when {
             _abLoopStart.value == null -> {
-                _abLoopStart.value = playbackConnection.playerState.value.currentPosition
-                android.util.Log.i("PMP_DIAG", "AB-loop A=${_abLoopStart.value}ms")
+                _abLoopStart.value = currentPositionMsAnySource()
+                android.util.Log.i("PMP_DIAG", "AB-loop A=${_abLoopStart.value}ms src=${if (isSpotifyActive) "spotify" else "local"}")
             }
             _abLoopEnd.value == null -> {
-                val end = playbackConnection.playerState.value.currentPosition
+                val end = currentPositionMsAnySource()
                 val start = _abLoopStart.value ?: return
                 if (end <= start + 1_000) {
-                    // Too close — treat as clear.
                     _abLoopStart.value = null
                     _abLoopEnd.value = null
                     return
                 }
                 _abLoopEnd.value = end
                 abLoopJob?.cancel()
+                // Spotify Connect /seek IPC is round-trip ~300-500ms;
+                // poll less aggressively when remote and add a small
+                // dwell guard so we don't spam-seek.
+                val pollInterval = if (isSpotifyActive) 750L else 250L
                 abLoopJob = viewModelScope.launch {
                     while (isActive) {
-                        delay(250)
+                        delay(pollInterval)
                         val a = _abLoopStart.value ?: break
                         val b = _abLoopEnd.value ?: break
-                        if (playbackConnection.playerState.value.currentPosition >= b) {
-                            playbackConnection.seekTo(a)
+                        if (currentPositionMsAnySource() >= b) {
+                            seekToAnySource(a)
                         }
                     }
                 }
-                android.util.Log.i("PMP_DIAG", "AB-loop B=${end}ms (loop active)")
+                android.util.Log.i("PMP_DIAG", "AB-loop B=${end}ms (loop active, src=${if (isSpotifyActive) "spotify" else "local"})")
             }
             else -> {
                 _abLoopStart.value = null

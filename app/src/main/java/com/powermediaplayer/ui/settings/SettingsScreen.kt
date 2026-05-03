@@ -174,32 +174,10 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         // ══════════════════════════════════════════════════════════
-        // POWER-USER FEATURES
+        // POWER-USER FEATURES — Video effects (Mirror H/V, B&W,
+        // Rotation) live in the player overlay only when a video is
+        // loaded; see PlayerScreen.VideoEffectsButton.
         // ══════════════════════════════════════════════════════════
-        SettingsSectionHeader("Video effects")
-        SettingsToggleItem("Mirror horizontally", "Flip the video left ↔ right.",
-            Icons.Filled.Flip, uiState.videoFlipH) { viewModel.setVideoFlipH(it) }
-        SettingsToggleItem("Flip vertically (upside-down)", "Flip the video top ↔ bottom.",
-            Icons.Filled.Flip, uiState.videoFlipV) { viewModel.setVideoFlipV(it) }
-        SettingsToggleItem("Black & white", "Render video in greyscale.",
-            Icons.Filled.Tonality, uiState.videoBw) { viewModel.setVideoBw(it) }
-        Row(
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Rotation", style = MaterialTheme.typography.titleSmall, color = TextPrimary,
-                modifier = Modifier.weight(1f))
-            listOf(0, 90, 180, 270).forEach { deg ->
-                FilterChip(
-                    selected = uiState.videoRotation == deg,
-                    onClick = { viewModel.setVideoRotation(deg) },
-                    label = { Text("${deg}°") },
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-            }
-        }
-
-        SettingsDivider()
         SettingsSectionHeader("Audio extras")
         SettingsToggleItem("Reverse audio (local files)",
             "Play local files backwards. Cloud streams unsupported.",

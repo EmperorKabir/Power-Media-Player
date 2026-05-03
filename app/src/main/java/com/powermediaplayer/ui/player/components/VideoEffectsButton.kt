@@ -1,0 +1,135 @@
+package com.powermediaplayer.ui.player.components
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Flip
+import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Tonality
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.powermediaplayer.ui.settings.SettingsViewModel
+import com.powermediaplayer.ui.theme.TealAccent
+import com.powermediaplayer.ui.theme.TextPrimary
+import com.powermediaplayer.ui.theme.TextSecondary
+
+/**
+ * Player overlay button for video effects (mirror H/V, B&W, rotation).
+ * Visible only on the video Player layout (caller decides). Tapping
+ * opens a bottom sheet of toggles backed by SettingsDataStore via
+ * SettingsViewModel — same backing store as before; only the entry
+ * point moved off the Settings tab.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun VideoEffectsButton(
+    modifier: Modifier = Modifier,
+    settingsVm: SettingsViewModel = hiltViewModel()
+) {
+    val s by settingsVm.uiState.collectAsStateWithLifecycle()
+    var showSheet by remember { mutableStateOf(false) }
+    val anyOn = s.videoFlipH || s.videoFlipV || s.videoBw || s.videoRotation != 0
+
+    IconButton(
+        onClick = { showSheet = true },
+        modifier = modifier.size(40.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Tune,
+            contentDescription = "Video effects",
+            tint = if (anyOn) TealAccent else TextSecondary
+        )
+    }
+
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            containerColor = androidx.compose.ui.graphics.Color.Black
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    "Video effects",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TealAccent
+                )
+                Spacer(Modifier.height(8.dp))
+                EffectToggleRow(
+                    icon = Icons.Filled.Flip,
+                    label = "Mirror horizontally",
+                    on = s.videoFlipH,
+                    onChange = { settingsVm.setVideoFlipH(it) }
+                )
+                EffectToggleRow(
+                    icon = Icons.Filled.Flip,
+                    label = "Flip vertically (upside-down)",
+                    on = s.videoFlipV,
+                    onChange = { settingsVm.setVideoFlipV(it) }
+                )
+                EffectToggleRow(
+                    icon = Icons.Filled.Tonality,
+                    label = "Black & white",
+                    on = s.videoBw,
+                    onChange = { settingsVm.setVideoBw(it) }
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    Icon(Icons.Filled.RotateRight, contentDescription = null,
+                        tint = TextSecondary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Rotation", style = MaterialTheme.typography.titleSmall,
+                        color = TextPrimary, modifier = Modifier.weight(1f))
+                    listOf(0, 90, 180, 270).forEach { deg ->
+                        FilterChip(
+                            selected = s.videoRotation == deg,
+                            onClick = { settingsVm.setVideoRotation(deg) },
+                            label = { Text("${deg}°") },
+                            modifier = Modifier.padding(end = 4.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun EffectToggleRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    on: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = TextSecondary,
+            modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary, modifier = Modifier.weight(1f))
+        Switch(
+            checked = on,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = TealAccent,
+                checkedTrackColor = TealAccent.copy(alpha = 0.4f)
+            )
+        )
+    }
+}
