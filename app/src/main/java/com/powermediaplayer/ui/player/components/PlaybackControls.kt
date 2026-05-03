@@ -65,6 +65,10 @@ fun PlaybackControls(
         com.powermediaplayer.ui.player.MediaKind.VIDEO -> "Video" to "Chapter"
         com.powermediaplayer.ui.player.MediaKind.UNKNOWN -> "File" to "Chapter"
     }
+    // Collapse: when file/chapter labels resolve to the same word
+    // (e.g. MUSIC → both = "Track"), hide the chapter pair so the
+    // user only sees one back-track and one forward-track button.
+    val collapseChapterPair = fileLabel.equals(chapterLabel, ignoreCase = true)
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -85,11 +89,13 @@ fun PlaybackControls(
                 label = fileLabel
             )
 
-            PrevChapterTrackButton(
-                enabled = controls.previousChapterOrTrack,
-                onClick = onPreviousChapterOrTrack,
-                label = chapterLabel
-            )
+            if (!collapseChapterPair) {
+                PrevChapterTrackButton(
+                    enabled = controls.previousChapterOrTrack,
+                    onClick = onPreviousChapterOrTrack,
+                    label = chapterLabel
+                )
+            }
 
             Spacer(modifier = Modifier.width(8.dp))
 
@@ -109,11 +115,13 @@ fun PlaybackControls(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            NextChapterTrackButton(
-                enabled = controls.nextChapterOrTrack,
-                onClick = onNextChapterOrTrack,
-                label = chapterLabel
-            )
+            if (!collapseChapterPair) {
+                NextChapterTrackButton(
+                    enabled = controls.nextChapterOrTrack,
+                    onClick = onNextChapterOrTrack,
+                    label = chapterLabel
+                )
+            }
 
             NextFileButton(
                 enabled = controls.nextFile,

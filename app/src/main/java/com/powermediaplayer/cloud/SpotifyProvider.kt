@@ -782,9 +782,19 @@ class SpotifyProvider @Inject constructor(
             }
         }
 
+    // Generation token — incremented every stop. Polling loop captures
+    // its generation; writes to _spotifyState are suppressed when a
+    // newer generation has been started (or when polling has been
+    // stopped). Closes the race where an inflight HTTP for /v1/me/player
+    // resolves AFTER stopPlaybackPolling sets the state to null and
+    // overwrites the null with stale snap, leaving the Spotify mirror
+    // visible while local m4b plays underneath.
+    @Volatile private var pollGen: Int = 0
+
     fun startPlaybackPolling() {
         if (pollJob?.isActive == true) return
-        android.util.Log.i("PMP_DIAG", "Spotify.startPlaybackPolling")
+        val gen = ++pollGen
+        android.util.Log.i("PMP_DIAG", "Spotify.startPlaybackPolling gen=$gen")
         pollJob = pollScope.launch {
             var lastTrackUri = ""
             var lastLyrics: String? = null
@@ -793,13 +803,14 @@ class SpotifyProvider @Inject constructor(
                 val token = currentAccessToken()
                 if (token != null) {
                     val snap = fetchCurrentState(token)
+                    // Recheck generation after the suspending HTTP call —
+                    // if stopPlaybackPolling fired in-between, drop the snap.
+                    if (gen != pollGen) return@launch
                     if (snap != null) {
-                        // Re-fetch lyrics only when the track changes —
-                        // LRCLib is gentle but no need to hammer it
-                        // every second.
                         if (snap.trackUri != lastTrackUri) {
                             lastTrackUri = snap.trackUri
                             val pair = fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
+                            if (gen != pollGen) return@launch
                             lastLyrics = pair?.first
                             lastSynced = pair?.second.orEmpty()
                         }
@@ -882,9 +893,11 @@ class SpotifyProvider @Inject constructor(
     }
 
     fun stopPlaybackPolling() {
+        pollGen++
         pollJob?.cancel()
         pollJob = null
         _spotifyState.value = null
+        android.util.Log.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
     }
 
     private fun fetchCurrentState(token: String): SpotifyPlaybackState? {
@@ -932,6 +945,20 @@ class SpotifyProvider @Inject constructor(
         val playing = _spotifyState.value?.isPlaying ?: false
         val endpoint = if (playing) "pause" else "play"
         simplePut(token, "https://api.spotify.com/v1/me/player/$endpoint")
+    }
+
+    /**
+     * Unconditionally pause Spotify Connect — regardless of cached
+     * `_spotifyState`. Used by Library when starting local playback so
+     * the user is not left with two audio streams. Independent of
+     * togglePlayPause which depends on cached state and would
+     * otherwise resume playback after stopPlaybackPolling cleared it.
+     */
+    suspend fun pause(): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired")
+        )
+        simplePut(token, "https://api.spotify.com/v1/me/player/pause")
     }
 
     suspend fun skipNext(): Result<Unit> = withContext(Dispatchers.IO) {

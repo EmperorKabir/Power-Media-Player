@@ -96,10 +96,12 @@ class LibraryViewModel @Inject constructor(
      */
     private fun stopSpotifyMirrorIfActive() {
         if (spotifyProvider.spotifyState.value != null) {
-            spotifyProvider.stopPlaybackPolling()
+            // Pause Spotify Connect FIRST (while cached state is still
+            // valid — togglePlayPause reads it). Then tear down the poll.
             viewModelScope.launch(Dispatchers.IO) {
-                runCatching { spotifyProvider.togglePlayPause() }
+                runCatching { spotifyProvider.pause() }
             }
+            spotifyProvider.stopPlaybackPolling()
         }
     }
 
