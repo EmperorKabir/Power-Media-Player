@@ -1,15 +1,31 @@
 package com.powermediaplayer.data.db.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Pin marker for a [PlaybackHistoryEntity]. Pinned items are
- * protected from the 10-item history cap and are user-reorderable
- * via [pinOrder]. Max 10 rows enforced at the repository layer.
+ * Pinned snapshot. Carries its OWN copy of title / subtitle / artwork /
+ * source / lastPositionMs so deletion of the underlying playback_history
+ * row does NOT delete the pin. Bookmarks are snapshotted separately
+ * into [FavouriteBookmarkEntity] at pin time and are independent of
+ * the original session's bookmarks. Max 10 rows enforced at the
+ * repository layer; user-reorderable via [pinOrder].
  */
-@Entity(tableName = "history_favourites")
+@Entity(
+    tableName = "history_favourites",
+    indices = [Index("pinOrder")]
+)
 data class HistoryFavouriteEntity(
-    @PrimaryKey val mediaUri: String,
-    val pinOrder: Int
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val mediaUri: String,
+    val title: String,
+    val subtitle: String,
+    val artworkUri: String?,
+    val source: String,
+    val mediaKindOrdinal: Int,
+    val lastPositionMs: Long,
+    val durationMs: Long,
+    val pinOrder: Int,
+    val pinnedAtMs: Long
 )

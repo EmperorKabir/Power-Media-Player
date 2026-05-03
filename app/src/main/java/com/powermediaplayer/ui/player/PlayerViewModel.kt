@@ -33,6 +33,16 @@ class PlayerViewModel @Inject constructor(
 ) : ViewModel() {
 
     /**
+     * Most recent play session id, observed from the repository. Used
+     * by [addBookmarkHere] to mirror Player-tab bookmark adds into the
+     * session's snapshot table so the matching Recents row in Last
+     * Played shows them. Null until the first play of the app's
+     * lifetime.
+     */
+    private val currentSessionId: Long?
+        get() = lastPlayedRepo.currentSessionId.value
+
+    /**
      * Resolve the bookmark key for whatever's currently playing. For
      * local + Drive (SAF) playback this is the ExoPlayer mediaId — a
      * file URI / content:// URI. For Spotify, the local ExoPlayer
@@ -60,19 +70,35 @@ class PlayerViewModel @Inject constructor(
      * Add a bookmark at current playback position. Label is the
      * formatted timestamp; user can edit later (out-of-scope here).
      * Works uniformly across local / Drive (SAF) / Spotify sources.
+     *
+     * Also writes a session-scoped snapshot to history_bookmarks so
+     * the current Recents row in Last Played shows it. The two writes
+     * are independent: deleting from bookmarks (Player tab) does NOT
+     * touch history_bookmarks (Recents) — that asymmetry is intentional
+     * per the user-visible contract that "Player edits don't propagate
+     * deletions to Last Played".
      */
     fun addBookmarkHere() {
         val mediaUri = currentBookmarkKey() ?: return
         val pos = currentBookmarkPositionMs()
+        val label = TimeFormatter.formatDuration(pos)
+        val sessionId = currentSessionId
         viewModelScope.launch(Dispatchers.IO) {
             bookmarkDao.insert(
                 com.powermediaplayer.data.db.entity.BookmarkEntity(
                     mediaUri = mediaUri,
                     positionMs = pos,
-                    label = TimeFormatter.formatDuration(pos)
+                    label = label
                 )
             )
-            android.util.Log.i("PMP_DIAG", "Bookmark added @ ${pos}ms uri=$mediaUri")
+            android.util.Log.i("PMP_DIAG", "Bookmark added @ ${pos}ms uri=$mediaUri sessionId=$sessionId")
+            // Mirror into the session's snapshot so the Recents row's
+            // dropdown reflects it. Skip if no session is active yet
+            // (rare — would only happen if user adds a bookmark before
+            // any recordPlay has been called).
+            if (sessionId != null) {
+                runCatching { lastPlayedRepo.addSessionBookmark(sessionId, pos, label) }
+            }
         }
     }
 
@@ -143,7 +169,7 @@ class PlayerViewModel @Inject constructor(
                 val playing = player.isPlaying
                 if (playing) {
                     launch(Dispatchers.IO) {
-                        runCatching { lastPlayedRepo.updatePosition(mediaUri, pos) }
+                        runCatching { lastPlayedRepo.updatePositionByUri(mediaUri, pos) }
                     }
                 }
             }

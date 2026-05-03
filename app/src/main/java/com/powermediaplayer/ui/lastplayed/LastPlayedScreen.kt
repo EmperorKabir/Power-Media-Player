@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.powermediaplayer.data.db.entity.BookmarkEntity
 import com.powermediaplayer.data.repository.LastPlayedRepository.HistoryItem
 import com.powermediaplayer.data.repository.LastPlayedRepository.Source
 import com.powermediaplayer.ui.theme.OledBlack
@@ -41,7 +40,7 @@ import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
 import com.powermediaplayer.ui.theme.TextSecondary
 import com.powermediaplayer.util.TimeFormatter
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -89,8 +88,8 @@ fun LastPlayedScreen(
                 ReorderablePinnedList(
                     items = pinned,
                     onMove = { from, to ->
-                        val movedUri = pinned[from].mediaUri
-                        viewModel.reorderPinned(movedUri, to)
+                        val movedFavId = pinned[from].id
+                        viewModel.reorderPinned(movedFavId, to)
                     },
                     onTap = { item ->
                         viewModel.playLocalAt(item)
@@ -100,20 +99,20 @@ fun LastPlayedScreen(
                         viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
                         onNavigateToPlayer()
                     },
-                    onDeleteBookmark = { id -> viewModel.deleteBookmark(id) },
-                    onUnpin = { uri -> viewModel.unpin(uri) },
-                    bookmarkProvider = { uri -> viewModel.bookmarksFor(uri) }
+                    onDeleteBookmark = { id -> viewModel.deletePinnedBookmark(id) },
+                    onUnpin = { favId -> viewModel.unpin(favId) },
+                    bookmarkProvider = { favId -> viewModel.pinnedBookmarksFor(favId) }
                 )
             }
 
             // Recent (dynamic) section.
             SectionHeader(if (dynamic.isEmpty()) "No recent items" else "Recent")
             LazyColumn(modifier = Modifier.weight(1f)) {
-                itemsIndexed(dynamic, key = { _, it -> "dyn_${it.mediaUri}" }) { _, item ->
+                itemsIndexed(dynamic, key = { _, it -> "dyn_${it.id}" }) { _, item ->
                     HistoryRowWithBookmarks(
                         item = item,
                         bookmarkCap = RECENT_BOOKMARK_CAP,
-                        bookmarkProvider = { viewModel.bookmarksFor(item.mediaUri) },
+                        bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
                         onTap = {
                             viewModel.playLocalAt(item)
                             onNavigateToPlayer()
@@ -122,11 +121,11 @@ fun LastPlayedScreen(
                             viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
                             onNavigateToPlayer()
                         },
-                        onDeleteBookmark = { id -> viewModel.deleteBookmark(id) },
+                        onDeleteBookmark = { id -> viewModel.deleteRecentsBookmark(id) },
                         trailing = {
                             IconButton(onClick = {
                                 scope.launch {
-                                    val ok = viewModel.pin(item.mediaUri)
+                                    val ok = viewModel.pinSession(item.id)
                                     if (!ok) {
                                         snackbar.showSnackbar(
                                             "Favourites full (10/10) — unpin one first"
@@ -164,38 +163,33 @@ private fun ReorderablePinnedList(
     items: List<HistoryItem>,
     onMove: (Int, Int) -> Unit,
     onTap: (HistoryItem) -> Unit,
-    onTapBookmark: (HistoryItem, BookmarkEntity) -> Unit,
+    onTapBookmark: (HistoryItem, LastPlayedViewModel.BookmarkRow) -> Unit,
     onDeleteBookmark: (Long) -> Unit,
-    onUnpin: (String) -> Unit,
-    bookmarkProvider: (String) -> kotlinx.coroutines.flow.Flow<List<BookmarkEntity>>
+    onUnpin: (Long) -> Unit,
+    bookmarkProvider: (Long) -> Flow<List<LastPlayedViewModel.BookmarkRow>>
 ) {
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
         onMove(from.index, to.index)
     }
-    // Pinned list height is bookmark-aware: each row may or may not be
-    // expanded so we can't precompute exact pixels, but bounding the
-    // section to a half-screen window prevents Recent from being shoved
-    // off-screen when many pins are open. The user can still scroll
-    // within this window via the LazyColumn.
     LazyColumn(
         state = listState,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(max = 360.dp)
     ) {
-        itemsIndexed(items, key = { _, it -> "pin_${it.mediaUri}" }) { _, item ->
-            ReorderableItem(reorderState, key = "pin_${item.mediaUri}") { dragging ->
+        itemsIndexed(items, key = { _, it -> "pin_${it.id}" }) { _, item ->
+            ReorderableItem(reorderState, key = "pin_${item.id}") { dragging ->
                 HistoryRowWithBookmarks(
                     item = item,
                     bookmarkCap = Int.MAX_VALUE, // pinned: unlimited
-                    bookmarkProvider = { bookmarkProvider(item.mediaUri) },
+                    bookmarkProvider = { bookmarkProvider(item.id) },
                     onTap = { onTap(item) },
                     onTapBookmark = { bookmark -> onTapBookmark(item, bookmark) },
                     onDeleteBookmark = onDeleteBookmark,
                     elevated = dragging,
                     trailing = {
-                        IconButton(onClick = { onUnpin(item.mediaUri) }) {
+                        IconButton(onClick = { onUnpin(item.id) }) {
                             Icon(Icons.Filled.Star, contentDescription = "Unpin",
                                 tint = TealAccent)
                         }
@@ -225,15 +219,15 @@ private fun ReorderablePinnedList(
 private fun HistoryRowWithBookmarks(
     item: HistoryItem,
     bookmarkCap: Int,
-    bookmarkProvider: () -> kotlinx.coroutines.flow.Flow<List<BookmarkEntity>>,
+    bookmarkProvider: () -> Flow<List<LastPlayedViewModel.BookmarkRow>>,
     onTap: () -> Unit,
-    onTapBookmark: (BookmarkEntity) -> Unit,
+    onTapBookmark: (LastPlayedViewModel.BookmarkRow) -> Unit,
     onDeleteBookmark: (Long) -> Unit,
     trailing: @Composable RowScope.() -> Unit,
     elevated: Boolean = false
 ) {
-    var expanded by rememberSaveable(item.mediaUri) { mutableStateOf(false) }
-    val bookmarksFlow = remember(item.mediaUri) { bookmarkProvider() }
+    var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
+    val bookmarksFlow = remember(item.id) { bookmarkProvider() }
     val bookmarks by bookmarksFlow.collectAsState(initial = emptyList())
 
     Surface(
@@ -258,7 +252,7 @@ private fun HistoryRowWithBookmarks(
                     .fillMaxWidth()
                     .padding(start = 56.dp, end = 12.dp, bottom = 8.dp)) {
                     bookmarks.take(bookmarkCap).forEach { bookmark ->
-                        BookmarkRow(
+                        BookmarkRowUi(
                             bookmark = bookmark,
                             onClick = { onTapBookmark(bookmark) },
                             onDelete = { onDeleteBookmark(bookmark.id) }
@@ -363,8 +357,8 @@ private fun HistoryHeaderRow(
 }
 
 @Composable
-private fun BookmarkRow(
-    bookmark: BookmarkEntity,
+private fun BookmarkRowUi(
+    bookmark: LastPlayedViewModel.BookmarkRow,
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {

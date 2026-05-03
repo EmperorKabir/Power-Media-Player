@@ -7,8 +7,10 @@ import com.powermediaplayer.data.repository.LastPlayedRepository
 import com.powermediaplayer.service.PlaybackConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -17,16 +19,16 @@ import javax.inject.Inject
  * Backing VM for the Last Played tab. Wraps the repository's
  * dynamic + pinned flows and exposes side-effect entry points.
  *
- * Note: actual playback dispatch into Library / Cloud / Spotify
- * happens at the Screen level via the existing tab ViewModels —
- * this VM only resolves the right action and triggers it.
+ * Recents and Pinned are now distinct id-spaces:
+ *   - Recents uses a [PlaybackHistoryEntity] id (one per play session)
+ *   - Pinned uses a [HistoryFavouriteEntity] id (one per pin snapshot)
+ * Bookmark dropdowns query different tables for each.
  */
 @HiltViewModel
 class LastPlayedViewModel @Inject constructor(
     private val repo: LastPlayedRepository,
     private val playbackConnection: PlaybackConnection,
-    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
-    private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao
+    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
 ) : ViewModel() {
 
     val dynamic: StateFlow<List<LastPlayedRepository.HistoryItem>> =
@@ -43,33 +45,53 @@ class LastPlayedViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
-    /** Returns true if pinned; false (with reason snackbar) if 10/10. */
-    suspend fun pin(uri: String): Boolean = repo.pin(uri).isSuccess
+    /** Pin a Recents row by its session id. False on full (10/10). */
+    suspend fun pinSession(historyId: Long): Boolean = repo.pinSession(historyId).isSuccess
 
-    fun unpin(uri: String) {
-        viewModelScope.launch(Dispatchers.IO) { repo.unpin(uri) }
+    fun unpin(favouriteId: Long) {
+        viewModelScope.launch(Dispatchers.IO) { repo.unpin(favouriteId) }
     }
 
-    fun reorderPinned(uri: String, newOrder: Int) {
-        viewModelScope.launch(Dispatchers.IO) { repo.reorderPinned(uri, newOrder) }
+    fun reorderPinned(favouriteId: Long, newOrder: Int) {
+        viewModelScope.launch(Dispatchers.IO) { repo.reorderPinned(favouriteId, newOrder) }
     }
 
-    fun delete(uri: String) {
-        viewModelScope.launch(Dispatchers.IO) { repo.delete(uri) }
+    fun deleteRecentsRow(historyId: Long) {
+        viewModelScope.launch(Dispatchers.IO) { repo.delete(historyId) }
     }
 
     /**
-     * Bookmarks for a single Last Played row. Used by the expandable
-     * dropdown so each row in Recent / Pinned can surface up to 5 (or
-     * unlimited, for pinned) timestamped seek-points without leaving
-     * the Last Played tab.
+     * UI-facing bookmark shape so the Last Played screen does not have
+     * to switch on entity type. Both [HistoryBookmarkEntity] (Recents)
+     * and [FavouriteBookmarkEntity] (Pinned) collapse to this.
      */
-    fun bookmarksFor(mediaUri: String):
-        kotlinx.coroutines.flow.Flow<List<com.powermediaplayer.data.db.entity.BookmarkEntity>> =
-        bookmarkDao.observeForMedia(mediaUri)
+    data class BookmarkRow(val id: Long, val positionMs: Long, val label: String)
 
-    fun deleteBookmark(id: Long) {
-        viewModelScope.launch(Dispatchers.IO) { bookmarkDao.delete(id) }
+    /**
+     * Recents bookmarks for a single session row. Editable from the
+     * Last Played UI; deleting one here does NOT touch the Player
+     * tab's bookmarks table.
+     */
+    fun recentsBookmarksFor(historyId: Long): Flow<List<BookmarkRow>> =
+        repo.observeSessionBookmarks(historyId).map { list ->
+            list.map { BookmarkRow(it.id, it.positionMs, it.label) }
+        }
+
+    fun deleteRecentsBookmark(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) { repo.deleteSessionBookmark(id) }
+    }
+
+    /**
+     * Pinned bookmarks for a single pinned row. Snapshotted at pin
+     * time; editable only from the Pinned section UI.
+     */
+    fun pinnedBookmarksFor(favouriteId: Long): Flow<List<BookmarkRow>> =
+        repo.observeFavouriteBookmarks(favouriteId).map { list ->
+            list.map { BookmarkRow(it.id, it.positionMs, it.label) }
+        }
+
+    fun deletePinnedBookmark(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) { repo.deleteFavouriteBookmark(id) }
     }
 
     /**
@@ -79,30 +101,54 @@ class LastPlayedViewModel @Inject constructor(
      * position. Spotify rows route through SpotifyProvider so they
      * resume on the user's Connect device.
      *
-     * @param atPositionMs override seek position — used by the
-     *   bookmark dropdown so tapping a bookmark in Last Played jumps
-     *   straight to that timestamp instead of the file's last-stored
-     *   position.
+     * Each tap creates a NEW play session row in playback_history so
+     * the Recents list reflects the user's actual sequence (A → B → A
+     * produces three rows).
      */
     fun playLocalAt(
         item: LastPlayedRepository.HistoryItem,
         atPositionMs: Long? = null
     ) {
-        // Spotify rows: route via Spotify Connect, including the bookmark
-        // override position. The mirror polling handles the play-state
-        // update so the Player tab swaps over.
+        // Spotify rows: route via Spotify Connect, including the
+        // bookmark override position. Polling starts unconditionally on
+        // play success (the previous gating-on-positive-position bug
+        // left the Player tab showing stale local metadata when a
+        // Spotify entry was tapped from a fresh-position row).
         if (item.source == LastPlayedRepository.Source.SPOTIFY) {
             val targetPos = atPositionMs ?: item.lastPositionMs
             viewModelScope.launch(Dispatchers.IO) {
                 val play = runCatching {
                     spotifyProvider.playTrackOnConnectDevice(item.mediaUri, contextUri = null)
-                }
-                if (play.getOrNull()?.isSuccess == true && targetPos > 0L) {
-                    // /seek lands a moment after /play; small dwell so
-                    // Spotify Connect has finished loading the track.
-                    kotlinx.coroutines.delay(500)
-                    runCatching { spotifyProvider.seekTo(targetPos) }
+                }.getOrNull()
+                val ok = play?.isSuccess == true
+                if (ok) {
+                    // Always start polling so the Player tab swaps to
+                    // the Spotify mirror — independent of whether the
+                    // user is jumping to a saved position.
                     spotifyProvider.startPlaybackPolling()
+                    if (targetPos > 0L) {
+                        // /seek lands a moment after /play; small dwell
+                        // so Spotify Connect has finished loading.
+                        kotlinx.coroutines.delay(500)
+                        runCatching { spotifyProvider.seekTo(targetPos) }
+                    }
+                    // Record a NEW Spotify session so the Recents list
+                    // shows the replay as its own row.
+                    runCatching {
+                        repo.recordPlay(
+                            com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                                mediaUri = item.mediaUri,
+                                title = item.title,
+                                subtitle = item.subtitle,
+                                artworkUri = item.artworkUri,
+                                source = "SPOTIFY",
+                                mediaKindOrdinal = item.mediaKindOrdinal,
+                                lastPositionMs = targetPos,
+                                durationMs = item.durationMs,
+                                lastPlayedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
                 }
             }
             return
@@ -119,6 +165,7 @@ class LastPlayedViewModel @Inject constructor(
             spotifyProvider.stopPlaybackPolling()
         }
         val uri = runCatching { Uri.parse(item.mediaUri) }.getOrNull() ?: return
+        val targetPos = atPositionMs ?: item.lastPositionMs
         val mediaItem = androidx.media3.common.MediaItem.Builder()
             .setMediaId(item.mediaUri)
             .setUri(uri)
@@ -134,6 +181,30 @@ class LastPlayedViewModel @Inject constructor(
             )
             .build()
         playbackConnection.setMediaItems(listOf(mediaItem), 0)
-        playbackConnection.seekTo(atPositionMs ?: item.lastPositionMs)
+        playbackConnection.seekTo(targetPos)
+        // Record a NEW session so the Recents list reflects this play
+        // as its own row (the user-visible "A → B → A produces three
+        // rows" contract).
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                repo.recordPlay(
+                    com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                        mediaUri = item.mediaUri,
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        artworkUri = item.artworkUri,
+                        source = when (item.source) {
+                            LastPlayedRepository.Source.LOCAL -> "LOCAL"
+                            LastPlayedRepository.Source.DRIVE -> "DRIVE"
+                            else -> "LOCAL"
+                        },
+                        mediaKindOrdinal = item.mediaKindOrdinal,
+                        lastPositionMs = targetPos,
+                        durationMs = item.durationMs,
+                        lastPlayedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
     }
 }

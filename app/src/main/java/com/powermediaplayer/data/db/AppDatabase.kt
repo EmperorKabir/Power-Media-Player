@@ -7,12 +7,16 @@ import androidx.room.RoomDatabase
 import com.powermediaplayer.data.db.dao.BookmarkDao
 import com.powermediaplayer.data.db.dao.EqualizerPresetDao
 import com.powermediaplayer.data.db.dao.FavoriteDao
+import com.powermediaplayer.data.db.dao.FavouriteBookmarkDao
+import com.powermediaplayer.data.db.dao.HistoryBookmarkDao
 import com.powermediaplayer.data.db.dao.HistoryFavouriteDao
 import com.powermediaplayer.data.db.dao.PlaybackHistoryDao
 import com.powermediaplayer.data.db.dao.PlaybackStateDao
 import com.powermediaplayer.data.db.entity.BookmarkEntity
 import com.powermediaplayer.data.db.entity.EqualizerPresetEntity
 import com.powermediaplayer.data.db.entity.FavoriteEntity
+import com.powermediaplayer.data.db.entity.FavouriteBookmarkEntity
+import com.powermediaplayer.data.db.entity.HistoryBookmarkEntity
 import com.powermediaplayer.data.db.entity.HistoryFavouriteEntity
 import com.powermediaplayer.data.db.entity.PlaybackHistoryEntity
 import com.powermediaplayer.data.db.entity.PlaybackStateEntity
@@ -28,9 +32,13 @@ import com.powermediaplayer.data.db.entity.PlaybackStateEntity
         FavoriteEntity::class,
         BookmarkEntity::class,
         PlaybackHistoryEntity::class,
-        HistoryFavouriteEntity::class
+        HistoryFavouriteEntity::class,
+        HistoryBookmarkEntity::class,
+        FavouriteBookmarkEntity::class
     ],
-    version = 4,
+    // v5: PlaybackHistory + HistoryFavourite switched to autogen IDs;
+    // added HistoryBookmark + FavouriteBookmark snapshot tables.
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -41,6 +49,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun playbackHistoryDao(): PlaybackHistoryDao
     abstract fun historyFavouriteDao(): HistoryFavouriteDao
+    abstract fun historyBookmarkDao(): HistoryBookmarkDao
+    abstract fun favouriteBookmarkDao(): FavouriteBookmarkDao
 
     companion object {
         const val DATABASE_NAME = "power_media_player.db"
