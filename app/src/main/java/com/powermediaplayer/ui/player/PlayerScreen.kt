@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -50,6 +51,7 @@ fun PlayerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val artworkBytes by viewModel.artworkBytes.collectAsStateWithLifecycle()
+    val sleepTimerExpired by viewModel.sleepTimerExpired.collectAsStateWithLifecycle()
     var coverColors by remember { mutableStateOf<CoverArtColors?>(null) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showChapterPicker by remember { mutableStateOf(false) }
@@ -130,6 +132,36 @@ fun PlayerScreen(
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodySmall
                     )
+                }
+            }
+        }
+        if (sleepTimerExpired) {
+            Surface(
+                color = Teal800,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Timer,
+                        contentDescription = null,
+                        tint = TealAccent,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    Text(
+                        text = "Sleep timer finished — playback paused.",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { viewModel.dismissSleepTimerExpired() }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = TextPrimary)
+                    }
                 }
             }
         }

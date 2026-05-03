@@ -35,6 +35,14 @@ class PlayerViewModel @Inject constructor(
     private var sleepTimerJob: Job? = null
     private val _sleepTimerRemainingMs = MutableStateFlow(0L)
 
+    // One-shot "Sleep timer finished" message — set true on expiry,
+    // cleared by [dismissSleepTimerExpired] when user taps the
+    // dismiss action in the player UI.
+    private val _sleepTimerExpired = MutableStateFlow(false)
+    val sleepTimerExpired: StateFlow<Boolean> = _sleepTimerExpired.asStateFlow()
+
+    fun dismissSleepTimerExpired() { _sleepTimerExpired.value = false }
+
     /**
      * The single source of truth for the player UI.
      * Combines PlaybackConnection state with computed display values.
@@ -183,9 +191,12 @@ class PlayerViewModel @Inject constructor(
                 remaining -= 1000
                 _sleepTimerRemainingMs.value = remaining.coerceAtLeast(0)
             }
-            // Timer expired — pause playback
+            // Timer expired — pause playback (no alarm sound) and raise
+            // a dismissible "Sleep timer finished" flag the UI shows.
             playbackConnection.pause()
             _sleepTimerRemainingMs.value = 0
+            _sleepTimerExpired.value = true
+            android.util.Log.i("PMP_DIAG", "SleepTimer expired — paused playback")
         }
     }
 

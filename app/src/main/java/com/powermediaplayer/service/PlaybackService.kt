@@ -34,6 +34,7 @@ import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.powermediaplayer.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -51,6 +52,10 @@ class PlaybackService : MediaSessionService() {
 
     @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
+
+    private val initScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
 
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
@@ -115,9 +120,23 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Configure renderers with FFmpeg extension support (when available)
+        // Configure renderers honouring the user's Settings → Software/
+        // Hardware decoding toggle. When SW preferred → load extension
+        // (FFmpeg) renderers and prefer them. When HW preferred → use
+        // the platform MediaCodec renderers exclusively.
+        val swPreferred = kotlinx.coroutines.runBlocking {
+            settingsDataStore.useSoftwareDecoding.first()
+        }
+        val rendererMode = if (swPreferred)
+            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+        else
+            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+        android.util.Log.i(
+            "PMP_DIAG",
+            "PlaybackService renderer mode swPreferred=$swPreferred extMode=$rendererMode"
+        )
         val renderersFactory = DefaultRenderersFactory(this)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setExtensionRendererMode(rendererMode)
 
         // Mp4 extractor with edit-list workaround — required for many M4B
         // audiobooks (especially Audible-converted) whose elst boxes confuse

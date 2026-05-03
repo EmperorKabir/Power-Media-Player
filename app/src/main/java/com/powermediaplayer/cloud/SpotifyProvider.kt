@@ -97,6 +97,18 @@ class SpotifyProvider @Inject constructor(
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
 
+    init {
+        // Restore the signed-in flag on cold start. Without this every
+        // app restart shows the consent screen even though the token
+        // is persisted in DataStore — the UI was driven by
+        // _isLoggedIn which always started as false.
+        pollScope.launch {
+            tokenStore.observe().collect { json ->
+                _isLoggedIn.value = !json.isNullOrBlank()
+            }
+        }
+    }
+
     private val authService: AuthorizationService by lazy { AuthorizationService(context) }
     private val gson = Gson()
     private val http = OkHttpClient()

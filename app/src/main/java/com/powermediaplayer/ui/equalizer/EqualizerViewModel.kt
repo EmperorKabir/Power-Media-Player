@@ -36,12 +36,18 @@ data class EqualizerUiState(
 @HiltViewModel
 class EqualizerViewModel @Inject constructor(
     private val presetDao: EqualizerPresetDao,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val eqEffect: com.powermediaplayer.audio.EqualizerEffectController
 ) : ViewModel() {
 
     private val gson = Gson()
     private val _uiState = MutableStateFlow(EqualizerUiState())
     val uiState: StateFlow<EqualizerUiState> = _uiState.asStateFlow()
+
+    /** Push current band levels through to the platform Equalizer. */
+    private fun pushLevels(levels: List<Int>) {
+        eqEffect.bandLevels.value = levels
+    }
 
     init {
         // Seed default presets if needed, then load all
@@ -63,6 +69,7 @@ class EqualizerViewModel @Inject constructor(
             bandLevels = newLevels,
             isCustomModified = true
         )
+        pushLevels(newLevels)
     }
 
     /**
@@ -76,6 +83,7 @@ class EqualizerViewModel @Inject constructor(
             selectedPresetName = preset.name,
             isCustomModified = false
         )
+        pushLevels(levels)
         viewModelScope.launch {
             settingsDataStore.setLastEqPresetId(preset.id)
         }
@@ -126,11 +134,13 @@ class EqualizerViewModel @Inject constructor(
      * Reset all bands to flat (0 dB).
      */
     fun resetToFlat() {
+        val flat = List(10) { 0 }
         _uiState.value = _uiState.value.copy(
-            bandLevels = List(10) { 0 },
+            bandLevels = flat,
             selectedPresetName = "Flat",
             isCustomModified = false
         )
+        pushLevels(flat)
     }
 
     private suspend fun loadPresets() {

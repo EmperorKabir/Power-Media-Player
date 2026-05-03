@@ -82,8 +82,25 @@ data class LibraryUiState(
 class LibraryViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val playbackConnection: PlaybackConnection,
-    private val favoriteDao: FavoriteDao
+    private val favoriteDao: FavoriteDao,
+    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
 ) : ViewModel() {
+
+    /**
+     * Stop any active Spotify Connect mirror when starting local
+     * playback — otherwise the Player tab kept showing Spotify
+     * metadata while the local file's audio played underneath.
+     * Best-effort pause Spotify Connect side too so the user isn't
+     * left with two audio streams.
+     */
+    private fun stopSpotifyMirrorIfActive() {
+        if (spotifyProvider.spotifyState.value != null) {
+            spotifyProvider.stopPlaybackPolling()
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { spotifyProvider.togglePlayPause() }
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
@@ -227,6 +244,7 @@ class LibraryViewModel @Inject constructor(
      * Directly calls PlaybackConnection so nothing is left as a TODO.
      */
     fun playFiles(files: List<MediaFileInfo>, startIndex: Int) {
+        stopSpotifyMirrorIfActive()
         try {
             val (items, idx) = createMediaItems(files, startIndex)
             playbackConnection.setMediaItems(items, idx)
@@ -246,6 +264,7 @@ class LibraryViewModel @Inject constructor(
      * folders work as expected.
      */
     fun playSingle(file: MediaFileInfo) {
+        stopSpotifyMirrorIfActive()
         try {
             val extras = com.powermediaplayer.util.M4bChapterParser
                 .extractChaptersAsBundle(context, file.uri)
@@ -282,6 +301,7 @@ class LibraryViewModel @Inject constructor(
      * works through PlaybackConnection.seekToFolderChapter.
      */
     fun playFolder(files: List<MediaFileInfo>, startIndex: Int = 0) {
+        stopSpotifyMirrorIfActive()
         val sorted = FolderChapterAggregator.naturalSort(files)
         val (items, idx) = createMediaItems(sorted, startIndex)
         playbackConnection.setMediaItems(items, idx)

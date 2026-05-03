@@ -242,6 +242,15 @@ class CloudViewModel @Inject constructor(
      * navigate away from the cloud screen.
      */
     private suspend fun openItemInternal(item: CloudMediaItem): Boolean {
+        // Drive (or other non-Spotify) playback starts → stop the
+        // Spotify mirror so the Player tab swaps over cleanly instead
+        // of leaving Spotify metadata visible while local audio plays.
+        if (item.sourceProvider != CloudProviderType.SPOTIFY &&
+            spotifyProvider.spotifyState.value != null
+        ) {
+            spotifyProvider.stopPlaybackPolling()
+            runCatching { spotifyProvider.togglePlayPause() }
+        }
         // Build a MediaItem and hand it to the playback connection. The
         // PlaybackService DataSource pipeline injects the Drive bearer
         // token automatically for googleapis.com URLs.
