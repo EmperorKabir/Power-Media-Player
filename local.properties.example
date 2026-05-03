@@ -1,0 +1,26 @@
+# Copy this file to `local.properties` and fill in the real values.
+# `local.properties` is gitignored — never commit it.
+
+# ── OAuth client IDs ────────────────────────────────────────────────
+# From Google Cloud Console → Clients → Android client
+GDRIVE_ANDROID_CLIENT_ID=
+
+# From Spotify Developer Dashboard → app → Settings
+SPOTIFY_CLIENT_ID=
+SPOTIFY_REDIRECT_URI=powermediaplayer://callback
+
+# ── Release signing ─────────────────────────────────────────────────
+# Path is relative to the repo root. Keep the .jks file OUTSIDE the
+# repo or in a gitignored folder. The two passwords + alias are what
+# you chose when running `keytool -genkey ...`.
+#
+# If RELEASE_STORE_FILE is left blank, `./gradlew bundleRelease`
+# produces an unsigned AAB (useful for CI). For Play Store uploads,
+# all four values must be present.
+RELEASE_STORE_FILE=
+RELEASE_STORE_PASSWORD=
+RELEASE_KEY_ALIAS=release
+RELEASE_KEY_PASSWORD=
+
+# Android SDK location (auto-populated by Android Studio first-run)
+sdk.dir=

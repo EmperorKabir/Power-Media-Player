@@ -41,6 +41,22 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = "powermediaplayer"
     }
 
+    // Release signing configured from local.properties (gitignored). When
+    // RELEASE_STORE_FILE is missing the release signingConfig is omitted, so
+    // `bundleRelease` builds an unsigned AAB instead of failing — useful in CI
+    // and for contributors who don't have the keystore.
+    signingConfigs {
+        val storeFilePath = localProp("RELEASE_STORE_FILE")
+        if (storeFilePath.isNotBlank()) {
+            create("release") {
+                storeFile = rootProject.file(storeFilePath)
+                storePassword = localProp("RELEASE_STORE_PASSWORD")
+                keyAlias = localProp("RELEASE_KEY_ALIAS")
+                keyPassword = localProp("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -49,6 +65,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Attach the release signingConfig only if it was created above.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
         debug {
             isMinifyEnabled = false

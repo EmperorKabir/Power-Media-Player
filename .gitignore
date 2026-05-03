@@ -4,6 +4,10 @@ app/build/
 .gradle/
 .idea/
 *.apk
+*.aab
 local.properties
+# Release signing — never commit the keystore
+*.jks
+*.keystore
 dbg*.png
 *.log
