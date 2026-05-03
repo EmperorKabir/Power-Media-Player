@@ -5,7 +5,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.powermediaplayer.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -128,7 +127,6 @@ class SpotifyProvider @Inject constructor(
     }
 
     private val authService: AuthorizationService by lazy { AuthorizationService(context) }
-    private val gson = Gson()
     private val http = OkHttpClient()
 
     private val serviceConfig = AuthorizationServiceConfiguration(

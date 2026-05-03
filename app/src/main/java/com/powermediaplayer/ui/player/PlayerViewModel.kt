@@ -154,29 +154,33 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 settingsDataStore.replayGainEnabled,
-                playbackConnection.playerState
-            ) { enabled, ps -> enabled to ps.title }
-                .collect { (enabled, _) ->
-                    if (!enabled) return@collect
-                    val mediaUri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
-                    if (mediaUri.isNullOrBlank()) return@collect
-                    runCatching {
-                        val mmr = android.media.MediaMetadataRetriever()
-                        mmr.setDataSource(context, android.net.Uri.parse(mediaUri))
-                        // No standard MMR key — try the GENRE field as
-                        // a stand-in for files that smuggle gain there;
-                        // most MP3s encode it via a custom TXXX frame
-                        // which MMR doesn't expose. This is best-effort.
-                        val raw = mmr.extractMetadata(
-                            android.media.MediaMetadataRetriever.METADATA_KEY_GENRE
-                        )
-                        mmr.release()
-                        val gainDb = raw?.let { Regex("(-?\\d+\\.?\\d*)\\s*dB").find(it)?.groupValues?.get(1)?.toDoubleOrNull() } ?: 0.0
-                        val mb = (gainDb * 100).toInt().coerceIn(-1500, 1500)
-                        if (mb != 0) {
-                            android.util.Log.i("PMP_DIAG", "ReplayGain mb=$mb (from $raw)")
-                            setVolumeBoost(mb.coerceAtLeast(0))
-                        }
+                playbackConnection.playerState.map { it.title }.distinctUntilChanged()
+            ) { enabled, _ -> enabled }
+                .collectLatest { enabled ->
+                    if (!enabled) return@collectLatest
+                    // Read mediaUri on Main (MediaController access),
+                    // then hop to IO for the blocking MMR read.
+                    val mediaUri = withContext(Dispatchers.Main) {
+                        playbackConnection.getPlayer()?.currentMediaItem?.mediaId
+                    }
+                    if (mediaUri.isNullOrBlank()) return@collectLatest
+                    val mb = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val mmr = android.media.MediaMetadataRetriever()
+                            mmr.setDataSource(context, android.net.Uri.parse(mediaUri))
+                            val raw = mmr.extractMetadata(
+                                android.media.MediaMetadataRetriever.METADATA_KEY_GENRE
+                            )
+                            mmr.release()
+                            val gainDb = raw?.let {
+                                Regex("(-?\\d+\\.?\\d*)\\s*dB").find(it)?.groupValues?.get(1)?.toDoubleOrNull()
+                            } ?: 0.0
+                            (gainDb * 100).toInt().coerceIn(-1500, 1500) to raw
+                        }.getOrDefault(0 to null)
+                    }
+                    if (mb.first != 0) {
+                        android.util.Log.i("PMP_DIAG", "ReplayGain mb=${mb.first} (from ${mb.second})")
+                        setVolumeBoost(mb.first.coerceAtLeast(0))
                     }
                 }
         }
@@ -622,7 +626,6 @@ class PlayerViewModel @Inject constructor(
      */
     private fun inferMediaKind(s: PlayerState): MediaKind = when {
         s.isVideoContent -> MediaKind.VIDEO
-        s.hasChapters && s.duration > 60 * 60 * 1000L -> MediaKind.AUDIOBOOK
         s.hasChapters -> MediaKind.AUDIOBOOK
         s.mediaItemCount > 1 -> MediaKind.ALBUM
         s.mediaItemCount == 1 -> MediaKind.MUSIC

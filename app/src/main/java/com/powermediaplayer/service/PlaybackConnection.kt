@@ -628,7 +628,7 @@ class PlaybackConnection @Inject constructor(
                 is VorbisComment -> if (entry.key.equals("DESCRIPTION", ignoreCase = true)) entry.value else ""
                 is MdtaMetadataEntry -> {
                     val key = entry.key
-                    if (key == "©des" || key == "desc" || key == "ldes" || key == "©des") {
+                    if (key == "©des" || key == "desc" || key == "ldes") {
                         runCatching { String(entry.value, Charsets.UTF_8) }.getOrDefault("")
                     } else ""
                 }

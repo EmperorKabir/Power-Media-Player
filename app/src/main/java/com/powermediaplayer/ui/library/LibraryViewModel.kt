@@ -265,13 +265,21 @@ class LibraryViewModel @Inject constructor(
      */
     fun playFiles(files: List<MediaFileInfo>, startIndex: Int) {
         stopSpotifyMirrorIfActive()
-        try {
-            val (items, idx) = createMediaItems(files, startIndex)
-            playbackConnection.setMediaItems(items, idx)
-            playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
-            files.getOrNull(idx)?.let { recordLocalPlay(it) }
-        } catch (t: Throwable) {
-            android.util.Log.e("PowerMediaPlayer", "playFiles failed", t)
+        // M4bChapterParser inside createMediaItems opens MediaExtractor
+        // + reads the entire MP4 box hierarchy synchronously — visible
+        // jank on tap when the file is a multi-GB audiobook. Parse off
+        // Main, then hop back for the MediaController call.
+        viewModelScope.launch {
+            try {
+                val (items, idx) = withContext(Dispatchers.IO) {
+                    createMediaItems(files, startIndex)
+                }
+                playbackConnection.setMediaItems(items, idx)
+                playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
+                files.getOrNull(idx)?.let { recordLocalPlay(it) }
+            } catch (t: Throwable) {
+                android.util.Log.e("PowerMediaPlayer", "playFiles failed", t)
+            }
         }
     }
 
@@ -283,33 +291,36 @@ class LibraryViewModel @Inject constructor(
      */
     fun playSingle(file: MediaFileInfo) {
         stopSpotifyMirrorIfActive()
-        try {
-            val extras = com.powermediaplayer.util.M4bChapterParser
-                .extractChaptersAsBundle(context, file.uri)
-            extras.putBoolean("is_video_hint", file.isVideo)
-            val item = MediaItem.Builder()
-                .setMediaId(file.uri.toString())
-                .setUri(file.uri)
-                .setRequestMetadata(
-                    MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(file.uri)
+        viewModelScope.launch {
+            try {
+                val item = withContext(Dispatchers.IO) {
+                    val extras = com.powermediaplayer.util.M4bChapterParser
+                        .extractChaptersAsBundle(context, file.uri)
+                    extras.putBoolean("is_video_hint", file.isVideo)
+                    MediaItem.Builder()
+                        .setMediaId(file.uri.toString())
+                        .setUri(file.uri)
+                        .setRequestMetadata(
+                            MediaItem.RequestMetadata.Builder()
+                                .setMediaUri(file.uri).build()
+                        )
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(file.title)
+                                .setArtist(file.artist)
+                                .setAlbumTitle(file.album)
+                                .setArtworkUri(file.albumArtUri)
+                                .setExtras(extras)
+                                .build()
+                        )
                         .build()
-                )
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(file.title)
-                        .setArtist(file.artist)
-                        .setAlbumTitle(file.album)
-                        .setArtworkUri(file.albumArtUri)
-                        .setExtras(extras)
-                        .build()
-                )
-                .build()
-            playbackConnection.setMediaItems(listOf(item), 0)
-            playbackConnection.setVideoModeHint(file.isVideo)
-            recordLocalPlay(file)
-        } catch (t: Throwable) {
-            android.util.Log.e("PowerMediaPlayer", "playSingle failed", t)
+                }
+                playbackConnection.setMediaItems(listOf(item), 0)
+                playbackConnection.setVideoModeHint(file.isVideo)
+                recordLocalPlay(file)
+            } catch (t: Throwable) {
+                android.util.Log.e("PowerMediaPlayer", "playSingle failed", t)
+            }
         }
     }
 
@@ -321,14 +332,20 @@ class LibraryViewModel @Inject constructor(
      */
     fun playFolder(files: List<MediaFileInfo>, startIndex: Int = 0) {
         stopSpotifyMirrorIfActive()
-        val sorted = FolderChapterAggregator.naturalSort(files)
-        val (items, idx) = createMediaItems(sorted, startIndex)
-        playbackConnection.setMediaItems(items, idx)
-        val chapters = FolderChapterAggregator.aggregate(sorted)
-        if (chapters.isNotEmpty()) {
-            playbackConnection.setFolderChapters(chapters)
+        viewModelScope.launch {
+            val sorted = FolderChapterAggregator.naturalSort(files)
+            val (items, idx) = withContext(Dispatchers.IO) {
+                createMediaItems(sorted, startIndex)
+            }
+            playbackConnection.setMediaItems(items, idx)
+            val chapters = withContext(Dispatchers.IO) {
+                FolderChapterAggregator.aggregate(sorted)
+            }
+            if (chapters.isNotEmpty()) {
+                playbackConnection.setFolderChapters(chapters)
+            }
+            sorted.getOrNull(idx)?.let { recordLocalPlay(it) }
         }
-        sorted.getOrNull(idx)?.let { recordLocalPlay(it) }
     }
 
     private fun recordLocalPlay(file: MediaFileInfo) {

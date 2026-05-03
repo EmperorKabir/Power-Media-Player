@@ -330,14 +330,25 @@ private fun SliderRow(
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit
 ) {
+    // Drag-local state so the dragging visual is fluid; commit to
+    // DataStore + downstream reactor (PlayerViewModel.init flows for
+    // pitch / volume-boost / replay-gain) only on release. The
+    // previous design fired DataStore.edit() per pixel of drag,
+    // chaining dozens of redundant writes.
+    var local by remember(value) { mutableStateOf(value) }
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, style = MaterialTheme.typography.titleSmall, color = TextPrimary,
                 modifier = Modifier.weight(1f))
             Text(valueLabel, style = MaterialTheme.typography.labelMedium, color = TealAccent)
         }
-        Slider(value = value, valueRange = range, onValueChange = onChange,
-            colors = SliderDefaults.colors(thumbColor = TealAccent, activeTrackColor = TealAccent))
+        Slider(
+            value = local,
+            valueRange = range,
+            onValueChange = { local = it },
+            onValueChangeFinished = { onChange(local) },
+            colors = SliderDefaults.colors(thumbColor = TealAccent, activeTrackColor = TealAccent)
+        )
     }
 }
 

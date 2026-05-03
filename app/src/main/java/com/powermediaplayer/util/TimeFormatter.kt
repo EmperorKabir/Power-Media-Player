@@ -17,10 +17,12 @@ object TimeFormatter {
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
 
+        // Locale.US so Arabic-numeral / RTL devices still produce
+        // ASCII digits (the duration is parsed by other code paths).
         return if (hours > 0) {
-            String.format("%d:%02d:%02d", hours, minutes, seconds)
+            String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
         } else {
-            String.format("%d:%02d", minutes, seconds)
+            String.format(java.util.Locale.US, "%d:%02d", minutes, seconds)
         }
     }
 
