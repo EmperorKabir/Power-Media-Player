@@ -205,6 +205,135 @@ class PlayerViewModel @Inject constructor(
         _sleepTimerRemainingMs.value = 0
     }
 
+    /**
+     * Sleep timer that pauses at the end of the CURRENT chapter (or
+     * track if the file has no chapters). Power-user feature: lets the
+     * listener fall asleep without losing their place mid-chapter.
+     */
+    fun startSleepAtEndOfChapter() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = viewModelScope.launch {
+            val state = uiState.value
+            val pos = playbackConnection.playerState.value.currentPosition
+            val target: Long = if (state.hasChapters && state.chapterDurationMs > 0) {
+                state.chapterStartMs + state.chapterDurationMs
+            } else {
+                playbackConnection.playerState.value.duration
+            }
+            val deltaMs = (target - pos).coerceAtLeast(1_000L)
+            android.util.Log.i("PMP_DIAG", "SleepAtEndOfChapter delta=${deltaMs}ms target=${target}ms")
+            _sleepTimerRemainingMs.value = deltaMs
+            var remaining = deltaMs
+            while (remaining > 0) {
+                delay(1000)
+                remaining -= 1000
+                _sleepTimerRemainingMs.value = remaining.coerceAtLeast(0)
+            }
+            playbackConnection.pause()
+            _sleepTimerRemainingMs.value = 0
+            _sleepTimerExpired.value = true
+        }
+    }
+
+    // ── A-B loop ─────────────────────────────────────────────────
+    private val _abLoopStart = MutableStateFlow<Long?>(null)
+    private val _abLoopEnd = MutableStateFlow<Long?>(null)
+    val abLoopStart: StateFlow<Long?> = _abLoopStart.asStateFlow()
+    val abLoopEnd: StateFlow<Long?> = _abLoopEnd.asStateFlow()
+    private var abLoopJob: Job? = null
+
+    /**
+     * Three-state A-B loop: first tap captures A; second tap captures
+     * B and starts looping; third tap clears the loop. The loop is
+     * enforced by a polling job that seeks back to A whenever
+     * currentPosition crosses B.
+     */
+    fun toggleAbLoop() {
+        when {
+            _abLoopStart.value == null -> {
+                _abLoopStart.value = playbackConnection.playerState.value.currentPosition
+                android.util.Log.i("PMP_DIAG", "AB-loop A=${_abLoopStart.value}ms")
+            }
+            _abLoopEnd.value == null -> {
+                val end = playbackConnection.playerState.value.currentPosition
+                val start = _abLoopStart.value!!
+                if (end <= start + 1_000) {
+                    // Too close — treat as clear.
+                    _abLoopStart.value = null
+                    _abLoopEnd.value = null
+                    return
+                }
+                _abLoopEnd.value = end
+                abLoopJob?.cancel()
+                abLoopJob = viewModelScope.launch {
+                    while (isActive) {
+                        delay(250)
+                        val a = _abLoopStart.value ?: break
+                        val b = _abLoopEnd.value ?: break
+                        if (playbackConnection.playerState.value.currentPosition >= b) {
+                            playbackConnection.seekTo(a)
+                        }
+                    }
+                }
+                android.util.Log.i("PMP_DIAG", "AB-loop B=${end}ms (loop active)")
+            }
+            else -> {
+                _abLoopStart.value = null
+                _abLoopEnd.value = null
+                abLoopJob?.cancel()
+                android.util.Log.i("PMP_DIAG", "AB-loop cleared")
+            }
+        }
+    }
+
+    // ── Pitch shift (independent of speed) ────────────────────────
+    private val _pitch = MutableStateFlow(1.0f)
+    val pitch: StateFlow<Float> = _pitch.asStateFlow()
+    fun setPitch(value: Float) {
+        val clamped = value.coerceIn(0.5f, 2.0f)
+        _pitch.value = clamped
+        // Re-apply current speed with new pitch (Media3 takes both in
+        // PlaybackParameters).
+        val speed = uiState.value.playbackSpeed
+        playbackConnection.setPlaybackParametersWithPitch(speed, clamped)
+    }
+
+    // ── LoudnessEnhancer volume boost ─────────────────────────────
+    private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
+    private val _volumeBoostMb = MutableStateFlow(0)
+    val volumeBoostMb: StateFlow<Int> = _volumeBoostMb.asStateFlow()
+
+    /** millibels of gain on top of normal volume. 0 = off; 2000 = +20 dB. */
+    fun setVolumeBoost(milliBels: Int) {
+        val clamped = milliBels.coerceIn(0, 2000)
+        _volumeBoostMb.value = clamped
+        val sessionId = (playbackConnection.getPlayer() as? androidx.media3.exoplayer.ExoPlayer)
+            ?.audioSessionId ?: 0
+        if (sessionId == 0) return
+        try {
+            val le = loudnessEnhancer ?: android.media.audiofx.LoudnessEnhancer(sessionId).also {
+                loudnessEnhancer = it
+                it.enabled = true
+            }
+            le.setTargetGain(clamped)
+        } catch (t: Throwable) {
+            android.util.Log.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
+        }
+    }
+
+    // ── Frame step + screenshot helpers ───────────────────────────
+    fun stepFrameForward() {
+        playbackConnection.pause()
+        // ~one frame at 30 fps. Good enough for visual stepping.
+        val pos = playbackConnection.playerState.value.currentPosition
+        playbackConnection.seekTo(pos + 33)
+    }
+    fun stepFrameBack() {
+        playbackConnection.pause()
+        val pos = playbackConnection.playerState.value.currentPosition
+        playbackConnection.seekTo((pos - 33).coerceAtLeast(0L))
+    }
+
     // ── Playlist Seek (seek within entire playlist by absolute position) ──
 
     fun seekToPlaylistPosition(absolutePositionMs: Long) =

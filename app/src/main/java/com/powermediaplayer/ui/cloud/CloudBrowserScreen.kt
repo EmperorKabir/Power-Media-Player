@@ -79,12 +79,11 @@ fun CloudBrowserScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
 
-        // Search bar — debounced (300 ms) lookup against the active
-        // provider. Drive uses files.list with `name contains`,
-        // Spotify uses /v1/search across track/album/playlist/show/
-        // episode. Empty query hides results so normal browse view
-        // remains the default.
-        if (uiState.activeProvider != null) {
+        // Search bar — Drive only for now. Spotify search returned
+        // unusable results (most items are albums/playlists which the
+        // app can't open yet). Hidden until the section picker lands
+        // and we wire results into the right kind of opener.
+        if (uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE) {
             OutlinedTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
@@ -142,6 +141,71 @@ fun CloudBrowserScreen(
             } else if (uiState.items.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Empty folder", color = TextSecondary)
+                }
+            } else if (uiState.activeProvider == CloudProviderType.SPOTIFY &&
+                       uiState.spotifySection == null) {
+                // Spotify section picker — landing screen when entering
+                // Spotify. Each card opens a single Web API endpoint.
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    items(
+                        items = com.powermediaplayer.cloud.SpotifySection.values().toList(),
+                        key = { it.name }
+                    ) { section ->
+                        Surface(
+                            color = SurfaceElevated,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                .clickable { viewModel.openSpotifySection(section) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = when (section) {
+                                        com.powermediaplayer.cloud.SpotifySection.LIKED_SONGS ->
+                                            Icons.Filled.Favorite
+                                        com.powermediaplayer.cloud.SpotifySection.RECENT ->
+                                            Icons.Filled.History
+                                        com.powermediaplayer.cloud.SpotifySection.SAVED_ALBUMS ->
+                                            Icons.Filled.Album
+                                        com.powermediaplayer.cloud.SpotifySection.SAVED_PLAYLISTS,
+                                        com.powermediaplayer.cloud.SpotifySection.FEATURED_PLAYLISTS ->
+                                            Icons.Filled.QueueMusic
+                                        com.powermediaplayer.cloud.SpotifySection.SAVED_EPISODES,
+                                        com.powermediaplayer.cloud.SpotifySection.SAVED_SHOWS ->
+                                            Icons.Filled.Podcasts
+                                        com.powermediaplayer.cloud.SpotifySection.TOP_TRACKS ->
+                                            Icons.Filled.TrendingUp
+                                        com.powermediaplayer.cloud.SpotifySection.TOP_ARTISTS ->
+                                            Icons.Filled.Person
+                                        com.powermediaplayer.cloud.SpotifySection.NEW_RELEASES ->
+                                            Icons.Filled.NewReleases
+                                    },
+                                    contentDescription = null,
+                                    tint = TealAccent,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(Modifier.width(16.dp))
+                                Text(
+                                    text = section.label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    Icons.Filled.ChevronRight,
+                                    contentDescription = null,
+                                    tint = TextSecondary
+                                )
+                            }
+                        }
+                    }
                 }
             } else if (uiState.searchQuery.isNotBlank()) {
                 LazyColumn(

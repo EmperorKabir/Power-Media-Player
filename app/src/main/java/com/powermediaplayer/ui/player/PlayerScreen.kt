@@ -250,19 +250,21 @@ private fun PlayerScreenCompact(
         if (!uiState.isVideoContent) controlsVisible = true
     }
 
-    // Tap toggle for video controls. Modifier.clickable on the parent
-    // Box propagates correctly with child IconButton clickables — child
-    // wins for taps in its bounds (so skip buttons fire), parent wins
-    // for taps in bare video area (so controls toggle). The previous
-    // detectTapGestures approach consumed the down event before
-    // children, which ate skip-button clicks.
-    val parentTapInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-    val parentTapModifier = if (uiState.isVideoContent) {
-        Modifier.clickable(
-            interactionSource = parentTapInteraction,
-            indication = null,
-            onClick = { controlsVisible = !controlsVisible }
-        )
+    // No parent tap-detector — the previous Modifier.clickable on the
+    // parent Box caused recompositions per tap that surfaced as
+    // controls-row jumps and stutter. Auto-hide (4 s) is the sole
+    // dismissal path. To re-show after auto-hide the user can tap any
+    // control area (the row Column's child IconButtons trigger normal
+    // recomposition that flips controlsVisible via tap-on-anything).
+    // Tap-anywhere reveal is implemented below by a transparent
+    // pointerInput Box that ONLY responds when controls are HIDDEN —
+    // when visible there's no parent interceptor so child buttons fire
+    // unimpeded (the bug fixed earlier where skip-buttons didn't
+    // register).
+    val parentTapModifier = if (uiState.isVideoContent && !controlsVisible) {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures(onTap = { controlsVisible = true })
+        }
     } else {
         Modifier
     }

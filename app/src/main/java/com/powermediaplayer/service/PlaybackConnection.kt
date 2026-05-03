@@ -271,6 +271,11 @@ class PlaybackConnection @Inject constructor(
         controller?.setPlaybackParameters(PlaybackParameters(speed))
     }
 
+    /** Set both speed and pitch — independent power-user controls. */
+    fun setPlaybackParametersWithPitch(speed: Float, pitch: Float) {
+        controller?.setPlaybackParameters(PlaybackParameters(speed, pitch))
+    }
+
     fun setVolume(volume: Float) {
         controller?.volume = volume.coerceIn(0f, 1f)
     }

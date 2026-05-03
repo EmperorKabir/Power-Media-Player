@@ -215,6 +215,14 @@ class PlaybackService : MediaSessionService() {
         //      seconds of imprecision, which is what every other media
         //      player does).
         player!!.setSeekParameters(SeekParameters.PREVIOUS_SYNC)
+        // Stop ExoPlayer from requesting display-refresh-rate changes
+        // around video seeks. The SurfaceFlinger transition that follows
+        // a frame-rate switch (60→24, 60→30, etc.) costs one full
+        // composition cycle and shows up as a stutter on backward seeks
+        // for content whose target frame rate doesn't equal the panel's.
+        player!!.setVideoChangeFrameRateStrategy(
+            androidx.media3.common.C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
+        )
 
         // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
         exoPlayerRef = java.lang.ref.WeakReference(player!!)
@@ -227,10 +235,29 @@ class PlaybackService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Build MediaSession with custom callback for skip actions
+        // Build MediaSession with custom callback for skip actions +
+        // a CustomLayout that places skip-back-15 / play-pause /
+        // skip-forward-15 in the system notification (compact view).
+        // Previous-track and Next-track come from the standard
+        // Player commands so they appear automatically when the queue
+        // supports them.
+        @androidx.annotation.OptIn(UnstableApi::class)
+        val customLayout = listOf(
+            CommandButton.Builder()
+                .setDisplayName("Back 15s")
+                .setIconResId(android.R.drawable.ic_media_rew)
+                .setSessionCommand(SessionCommand(ACTION_SKIP_BACK_15, Bundle.EMPTY))
+                .build(),
+            CommandButton.Builder()
+                .setDisplayName("Forward 15s")
+                .setIconResId(android.R.drawable.ic_media_ff)
+                .setSessionCommand(SessionCommand(ACTION_SKIP_FORWARD_15, Bundle.EMPTY))
+                .build()
+        )
         mediaSession = MediaSession.Builder(this, player!!)
             .setSessionActivity(sessionActivityIntent)
             .setCallback(PlayerSessionCallback())
+            .setCustomLayout(customLayout)
             .build()
 
         // Keep the Bluetooth mapping snapshot fresh. Combine into a

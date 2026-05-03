@@ -66,6 +66,24 @@ data class SpotifyPlaybackState(
 data class LyricLine(val timeMs: Long, val text: String)
 
 /**
+ * Coarse Spotify "section" the user can drill into. Each maps to a
+ * single Spotify Web API endpoint. Order matches the user-confirmed
+ * default for the section picker UI.
+ */
+enum class SpotifySection(val label: String) {
+    LIKED_SONGS("Liked Songs"),
+    RECENT("Recently Played"),
+    SAVED_ALBUMS("Saved Albums"),
+    SAVED_PLAYLISTS("Saved Playlists"),
+    SAVED_EPISODES("Saved Episodes"),
+    SAVED_SHOWS("Podcasts (saved shows)"),
+    TOP_TRACKS("Top Tracks"),
+    TOP_ARTISTS("Top Artists"),
+    NEW_RELEASES("New Releases"),
+    FEATURED_PLAYLISTS("Featured Playlists")
+}
+
+/**
  * Spotify Web API integration via OAuth 2.0 + PKCE (no client secret required).
  *
  * Uses the 2026 generic library endpoint `/v1/me/library?type=track,album,...`
@@ -251,6 +269,108 @@ class SpotifyProvider @Inject constructor(
             }
             Result.success(items)
         }
+
+    /**
+     * Fetch one named Spotify section. Each endpoint has a slightly
+     * different envelope so the parsing is per-section. Returns an
+     * empty list on non-200 (e.g. 403 from the top-tracks endpoint if
+     * the user hasn't granted the long-term-listening scope or doesn't
+     * have enough history).
+     */
+    suspend fun listSection(section: SpotifySection): Result<List<CloudMediaItem>> =
+        withContext(Dispatchers.IO) {
+            val token = currentAccessToken() ?: return@withContext Result.failure(
+                IllegalStateException("Not authenticated")
+            )
+            val url = when (section) {
+                SpotifySection.LIKED_SONGS -> "https://api.spotify.com/v1/me/tracks?limit=50"
+                SpotifySection.SAVED_ALBUMS -> "https://api.spotify.com/v1/me/albums?limit=50"
+                SpotifySection.SAVED_PLAYLISTS -> "https://api.spotify.com/v1/me/playlists?limit=50"
+                SpotifySection.RECENT -> "https://api.spotify.com/v1/me/player/recently-played?limit=50"
+                SpotifySection.TOP_TRACKS -> "https://api.spotify.com/v1/me/top/tracks?limit=50"
+                SpotifySection.TOP_ARTISTS -> "https://api.spotify.com/v1/me/top/artists?limit=50"
+                SpotifySection.NEW_RELEASES -> "https://api.spotify.com/v1/browse/new-releases?limit=50"
+                SpotifySection.FEATURED_PLAYLISTS -> "https://api.spotify.com/v1/browse/featured-playlists?limit=50"
+                SpotifySection.SAVED_EPISODES -> "https://api.spotify.com/v1/me/episodes?limit=50"
+                SpotifySection.SAVED_SHOWS -> "https://api.spotify.com/v1/me/shows?limit=50"
+            }
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            val items = mutableListOf<CloudMediaItem>()
+            try {
+                val body: String = http.newCall(req).execute().use { resp ->
+                    android.util.Log.i("PMP_DIAG", "Spotify.section $section http=${resp.code}")
+                    if (!resp.isSuccessful) "" else resp.body?.string().orEmpty()
+                }
+                if (body.isNotBlank()) {
+                    val root = JsonParser.parseString(body).asJsonObject
+                    parseSectionInto(section, root, items)
+                }
+                Result.success(items)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    private fun parseSectionInto(
+        section: SpotifySection,
+        root: com.google.gson.JsonObject,
+        items: MutableList<CloudMediaItem>
+    ) {
+        when (section) {
+            SpotifySection.LIKED_SONGS, SpotifySection.SAVED_EPISODES -> {
+                val arr = root.getAsJsonArray("items") ?: return
+                val key = if (section == SpotifySection.LIKED_SONGS) "track" else "episode"
+                val type = key
+                for (el in arr) {
+                    val core = el.asJsonObject.getAsJsonObject(key) ?: continue
+                    items.add(jsonToCloudItem(core, type))
+                }
+            }
+            SpotifySection.SAVED_ALBUMS -> {
+                val arr = root.getAsJsonArray("items") ?: return
+                for (el in arr) {
+                    val core = el.asJsonObject.getAsJsonObject("album") ?: continue
+                    items.add(jsonToCloudItem(core, "album"))
+                }
+            }
+            SpotifySection.SAVED_SHOWS -> {
+                val arr = root.getAsJsonArray("items") ?: return
+                for (el in arr) {
+                    val core = el.asJsonObject.getAsJsonObject("show") ?: continue
+                    items.add(jsonToCloudItem(core, "show"))
+                }
+            }
+            SpotifySection.SAVED_PLAYLISTS, SpotifySection.TOP_TRACKS,
+            SpotifySection.TOP_ARTISTS -> {
+                val arr = root.getAsJsonArray("items") ?: return
+                val type = when (section) {
+                    SpotifySection.SAVED_PLAYLISTS -> "playlist"
+                    SpotifySection.TOP_TRACKS -> "track"
+                    SpotifySection.TOP_ARTISTS -> "artist"
+                    else -> "track"
+                }
+                for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, type))
+            }
+            SpotifySection.RECENT -> {
+                val arr = root.getAsJsonArray("items") ?: return
+                for (el in arr) {
+                    val core = el.asJsonObject.getAsJsonObject("track") ?: continue
+                    items.add(jsonToCloudItem(core, "track"))
+                }
+            }
+            SpotifySection.NEW_RELEASES -> {
+                val arr = root.getAsJsonObject("albums")?.getAsJsonArray("items") ?: return
+                for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, "album"))
+            }
+            SpotifySection.FEATURED_PLAYLISTS -> {
+                val arr = root.getAsJsonObject("playlists")?.getAsJsonArray("items") ?: return
+                for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, "playlist"))
+            }
+        }
+    }
 
     private fun fetchPerType(token: String): Result<List<CloudMediaItem>> {
         val items = mutableListOf<CloudMediaItem>()

@@ -36,7 +36,8 @@ data class CloudUiState(
     val folderStack: List<Pair<String?, String>> = listOf(null to "Root"),
     val driveFavourites: List<DriveFavouriteFolder> = emptyList(),
     val searchQuery: String = "",
-    val searchResults: List<CloudMediaItem> = emptyList()
+    val searchResults: List<CloudMediaItem> = emptyList(),
+    val spotifySection: com.powermediaplayer.cloud.SpotifySection? = null
 )
 
 @HiltViewModel
@@ -129,23 +130,52 @@ class CloudViewModel @Inject constructor(
     }
 
     fun browseSpotify() {
+        // Land on the section picker — empty items + spotifySection=null
+        // signals the UI to render the section cards.
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            activeProvider = CloudProviderType.SPOTIFY,
+            items = emptyList(),
+            spotifySection = null,
+            errorMessage = null,
+            folderStack = listOf(null to "Spotify Library")
+        )
+    }
+
+    fun openSpotifySection(section: com.powermediaplayer.cloud.SpotifySection) {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = _uiState.value.copy(
                 isLoading = true,
-                activeProvider = CloudProviderType.SPOTIFY
+                activeProvider = CloudProviderType.SPOTIFY,
+                spotifySection = section
             )
-            val result = spotifyProvider.listFiles()
+            val result = spotifyProvider.listSection(section)
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 items = result.getOrDefault(emptyList()),
                 errorMessage = result.exceptionOrNull()?.message,
-                folderStack = listOf(null to "Spotify Library")
+                folderStack = listOf(null to "Spotify Library", null to section.label)
             )
         }
     }
 
+    fun spotifyBackToSections() {
+        _uiState.value = _uiState.value.copy(
+            spotifySection = null,
+            items = emptyList(),
+            folderStack = listOf(null to "Spotify Library")
+        )
+    }
+
     fun navigateUp() {
         val stack = _uiState.value.folderStack
+        // Spotify section view → back to section picker (one extra level).
+        if (_uiState.value.activeProvider == CloudProviderType.SPOTIFY &&
+            _uiState.value.spotifySection != null
+        ) {
+            spotifyBackToSections()
+            return
+        }
         // At root of a provider → leave the provider, go back to the
         // provider-selection screen so the user can pick a different one.
         if (stack.size <= 1) {

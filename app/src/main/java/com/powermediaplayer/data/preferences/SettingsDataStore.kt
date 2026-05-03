@@ -42,6 +42,14 @@ class SettingsDataStore @Inject constructor(
         // preserve the human label without an extra round-trip to the
         // Drive API on every browse.
         val DRIVE_FAVOURITE_FOLDERS = stringSetPreferencesKey("drive_favourite_folders")
+        // Drive favourite tracks (saved track IDs + names).
+        val DRIVE_FAVOURITE_TRACKS = stringSetPreferencesKey("drive_favourite_tracks")
+        // Spotify favourites — separate buckets for tracks/albums/podcasts.
+        // Each entry: "spotify:track:ID|name", "spotify:album:ID|name",
+        // "spotify:show:ID|name".
+        val SPOTIFY_FAVOURITE_TRACKS = stringSetPreferencesKey("spotify_favourite_tracks")
+        val SPOTIFY_FAVOURITE_ALBUMS = stringSetPreferencesKey("spotify_favourite_albums")
+        val SPOTIFY_FAVOURITE_PODCASTS = stringSetPreferencesKey("spotify_favourite_podcasts")
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
@@ -187,6 +195,56 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    val driveFavouriteTracks: Flow<List<DriveFavouriteFolder>> =
+        context.dataStore.data.map { prefs ->
+            (prefs[Keys.DRIVE_FAVOURITE_TRACKS] ?: emptySet()).mapNotNull { entry ->
+                val sep = entry.indexOf('|')
+                if (sep <= 0) null
+                else DriveFavouriteFolder(entry.substring(0, sep), entry.substring(sep + 1))
+            }.sortedBy { it.name.lowercase() }
+        }
+
+    suspend fun toggleDriveFavouriteTrack(id: String, name: String) {
+        toggleSetEntry(Keys.DRIVE_FAVOURITE_TRACKS, id, name)
+    }
+
+    val spotifyFavouriteTracks: Flow<List<SpotifyFavourite>> =
+        spotifyFavSet(Keys.SPOTIFY_FAVOURITE_TRACKS)
+    val spotifyFavouriteAlbums: Flow<List<SpotifyFavourite>> =
+        spotifyFavSet(Keys.SPOTIFY_FAVOURITE_ALBUMS)
+    val spotifyFavouritePodcasts: Flow<List<SpotifyFavourite>> =
+        spotifyFavSet(Keys.SPOTIFY_FAVOURITE_PODCASTS)
+
+    suspend fun toggleSpotifyFavouriteTrack(uri: String, name: String) =
+        toggleSetEntry(Keys.SPOTIFY_FAVOURITE_TRACKS, uri, name)
+    suspend fun toggleSpotifyFavouriteAlbum(uri: String, name: String) =
+        toggleSetEntry(Keys.SPOTIFY_FAVOURITE_ALBUMS, uri, name)
+    suspend fun toggleSpotifyFavouritePodcast(uri: String, name: String) =
+        toggleSetEntry(Keys.SPOTIFY_FAVOURITE_PODCASTS, uri, name)
+
+    private fun spotifyFavSet(key: Preferences.Key<Set<String>>): Flow<List<SpotifyFavourite>> =
+        context.dataStore.data.map { prefs ->
+            (prefs[key] ?: emptySet()).mapNotNull { entry ->
+                val sep = entry.indexOf('|')
+                if (sep <= 0) null
+                else SpotifyFavourite(entry.substring(0, sep), entry.substring(sep + 1))
+            }.sortedBy { it.name.lowercase() }
+        }
+
+    private suspend fun toggleSetEntry(
+        key: Preferences.Key<Set<String>>,
+        id: String,
+        name: String
+    ) {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[key] ?: emptySet()).toMutableSet()
+            val existing = current.firstOrNull { it.startsWith("$id|") }
+            if (existing != null) current.remove(existing)
+            else current.add("$id|$name")
+            prefs[key] = current
+        }
+    }
+
     /**
      * Synchronous snapshot of the Bluetooth mapping — used by
      * PlaybackService.MediaSession.Callback which is invoked on the
@@ -221,6 +279,12 @@ object BluetoothMediaActions {
  * Persisted reference to a Drive folder the user has starred.
  */
 data class DriveFavouriteFolder(val id: String, val name: String)
+
+/**
+ * Persisted reference to a Spotify URI the user has starred.
+ * id is the spotify:track:..., spotify:album:..., or spotify:show:...
+ */
+data class SpotifyFavourite(val id: String, val name: String)
 
 /**
  * Immutable snapshot for the binder-thread MediaSession.Callback.
