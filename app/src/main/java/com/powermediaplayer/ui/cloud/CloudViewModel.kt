@@ -278,9 +278,11 @@ class CloudViewModel @Inject constructor(
                     viewModelScope.launch(Dispatchers.IO) {
                         _uiState.value = _uiState.value.copy(isLoading = true)
                         val r = spotifyProvider.listContainer(containerUri)
+                        val list = r.getOrDefault(emptyList())
+                        android.util.Log.i("PMP_DIAG", "Cloud.openItem container loaded n=${list.size} first=${list.firstOrNull()?.name}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            items = r.getOrDefault(emptyList()),
+                            items = list,
                             folderStack = _uiState.value.folderStack + (containerUri to item.name),
                             errorMessage = r.exceptionOrNull()?.message
                         )

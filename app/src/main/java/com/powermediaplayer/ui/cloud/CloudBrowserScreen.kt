@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -271,7 +272,7 @@ fun CloudBrowserScreen(
                             )
                         }
                     }
-                    items(uiState.items, key = { it.id }) { item ->
+                    itemsIndexed(uiState.items, key = { idx, it -> "${it.id}_$idx" }) { _, item ->
                         val isDriveFolder = item.isFolder &&
                             item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
                         val isDriveTrack = !item.isFolder &&

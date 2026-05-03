@@ -645,10 +645,15 @@ class SpotifyProvider @Inject constructor(
             if (parts.size < 3) return@withContext Result.success(emptyList())
             val type = parts[1]
             val id = parts[2]
+            // Use container-object endpoints (which return the items
+            // inline) instead of /{id}/tracks endpoints — Spotify's
+            // late-2024 API restriction returns 403 from /tracks for
+            // non-approved third-party apps but still allows the
+            // parent /{id} endpoint to surface the items.
             val url = when (type) {
-                "album" -> "https://api.spotify.com/v1/albums/$id/tracks?limit=50"
-                "playlist" -> "https://api.spotify.com/v1/playlists/$id/tracks?limit=50"
-                "show" -> "https://api.spotify.com/v1/shows/$id/episodes?limit=50"
+                "album" -> "https://api.spotify.com/v1/albums/$id?market=from_token"
+                "playlist" -> "https://api.spotify.com/v1/playlists/$id?market=from_token"
+                "show" -> "https://api.spotify.com/v1/shows/$id?market=from_token"
                 "artist" -> "https://api.spotify.com/v1/artists/$id/top-tracks?market=from_token"
                 else -> return@withContext Result.success(emptyList())
             }
@@ -659,22 +664,66 @@ class SpotifyProvider @Inject constructor(
             try {
                 val items = mutableListOf<CloudMediaItem>()
                 val body: String = http.newCall(req).execute().use { resp ->
-                    android.util.Log.i("PMP_DIAG", "Spotify.listContainer $containerUri http=${resp.code}")
-                    if (!resp.isSuccessful) "" else resp.body?.string().orEmpty()
+                    val raw = resp.body?.string().orEmpty()
+                    val keys = if (resp.isSuccessful) {
+                        runCatching {
+                            JsonParser.parseString(raw).asJsonObject.keySet().joinToString(",")
+                        }.getOrDefault("?")
+                    } else ""
+                    android.util.Log.i(
+                        "PMP_DIAG",
+                        "Spotify.listContainer $containerUri http=${resp.code} bytes=${raw.length} rootKeys=[$keys]"
+                    )
+                    if (!resp.isSuccessful) "" else raw
                 }
                 if (body.isNotBlank()) {
                     val root = JsonParser.parseString(body).asJsonObject
                     when (type) {
                         "album", "playlist", "show" -> {
-                            val arr = root.getAsJsonArray("items") ?: return@withContext Result.success(items)
+                            // Spotify response shape varies. Try
+                            // root.items (raw array), then
+                            // root.items.items (paged wrapper at root),
+                            // then root.tracks.items / root.episodes.items
+                            // (legacy nested). All three fail safely.
+                            val containerKey = if (type == "show") "episodes" else "tracks"
+                            val arr: com.google.gson.JsonArray? = runCatching {
+                                root.get("items")?.let { v ->
+                                    when {
+                                        v.isJsonArray -> v.asJsonArray
+                                        v.isJsonObject -> v.asJsonObject.getAsJsonArray("items")
+                                        else -> null
+                                    }
+                                } ?: root.getAsJsonObject(containerKey)?.getAsJsonArray("items")
+                            }.getOrNull()
+                            android.util.Log.i(
+                                "PMP_DIAG",
+                                "Spotify.listContainer parsed arrSize=${arr?.size() ?: -1}"
+                            )
+                            arr ?: return@withContext Result.success(items)
                             val childType = if (type == "show") "episode" else "track"
+                            android.util.Log.i("PMP_DIAG", "Spotify.listContainer iterating arr.size=${arr.size()}")
+                            if (arr.size() > 0) {
+                                val first = arr[0]
+                                android.util.Log.i("PMP_DIAG", "Spotify.listContainer firstElem=${first.toString().take(800)}")
+                            }
                             for (el in arr) {
-                                val core = if (type == "playlist") {
-                                    el.asJsonObject.getAsJsonObject("track") ?: continue
-                                } else el.asJsonObject
+                                if (!el.isJsonObject) continue
+                                val obj = el.asJsonObject
+                                // Probe across known Spotify shapes for the
+                                // child object that actually has an `id`.
+                                val candidates = listOfNotNull(
+                                    obj.takeIf { it.has("id") && !it.get("id").isJsonNull },
+                                    obj.getAsJsonObject("track"),
+                                    obj.getAsJsonObject("episode"),
+                                    obj.getAsJsonObject("show")
+                                )
+                                val core = candidates.firstOrNull {
+                                    it.has("id") && !it.get("id").isJsonNull
+                                } ?: continue
                                 val item = jsonToCloudItem(core, childType)
                                 items.add(item.copy(contextUri = containerUri))
                             }
+                            android.util.Log.i("PMP_DIAG", "Spotify.listContainer items=${items.size}")
                         }
                         "artist" -> {
                             val arr = root.getAsJsonArray("tracks") ?: return@withContext Result.success(items)
