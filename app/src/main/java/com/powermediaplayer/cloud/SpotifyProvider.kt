@@ -307,6 +307,10 @@ class SpotifyProvider @Inject constructor(
                 if (body.isNotBlank()) {
                     val root = JsonParser.parseString(body).asJsonObject
                     parseSectionInto(section, root, items)
+                    android.util.Log.i(
+                        "PMP_DIAG",
+                        "Spotify.section $section parsed=${items.size}"
+                    )
                 }
                 Result.success(items)
             } catch (e: Exception) {
