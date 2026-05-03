@@ -121,12 +121,17 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
 
         // Configure renderers honouring the user's Settings → Software/
-        // Hardware decoding toggle. When SW preferred → load extension
-        // (FFmpeg) renderers and prefer them. When HW preferred → use
-        // the platform MediaCodec renderers exclusively.
-        val swPreferred = kotlinx.coroutines.runBlocking {
-            settingsDataStore.useSoftwareDecoding.first()
-        }
+        // Hardware decoding toggle. Read with a 200 ms timeout so a
+        // sluggish DataStore can never ANR the foreground service
+        // start. Default = HW (false) when the read times out — the
+        // user can toggle and restart playback to apply.
+        val swPreferred = runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(200) {
+                    settingsDataStore.useSoftwareDecoding.first()
+                }
+            }
+        }.getOrNull() ?: false
         val rendererMode = if (swPreferred)
             DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
         else

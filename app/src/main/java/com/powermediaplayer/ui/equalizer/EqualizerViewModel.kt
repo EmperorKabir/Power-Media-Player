@@ -50,12 +50,15 @@ class EqualizerViewModel @Inject constructor(
     }
 
     init {
-        // Seed default presets if needed, then load all
+        // Seed default presets, restore last preset, then start
+        // observing the table in a separate coroutine. The previous
+        // ordering called `loadPresets()` which collects an infinite
+        // Flow — `restoreLastPreset()` was unreachable.
         viewModelScope.launch {
             seedDefaultPresetsIfNeeded()
-            loadPresets()
             restoreLastPreset()
         }
+        viewModelScope.launch { loadPresets() }
     }
 
     /**

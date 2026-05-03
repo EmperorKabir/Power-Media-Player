@@ -1023,7 +1023,10 @@ class SpotifyProvider @Inject constructor(
             state.performActionWithFreshTokens(authService) { token, _, ex ->
                 if (token != null) {
                     val refreshed = state.jsonSerializeString()
-                    kotlinx.coroutines.runBlocking { tokenStore.write(refreshed) }
+                    // Persist on the provider's pollScope (IO) — the
+                    // previous `runBlocking` blocked AppAuth's executor
+                    // and could deadlock against DataStore's actor.
+                    pollScope.launch { runCatching { tokenStore.write(refreshed) } }
                     _isLoggedIn.value = true
                     cont.resume(token)
                 } else {

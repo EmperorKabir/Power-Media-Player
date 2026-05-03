@@ -33,12 +33,15 @@ class EqualizerEffectController @Inject constructor(
     private var lastSessionId: Int = 0
 
     init {
-        // React to player connect / disconnect — when the underlying
-        // ExoPlayer becomes available we read its audioSessionId and
-        // (re)create the Equalizer.
+        // React to player connect / disconnect AND audio-session-id
+        // changes. NOTE: playerFlow exposes a MediaController (IPC
+        // proxy) — `as? ExoPlayer` always yields null, so the
+        // Equalizer never used to attach. The real ExoPlayer lives
+        // in PlaybackService; we read its audioSessionId directly
+        // and re-poll on every player connect event.
         scope.launch {
-            playbackConnection.playerFlow.collectLatest { player ->
-                val sessionId = (player as? androidx.media3.exoplayer.ExoPlayer)?.audioSessionId ?: 0
+            playbackConnection.playerFlow.collectLatest { _ ->
+                val sessionId = com.powermediaplayer.service.PlaybackService.getExoPlayer()?.audioSessionId ?: 0
                 applySession(sessionId)
             }
         }

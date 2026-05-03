@@ -460,8 +460,11 @@ class PlayerViewModel @Inject constructor(
     fun setVolumeBoost(milliBels: Int) {
         val clamped = milliBels.coerceIn(0, 2000)
         _volumeBoostMb.value = clamped
-        val sessionId = (playbackConnection.getPlayer() as? androidx.media3.exoplayer.ExoPlayer)
-            ?.audioSessionId ?: 0
+        // playbackConnection.getPlayer() returns a MediaController IPC
+        // proxy — `as? ExoPlayer` always yields null. Reach the real
+        // ExoPlayer via the same static accessor used by VideoSurface.
+        val sessionId = com.powermediaplayer.service.PlaybackService
+            .getExoPlayer()?.audioSessionId ?: 0
         if (sessionId == 0) return
         try {
             val le = loudnessEnhancer ?: android.media.audiofx.LoudnessEnhancer(sessionId).also {
