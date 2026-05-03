@@ -116,6 +116,10 @@ class LastPlayedViewModel @Inject constructor(
         // Spotify entry was tapped from a fresh-position row).
         if (item.source == LastPlayedRepository.Source.SPOTIFY) {
             val targetPos = atPositionMs ?: item.lastPositionMs
+            // Stop the local ExoPlayer first — otherwise tapping a
+            // Spotify row from Last Played leaves any currently-playing
+            // local audio audible behind the Spotify Connect track.
+            runCatching { playbackConnection.pause() }
             viewModelScope.launch(Dispatchers.IO) {
                 val play = runCatching {
                     spotifyProvider.playTrackOnConnectDevice(item.mediaUri, contextUri = null)

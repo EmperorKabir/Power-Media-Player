@@ -3,6 +3,8 @@ package com.powermediaplayer.cloud
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.content.pm.PackageManager
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import com.powermediaplayer.data.preferences.DrivePickedRoot
 import com.powermediaplayer.data.preferences.SettingsDataStore
@@ -59,17 +61,135 @@ class GoogleDriveProvider @Inject constructor(
     }
 
     /**
-     * Returns an Intent that fires the Android system folder picker. The
-     * cloud screen launches it via ActivityResultContracts, then hands
-     * the result to [handleSignInResult].
+     * Returns an Intent that fires the Android system folder picker.
+     *
+     * Default (no [initialUri]): the picker opens at its last-used
+     * location (usually internal storage). On many Samsung / fold
+     * devices the source drawer that exposes Drive / OneDrive /
+     * Dropbox is unreachable from this view — the user only sees
+     * local files. Use [buildDeepLinkedSignInIntent] with a root URI
+     * from [queryDocumentRoots] to land directly inside a chosen
+     * source instead.
      */
-    fun buildSignInIntent(): Intent =
+    fun buildSignInIntent(): Intent = buildDeepLinkedSignInIntent(initialUri = null)
+
+    fun buildDeepLinkedSignInIntent(initialUri: Uri?): Intent =
         Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
             addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
             )
+            putExtra("android.provider.extra.SHOW_ADVANCED", true)
+            if (initialUri != null) {
+                putExtra(DocumentsContract.EXTRA_INITIAL_URI, initialUri)
+            }
+            // Pin to Google DocumentsUI when installed (it always is on
+            // Google-certified devices). Falls through to the system
+            // resolver if the package is missing.
+            val pm = context.packageManager
+            val googleDocsui = "com.google.android.documentsui"
+            try {
+                pm.getApplicationInfo(googleDocsui, 0)
+                setPackage(googleDocsui)
+            } catch (_: Exception) {
+                // Not installed — let the resolver pick whatever's available.
+            }
         }
+
+    /**
+     * Snapshot of a [DocumentsContract] root surfaced by some installed
+     * DocumentsProvider (Drive, OneDrive, Internal Storage, USB-OTG, …).
+     */
+    data class CloudRoot(
+        val authority: String,
+        val rootId: String,
+        val documentId: String,
+        val title: String,
+        val summary: String?,
+        val packageName: String
+    ) {
+        /** The URI to hand to [DocumentsContract.EXTRA_INITIAL_URI]. */
+        fun initialUri(): Uri = DocumentsContract.buildDocumentUri(authority, documentId)
+    }
+
+    /**
+     * Return a list of well-known DocumentsProviders that are installed
+     * on the device, paired with a best-effort initial URI we can hand
+     * to the SAF picker so it lands inside that source. Used by the
+     * Cloud screen's chooser dialog.
+     *
+     * Why this is hardcoded rather than enumerated: querying
+     * [DocumentsContract.buildRootsUri] returns SecurityException for
+     * almost every provider — `MANAGE_DOCUMENTS` is signature-only,
+     * granted only to system DocumentsUI. Apps cannot enumerate roots
+     * directly. The fallback is to recognise the well-known providers
+     * by package name, then use the picker's `EXTRA_INITIAL_URI`
+     * mechanism to deep-link.
+     */
+    suspend fun queryDocumentRoots(): List<CloudRoot> = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        val installed = mutableSetOf<String>()
+        for (pkg in pm.getInstalledPackages(PackageManager.GET_PROVIDERS)) {
+            installed.add(pkg.packageName)
+        }
+        android.util.Log.i("PMP_DIAG", "Installed pkg count for chooser: ${installed.size}")
+        val out = mutableListOf<CloudRoot>()
+        // Google Drive — initial URI uses the documented "root" doc ID;
+        // even when the picker's drawer is unreachable, this navigates
+        // to the user's My Drive root.
+        if ("com.google.android.apps.docs" in installed) {
+            out.add(
+                CloudRoot(
+                    authority = "com.google.android.apps.docs.storage",
+                    rootId = "root",
+                    documentId = "root",
+                    title = "Google Drive",
+                    summary = "Stream from My Drive",
+                    packageName = "com.google.android.apps.docs"
+                )
+            )
+        }
+        // Microsoft OneDrive
+        if ("com.microsoft.skydrive" in installed) {
+            out.add(
+                CloudRoot(
+                    authority = "com.microsoft.skydrive.content.external",
+                    rootId = "root",
+                    documentId = "root",
+                    title = "OneDrive",
+                    summary = "Stream from your OneDrive",
+                    packageName = "com.microsoft.skydrive"
+                )
+            )
+        }
+        // Dropbox
+        if ("com.dropbox.android" in installed) {
+            out.add(
+                CloudRoot(
+                    authority = "com.dropbox.product.android.dbapp.document_provider.documents",
+                    rootId = "root",
+                    documentId = "root",
+                    title = "Dropbox",
+                    summary = "Stream from your Dropbox",
+                    packageName = "com.dropbox.android"
+                )
+            )
+        }
+        // Internal storage / SD card / USB-OTG via the system external
+        // storage provider. Always present.
+        out.add(
+            CloudRoot(
+                authority = "com.android.externalstorage.documents",
+                rootId = "primary",
+                documentId = "primary:",
+                title = "Phone storage",
+                summary = "Internal / SD card / USB",
+                packageName = "com.android.externalstorage"
+            )
+        )
+        android.util.Log.i("PMP_DIAG", "Chooser roots: ${out.size}")
+        out
+    }
 
     /**
      * Process the picker result: take a persistable URI permission so

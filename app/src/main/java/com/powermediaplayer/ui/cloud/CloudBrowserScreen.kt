@@ -59,6 +59,27 @@ fun CloudBrowserScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { result -> viewModel.handleSpotifyResult(result.data) }
 
+    // Source-chooser dialog: shown when the user taps "Pick a folder"
+    // or "Add folder" so they can pick a DocumentsProvider root
+    // (Drive · email, OneDrive · email, Internal storage, USB-OTG, …)
+    // before the SAF picker fires. Solves picker variants whose
+    // source drawer is unreachable.
+    if (uiState.pickerRootsVisible) {
+        SourceChooserDialog(
+            roots = uiState.pickerRoots,
+            onPick = { root ->
+                val intent = viewModel.buildDeepLinkedDriveIntent(root)
+                driveLauncher.launch(intent)
+                viewModel.dismissPickerChooser()
+            },
+            onPickAnything = {
+                driveLauncher.launch(viewModel.buildDriveSignInIntent())
+                viewModel.dismissPickerChooser()
+            },
+            onDismiss = { viewModel.dismissPickerChooser() }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -112,7 +133,7 @@ fun CloudBrowserScreen(
             spotifyLoggedIn = uiState.spotifyLoggedIn,
             onSelectDrive = {
                 if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
-                else driveLauncher.launch(viewModel.buildDriveSignInIntent())
+                else viewModel.openPickerChooser()
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
@@ -125,7 +146,7 @@ fun CloudBrowserScreen(
             ProviderCards(
                 driveLoggedIn = uiState.driveLoggedIn,
                 spotifyLoggedIn = uiState.spotifyLoggedIn,
-                onConnectDrive = { driveLauncher.launch(viewModel.buildDriveSignInIntent()) },
+                onConnectDrive = { viewModel.openPickerChooser() },
                 onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
                 onBrowseDrive = { viewModel.browseDrive(null, "Root") },
                 onBrowseSpotify = { viewModel.browseSpotify() },
@@ -432,7 +453,8 @@ private fun ProviderCards(
             onBrowse = onBrowseDrive,
             onSignOut = onSignOutDrive,
             connectLabel = "Pick a folder",
-            signOutLabel = "Forget all folders"
+            signOutLabel = "Forget all folders",
+            addAnotherLabel = "Add folder"
         )
         ProviderCard(
             name = "Spotify",
@@ -454,7 +476,14 @@ private fun ProviderCard(
     onBrowse: () -> Unit,
     onSignOut: () -> Unit,
     connectLabel: String = "Connect $name",
-    signOutLabel: String = "Sign out"
+    signOutLabel: String = "Sign out",
+    /**
+     * If non-null, shows a third button beside Browse / Sign out that
+     * fires [onConnect]. Lets the cloud card add another folder
+     * without taking the user back through the not-logged-in flow.
+     * Spotify and other single-account providers leave this null.
+     */
+    addAnotherLabel: String? = null
 ) {
     Surface(
         color = SurfaceElevated,
@@ -479,13 +508,15 @@ private fun ProviderCard(
                             contentColor = TealAccent
                         )
                     ) { Text("Browse") }
-                    FilledTonalButton(
-                        onClick = onConnect,
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Teal800,
-                            contentColor = TealAccent
-                        )
-                    ) { Text("Add folder") }
+                    if (addAnotherLabel != null) {
+                        FilledTonalButton(
+                            onClick = onConnect,
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Teal800,
+                                contentColor = TealAccent
+                            )
+                        ) { Text(addAnotherLabel) }
+                    }
                     OutlinedButton(onClick = onSignOut) {
                         Text(signOutLabel, color = TextSecondary)
                     }
@@ -501,6 +532,89 @@ private fun ProviderCard(
             }
         }
     }
+}
+
+/**
+ * Source chooser shown when the user taps "Pick a folder" on devices
+ * whose SAF picker hides the source drawer. Lists every available
+ * DocumentsProvider root (Drive · email, OneDrive · email, Internal
+ * storage, USB-OTG, …) and deep-links the picker into the chosen
+ * source via EXTRA_INITIAL_URI when tapped. Falls back to the
+ * un-deep-linked picker via "Choose another source" so users on
+ * working devices can still see the drawer.
+ */
+@Composable
+private fun SourceChooserDialog(
+    roots: List<com.powermediaplayer.cloud.GoogleDriveProvider.CloudRoot>,
+    onPick: (com.powermediaplayer.cloud.GoogleDriveProvider.CloudRoot) -> Unit,
+    onPickAnything: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pick a source", color = TealAccent) },
+        text = {
+            Column {
+                Text(
+                    "Choose where your media is stored.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                Spacer(Modifier.height(8.dp))
+                if (roots.isEmpty()) {
+                    Text(
+                        "No sources detected. Make sure Google Drive / OneDrive " +
+                            "are signed in, then tap \"Choose another source\".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                        items(roots, key = { "${it.authority}_${it.rootId}" }) { root ->
+                            Surface(
+                                color = SurfaceElevated,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable { onPick(root) }
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        root.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = TextPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (!root.summary.isNullOrBlank()) {
+                                        Text(
+                                            root.summary,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onPickAnything) {
+                Text("Choose another source", color = TealAccent)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = TextSecondary)
+            }
+        },
+        containerColor = OledBlack
+    )
 }
 
 @Composable

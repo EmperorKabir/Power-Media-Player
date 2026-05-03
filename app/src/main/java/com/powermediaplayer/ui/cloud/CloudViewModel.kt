@@ -42,7 +42,16 @@ data class CloudUiState(
     val spotifyFavPodcasts: List<com.powermediaplayer.data.preferences.SpotifyFavourite> = emptyList(),
     val searchQuery: String = "",
     val searchResults: List<CloudMediaItem> = emptyList(),
-    val spotifySection: com.powermediaplayer.cloud.SpotifySection? = null
+    val spotifySection: com.powermediaplayer.cloud.SpotifySection? = null,
+    /**
+     * Snapshot of source-picker roots (Drive, OneDrive, internal
+     * storage, USB-OTG, …) populated when the user taps "Pick a
+     * folder" so the cloud screen can show a chooser instead of
+     * relying on the SAF picker's drawer (which is unreachable on
+     * some Samsung / fold builds).
+     */
+    val pickerRoots: List<GoogleDriveProvider.CloudRoot> = emptyList(),
+    val pickerRootsVisible: Boolean = false
 )
 
 @HiltViewModel
@@ -164,6 +173,27 @@ class CloudViewModel @Inject constructor(
 
     fun buildDriveSignInIntent(): Intent = driveProvider.buildSignInIntent()
     fun buildSpotifyAuthIntent(): Intent = spotifyProvider.buildAuthIntent()
+
+    /**
+     * Populate [CloudUiState.pickerRoots] with every available
+     * DocumentsProvider root so the Cloud screen can show a chooser.
+     * The chooser is the supported entry point on devices whose SAF
+     * picker hides the source drawer; tapping a root deep-links the
+     * picker straight into that source via EXTRA_INITIAL_URI.
+     */
+    fun openPickerChooser() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val roots = runCatching { driveProvider.queryDocumentRoots() }.getOrDefault(emptyList())
+            _uiState.update { it.copy(pickerRoots = roots, pickerRootsVisible = true) }
+        }
+    }
+
+    fun dismissPickerChooser() {
+        _uiState.update { it.copy(pickerRootsVisible = false) }
+    }
+
+    fun buildDeepLinkedDriveIntent(root: GoogleDriveProvider.CloudRoot): Intent =
+        driveProvider.buildDeepLinkedSignInIntent(root.initialUri())
 
     fun handleDriveResult(data: Intent?) {
         viewModelScope.launch {
@@ -331,6 +361,12 @@ class CloudViewModel @Inject constructor(
         // Spotify on a device first.
         if (item.sourceProvider == CloudProviderType.SPOTIFY) {
             viewModelScope.launch {
+                // Stop the local ExoPlayer FIRST so the user doesn't get
+                // two streams playing at once. The previous behaviour
+                // left the local file audible behind the Spotify
+                // Connect track and the Player tab's pause button only
+                // paused Spotify (because isSpotifyActive=true).
+                runCatching { playbackConnection.pause() }
                 val spotifyUri = if (item.downloadUrl.startsWith("spotify:")) {
                     item.downloadUrl
                 } else {

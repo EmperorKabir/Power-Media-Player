@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Package visibility (Android 11+): allow detection of installed
+         cloud DocumentsProvider apps so the Cloud chooser can offer
+         Drive / OneDrive / Dropbox buttons even when the SAF picker's
+         own source drawer is unreachable on this device. -->
+    <queries>
+        <package android:name="com.google.android.apps.docs" />
+        <package android:name="com.microsoft.skydrive" />
+        <package android:name="com.dropbox.android" />
+    </queries>
+
     <!-- Network streaming (HLS, DASH, RTSP) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
