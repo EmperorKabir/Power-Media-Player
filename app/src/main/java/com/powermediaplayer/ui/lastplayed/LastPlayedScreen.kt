@@ -1,5 +1,6 @@
 package com.powermediaplayer.ui.lastplayed
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,14 +9,19 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.powermediaplayer.data.db.entity.BookmarkEntity
 import com.powermediaplayer.data.repository.LastPlayedRepository.HistoryItem
 import com.powermediaplayer.data.repository.LastPlayedRepository.Source
 import com.powermediaplayer.ui.theme.OledBlack
@@ -33,6 +40,8 @@ import com.powermediaplayer.ui.theme.SurfaceElevated
 import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
 import com.powermediaplayer.ui.theme.TextSecondary
+import com.powermediaplayer.util.TimeFormatter
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -40,6 +49,8 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 private val DriveBlue = Color(0xFF4FC3F7)
 private val SpotifyGreen = Color(0xFF1DB954)
 private val LocalTeal = TealAccent
+
+private const val RECENT_BOOKMARK_CAP = 5
 
 @Composable
 fun LastPlayedScreen(
@@ -85,7 +96,13 @@ fun LastPlayedScreen(
                         viewModel.playLocalAt(item)
                         onNavigateToPlayer()
                     },
-                    onUnpin = { uri -> viewModel.unpin(uri) }
+                    onTapBookmark = { item, bookmark ->
+                        viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
+                        onNavigateToPlayer()
+                    },
+                    onDeleteBookmark = { id -> viewModel.deleteBookmark(id) },
+                    onUnpin = { uri -> viewModel.unpin(uri) },
+                    bookmarkProvider = { uri -> viewModel.bookmarksFor(uri) }
                 )
             }
 
@@ -93,8 +110,19 @@ fun LastPlayedScreen(
             SectionHeader(if (dynamic.isEmpty()) "No recent items" else "Recent")
             LazyColumn(modifier = Modifier.weight(1f)) {
                 itemsIndexed(dynamic, key = { _, it -> "dyn_${it.mediaUri}" }) { _, item ->
-                    HistoryRow(
+                    HistoryRowWithBookmarks(
                         item = item,
+                        bookmarkCap = RECENT_BOOKMARK_CAP,
+                        bookmarkProvider = { viewModel.bookmarksFor(item.mediaUri) },
+                        onTap = {
+                            viewModel.playLocalAt(item)
+                            onNavigateToPlayer()
+                        },
+                        onTapBookmark = { bookmark ->
+                            viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
+                            onNavigateToPlayer()
+                        },
+                        onDeleteBookmark = { id -> viewModel.deleteBookmark(id) },
                         trailing = {
                             IconButton(onClick = {
                                 scope.launch {
@@ -112,10 +140,6 @@ fun LastPlayedScreen(
                                     tint = if (item.isPinned) TealAccent else TextSecondary
                                 )
                             }
-                        },
-                        onClick = {
-                            viewModel.playLocalAt(item)
-                            onNavigateToPlayer()
                         }
                     )
                 }
@@ -140,22 +164,36 @@ private fun ReorderablePinnedList(
     items: List<HistoryItem>,
     onMove: (Int, Int) -> Unit,
     onTap: (HistoryItem) -> Unit,
-    onUnpin: (String) -> Unit
+    onTapBookmark: (HistoryItem, BookmarkEntity) -> Unit,
+    onDeleteBookmark: (Long) -> Unit,
+    onUnpin: (String) -> Unit,
+    bookmarkProvider: (String) -> kotlinx.coroutines.flow.Flow<List<BookmarkEntity>>
 ) {
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
         onMove(from.index, to.index)
     }
+    // Pinned list height is bookmark-aware: each row may or may not be
+    // expanded so we can't precompute exact pixels, but bounding the
+    // section to a half-screen window prevents Recent from being shoved
+    // off-screen when many pins are open. The user can still scroll
+    // within this window via the LazyColumn.
     LazyColumn(
         state = listState,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = (items.size * 72).dp.coerceAtLeast(72.dp))
+            .heightIn(max = 360.dp)
     ) {
         itemsIndexed(items, key = { _, it -> "pin_${it.mediaUri}" }) { _, item ->
             ReorderableItem(reorderState, key = "pin_${item.mediaUri}") { dragging ->
-                HistoryRow(
+                HistoryRowWithBookmarks(
                     item = item,
+                    bookmarkCap = Int.MAX_VALUE, // pinned: unlimited
+                    bookmarkProvider = { bookmarkProvider(item.mediaUri) },
+                    onTap = { onTap(item) },
+                    onTapBookmark = { bookmark -> onTapBookmark(item, bookmark) },
+                    onDeleteBookmark = onDeleteBookmark,
+                    elevated = dragging,
                     trailing = {
                         IconButton(onClick = { onUnpin(item.mediaUri) }) {
                             Icon(Icons.Filled.Star, contentDescription = "Unpin",
@@ -168,22 +206,36 @@ private fun ReorderablePinnedList(
                             Icon(Icons.Filled.DragHandle, contentDescription = "Reorder",
                                 tint = TextSecondary)
                         }
-                    },
-                    onClick = { onTap(item) },
-                    elevated = dragging
+                    }
                 )
             }
         }
     }
 }
 
+/**
+ * History row with an expand-to-reveal bookmark dropdown. The
+ * top portion is the play-this-track-from-its-saved-position row;
+ * tapping the chevron expands to show up to [bookmarkCap] bookmarks
+ * (most-recent first), each tappable to seek the file to that
+ * timestamp. Local + Drive (SAF) sources play through the local
+ * ExoPlayer; Spotify rows route via Spotify Connect (in VM).
+ */
 @Composable
-private fun HistoryRow(
+private fun HistoryRowWithBookmarks(
     item: HistoryItem,
+    bookmarkCap: Int,
+    bookmarkProvider: () -> kotlinx.coroutines.flow.Flow<List<BookmarkEntity>>,
+    onTap: () -> Unit,
+    onTapBookmark: (BookmarkEntity) -> Unit,
+    onDeleteBookmark: (Long) -> Unit,
     trailing: @Composable RowScope.() -> Unit,
-    onClick: () -> Unit,
     elevated: Boolean = false
 ) {
+    var expanded by rememberSaveable(item.mediaUri) { mutableStateOf(false) }
+    val bookmarksFlow = remember(item.mediaUri) { bookmarkProvider() }
+    val bookmarks by bookmarksFlow.collectAsState(initial = emptyList())
+
     Surface(
         color = if (elevated) TealAccent.copy(alpha = 0.10f) else SurfaceElevated,
         shape = RoundedCornerShape(8.dp),
@@ -191,56 +243,170 @@ private fun HistoryRow(
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .fillMaxWidth()
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        Column(modifier = Modifier.fillMaxWidth()) {
+            HistoryHeaderRow(
+                item = item,
+                bookmarkCount = bookmarks.size,
+                expandable = bookmarks.isNotEmpty(),
+                expanded = expanded,
+                onToggleExpanded = { expanded = !expanded },
+                onClick = onTap,
+                trailing = trailing
+            )
+            AnimatedVisibility(visible = expanded && bookmarks.isNotEmpty()) {
+                Column(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 56.dp, end = 12.dp, bottom = 8.dp)) {
+                    bookmarks.take(bookmarkCap).forEach { bookmark ->
+                        BookmarkRow(
+                            bookmark = bookmark,
+                            onClick = { onTapBookmark(bookmark) },
+                            onDelete = { onDeleteBookmark(bookmark.id) }
+                        )
+                    }
+                    if (bookmarks.size > bookmarkCap) {
+                        Text(
+                            "+${bookmarks.size - bookmarkCap} more — pin to see all",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryHeaderRow(
+    item: HistoryItem,
+    bookmarkCount: Int,
+    expandable: Boolean,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onClick: () -> Unit,
+    trailing: @Composable RowScope.() -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(OledBlack),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(OledBlack),
-                contentAlignment = Alignment.Center
-            ) {
-                if (item.artworkUri != null) {
-                    coil3.compose.AsyncImage(
-                        model = item.artworkUri,
+            if (item.artworkUri != null) {
+                coil3.compose.AsyncImage(
+                    model = item.artworkUri,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(Icons.Filled.MusicNote, contentDescription = null,
+                    tint = TealAccent, modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onClick() }
+        ) {
+            Text(item.title,
+                style = MaterialTheme.typography.labelLarge,
+                color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SourcePill(item.source)
+                if (item.subtitle.isNotBlank() && item.subtitle != item.source.name) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(item.subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (item.lastPositionMs > 0L) {
+                    Spacer(Modifier.width(6.dp))
+                    Text("@${TimeFormatter.formatDuration(item.lastPositionMs)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary)
+                }
+                if (bookmarkCount > 0) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.Filled.Bookmark,
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize()
+                        tint = TealAccent,
+                        modifier = Modifier.size(12.dp)
                     )
-                } else {
-                    Icon(Icons.Filled.MusicNote, contentDescription = null,
-                        tint = TealAccent, modifier = Modifier.size(20.dp))
+                    Text(" $bookmarkCount",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TealAccent)
                 }
             }
-            Spacer(Modifier.width(10.dp))
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onClick() }
-            ) {
-                Text(item.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SourcePill(item.source)
-                    if (item.subtitle.isNotBlank() && item.subtitle != item.source.name) {
-                        Spacer(Modifier.width(6.dp))
-                        Text(item.subtitle,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (item.lastPositionMs > 0L) {
-                        Spacer(Modifier.width(6.dp))
-                        Text("@${formatMs(item.lastPositionMs)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary)
-                    }
-                }
+        }
+        if (expandable) {
+            IconButton(onClick = onToggleExpanded, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Hide bookmarks" else "Show bookmarks",
+                    tint = TextSecondary
+                )
             }
-            trailing()
+        }
+        trailing()
+    }
+}
+
+@Composable
+private fun BookmarkRow(
+    bookmark: BookmarkEntity,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 4.dp)
+    ) {
+        Icon(
+            Icons.Filled.PlayArrow,
+            contentDescription = "Play from this bookmark",
+            tint = TealAccent,
+            modifier = Modifier.size(16.dp)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            TimeFormatter.formatDuration(bookmark.positionMs),
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextPrimary
+        )
+        if (bookmark.label.isNotBlank() && bookmark.label != TimeFormatter.formatDuration(bookmark.positionMs)) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                bookmark.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+        IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = "Delete bookmark",
+                tint = TextSecondary,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
@@ -264,11 +430,3 @@ private fun SourcePill(source: Source) {
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
-
-private fun formatMs(ms: Long): String {
-    val s = ms / 1000
-    val m = s / 60
-    val rem = s % 60
-    return "%d:%02d".format(m, rem)
-}
-

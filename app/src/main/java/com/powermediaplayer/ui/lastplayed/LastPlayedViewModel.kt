@@ -25,7 +25,8 @@ import javax.inject.Inject
 class LastPlayedViewModel @Inject constructor(
     private val repo: LastPlayedRepository,
     private val playbackConnection: PlaybackConnection,
-    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
+    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
+    private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao
 ) : ViewModel() {
 
     val dynamic: StateFlow<List<LastPlayedRepository.HistoryItem>> =
@@ -58,12 +59,56 @@ class LastPlayedViewModel @Inject constructor(
     }
 
     /**
-     * Hand off play of a row's media. Local sources resolve to a
-     * single MediaItem fed to PlaybackConnection at the saved
-     * position. Drive / Spotify rows are routed back through their
-     * provider VMs by the Screen layer (this VM only handles LOCAL).
+     * Bookmarks for a single Last Played row. Used by the expandable
+     * dropdown so each row in Recent / Pinned can surface up to 5 (or
+     * unlimited, for pinned) timestamped seek-points without leaving
+     * the Last Played tab.
      */
-    fun playLocalAt(item: LastPlayedRepository.HistoryItem) {
+    fun bookmarksFor(mediaUri: String):
+        kotlinx.coroutines.flow.Flow<List<com.powermediaplayer.data.db.entity.BookmarkEntity>> =
+        bookmarkDao.observeForMedia(mediaUri)
+
+    fun deleteBookmark(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) { bookmarkDao.delete(id) }
+    }
+
+    /**
+     * Hand off play of a row's media. Local + Drive (SAF content://)
+     * sources resolve to a single MediaItem fed to PlaybackConnection
+     * at [atPositionMs] if provided, else the row's last-known
+     * position. Spotify rows route through SpotifyProvider so they
+     * resume on the user's Connect device.
+     *
+     * @param atPositionMs override seek position — used by the
+     *   bookmark dropdown so tapping a bookmark in Last Played jumps
+     *   straight to that timestamp instead of the file's last-stored
+     *   position.
+     */
+    fun playLocalAt(
+        item: LastPlayedRepository.HistoryItem,
+        atPositionMs: Long? = null
+    ) {
+        // Spotify rows: route via Spotify Connect, including the bookmark
+        // override position. The mirror polling handles the play-state
+        // update so the Player tab swaps over.
+        if (item.source == LastPlayedRepository.Source.SPOTIFY) {
+            val targetPos = atPositionMs ?: item.lastPositionMs
+            viewModelScope.launch(Dispatchers.IO) {
+                val play = runCatching {
+                    spotifyProvider.playTrackOnConnectDevice(item.mediaUri, contextUri = null)
+                }
+                if (play.getOrNull()?.isSuccess == true && targetPos > 0L) {
+                    // /seek lands a moment after /play; small dwell so
+                    // Spotify Connect has finished loading the track.
+                    kotlinx.coroutines.delay(500)
+                    runCatching { spotifyProvider.seekTo(targetPos) }
+                    spotifyProvider.startPlaybackPolling()
+                }
+            }
+            return
+        }
+
+        // Local + Drive (SAF) — both fed via the local ExoPlayer.
         // Mirror cleanup matches LibraryViewModel.stopSpotifyMirrorIfActive
         // so the Player tab doesn't keep displaying Spotify metadata
         // while local audio plays underneath.
@@ -89,6 +134,6 @@ class LastPlayedViewModel @Inject constructor(
             )
             .build()
         playbackConnection.setMediaItems(listOf(mediaItem), 0)
-        playbackConnection.seekTo(item.lastPositionMs)
+        playbackConnection.seekTo(atPositionMs ?: item.lastPositionMs)
     }
 }
