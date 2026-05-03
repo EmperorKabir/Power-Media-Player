@@ -68,6 +68,15 @@ class SettingsDataStore @Inject constructor(
         val CROSSFADE_MS = intPreferencesKey("crossfade_ms")
         val RESUME_ON_BT = booleanPreferencesKey("resume_on_bt")
         val PREFETCH_NEXT_CLOUD = booleanPreferencesKey("prefetch_next_cloud")
+
+        val LIBRARY_SORT_MODE = stringPreferencesKey("library_sort_mode")
+    }
+
+    val librarySortMode: Flow<String> = context.dataStore.data.map {
+        it[Keys.LIBRARY_SORT_MODE] ?: "NAME_ASC"
+    }
+    suspend fun setLibrarySortMode(mode: String) {
+        context.dataStore.edit { it[Keys.LIBRARY_SORT_MODE] = mode }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────

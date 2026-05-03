@@ -630,6 +630,64 @@ class SpotifyProvider @Inject constructor(
      * tappable, the rest currently land on the "browse not implemented"
      * error path until the section UI lands.
      */
+    /**
+     * Drill into a Spotify album / playlist / show URI and return the
+     * tracks (or episodes for shows). Each child carries the parent's
+     * URI as contextUri so /next + /previous operate within the
+     * container.
+     */
+    suspend fun listContainer(containerUri: String): Result<List<CloudMediaItem>> =
+        withContext(Dispatchers.IO) {
+            val token = currentAccessToken() ?: return@withContext Result.failure(
+                IllegalStateException("Not authenticated")
+            )
+            val parts = containerUri.split(":")
+            if (parts.size < 3) return@withContext Result.success(emptyList())
+            val type = parts[1]
+            val id = parts[2]
+            val url = when (type) {
+                "album" -> "https://api.spotify.com/v1/albums/$id/tracks?limit=50"
+                "playlist" -> "https://api.spotify.com/v1/playlists/$id/tracks?limit=50"
+                "show" -> "https://api.spotify.com/v1/shows/$id/episodes?limit=50"
+                "artist" -> "https://api.spotify.com/v1/artists/$id/top-tracks?market=from_token"
+                else -> return@withContext Result.success(emptyList())
+            }
+            val req = Request.Builder()
+                .url(url)
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            try {
+                val items = mutableListOf<CloudMediaItem>()
+                val body: String = http.newCall(req).execute().use { resp ->
+                    android.util.Log.i("PMP_DIAG", "Spotify.listContainer $containerUri http=${resp.code}")
+                    if (!resp.isSuccessful) "" else resp.body?.string().orEmpty()
+                }
+                if (body.isNotBlank()) {
+                    val root = JsonParser.parseString(body).asJsonObject
+                    when (type) {
+                        "album", "playlist", "show" -> {
+                            val arr = root.getAsJsonArray("items") ?: return@withContext Result.success(items)
+                            val childType = if (type == "show") "episode" else "track"
+                            for (el in arr) {
+                                val core = if (type == "playlist") {
+                                    el.asJsonObject.getAsJsonObject("track") ?: continue
+                                } else el.asJsonObject
+                                val item = jsonToCloudItem(core, childType)
+                                items.add(item.copy(contextUri = containerUri))
+                            }
+                        }
+                        "artist" -> {
+                            val arr = root.getAsJsonArray("tracks") ?: return@withContext Result.success(items)
+                            for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, "track"))
+                        }
+                    }
+                }
+                Result.success(items)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
     suspend fun search(query: String): Result<List<CloudMediaItem>> =
         withContext(Dispatchers.IO) {
             if (query.isBlank()) return@withContext Result.success(emptyList())

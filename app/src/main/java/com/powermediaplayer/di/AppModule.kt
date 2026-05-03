@@ -36,9 +36,9 @@ object AppModule {
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
         )
-            // v1 → v2 added the `favorite` table; no existing user data needs to
-            // be preserved across this bump, so destructive migration is fine.
-            .fallbackToDestructiveMigration(false)
+            // v2 → v3 added the `bookmarks` table. No need to keep
+            // schema-less migration; destroy on bump.
+            .fallbackToDestructiveMigration(true)
             .build()
     }
 
@@ -58,6 +58,12 @@ object AppModule {
     @Singleton
     fun provideFavoriteDao(database: AppDatabase): FavoriteDao {
         return database.favoriteDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideBookmarkDao(database: AppDatabase): com.powermediaplayer.data.db.dao.BookmarkDao {
+        return database.bookmarkDao()
     }
 
     @Provides

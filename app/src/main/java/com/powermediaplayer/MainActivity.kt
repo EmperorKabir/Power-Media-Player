@@ -28,6 +28,13 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var playbackConnection: PlaybackConnection
 
+    /**
+     * True while the system is rendering us in PiP. Drives
+     * AppNavigation to render ONLY the VideoSurface in this mode so
+     * the user doesn't see the bottom nav / sliders behind black bars.
+     */
+    private val isInPip = androidx.compose.runtime.mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -40,10 +47,30 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = OledBlack
                 ) {
-                    AppNavigation(windowSizeClass = windowSizeClass)
+                    if (isInPip.value) {
+                        // PiP mode: render ONLY the video surface so the
+                        // window content matches the PiP frame. App
+                        // chrome (tabs, controls) stays hidden.
+                        com.powermediaplayer.ui.player.components.VideoSurface(
+                            isVideoContent = true,
+                            videoWidth = playbackConnection.playerState.value.videoWidth,
+                            videoHeight = playbackConnection.playerState.value.videoHeight,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        AppNavigation(windowSizeClass = windowSizeClass)
+                    }
                 }
             }
         }
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        isInPip.value = isInPictureInPictureMode
     }
 
     override fun onDestroy() {
@@ -75,10 +102,17 @@ class MainActivity : ComponentActivity() {
                 val safeAspect = if (aspect.toFloat() > 2.39f || aspect.toFloat() < 0.42f) {
                     android.util.Rational(16, 9)
                 } else aspect
-                val params = android.app.PictureInPictureParams.Builder()
+                val builder = android.app.PictureInPictureParams.Builder()
                     .setAspectRatio(safeAspect)
-                    .build()
-                enterPictureInPictureMode(params)
+                // SDK 31+ supports an explicit "auto-enter when going home"
+                // and source rectangle hint so the system knows where to
+                // animate FROM. Resizing is allowed by default for the
+                // app's PiP — we don't restrict it.
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    builder.setSeamlessResizeEnabled(true)
+                    builder.setAutoEnterEnabled(true)
+                }
+                enterPictureInPictureMode(builder.build())
             }.onFailure {
                 android.util.Log.w("PMP_DIAG", "PiP enter failed", it)
             }

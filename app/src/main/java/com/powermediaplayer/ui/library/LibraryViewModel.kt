@@ -83,7 +83,8 @@ class LibraryViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val playbackConnection: PlaybackConnection,
     private val favoriteDao: FavoriteDao,
-    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
+    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
+    private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore
 ) : ViewModel() {
 
     /**
@@ -111,6 +112,17 @@ class LibraryViewModel @Inject constructor(
     private var rawVideo: List<MediaFileInfo> = emptyList()
 
     init {
+        // Restore last sort mode from DataStore on startup. Survives
+        // app restart, navigating away from the Library tab, etc.
+        viewModelScope.launch {
+            settingsDataStore.librarySortMode.collect { name ->
+                val mode = runCatching { SortMode.valueOf(name) }.getOrDefault(SortMode.NAME_ASC)
+                if (_uiState.value.sortMode != mode) {
+                    _uiState.value = _uiState.value.copy(sortMode = mode)
+                    recomputeDisplayed()
+                }
+            }
+        }
         scanMedia()
         observeFavorites()
     }
@@ -122,6 +134,7 @@ class LibraryViewModel @Inject constructor(
     fun setSortMode(mode: SortMode) {
         _uiState.value = _uiState.value.copy(sortMode = mode)
         recomputeDisplayed()
+        viewModelScope.launch { settingsDataStore.setLibrarySortMode(mode.name) }
     }
 
     fun setSearchQuery(query: String) {

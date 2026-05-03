@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
@@ -496,7 +497,38 @@ private fun OverlayContent(
                 Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
                     tint = TealAccent)
             }
+            IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
+                    tint = TealAccent)
+            }
             BluetoothButton(modifier = Modifier.size(48.dp))
+        }
+        // Bookmark chips for the currently playing item.
+        val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
+        if (bookmarks.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                bookmarks.forEach { b ->
+                    AssistChip(
+                        onClick = { viewModel.seekToBookmark(b) },
+                        label = { Text(b.label, style = MaterialTheme.typography.labelSmall) },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { viewModel.deleteBookmark(b) },
+                                modifier = Modifier.size(18.dp)
+                            ) {
+                                Icon(Icons.Filled.Close, contentDescription = "Remove",
+                                    tint = ErrorRed, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    )
+                }
+            }
         }
         if (uiState.isLoading) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -580,7 +612,8 @@ private fun PlayerScreenExpanded(
                 onPlayPause = { viewModel.playPause() },
                 onSkipForward = { viewModel.skipForward(it) },
                 onNextChapterOrTrack = { viewModel.nextChapterOrTrack() },
-                onNextFile = { viewModel.nextFile() }
+                onNextFile = { viewModel.nextFile() },
+                mediaKind = uiState.mediaKind
             )
             Spacer(modifier = Modifier.height(8.dp))
             PreparedSpeedComponent(

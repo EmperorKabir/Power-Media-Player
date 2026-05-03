@@ -276,6 +276,20 @@ class PlaybackConnection @Inject constructor(
         controller?.setPlaybackParameters(PlaybackParameters(speed, pitch))
     }
 
+    /** Audio delay relative to video (ms; +/-). Implemented by adjusting
+     *  TrackSelectionParameters via the underlying player. We can't shift
+     *  audio precisely from MediaController, but we can apply per-track
+     *  selection overrides. For now this is a no-op placeholder + log so
+     *  the user-visible setting persists; full sync needs a custom audio
+     *  renderer pipeline. */
+    fun setAudioDelayMs(ms: Int) {
+        android.util.Log.i("PMP_DIAG", "audioDelayMs=$ms (logged; no-op until audio renderer)")
+    }
+    /** Subtitle delay (ms; +/-). Same caveat as audio delay. */
+    fun setSubtitleDelayMs(ms: Int) {
+        android.util.Log.i("PMP_DIAG", "subtitleDelayMs=$ms (logged; no-op until subtitle pipeline)")
+    }
+
     fun setVolume(volume: Float) {
         controller?.volume = volume.coerceIn(0f, 1f)
     }

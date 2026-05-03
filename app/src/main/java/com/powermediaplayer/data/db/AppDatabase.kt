@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.powermediaplayer.data.db.dao.BookmarkDao
 import com.powermediaplayer.data.db.dao.EqualizerPresetDao
 import com.powermediaplayer.data.db.dao.FavoriteDao
 import com.powermediaplayer.data.db.dao.PlaybackStateDao
+import com.powermediaplayer.data.db.entity.BookmarkEntity
 import com.powermediaplayer.data.db.entity.EqualizerPresetEntity
 import com.powermediaplayer.data.db.entity.FavoriteEntity
 import com.powermediaplayer.data.db.entity.PlaybackStateEntity
@@ -19,9 +21,10 @@ import com.powermediaplayer.data.db.entity.PlaybackStateEntity
     entities = [
         EqualizerPresetEntity::class,
         PlaybackStateEntity::class,
-        FavoriteEntity::class
+        FavoriteEntity::class,
+        BookmarkEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun equalizerPresetDao(): EqualizerPresetDao
     abstract fun playbackStateDao(): PlaybackStateDao
     abstract fun favoriteDao(): FavoriteDao
+    abstract fun bookmarkDao(): BookmarkDao
 
     companion object {
         const val DATABASE_NAME = "power_media_player.db"

@@ -79,11 +79,9 @@ fun CloudBrowserScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
 
-        // Search bar — Drive only for now. Spotify search returned
-        // unusable results (most items are albums/playlists which the
-        // app can't open yet). Hidden until the section picker lands
-        // and we wire results into the right kind of opener.
-        if (uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE) {
+        // Search bar — Drive (files.list `name contains`) and Spotify
+        // (/v1/search across track/album/playlist/show/episode).
+        if (uiState.activeProvider != null) {
             OutlinedTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },

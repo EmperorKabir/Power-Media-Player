@@ -216,6 +216,15 @@ class CloudViewModel @Inject constructor(
 
     fun navigateUp() {
         val stack = _uiState.value.folderStack
+        // Spotify drill-down (album/playlist/show contents) → pop the
+        // top folder and re-load the section listing.
+        if (_uiState.value.activeProvider == CloudProviderType.SPOTIFY &&
+            _uiState.value.spotifySection != null && stack.size > 2
+        ) {
+            val section = _uiState.value.spotifySection ?: return
+            openSpotifySection(section)
+            return
+        }
         // Spotify section view → back to section picker (one extra level).
         if (_uiState.value.activeProvider == CloudProviderType.SPOTIFY &&
             _uiState.value.spotifySection != null
@@ -260,12 +269,22 @@ class CloudViewModel @Inject constructor(
             when (item.sourceProvider) {
                 CloudProviderType.GOOGLE_DRIVE -> browseDrive(item.id, item.name)
                 CloudProviderType.SPOTIFY -> {
-                    // Spotify folders (albums/playlists) — paged browsing
-                    // not implemented this round. Make the no-op visible
-                    // instead of silently doing nothing.
-                    _uiState.value = _uiState.value.copy(
-                        errorMessage = "Spotify ${item.mimeType.substringAfter("application/spotify-")} browsing not yet implemented — tap a track instead."
-                    )
+                    // Drill into the album / playlist / show — load its
+                    // tracks (or episodes) into the items list and push
+                    // a new folder-stack entry so the back-arrow returns
+                    // to the section view.
+                    val containerUri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
+                        else "spotify:${item.mimeType.substringAfter("application/spotify-")}:${item.id}"
+                    viewModelScope.launch(Dispatchers.IO) {
+                        _uiState.value = _uiState.value.copy(isLoading = true)
+                        val r = spotifyProvider.listContainer(containerUri)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            items = r.getOrDefault(emptyList()),
+                            folderStack = _uiState.value.folderStack + (containerUri to item.name),
+                            errorMessage = r.exceptionOrNull()?.message
+                        )
+                    }
                 }
                 else -> { }
             }

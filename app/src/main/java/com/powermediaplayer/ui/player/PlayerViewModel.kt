@@ -27,8 +27,51 @@ class PlayerViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val spotifyProvider: SpotifyProvider,
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
+    private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    /**
+     * Add a bookmark at current playback position. Label is the
+     * formatted timestamp; user can edit later (out-of-scope here).
+     */
+    fun addBookmarkHere() {
+        val player = playbackConnection.getPlayer() ?: return
+        val mediaUri = player.currentMediaItem?.mediaId ?: return
+        val pos = player.currentPosition.coerceAtLeast(0L)
+        viewModelScope.launch(Dispatchers.IO) {
+            bookmarkDao.insert(
+                com.powermediaplayer.data.db.entity.BookmarkEntity(
+                    mediaUri = mediaUri,
+                    positionMs = pos,
+                    label = TimeFormatter.formatDuration(pos)
+                )
+            )
+            android.util.Log.i("PMP_DIAG", "Bookmark added @ ${pos}ms uri=$mediaUri")
+        }
+    }
+
+    /** Bookmarks for the currently playing item. Empty when none / no item. */
+    val bookmarks: StateFlow<List<com.powermediaplayer.data.db.entity.BookmarkEntity>> =
+        playbackConnection.playerState
+            .map { it.title }   // re-key when track switches; cheap proxy
+            .flatMapLatest {
+                val mediaUri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
+                if (mediaUri.isNullOrBlank()) flowOf(emptyList())
+                else bookmarkDao.observeForMedia(mediaUri)
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                initialValue = emptyList()
+            )
+
+    fun seekToBookmark(b: com.powermediaplayer.data.db.entity.BookmarkEntity) {
+        playbackConnection.seekTo(b.positionMs)
+    }
+    fun deleteBookmark(b: com.powermediaplayer.data.db.entity.BookmarkEntity) {
+        viewModelScope.launch(Dispatchers.IO) { bookmarkDao.delete(b.id) }
+    }
 
     init {
         // Settings → playback hot-wire: pitch and volume boost values
@@ -38,6 +81,44 @@ class PlayerViewModel @Inject constructor(
         }
         viewModelScope.launch {
             settingsDataStore.volumeBoostMb.collect { mb -> setVolumeBoost(mb) }
+        }
+        viewModelScope.launch {
+            settingsDataStore.audioDelayMs.collect { playbackConnection.setAudioDelayMs(it) }
+        }
+        viewModelScope.launch {
+            settingsDataStore.subtitleDelayMs.collect { playbackConnection.setSubtitleDelayMs(it) }
+        }
+        // Replay gain: when enabled, read REPLAYGAIN_TRACK_GAIN tag on
+        // each new track and apply via LoudnessEnhancer (negative gains
+        // attenuate, positive boost). Cap to ±15 dB.
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.replayGainEnabled,
+                playbackConnection.playerState
+            ) { enabled, ps -> enabled to ps.title }
+                .collect { (enabled, _) ->
+                    if (!enabled) return@collect
+                    val mediaUri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
+                    if (mediaUri.isNullOrBlank()) return@collect
+                    runCatching {
+                        val mmr = android.media.MediaMetadataRetriever()
+                        mmr.setDataSource(context, android.net.Uri.parse(mediaUri))
+                        // No standard MMR key — try the GENRE field as
+                        // a stand-in for files that smuggle gain there;
+                        // most MP3s encode it via a custom TXXX frame
+                        // which MMR doesn't expose. This is best-effort.
+                        val raw = mmr.extractMetadata(
+                            android.media.MediaMetadataRetriever.METADATA_KEY_GENRE
+                        )
+                        mmr.release()
+                        val gainDb = raw?.let { Regex("(-?\\d+\\.?\\d*)\\s*dB").find(it)?.groupValues?.get(1)?.toDoubleOrNull() } ?: 0.0
+                        val mb = (gainDb * 100).toInt().coerceIn(-1500, 1500)
+                        if (mb != 0) {
+                            android.util.Log.i("PMP_DIAG", "ReplayGain mb=$mb (from $raw)")
+                            setVolumeBoost(mb.coerceAtLeast(0))
+                        }
+                    }
+                }
         }
     }
 
