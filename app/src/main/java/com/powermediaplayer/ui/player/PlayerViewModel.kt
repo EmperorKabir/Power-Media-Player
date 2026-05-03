@@ -26,8 +26,20 @@ import javax.inject.Inject
 class PlayerViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val spotifyProvider: SpotifyProvider,
+    private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    init {
+        // Settings → playback hot-wire: pitch and volume boost values
+        // change in Settings; reflect them in the running player.
+        viewModelScope.launch {
+            settingsDataStore.pitchIndependent.collect { p -> setPitch(p) }
+        }
+        viewModelScope.launch {
+            settingsDataStore.volumeBoostMb.collect { mb -> setVolumeBoost(mb) }
+        }
+    }
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 

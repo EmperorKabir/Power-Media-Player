@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -203,6 +205,10 @@ fun PlayerScreen(
             },
             onCancel = {
                 viewModel.cancelSleepTimer()
+                showSleepTimerDialog = false
+            },
+            onSleepAtEndOfChapter = {
+                viewModel.startSleepAtEndOfChapter()
                 showSleepTimerDialog = false
             }
         )
@@ -455,13 +461,41 @@ private fun OverlayContent(
             onSleepTimerClick = onShowSleepTimer
         )
         Spacer(modifier = Modifier.height(4.dp))
-        // Bluetooth button in the main controls — large enough to be
-        // unmissable, sized to match Sleep Timer height.
+        // Power-user controls row: A-B loop, frame step ±, and the
+        // Bluetooth button. Frame-step buttons only meaningful when
+        // paused, so they're always present but cheap.
+        val abStart by viewModel.abLoopStart.collectAsStateWithLifecycle()
+        val abEnd by viewModel.abLoopEnd.collectAsStateWithLifecycle()
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
+                    tint = TealAccent)
+            }
+            FilledTonalButton(
+                onClick = { viewModel.toggleAbLoop() },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = if (abEnd != null) Teal800 else SurfaceElevated,
+                    contentColor = TealAccent
+                )
+            ) {
+                Text(
+                    text = when {
+                        abEnd != null -> "A–B ON"
+                        abStart != null -> "A set — tap for B"
+                        else -> "A–B Loop"
+                    },
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+            IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
+                    tint = TealAccent)
+            }
             BluetoothButton(modifier = Modifier.size(48.dp))
         }
         if (uiState.isLoading) {
@@ -788,7 +822,8 @@ private fun SleepTimerDialog(
     sleepTimerFormatted: String,
     onDismiss: () -> Unit,
     onSetTimer: (Int) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onSleepAtEndOfChapter: () -> Unit = {}
 ) {
     val presets = listOf(
         15 to "15 minutes",
@@ -855,6 +890,18 @@ private fun SleepTimerDialog(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
+                }
+                HorizontalDivider(color = DisabledContent, modifier = Modifier.padding(vertical = 4.dp))
+                TextButton(
+                    onClick = onSleepAtEndOfChapter,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Sleep at end of current chapter / track",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TealAccent,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 if (isActive) {
