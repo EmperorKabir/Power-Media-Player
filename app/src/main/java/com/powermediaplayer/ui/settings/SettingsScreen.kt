@@ -174,6 +174,61 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(32.dp))
 
         // ══════════════════════════════════════════════════════════
+        // POWER-USER FEATURES
+        // ══════════════════════════════════════════════════════════
+        SettingsSectionHeader("Video effects")
+        SettingsToggleItem("Mirror horizontally", "Flip the video left ↔ right.",
+            Icons.Filled.Flip, uiState.videoFlipH) { viewModel.setVideoFlipH(it) }
+        SettingsToggleItem("Flip vertically (upside-down)", "Flip the video top ↔ bottom.",
+            Icons.Filled.Flip, uiState.videoFlipV) { viewModel.setVideoFlipV(it) }
+        SettingsToggleItem("Black & white", "Render video in greyscale.",
+            Icons.Filled.Tonality, uiState.videoBw) { viewModel.setVideoBw(it) }
+        Row(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Rotation", style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                modifier = Modifier.weight(1f))
+            listOf(0, 90, 180, 270).forEach { deg ->
+                FilterChip(
+                    selected = uiState.videoRotation == deg,
+                    onClick = { viewModel.setVideoRotation(deg) },
+                    label = { Text("${deg}°") },
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+            }
+        }
+
+        SettingsDivider()
+        SettingsSectionHeader("Audio extras")
+        SettingsToggleItem("Reverse audio (local files)",
+            "Play local files backwards. Cloud streams unsupported.",
+            Icons.Filled.SwapHoriz, uiState.audioReverseLocal) { viewModel.setAudioReverseLocal(it) }
+        SliderRow("Independent pitch", "${"%.2f".format(uiState.pitch)}×",
+            uiState.pitch, 0.5f..2.0f) { viewModel.setPitch(it) }
+        SliderRow("Volume boost", "+${uiState.volumeBoostMb / 100} dB",
+            uiState.volumeBoostMb.toFloat(), 0f..2000f) { viewModel.setVolumeBoost(it.toInt()) }
+        SliderRow("Subtitle delay", "${uiState.subtitleDelayMs} ms",
+            uiState.subtitleDelayMs.toFloat(), -5000f..5000f) { viewModel.setSubtitleDelay(it.toInt()) }
+        SliderRow("Audio delay", "${uiState.audioDelayMs} ms",
+            uiState.audioDelayMs.toFloat(), -2000f..2000f) { viewModel.setAudioDelay(it.toInt()) }
+        SliderRow("Crossfade", "${uiState.crossfadeMs} ms",
+            uiState.crossfadeMs.toFloat(), 0f..10_000f) { viewModel.setCrossfade(it.toInt()) }
+        SettingsToggleItem("Gapless playback", "Seamless transitions between tracks.",
+            Icons.Filled.SkipNext, uiState.gaplessPlayback) { viewModel.setGapless(it) }
+        SettingsToggleItem("ReplayGain normalisation",
+            "Even out loudness across tracks using their REPLAYGAIN tags.",
+            Icons.Filled.GraphicEq, uiState.replayGainEnabled) { viewModel.setReplayGain(it) }
+        SettingsToggleItem("Resume on Bluetooth connect",
+            "Auto-resume the last track when a BT audio device reconnects.",
+            Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
+        SettingsToggleItem("Pre-fetch next cloud track",
+            "Buffer the next item in a cloud queue for seamless transition.",
+            Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }
+
+        SettingsDivider()
+
+        // ══════════════════════════════════════════════════════════
         // ABOUT
         // ══════════════════════════════════════════════════════════
         SettingsSectionHeader("About")
@@ -264,6 +319,25 @@ private fun SettingsToggleItem(
                 uncheckedTrackColor = SurfaceElevated
             )
         )
+    }
+}
+
+@Composable
+private fun SliderRow(
+    label: String,
+    valueLabel: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.titleSmall, color = TextPrimary,
+                modifier = Modifier.weight(1f))
+            Text(valueLabel, style = MaterialTheme.typography.labelMedium, color = TealAccent)
+        }
+        Slider(value = value, valueRange = range, onValueChange = onChange,
+            colors = SliderDefaults.colors(thumbColor = TealAccent, activeTrackColor = TealAccent))
     }
 }
 

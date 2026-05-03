@@ -19,7 +19,21 @@ data class SettingsUiState(
     val btPrevAction: String = BluetoothMediaActions.PREV_TRACK,
     val btNextAction: String = BluetoothMediaActions.NEXT_TRACK,
     val btSkipBackSeconds: Int = 30,
-    val btSkipForwardSeconds: Int = 30
+    val btSkipForwardSeconds: Int = 30,
+    val videoFlipH: Boolean = false,
+    val videoFlipV: Boolean = false,
+    val videoBw: Boolean = false,
+    val videoRotation: Int = 0,
+    val audioReverseLocal: Boolean = false,
+    val pitch: Float = 1.0f,
+    val volumeBoostMb: Int = 0,
+    val subtitleDelayMs: Int = 0,
+    val audioDelayMs: Int = 0,
+    val gaplessPlayback: Boolean = true,
+    val replayGainEnabled: Boolean = false,
+    val crossfadeMs: Int = 0,
+    val resumeOnBt: Boolean = false,
+    val prefetchNextCloud: Boolean = true
 )
 
 /**
@@ -32,24 +46,52 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        listOf(
+        listOf<Flow<Any>>(
             settingsDataStore.useDeepScan,
             settingsDataStore.subtitleFormat,
             settingsDataStore.useSoftwareDecoding,
             settingsDataStore.btPrevAction,
             settingsDataStore.btNextAction,
             settingsDataStore.btSkipBackSeconds,
-            settingsDataStore.btSkipForwardSeconds
+            settingsDataStore.btSkipForwardSeconds,
+            settingsDataStore.videoFlipH,
+            settingsDataStore.videoFlipV,
+            settingsDataStore.videoBw,
+            settingsDataStore.videoRotation,
+            settingsDataStore.audioReverseLocal,
+            settingsDataStore.pitchIndependent,
+            settingsDataStore.volumeBoostMb,
+            settingsDataStore.subtitleDelayMs,
+            settingsDataStore.audioDelayMs,
+            settingsDataStore.gaplessPlayback,
+            settingsDataStore.replayGainEnabled,
+            settingsDataStore.crossfadeMs,
+            settingsDataStore.resumeOnBt,
+            settingsDataStore.prefetchNextCloud
         )
-    ) { values ->
+    ) { v ->
         SettingsUiState(
-            useDeepScan = values[0] as Boolean,
-            subtitleFormat = values[1] as String,
-            useSoftwareDecoding = values[2] as Boolean,
-            btPrevAction = values[3] as String,
-            btNextAction = values[4] as String,
-            btSkipBackSeconds = values[5] as Int,
-            btSkipForwardSeconds = values[6] as Int
+            useDeepScan = v[0] as Boolean,
+            subtitleFormat = v[1] as String,
+            useSoftwareDecoding = v[2] as Boolean,
+            btPrevAction = v[3] as String,
+            btNextAction = v[4] as String,
+            btSkipBackSeconds = v[5] as Int,
+            btSkipForwardSeconds = v[6] as Int,
+            videoFlipH = v[7] as Boolean,
+            videoFlipV = v[8] as Boolean,
+            videoBw = v[9] as Boolean,
+            videoRotation = v[10] as Int,
+            audioReverseLocal = v[11] as Boolean,
+            pitch = v[12] as Float,
+            volumeBoostMb = v[13] as Int,
+            subtitleDelayMs = v[14] as Int,
+            audioDelayMs = v[15] as Int,
+            gaplessPlayback = v[16] as Boolean,
+            replayGainEnabled = v[17] as Boolean,
+            crossfadeMs = v[18] as Int,
+            resumeOnBt = v[19] as Boolean,
+            prefetchNextCloud = v[20] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -84,4 +126,19 @@ class SettingsViewModel @Inject constructor(
     fun setBtSkipForwardSeconds(seconds: Int) {
         viewModelScope.launch { settingsDataStore.setBtSkipForwardSeconds(seconds) }
     }
+
+    fun setVideoFlipH(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoFlipH(v) }.let{}
+    fun setVideoFlipV(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoFlipV(v) }.let{}
+    fun setVideoBw(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoBw(v) }.let{}
+    fun setVideoRotation(d: Int) = viewModelScope.launch { settingsDataStore.setVideoRotation(d) }.let{}
+    fun setAudioReverseLocal(v: Boolean) = viewModelScope.launch { settingsDataStore.setAudioReverseLocal(v) }.let{}
+    fun setPitch(p: Float) = viewModelScope.launch { settingsDataStore.setPitchIndependent(p) }.let{}
+    fun setVolumeBoost(mb: Int) = viewModelScope.launch { settingsDataStore.setVolumeBoostMb(mb) }.let{}
+    fun setSubtitleDelay(ms: Int) = viewModelScope.launch { settingsDataStore.setSubtitleDelayMs(ms) }.let{}
+    fun setAudioDelay(ms: Int) = viewModelScope.launch { settingsDataStore.setAudioDelayMs(ms) }.let{}
+    fun setGapless(v: Boolean) = viewModelScope.launch { settingsDataStore.setGaplessPlayback(v) }.let{}
+    fun setReplayGain(v: Boolean) = viewModelScope.launch { settingsDataStore.setReplayGainEnabled(v) }.let{}
+    fun setCrossfade(ms: Int) = viewModelScope.launch { settingsDataStore.setCrossfadeMs(ms) }.let{}
+    fun setResumeOnBt(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnBt(v) }.let{}
+    fun setPrefetchNextCloud(v: Boolean) = viewModelScope.launch { settingsDataStore.setPrefetchNextCloud(v) }.let{}
 }

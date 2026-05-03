@@ -35,6 +35,10 @@ data class CloudUiState(
     val items: List<CloudMediaItem> = emptyList(),
     val folderStack: List<Pair<String?, String>> = listOf(null to "Root"),
     val driveFavourites: List<DriveFavouriteFolder> = emptyList(),
+    val driveFavouriteTracks: List<DriveFavouriteFolder> = emptyList(),
+    val spotifyFavTracks: List<com.powermediaplayer.data.preferences.SpotifyFavourite> = emptyList(),
+    val spotifyFavAlbums: List<com.powermediaplayer.data.preferences.SpotifyFavourite> = emptyList(),
+    val spotifyFavPodcasts: List<com.powermediaplayer.data.preferences.SpotifyFavourite> = emptyList(),
     val searchQuery: String = "",
     val searchResults: List<CloudMediaItem> = emptyList(),
     val spotifySection: com.powermediaplayer.cloud.SpotifySection? = null
@@ -62,6 +66,49 @@ class CloudViewModel @Inject constructor(
         viewModelScope.launch {
             settingsDataStore.driveFavouriteFolders.collect { favs ->
                 _uiState.value = _uiState.value.copy(driveFavourites = favs)
+            }
+        }
+        viewModelScope.launch {
+            settingsDataStore.driveFavouriteTracks.collect { favs ->
+                _uiState.value = _uiState.value.copy(driveFavouriteTracks = favs)
+            }
+        }
+        viewModelScope.launch {
+            settingsDataStore.spotifyFavouriteTracks.collect { favs ->
+                _uiState.value = _uiState.value.copy(spotifyFavTracks = favs)
+            }
+        }
+        viewModelScope.launch {
+            settingsDataStore.spotifyFavouriteAlbums.collect { favs ->
+                _uiState.value = _uiState.value.copy(spotifyFavAlbums = favs)
+            }
+        }
+        viewModelScope.launch {
+            settingsDataStore.spotifyFavouritePodcasts.collect { favs ->
+                _uiState.value = _uiState.value.copy(spotifyFavPodcasts = favs)
+            }
+        }
+    }
+
+    fun toggleDriveFavouriteTrack(item: CloudMediaItem) {
+        if (item.isFolder || item.sourceProvider != CloudProviderType.GOOGLE_DRIVE) return
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsDataStore.toggleDriveFavouriteTrack(item.id, item.name)
+        }
+    }
+    fun toggleSpotifyFav(item: CloudMediaItem) {
+        if (item.sourceProvider != CloudProviderType.SPOTIFY) return
+        val uri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
+            else "spotify:${if (item.isFolder) item.mimeType.substringAfter("application/spotify-") else "track"}:${item.id}"
+        viewModelScope.launch(Dispatchers.IO) {
+            when {
+                uri.startsWith("spotify:track") ->
+                    settingsDataStore.toggleSpotifyFavouriteTrack(uri, item.name)
+                uri.startsWith("spotify:album") ->
+                    settingsDataStore.toggleSpotifyFavouriteAlbum(uri, item.name)
+                uri.startsWith("spotify:show") || uri.startsWith("spotify:episode") ->
+                    settingsDataStore.toggleSpotifyFavouritePodcast(uri, item.name)
+                else -> {}
             }
         }
     }

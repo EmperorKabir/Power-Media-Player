@@ -50,6 +50,24 @@ class SettingsDataStore @Inject constructor(
         val SPOTIFY_FAVOURITE_TRACKS = stringSetPreferencesKey("spotify_favourite_tracks")
         val SPOTIFY_FAVOURITE_ALBUMS = stringSetPreferencesKey("spotify_favourite_albums")
         val SPOTIFY_FAVOURITE_PODCASTS = stringSetPreferencesKey("spotify_favourite_podcasts")
+
+        // Power-user video effects (M).
+        val VIDEO_FLIP_HORIZONTAL = booleanPreferencesKey("video_flip_h")
+        val VIDEO_FLIP_VERTICAL = booleanPreferencesKey("video_flip_v")
+        val VIDEO_BLACK_AND_WHITE = booleanPreferencesKey("video_bw")
+        val VIDEO_ROTATION = intPreferencesKey("video_rotation")  // 0/90/180/270
+
+        // Power-user audio (M).
+        val AUDIO_REVERSE_LOCAL = booleanPreferencesKey("audio_reverse_local")
+        val PITCH_INDEPENDENT = floatPreferencesKey("pitch_independent")
+        val VOLUME_BOOST_MB = intPreferencesKey("volume_boost_mb")
+        val SUBTITLE_DELAY_MS = intPreferencesKey("subtitle_delay_ms")
+        val AUDIO_DELAY_MS = intPreferencesKey("audio_delay_ms")
+        val GAPLESS_PLAYBACK = booleanPreferencesKey("gapless_playback")
+        val REPLAY_GAIN_ENABLED = booleanPreferencesKey("replay_gain_enabled")
+        val CROSSFADE_MS = intPreferencesKey("crossfade_ms")
+        val RESUME_ON_BT = booleanPreferencesKey("resume_on_bt")
+        val PREFETCH_NEXT_CLOUD = booleanPreferencesKey("prefetch_next_cloud")
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
@@ -244,6 +262,37 @@ class SettingsDataStore @Inject constructor(
             prefs[key] = current
         }
     }
+
+    // ── Power-user toggles ──────────────────────────────────────
+    val videoFlipH: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_FLIP_HORIZONTAL] ?: false }
+    val videoFlipV: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_FLIP_VERTICAL] ?: false }
+    val videoBw: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_BLACK_AND_WHITE] ?: false }
+    val videoRotation: Flow<Int> = context.dataStore.data.map { it[Keys.VIDEO_ROTATION] ?: 0 }
+    val audioReverseLocal: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUDIO_REVERSE_LOCAL] ?: false }
+    val pitchIndependent: Flow<Float> = context.dataStore.data.map { it[Keys.PITCH_INDEPENDENT] ?: 1.0f }
+    val volumeBoostMb: Flow<Int> = context.dataStore.data.map { it[Keys.VOLUME_BOOST_MB] ?: 0 }
+    val subtitleDelayMs: Flow<Int> = context.dataStore.data.map { it[Keys.SUBTITLE_DELAY_MS] ?: 0 }
+    val audioDelayMs: Flow<Int> = context.dataStore.data.map { it[Keys.AUDIO_DELAY_MS] ?: 0 }
+    val gaplessPlayback: Flow<Boolean> = context.dataStore.data.map { it[Keys.GAPLESS_PLAYBACK] ?: true }
+    val replayGainEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.REPLAY_GAIN_ENABLED] ?: false }
+    val crossfadeMs: Flow<Int> = context.dataStore.data.map { it[Keys.CROSSFADE_MS] ?: 0 }
+    val resumeOnBt: Flow<Boolean> = context.dataStore.data.map { it[Keys.RESUME_ON_BT] ?: false }
+    val prefetchNextCloud: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREFETCH_NEXT_CLOUD] ?: true }
+
+    suspend fun setVideoFlipH(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_FLIP_HORIZONTAL] = v } }
+    suspend fun setVideoFlipV(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_FLIP_VERTICAL] = v } }
+    suspend fun setVideoBw(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_BLACK_AND_WHITE] = v } }
+    suspend fun setVideoRotation(deg: Int) { context.dataStore.edit { it[Keys.VIDEO_ROTATION] = deg } }
+    suspend fun setAudioReverseLocal(v: Boolean) { context.dataStore.edit { it[Keys.AUDIO_REVERSE_LOCAL] = v } }
+    suspend fun setPitchIndependent(p: Float) { context.dataStore.edit { it[Keys.PITCH_INDEPENDENT] = p } }
+    suspend fun setVolumeBoostMb(mb: Int) { context.dataStore.edit { it[Keys.VOLUME_BOOST_MB] = mb } }
+    suspend fun setSubtitleDelayMs(ms: Int) { context.dataStore.edit { it[Keys.SUBTITLE_DELAY_MS] = ms } }
+    suspend fun setAudioDelayMs(ms: Int) { context.dataStore.edit { it[Keys.AUDIO_DELAY_MS] = ms } }
+    suspend fun setGaplessPlayback(v: Boolean) { context.dataStore.edit { it[Keys.GAPLESS_PLAYBACK] = v } }
+    suspend fun setReplayGainEnabled(v: Boolean) { context.dataStore.edit { it[Keys.REPLAY_GAIN_ENABLED] = v } }
+    suspend fun setCrossfadeMs(ms: Int) { context.dataStore.edit { it[Keys.CROSSFADE_MS] = ms } }
+    suspend fun setResumeOnBt(v: Boolean) { context.dataStore.edit { it[Keys.RESUME_ON_BT] = v } }
+    suspend fun setPrefetchNextCloud(v: Boolean) { context.dataStore.edit { it[Keys.PREFETCH_NEXT_CLOUD] = v } }
 
     /**
      * Synchronous snapshot of the Bluetooth mapping — used by

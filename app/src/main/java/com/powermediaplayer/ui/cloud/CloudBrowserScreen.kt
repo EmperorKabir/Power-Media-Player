@@ -274,21 +274,39 @@ fun CloudBrowserScreen(
                         }
                     }
                     items(uiState.items, key = { it.id }) { item ->
-                        val isFav = uiState.driveFavourites.any { it.id == item.id }
-                        val canFavourite = item.isFolder && item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
+                        val isDriveFolder = item.isFolder &&
+                            item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
+                        val isDriveTrack = !item.isFolder &&
+                            item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
+                        val isSpotify = item.sourceProvider == CloudProviderType.SPOTIFY
+                        val isFav = when {
+                            isDriveFolder -> uiState.driveFavourites.any { it.id == item.id }
+                            isDriveTrack -> uiState.driveFavouriteTracks.any { it.id == item.id }
+                            isSpotify -> {
+                                val uri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
+                                    else "spotify:track:${item.id}"
+                                uiState.spotifyFavTracks.any { it.id == uri } ||
+                                uiState.spotifyFavAlbums.any { it.id == uri } ||
+                                uiState.spotifyFavPodcasts.any { it.id == uri }
+                            }
+                            else -> false
+                        }
+                        val canFavourite = isDriveFolder || isDriveTrack || isSpotify
                         CloudItemRow(
                             item = item,
                             isFavourite = isFav,
                             canFavourite = canFavourite,
-                            onToggleFavourite = { viewModel.toggleDriveFavourite(item) },
+                            onToggleFavourite = {
+                                when {
+                                    isDriveFolder -> viewModel.toggleDriveFavourite(item)
+                                    isDriveTrack -> viewModel.toggleDriveFavouriteTrack(item)
+                                    isSpotify -> viewModel.toggleSpotifyFav(item)
+                                }
+                            },
                             onClick = {
                                 if (item.isFolder) {
                                     viewModel.openItem(item)
                                 } else {
-                                    // Navigate ONLY when playback actually
-                                    // starts — failed Spotify previews stay
-                                    // on the cloud screen so the user sees
-                                    // the error banner.
                                     viewModel.openItem(item, onPlaybackStarted = onNavigateToPlayer)
                                 }
                             }
