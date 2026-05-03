@@ -80,9 +80,10 @@ fun CloudBrowserScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
 
-        // Search bar — Drive (files.list `name contains`) and Spotify
-        // (/v1/search across track/album/playlist/show/episode).
-        if (uiState.activeProvider != null) {
+        // Search bar — Drive only. Spotify search is hidden per UX
+        // decision (the previous text-search implementation didn't
+        // surface useful results to end-users).
+        if (uiState.activeProvider != null && uiState.activeProvider != CloudProviderType.SPOTIFY) {
             OutlinedTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
