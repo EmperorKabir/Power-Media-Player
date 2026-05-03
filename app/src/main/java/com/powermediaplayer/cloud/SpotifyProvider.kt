@@ -713,6 +713,10 @@ class SpotifyProvider @Inject constructor(
                                 // child object that actually has an `id`.
                                 val candidates = listOfNotNull(
                                     obj.takeIf { it.has("id") && !it.get("id").isJsonNull },
+                                    // Spotify's current playlist response wraps the
+                                    // track under "item" (singular). Older docs say
+                                    // "track" — check both.
+                                    obj.getAsJsonObject("item"),
                                     obj.getAsJsonObject("track"),
                                     obj.getAsJsonObject("episode"),
                                     obj.getAsJsonObject("show")
