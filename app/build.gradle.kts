@@ -102,6 +102,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
+    // ── Reorderable lists (Last Played favourites drag-to-reorder) ──
+    implementation("sh.calvin.reorderable:reorderable:2.5.0")
+
     // ── Core AndroidX ────────────────────────────────────────────
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")

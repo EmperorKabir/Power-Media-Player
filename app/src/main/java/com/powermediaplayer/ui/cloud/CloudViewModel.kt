@@ -50,8 +50,35 @@ class CloudViewModel @Inject constructor(
     private val driveProvider: GoogleDriveProvider,
     private val spotifyProvider: SpotifyProvider,
     private val playbackConnection: PlaybackConnection,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
 ) : ViewModel() {
+
+    private fun recordCloudPlay(item: CloudMediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val source = when (item.sourceProvider) {
+                    CloudProviderType.SPOTIFY -> "SPOTIFY"
+                    CloudProviderType.GOOGLE_DRIVE -> "DRIVE"
+                    else -> "DRIVE"
+                }
+                val uri = if (item.downloadUrl.isNotBlank()) item.downloadUrl else item.id
+                lastPlayedRepo.recordPlay(
+                    com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                        mediaUri = uri,
+                        title = item.name,
+                        subtitle = source,
+                        artworkUri = item.thumbnailUri?.toString(),
+                        source = source,
+                        mediaKindOrdinal = 0,
+                        lastPositionMs = 0L,
+                        durationMs = 0L,
+                        lastPlayedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow(CloudUiState())
     val uiState: StateFlow<CloudUiState> = _uiState.asStateFlow()
@@ -308,11 +335,10 @@ class CloudViewModel @Inject constructor(
                 val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri, item.contextUri)
                 r.onSuccess {
                     spotifyProvider.startPlaybackPolling()
+                    recordCloudPlay(item)
                     _uiState.value = _uiState.value.copy(
                         errorMessage = "Playing on Spotify: ${item.name}"
                     )
-                    // Navigate to the player tab so the user sees the
-                    // mirrored Spotify state and remote-control buttons.
                     onPlaybackStarted()
                 }.onFailure { ex ->
                     _uiState.value = _uiState.value.copy(
@@ -325,6 +351,7 @@ class CloudViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 if (openItemInternal(item)) {
+                    recordCloudPlay(item)
                     onPlaybackStarted()
                 }
             } catch (t: Throwable) {

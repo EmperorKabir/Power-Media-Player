@@ -28,6 +28,7 @@ class PlayerViewModel @Inject constructor(
     private val spotifyProvider: SpotifyProvider,
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao,
+    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -87,6 +88,60 @@ class PlayerViewModel @Inject constructor(
         }
         viewModelScope.launch {
             settingsDataStore.subtitleDelayMs.collect { playbackConnection.setSubtitleDelayMs(it) }
+        }
+        // Persist current position every 5s while playing — used by the
+        // Last Played tab + cold-start resume. One small UPDATE per tick.
+        viewModelScope.launch {
+            while (isActive) {
+                delay(5_000)
+                val player = playbackConnection.getPlayer() ?: continue
+                val mediaUri = player.currentMediaItem?.mediaId ?: continue
+                val pos = player.currentPosition.coerceAtLeast(0L)
+                if (player.isPlaying) {
+                    runCatching { lastPlayedRepo.updatePosition(mediaUri, pos) }
+                }
+            }
+        }
+        // Cold-start resume: load the most-recent LOCAL history item
+        // into the player paused at its saved position. Cloud items
+        // are skipped — Drive needs token refresh and Spotify needs
+        // Connect device, neither of which are guaranteed at cold
+        // start. Auto-play is off so audio doesn't surprise the user.
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(800) // wait for service connection
+            val recent = runCatching { lastPlayedRepo.mostRecent() }.getOrNull()
+                ?: return@launch
+            if (recent.source != "LOCAL") return@launch
+            val player = playbackConnection.getPlayer() ?: return@launch
+            // Only restore when nothing is loaded — never clobber an
+            // active session.
+            if (player.currentMediaItem != null) return@launch
+            withContext(Dispatchers.Main) {
+                runCatching {
+                    val uri = android.net.Uri.parse(recent.mediaUri)
+                    val item = androidx.media3.common.MediaItem.Builder()
+                        .setMediaId(recent.mediaUri)
+                        .setUri(uri)
+                        .setRequestMetadata(
+                            androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                                .setMediaUri(uri).build()
+                        )
+                        .setMediaMetadata(
+                            androidx.media3.common.MediaMetadata.Builder()
+                                .setTitle(recent.title)
+                                .setArtist(recent.subtitle)
+                                .build()
+                        )
+                        .build()
+                    playbackConnection.setMediaItems(listOf(item), 0)
+                    playbackConnection.seekTo(recent.lastPositionMs)
+                    player.playWhenReady = false
+                    android.util.Log.i(
+                        "PMP_DIAG",
+                        "Cold-start restored '${recent.title}' @ ${recent.lastPositionMs}ms"
+                    )
+                }
+            }
         }
         // Replay gain: when enabled, read REPLAYGAIN_TRACK_GAIN tag on
         // each new track and apply via LoudnessEnhancer (negative gains

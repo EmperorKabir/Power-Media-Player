@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Settings
@@ -34,12 +35,16 @@ import com.powermediaplayer.ui.theme.TealAccent
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Player : Screen("player", "Player", Icons.Filled.PlayCircle)
     data object Library : Screen("library", "Library", Icons.Filled.LibraryMusic)
+    data object LastPlayed : Screen("last_played", "Last Played", Icons.Filled.History)
     data object Cloud : Screen("cloud", "Cloud", Icons.Filled.Cloud)
     data object Equalizer : Screen("equalizer", "EQ", Icons.Filled.Equalizer)
     data object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
 }
 
-private val screens = listOf(Screen.Player, Screen.Library, Screen.Cloud, Screen.Equalizer, Screen.Settings)
+private val screens = listOf(
+    Screen.Player, Screen.Library, Screen.LastPlayed,
+    Screen.Cloud, Screen.Equalizer, Screen.Settings
+)
 
 /**
  * Main app navigation. Hosts a SHARED LibraryViewModel across the Library tab
@@ -122,6 +127,11 @@ fun AppNavigation(windowSizeClass: WindowSizeClass) {
             }
             composable(Screen.Cloud.route) {
                 CloudBrowserScreen(onNavigateToPlayer = navigateToPlayer)
+            }
+            composable(Screen.LastPlayed.route) {
+                com.powermediaplayer.ui.lastplayed.LastPlayedScreen(
+                    onNavigateToPlayer = navigateToPlayer
+                )
             }
             composable(Screen.Equalizer.route) { EqualizerScreen() }
             composable(Screen.Settings.route) { SettingsScreen() }

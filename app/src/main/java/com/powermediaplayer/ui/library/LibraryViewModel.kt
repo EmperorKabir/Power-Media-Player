@@ -84,7 +84,8 @@ class LibraryViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val favoriteDao: FavoriteDao,
     private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
-    private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore
+    private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
+    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
 ) : ViewModel() {
 
     /**
@@ -263,10 +264,8 @@ class LibraryViewModel @Inject constructor(
         try {
             val (items, idx) = createMediaItems(files, startIndex)
             playbackConnection.setMediaItems(items, idx)
-            // Authoritative video flag — caller knows the file is video, no
-            // need to wait for ExoPlayer track parsing or worry about extras
-            // surviving Media3 metadata combine.
             playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
+            files.getOrNull(idx)?.let { recordLocalPlay(it) }
         } catch (t: Throwable) {
             android.util.Log.e("PowerMediaPlayer", "playFiles failed", t)
         }
@@ -304,6 +303,7 @@ class LibraryViewModel @Inject constructor(
                 .build()
             playbackConnection.setMediaItems(listOf(item), 0)
             playbackConnection.setVideoModeHint(file.isVideo)
+            recordLocalPlay(file)
         } catch (t: Throwable) {
             android.util.Log.e("PowerMediaPlayer", "playSingle failed", t)
         }
@@ -320,10 +320,30 @@ class LibraryViewModel @Inject constructor(
         val sorted = FolderChapterAggregator.naturalSort(files)
         val (items, idx) = createMediaItems(sorted, startIndex)
         playbackConnection.setMediaItems(items, idx)
-        // setMediaItems clears any prior override — apply the new one after.
         val chapters = FolderChapterAggregator.aggregate(sorted)
         if (chapters.isNotEmpty()) {
             playbackConnection.setFolderChapters(chapters)
+        }
+        sorted.getOrNull(idx)?.let { recordLocalPlay(it) }
+    }
+
+    private fun recordLocalPlay(file: MediaFileInfo) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                lastPlayedRepo.recordPlay(
+                    com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                        mediaUri = file.uri.toString(),
+                        title = file.title.ifBlank { file.uri.lastPathSegment.orEmpty() },
+                        subtitle = file.artist.ifBlank { "Local file" },
+                        artworkUri = file.albumArtUri?.toString(),
+                        source = "LOCAL",
+                        mediaKindOrdinal = 0,
+                        lastPositionMs = 0L,
+                        durationMs = file.duration,
+                        lastPlayedAt = System.currentTimeMillis()
+                    )
+                )
+            }
         }
     }
 

@@ -68,6 +68,18 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun providePlaybackHistoryDao(database: AppDatabase): com.powermediaplayer.data.db.dao.PlaybackHistoryDao {
+        return database.playbackHistoryDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideHistoryFavouriteDao(database: AppDatabase): com.powermediaplayer.data.db.dao.HistoryFavouriteDao {
+        return database.historyFavouriteDao()
+    }
+
+    @Provides
+    @Singleton
     fun provideSettingsDataStore(
         @ApplicationContext context: Context
     ): SettingsDataStore {
