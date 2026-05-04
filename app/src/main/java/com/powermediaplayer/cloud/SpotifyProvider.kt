@@ -499,11 +499,35 @@ class SpotifyProvider @Inject constructor(
             }
 
             android.util.Log.i("PMP_DIAG", "Spotify.play no active device — listing")
-            val devices = listDevices(token)
+            var devices = listDevices(token)
+            if (devices.isEmpty()) {
+                // Spotify isn't running anywhere. Auto-launch the
+                // installed Spotify app so it registers as a Connect
+                // device, then immediately bounce our app back to the
+                // foreground so the user feels they never left.
+                val launched = launchSpotifyAndReturn()
+                if (launched) {
+                    // Spotify takes ~1–3 s to start up + register with
+                    // Connect. Poll the devices endpoint up to 5 s
+                    // before giving up.
+                    repeat(10) { attempt ->
+                        kotlinx.coroutines.delay(500)
+                        devices = listDevices(token)
+                        if (devices.isNotEmpty()) {
+                            android.util.Log.i(
+                                "PMP_DIAG",
+                                "Spotify.play device appeared after ${(attempt + 1) * 500}ms"
+                            )
+                            return@repeat
+                        }
+                    }
+                }
+            }
             val first = devices.firstOrNull()
                 ?: return@withContext Result.failure(
                     IllegalStateException(
-                        "No Spotify device found. Open Spotify on this phone or another device first."
+                        "Spotify isn't installed or didn't start. Open Spotify on this " +
+                            "phone or another device, then try again."
                     )
                 )
             android.util.Log.i("PMP_DIAG", "Spotify.play activating device ${first.first} (${first.second})")
@@ -514,6 +538,54 @@ class SpotifyProvider @Inject constructor(
             kotlinx.coroutines.delay(400)
             playRequest(token, spotifyUri, resolvedContext, deviceId = first.first)
         }
+
+    /**
+     * Wake the Spotify app via its launch intent, then schedule our
+     * own MainActivity to come back to the foreground a moment later.
+     * The user briefly sees Spotify's splash, then is dropped back
+     * into our app — which by then has a Connect device to play to.
+     *
+     * Returns true if Spotify is installed and the launch intent
+     * fired successfully; false (with no UI side-effect) when the
+     * user doesn't have Spotify installed.
+     */
+    private fun launchSpotifyAndReturn(): Boolean {
+        return try {
+            val pm = context.packageManager
+            val spotify = pm.getLaunchIntentForPackage("com.spotify.music") ?: run {
+                android.util.Log.w("PMP_DIAG", "Spotify auto-launch skipped — app not installed")
+                return false
+            }
+            spotify.flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_NO_USER_ACTION or
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+            context.startActivity(spotify)
+            android.util.Log.i("PMP_DIAG", "Spotify auto-launch fired")
+            // Bounce our own MainActivity to the foreground after a
+            // short delay so the Spotify splash is just a flash and
+            // the user lands back in our UI ready to play.
+            pollScope.launch {
+                kotlinx.coroutines.delay(1500)
+                runCatching {
+                    val ours = Intent(
+                        context,
+                        com.powermediaplayer.MainActivity::class.java
+                    ).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION
+                    }
+                    context.startActivity(ours)
+                    android.util.Log.i("PMP_DIAG", "Bounced back to MainActivity")
+                }
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("PMP_DIAG", "Spotify auto-launch failed", e)
+            false
+        }
+    }
 
     /**
      * Look up the album URI for a given spotify:track:ID via

@@ -9,6 +9,11 @@
         <package android:name="com.google.android.apps.docs" />
         <package android:name="com.microsoft.skydrive" />
         <package android:name="com.dropbox.android" />
+        <!-- Spotify auto-launch: when Spotify isn't running on any
+             Connect device, the cloud screen wakes it via a launch
+             intent so playback can start without the user having to
+             leave our app. Requires explicit visibility on A11+. -->
+        <package android:name="com.spotify.music" />
     </queries>
 
     <!-- Network streaming (HLS, DASH, RTSP) -->
