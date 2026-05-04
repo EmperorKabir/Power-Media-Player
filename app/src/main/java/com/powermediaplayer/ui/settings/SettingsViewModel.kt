@@ -23,6 +23,8 @@ data class SettingsUiState(
     val videoFlipH: Boolean = false,
     val videoFlipV: Boolean = false,
     val videoBw: Boolean = false,
+    val videoSepia: Boolean = false,
+    val videoInvert: Boolean = false,
     val videoRotation: Int = 0,
     val audioReverseLocal: Boolean = false,
     val pitch: Float = 1.0f,
@@ -75,7 +77,9 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.reverbPreset,
             settingsDataStore.stereoFlip,
             settingsDataStore.monoMix,
-            settingsDataStore.passthroughAudio
+            settingsDataStore.passthroughAudio,
+            settingsDataStore.videoSepia,
+            settingsDataStore.videoInvert
         )
     ) { v ->
         SettingsUiState(
@@ -103,7 +107,9 @@ class SettingsViewModel @Inject constructor(
             reverbPreset = v[21] as Int,
             stereoFlip = v[22] as Boolean,
             monoMix = v[23] as Boolean,
-            passthroughAudio = v[24] as Boolean
+            passthroughAudio = v[24] as Boolean,
+            videoSepia = v[25] as Boolean,
+            videoInvert = v[26] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -142,6 +148,8 @@ class SettingsViewModel @Inject constructor(
     fun setVideoFlipH(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoFlipH(v) }.let{}
     fun setVideoFlipV(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoFlipV(v) }.let{}
     fun setVideoBw(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoBw(v) }.let{}
+    fun setVideoSepia(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoSepia(v) }.let{}
+    fun setVideoInvert(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoInvert(v) }.let{}
     fun setVideoRotation(d: Int) = viewModelScope.launch { settingsDataStore.setVideoRotation(d) }.let{}
     fun setAudioReverseLocal(v: Boolean) = viewModelScope.launch { settingsDataStore.setAudioReverseLocal(v) }.let{}
     fun setPitch(p: Float) = viewModelScope.launch { settingsDataStore.setPitchIndependent(p) }.let{}

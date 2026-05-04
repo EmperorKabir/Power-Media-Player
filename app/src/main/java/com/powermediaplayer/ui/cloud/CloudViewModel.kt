@@ -214,6 +214,22 @@ class CloudViewModel @Inject constructor(
             val r = spotifyProvider.playTrackOnConnectDevice(uri, contextUri = null)
             r.onSuccess {
                 spotifyProvider.startPlaybackPolling()
+                // Record this play in Last Played so the Recents tab + the
+                // session-bookmark dropdowns know about it. Previously
+                // missing — Spotify tracks tapped from the favourites
+                // strip never wrote a history row, so they never appeared
+                // in Last Played and never got bookmark dropdowns.
+                val item = CloudMediaItem(
+                    id = uri,
+                    name = name,
+                    mimeType = "audio/spotify",
+                    size = 0L,
+                    downloadUrl = uri,
+                    sourceProvider = CloudProviderType.SPOTIFY,
+                    isFolder = false,
+                    parentId = null
+                )
+                recordCloudPlay(item)
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "Playing on Spotify: $name"
                 )

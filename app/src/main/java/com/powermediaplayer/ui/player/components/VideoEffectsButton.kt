@@ -2,7 +2,9 @@ package com.powermediaplayer.ui.player.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FilterDrama
 import androidx.compose.material.icons.filled.Flip
+import androidx.compose.material.icons.filled.InvertColors
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Tonality
 import androidx.compose.material.icons.filled.Tune
@@ -33,7 +35,8 @@ fun VideoEffectsButton(
 ) {
     val s by settingsVm.uiState.collectAsStateWithLifecycle()
     var showSheet by remember { mutableStateOf(false) }
-    val anyOn = s.videoFlipH || s.videoFlipV || s.videoBw || s.videoRotation != 0
+    val anyOn = s.videoFlipH || s.videoFlipV || s.videoBw ||
+        s.videoSepia || s.videoInvert || s.videoRotation != 0
 
     IconButton(
         onClick = { showSheet = true },
@@ -82,6 +85,18 @@ fun VideoEffectsButton(
                     label = "Black & white",
                     on = s.videoBw,
                     onChange = { settingsVm.setVideoBw(it) }
+                )
+                EffectToggleRow(
+                    icon = Icons.Filled.FilterDrama,
+                    label = "Sepia",
+                    on = s.videoSepia,
+                    onChange = { settingsVm.setVideoSepia(it) }
+                )
+                EffectToggleRow(
+                    icon = Icons.Filled.InvertColors,
+                    label = "Invert colours",
+                    on = s.videoInvert,
+                    onChange = { settingsVm.setVideoInvert(it) }
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(

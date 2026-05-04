@@ -55,6 +55,8 @@ class SettingsDataStore @Inject constructor(
         val VIDEO_FLIP_HORIZONTAL = booleanPreferencesKey("video_flip_h")
         val VIDEO_FLIP_VERTICAL = booleanPreferencesKey("video_flip_v")
         val VIDEO_BLACK_AND_WHITE = booleanPreferencesKey("video_bw")
+        val VIDEO_SEPIA = booleanPreferencesKey("video_sepia")
+        val VIDEO_INVERT = booleanPreferencesKey("video_invert")
         val VIDEO_ROTATION = intPreferencesKey("video_rotation")  // 0/90/180/270
 
         // Power-user audio (M).
@@ -365,6 +367,8 @@ class SettingsDataStore @Inject constructor(
     val videoFlipH: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_FLIP_HORIZONTAL] ?: false }
     val videoFlipV: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_FLIP_VERTICAL] ?: false }
     val videoBw: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_BLACK_AND_WHITE] ?: false }
+    val videoSepia: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_SEPIA] ?: false }
+    val videoInvert: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_INVERT] ?: false }
     val videoRotation: Flow<Int> = context.dataStore.data.map { it[Keys.VIDEO_ROTATION] ?: 0 }
     val audioReverseLocal: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUDIO_REVERSE_LOCAL] ?: false }
     val reverbPreset: Flow<Int> = context.dataStore.data.map { it[Keys.REVERB_PRESET] ?: 0 }
@@ -388,6 +392,8 @@ class SettingsDataStore @Inject constructor(
     suspend fun setVideoFlipH(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_FLIP_HORIZONTAL] = v } }
     suspend fun setVideoFlipV(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_FLIP_VERTICAL] = v } }
     suspend fun setVideoBw(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_BLACK_AND_WHITE] = v } }
+    suspend fun setVideoSepia(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_SEPIA] = v } }
+    suspend fun setVideoInvert(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_INVERT] = v } }
     suspend fun setVideoRotation(deg: Int) { context.dataStore.edit { it[Keys.VIDEO_ROTATION] = deg } }
     suspend fun setAudioReverseLocal(v: Boolean) { context.dataStore.edit { it[Keys.AUDIO_REVERSE_LOCAL] = v } }
     suspend fun setPitchIndependent(p: Float) { context.dataStore.edit { it[Keys.PITCH_INDEPENDENT] = p } }

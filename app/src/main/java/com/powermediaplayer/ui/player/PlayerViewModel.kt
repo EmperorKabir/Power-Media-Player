@@ -558,12 +558,31 @@ class PlayerViewModel @Inject constructor(
      * 5 = "Cave" (mapped to PRESET_LARGEROOM, the most cavernous
      * preset Android actually exposes).
      */
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun applyReverbPreset(preset: Int) {
-        val sessionId = com.powermediaplayer.service.PlaybackService
-            .getExoPlayer()?.audioSessionId ?: 0
-        if (sessionId == 0) return
+        // PRESET_REVERB IS AN AUXILIARY EFFECT — attaching it to the
+        // session ID alone (which is what we did in the first
+        // implementation) does NOT route audio through it; the
+        // reverb instance just sits there inert and the user hears
+        // no change. The proper wiring is:
+        //   1. Construct PresetReverb on session 0 (global aux mix).
+        //   2. Set the desired preset + enable it.
+        //   3. Tell ExoPlayer to send a portion of its audio output
+        //      to that aux effect via AuxEffectInfo(effectId, sendLevel).
+        // sendLevel = 1.0 mixes the reverb at unity gain — the most
+        // pronounced setting Android exposes via this API. For
+        // "even more reverb" we'd have to switch to
+        // EnvironmentalReverb with custom decay/density (more code).
+        val exoPlayer = com.powermediaplayer.service.PlaybackService.getExoPlayer() ?: return
         try {
             if (preset == 0) {
+                runCatching {
+                    exoPlayer.setAuxEffectInfo(
+                        androidx.media3.common.AuxEffectInfo(
+                            androidx.media3.common.AuxEffectInfo.NO_AUX_EFFECT_ID, 0f
+                        )
+                    )
+                }
                 presetReverb?.release()
                 presetReverb = null
                 return
@@ -576,11 +595,18 @@ class PlayerViewModel @Inject constructor(
                 5 -> android.media.audiofx.PresetReverb.PRESET_LARGEROOM
                 else -> android.media.audiofx.PresetReverb.PRESET_NONE
             }
-            val pr = presetReverb ?: android.media.audiofx.PresetReverb(0, sessionId).also {
+            val pr = presetReverb ?: android.media.audiofx.PresetReverb(0, 0).also {
                 presetReverb = it
                 it.enabled = true
             }
             pr.preset = androidPreset
+            exoPlayer.setAuxEffectInfo(
+                androidx.media3.common.AuxEffectInfo(pr.id, 1.0f)
+            )
+            android.util.Log.i(
+                "PMP_DIAG",
+                "Reverb applied: preset=$preset auxId=${pr.id} sendLevel=1.0"
+            )
         } catch (t: Throwable) {
             android.util.Log.w("PMP_DIAG", "PresetReverb apply failed", t)
         }
