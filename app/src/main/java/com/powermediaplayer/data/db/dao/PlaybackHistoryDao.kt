@@ -51,4 +51,7 @@ interface PlaybackHistoryDao {
 
     @Query("SELECT * FROM playback_history WHERE id = :id")
     suspend fun get(id: Long): PlaybackHistoryEntity?
+
+    @Query("DELETE FROM playback_history")
+    suspend fun deleteAll()
 }

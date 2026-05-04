@@ -60,6 +60,10 @@ class LastPlayedViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) { repo.delete(historyId) }
     }
 
+    fun clearAllRecents() {
+        viewModelScope.launch(Dispatchers.IO) { repo.clearAllRecents() }
+    }
+
     /**
      * UI-facing bookmark shape so the Last Played screen does not have
      * to switch on entity type. Both [HistoryBookmarkEntity] (Recents)

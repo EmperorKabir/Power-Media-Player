@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.ExpandLess
@@ -105,42 +106,53 @@ fun LastPlayedScreen(
                 )
             }
 
-            // Recent (dynamic) section.
-            SectionHeader(if (dynamic.isEmpty()) "No recent items" else "Recent")
+            // Recent (dynamic) section header. Clear-all button on the
+            // trailing edge wipes every Recents row + their session
+            // bookmarks. Pinned snapshots are independent and survive.
+            RecentsSectionHeader(
+                visible = dynamic.isNotEmpty(),
+                emptyLabel = "No recent items",
+                onClearAll = { viewModel.clearAllRecents() }
+            )
             LazyColumn(modifier = Modifier.weight(1f)) {
                 itemsIndexed(dynamic, key = { _, it -> "dyn_${it.id}" }) { _, item ->
-                    HistoryRowWithBookmarks(
-                        item = item,
-                        bookmarkCap = RECENT_BOOKMARK_CAP,
-                        bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
-                        onTap = {
-                            viewModel.playLocalAt(item)
-                            onNavigateToPlayer()
-                        },
-                        onTapBookmark = { bookmark ->
-                            viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
-                            onNavigateToPlayer()
-                        },
-                        onDeleteBookmark = { id -> viewModel.deleteRecentsBookmark(id) },
-                        trailing = {
-                            IconButton(onClick = {
-                                scope.launch {
-                                    val ok = viewModel.pinSession(item.id)
-                                    if (!ok) {
-                                        snackbar.showSnackbar(
-                                            "Favourites full (10/10) — unpin one first"
-                                        )
+                    SwipeToDismissRow(
+                        onDismissed = { viewModel.deleteRecentsRow(item.id) }
+                    ) {
+                        HistoryRowWithBookmarks(
+                            item = item,
+                            bookmarkCap = RECENT_BOOKMARK_CAP,
+                            bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
+                            onTap = {
+                                viewModel.playLocalAt(item)
+                                onNavigateToPlayer()
+                            },
+                            onTapBookmark = { bookmark ->
+                                viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
+                                onNavigateToPlayer()
+                            },
+                            onDeleteBookmark = { id -> viewModel.deleteRecentsBookmark(id) },
+                            swipeBookmark = true,
+                            trailing = {
+                                IconButton(onClick = {
+                                    scope.launch {
+                                        val ok = viewModel.pinSession(item.id)
+                                        if (!ok) {
+                                            snackbar.showSnackbar(
+                                                "Favourites full (10/10) — unpin one first"
+                                            )
+                                        }
                                     }
+                                }) {
+                                    Icon(
+                                        if (item.isPinned) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                        contentDescription = "Pin",
+                                        tint = if (item.isPinned) TealAccent else TextSecondary
+                                    )
                                 }
-                            }) {
-                                Icon(
-                                    if (item.isPinned) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = "Pin",
-                                    tint = if (item.isPinned) TealAccent else TextSecondary
-                                )
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -156,6 +168,89 @@ private fun SectionHeader(text: String) {
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
     )
+}
+
+/**
+ * Recents header with an inline "Clear all" button. Hidden when the
+ * list is empty (replaced by the empty-state label so the user
+ * doesn't accidentally tap it on an already-empty list).
+ */
+@Composable
+private fun RecentsSectionHeader(
+    visible: Boolean,
+    emptyLabel: String,
+    onClearAll: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = if (visible) "Recent" else emptyLabel,
+            style = MaterialTheme.typography.labelLarge,
+            color = TextSecondary,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f)
+        )
+        if (visible) {
+            TextButton(onClick = onClearAll) {
+                Icon(
+                    Icons.Filled.ClearAll,
+                    contentDescription = null,
+                    tint = TealAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("Clear all", color = TealAccent, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+/**
+ * Swipe-left-to-dismiss wrapper. Threshold is 40 % of width so a
+ * casual brush doesn't accidentally remove a row. Right-to-left swipes
+ * only — left-to-right is disabled to leave that gesture available
+ * for system back / drawers without conflict.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeToDismissRow(
+    onDismissed: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val state = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDismissed()
+                true
+            } else false
+        },
+        positionalThreshold = { totalDistance -> totalDistance * 0.4f }
+    )
+    SwipeToDismissBox(
+        state = state,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = true,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Icon(
+                    Icons.Filled.Delete,
+                    contentDescription = null,
+                    tint = androidx.compose.ui.graphics.Color(0xFFFF5252)
+                )
+            }
+        }
+    ) {
+        content()
+    }
 }
 
 @Composable
@@ -224,7 +319,14 @@ private fun HistoryRowWithBookmarks(
     onTapBookmark: (LastPlayedViewModel.BookmarkRow) -> Unit,
     onDeleteBookmark: (Long) -> Unit,
     trailing: @Composable RowScope.() -> Unit,
-    elevated: Boolean = false
+    elevated: Boolean = false,
+    /**
+     * When true, each bookmark in the dropdown is swipe-to-dismiss
+     * (in addition to the inline delete icon). Recents rows opt in;
+     * Pinned rows leave it false because the swipe gesture conflicts
+     * with the drag-to-reorder handle.
+     */
+    swipeBookmark: Boolean = false
 ) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     val bookmarksFlow = remember(item.id) { bookmarkProvider() }
@@ -252,11 +354,25 @@ private fun HistoryRowWithBookmarks(
                     .fillMaxWidth()
                     .padding(start = 56.dp, end = 12.dp, bottom = 8.dp)) {
                     bookmarks.take(bookmarkCap).forEach { bookmark ->
-                        BookmarkRowUi(
-                            bookmark = bookmark,
-                            onClick = { onTapBookmark(bookmark) },
-                            onDelete = { onDeleteBookmark(bookmark.id) }
-                        )
+                        if (swipeBookmark) {
+                            key(bookmark.id) {
+                                SwipeToDismissRow(
+                                    onDismissed = { onDeleteBookmark(bookmark.id) }
+                                ) {
+                                    BookmarkRowUi(
+                                        bookmark = bookmark,
+                                        onClick = { onTapBookmark(bookmark) },
+                                        onDelete = { onDeleteBookmark(bookmark.id) }
+                                    )
+                                }
+                            }
+                        } else {
+                            BookmarkRowUi(
+                                bookmark = bookmark,
+                                onClick = { onTapBookmark(bookmark) },
+                                onDelete = { onDeleteBookmark(bookmark.id) }
+                            )
+                        }
                     }
                     if (bookmarks.size > bookmarkCap) {
                         Text(

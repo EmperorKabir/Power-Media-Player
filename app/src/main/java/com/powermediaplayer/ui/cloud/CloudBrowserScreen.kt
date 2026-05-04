@@ -100,33 +100,10 @@ fun CloudBrowserScreen(
         }
     }
 
-    // Source-chooser dialog: shown when the user taps "Pick a folder"
-    // or "Add folder" so they can pick a DocumentsProvider root
-    // (Drive · email, OneDrive · email, Internal storage, USB-OTG, …)
-    // before the SAF picker fires. Solves picker variants whose
-    // source drawer is unreachable.
-    if (uiState.pickerRootsVisible) {
-        SourceChooserDialog(
-            roots = uiState.pickerRoots,
-            onPick = { root ->
-                // Google Drive routes through OAuth + WebView Picker
-                // (drive.file scope, no verification). Other sources
-                // use the SAF picker with a deep-linked initial URI.
-                if (root.packageName == "com.google.android.apps.docs") {
-                    driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
-                } else {
-                    val intent = viewModel.buildDeepLinkedDriveIntent(root)
-                    driveLauncher.launch(intent)
-                }
-                viewModel.dismissPickerChooser()
-            },
-            onPickAnything = {
-                driveLauncher.launch(viewModel.buildDriveSignInIntent())
-                viewModel.dismissPickerChooser()
-            },
-            onDismiss = { viewModel.dismissPickerChooser() }
-        )
-    }
+    // Direct Drive OAuth + Picker flow — the source chooser was
+    // removed since SAF / OneDrive don't reliably work on this device
+    // and Phone-storage isn't a "cloud" source the user wants here.
+    // All cloud-folder buttons now go straight to the Drive flow.
 
     Column(
         modifier = Modifier
@@ -181,7 +158,7 @@ fun CloudBrowserScreen(
             spotifyLoggedIn = uiState.spotifyLoggedIn,
             onSelectDrive = {
                 if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
-                else viewModel.openPickerChooser()
+                else driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
@@ -194,7 +171,7 @@ fun CloudBrowserScreen(
             ProviderCards(
                 driveLoggedIn = uiState.driveLoggedIn,
                 spotifyLoggedIn = uiState.spotifyLoggedIn,
-                onConnectDrive = { viewModel.openPickerChooser() },
+                onConnectDrive = { driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent()) },
                 onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
                 onBrowseDrive = { viewModel.browseDrive(null, "Root") },
                 onBrowseSpotify = { viewModel.browseSpotify() },
@@ -358,7 +335,7 @@ fun CloudBrowserScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp, vertical = 4.dp)
-                                    .clickable { viewModel.openPickerChooser() }
+                                    .clickable { driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent()) }
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,

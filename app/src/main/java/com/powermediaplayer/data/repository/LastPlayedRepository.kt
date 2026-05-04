@@ -95,6 +95,17 @@ class LastPlayedRepository @Inject constructor(
         historyDao.delete(id)
     }
 
+    /**
+     * Delete every Recents row + their session bookmarks (cascade).
+     * Pinned snapshots in [HistoryFavouriteEntity] / [FavouriteBookmarkEntity]
+     * are independent and survive — only the dynamic recent-plays list
+     * is cleared.
+     */
+    suspend fun clearAllRecents() {
+        historyDao.deleteAll()
+        _currentSessionId.value = null
+    }
+
     suspend fun mostRecent(): PlaybackHistoryEntity? = historyDao.mostRecent()
 
     /**
