@@ -1,6 +1,7 @@
 package com.powermediaplayer.ui.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -203,6 +204,70 @@ fun SettingsScreen(
         SettingsToggleItem("Pre-fetch next cloud track",
             "Buffer the next item in a cloud queue for seamless transition.",
             Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }
+
+        SettingsDivider()
+
+        // ══════════════════════════════════════════════════════════
+        // AUDIO EFFECTS
+        // ══════════════════════════════════════════════════════════
+        SettingsSectionHeader("Audio effects")
+
+        // Reverb preset chooser (radio-style row).
+        Text(
+            "Reverb",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary,
+            modifier = Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp)
+        )
+        val reverbOptions = listOf(
+            0 to "Off",
+            1 to "Room",
+            2 to "Medium hall",
+            3 to "Large hall",
+            4 to "Plate",
+            5 to "Cave"
+        )
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            reverbOptions.forEach { (id, label) ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.setReverbPreset(id) }
+                        .padding(vertical = 6.dp)
+                ) {
+                    RadioButton(
+                        selected = uiState.reverbPreset == id,
+                        onClick = { viewModel.setReverbPreset(id) }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(label, color = TextPrimary)
+                }
+            }
+        }
+        SettingsToggleItem(
+            "Stereo flip (L↔R)",
+            "Swap left and right channels. Useful when headphones " +
+                "are mis-wired or for spatial-audio experiments.",
+            Icons.Filled.SwapHoriz,
+            uiState.stereoFlip
+        ) { viewModel.setStereoFlip(it) }
+        SettingsToggleItem(
+            "Mono mix",
+            "Mix both channels into a centred mono image (still " +
+                "output as stereo so headphones receive the same on " +
+                "both ears).",
+            Icons.Filled.Adjust,
+            uiState.monoMix
+        ) { viewModel.setMonoMix(it) }
+        SettingsToggleItem(
+            "Multi-channel passthrough",
+            "When on, 5.1/7.1/Dolby/DTS audio bitstream is sent to a " +
+                "connected receiver / HDMI sink unchanged so it can " +
+                "decode itself. Off forces software downmix to stereo.",
+            Icons.Filled.Speaker,
+            uiState.passthroughAudio
+        ) { viewModel.setPassthroughAudio(it) }
 
         SettingsDivider()
 

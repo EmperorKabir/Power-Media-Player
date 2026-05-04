@@ -53,6 +53,23 @@ class PlaybackService : MediaSessionService() {
     @javax.inject.Inject
     lateinit var driveOAuthProvider: com.powermediaplayer.cloud.DriveOAuthProvider
 
+    /**
+     * Custom AudioProcessor that powers the Stereo flip / Mono mix
+     * effects in Settings. Lives here (singleton-per-service) so it
+     * outlasts the renderer factory and can read its enable flags
+     * lazily on each input buffer.
+     */
+    private val stereoTransformProcessor by lazy {
+        com.powermediaplayer.audio.StereoTransformProcessor(
+            flipSupplier = { stereoFlipFlag },
+            monoSupplier = { monoMixFlag }
+        )
+    }
+    @Volatile
+    private var stereoFlipFlag: Boolean = false
+    @Volatile
+    private var monoMixFlag: Boolean = false
+
     @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
 
@@ -140,8 +157,38 @@ class PlaybackService : MediaSessionService() {
             "PMP_DIAG",
             "PlaybackService renderer mode swPreferred=$swPreferred extMode=$rendererMode"
         )
-        val renderersFactory = DefaultRenderersFactory(this)
-            .setExtensionRendererMode(rendererMode)
+        // Custom RenderersFactory injects our StereoTransformProcessor
+        // (Stereo flip + Mono mix) into the audio sink. Surround
+        // streams (5.1 / 7.1 / Atmos) bypass our processor because
+        // its onConfigure rejects non-16-bit-stereo formats — leaving
+        // multi-channel output untouched, which is the right
+        // behaviour for passthrough to AVRs.
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: android.content.Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): androidx.media3.exoplayer.audio.AudioSink {
+                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessorChain(
+                        androidx.media3.exoplayer.audio.DefaultAudioSink
+                            .DefaultAudioProcessorChain(stereoTransformProcessor)
+                    )
+                    .build()
+            }
+        }.setExtensionRendererMode(rendererMode)
+
+        // Watch the stereo flip / mono mix prefs from DataStore and
+        // mirror into the @Volatile flags the processor reads on every
+        // input buffer. No restart of playback required to toggle.
+        serviceScope.launch {
+            settingsDataStore.stereoFlip.collect { stereoFlipFlag = it }
+        }
+        serviceScope.launch {
+            settingsDataStore.monoMix.collect { monoMixFlag = it }
+        }
 
         // Mp4 extractor with edit-list workaround — required for many M4B
         // audiobooks (especially Audible-converted) whose elst boxes confuse

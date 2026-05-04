@@ -73,7 +73,12 @@ data class PlayerState(
     val isPartOfPlaylist: Boolean = false,
     val hasCoverArt: Boolean = false,
     val isVideoContent: Boolean = false,
-    val isSeekable: Boolean = false
+    val isSeekable: Boolean = false,
+    /** Display label for the current audio track, e.g. "AAC 2.0 · 48 kHz" or
+     *  "E-AC-3 5.1 · 48 kHz" or "E-AC-3 JOC · Atmos · 48 kHz". Empty when
+     *  no audio track is selected. Set on every state-update tick by
+     *  reading [Tracks] from the active MediaController. */
+    val audioFormatLabel: String = ""
 )
 
 /**
@@ -754,7 +759,8 @@ class PlaybackConnection @Inject constructor(
             hasCoverArt = (overArtwork ?: metadata.artworkUri) != null ||
                 (overArtworkBytes ?: metadata.artworkData) != null,
             isVideoContent = hasVideoTrack,
-            isSeekable = c.isCurrentMediaItemSeekable
+            isSeekable = c.isCurrentMediaItemSeekable,
+            audioFormatLabel = describeAudioFormat(c)
         )
     }
 
@@ -784,6 +790,66 @@ class PlaybackConnection @Inject constructor(
 
     private fun findCurrentChapter(chapters: List<ChapterInfo>, position: Long): Int {
         return chapters.indexOfLast { position >= it.startTimeMs }
+    }
+
+    /**
+     * Build a user-facing audio format label from the currently
+     * SELECTED audio track. Detects Dolby variants (Digital, Plus,
+     * JOC/Atmos), TrueHD, DTS, plus standard PCM/AAC/FLAC etc.
+     * Channel count is rendered as a familiar layout ("Mono", "Stereo",
+     * "5.1", "7.1") rather than raw integers.
+     */
+    private fun describeAudioFormat(c: MediaController): String {
+        return try {
+            val groups = c.currentTracks.groups
+            val selectedAudio = groups.firstOrNull { g ->
+                g.type == androidx.media3.common.C.TRACK_TYPE_AUDIO && g.isSelected
+            } ?: groups.firstOrNull { g ->
+                g.type == androidx.media3.common.C.TRACK_TYPE_AUDIO
+            } ?: return ""
+            // Pick whichever sub-track is selected (or the first).
+            var fmt: androidx.media3.common.Format? = null
+            for (i in 0 until selectedAudio.length) {
+                if (selectedAudio.isTrackSelected(i)) {
+                    fmt = selectedAudio.getTrackFormat(i); break
+                }
+            }
+            if (fmt == null) fmt = selectedAudio.getTrackFormat(0)
+            val mime = fmt.sampleMimeType.orEmpty().lowercase()
+            val codec = fmt.codecs.orEmpty().lowercase()
+            val channels = fmt.channelCount
+            val sample = fmt.sampleRate
+            val codecLabel = when {
+                "eac3-joc" in mime || "ec-3" in codec || "joc" in codec ->
+                    "E-AC-3 JOC · Atmos"
+                "eac3" in mime || "ec3" in codec -> "E-AC-3 (Dolby Digital Plus)"
+                "ac3" in mime || "ac-3" in codec -> "AC-3 (Dolby Digital)"
+                "ac4" in mime -> "AC-4 (Dolby AC-4)"
+                "truehd" in mime || "mlp" in codec -> "TrueHD (Dolby)"
+                "dts-hd" in mime || "dts:x" in mime || "dtsx" in mime -> "DTS-HD"
+                "dts" in mime -> "DTS"
+                "mp4a-latm" in mime || "aac" in codec || "aac" in mime -> "AAC"
+                "vorbis" in mime -> "Vorbis"
+                "opus" in mime -> "Opus"
+                "flac" in mime -> "FLAC"
+                "raw" in mime || "pcm" in codec -> "PCM"
+                "mpeg" in mime -> "MP3"
+                else -> mime.removePrefix("audio/").ifBlank { "Audio" }
+            }
+            val channelLabel = when (channels) {
+                1 -> "Mono"
+                2 -> "Stereo"
+                3 -> "2.1"
+                4 -> "Quad"
+                5 -> "5.0"
+                6 -> "5.1"
+                7 -> "6.1"
+                8 -> "7.1"
+                else -> if (channels > 0) "${channels}ch" else "?"
+            }
+            val rate = if (sample > 0) " · ${sample / 1000} kHz" else ""
+            "$codecLabel · $channelLabel$rate"
+        } catch (_: Throwable) { "" }
     }
 
     private fun calculateTotalPlaylistDuration(controller: MediaController): Long {

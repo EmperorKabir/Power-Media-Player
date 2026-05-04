@@ -59,6 +59,14 @@ class SettingsDataStore @Inject constructor(
 
         // Power-user audio (M).
         val AUDIO_REVERSE_LOCAL = booleanPreferencesKey("audio_reverse_local")
+        // Audio effects panel — preset reverb, stereo flip, mono mix.
+        val REVERB_PRESET = intPreferencesKey("reverb_preset")          // 0=off,1=Room,2=MediumHall,3=LargeHall,4=Plate,5=Cave
+        val STEREO_FLIP = booleanPreferencesKey("stereo_flip")
+        val MONO_MIX = booleanPreferencesKey("mono_mix")
+        // Multi-channel passthrough — when on, ExoPlayer hands the
+        // bitstream to the OS unchanged so a connected receiver/HDMI
+        // sink decodes 5.1/7.1/Atmos itself.
+        val PASSTHROUGH_AUDIO = booleanPreferencesKey("passthrough_audio")
         val PITCH_INDEPENDENT = floatPreferencesKey("pitch_independent")
         val VOLUME_BOOST_MB = intPreferencesKey("volume_boost_mb")
         val SUBTITLE_DELAY_MS = intPreferencesKey("subtitle_delay_ms")
@@ -359,6 +367,14 @@ class SettingsDataStore @Inject constructor(
     val videoBw: Flow<Boolean> = context.dataStore.data.map { it[Keys.VIDEO_BLACK_AND_WHITE] ?: false }
     val videoRotation: Flow<Int> = context.dataStore.data.map { it[Keys.VIDEO_ROTATION] ?: 0 }
     val audioReverseLocal: Flow<Boolean> = context.dataStore.data.map { it[Keys.AUDIO_REVERSE_LOCAL] ?: false }
+    val reverbPreset: Flow<Int> = context.dataStore.data.map { it[Keys.REVERB_PRESET] ?: 0 }
+    val stereoFlip: Flow<Boolean> = context.dataStore.data.map { it[Keys.STEREO_FLIP] ?: false }
+    val monoMix: Flow<Boolean> = context.dataStore.data.map { it[Keys.MONO_MIX] ?: false }
+    val passthroughAudio: Flow<Boolean> = context.dataStore.data.map { it[Keys.PASSTHROUGH_AUDIO] ?: true }
+    suspend fun setReverbPreset(preset: Int) { context.dataStore.edit { it[Keys.REVERB_PRESET] = preset.coerceIn(0, 5) } }
+    suspend fun setStereoFlip(v: Boolean) { context.dataStore.edit { it[Keys.STEREO_FLIP] = v } }
+    suspend fun setMonoMix(v: Boolean) { context.dataStore.edit { it[Keys.MONO_MIX] = v } }
+    suspend fun setPassthroughAudio(v: Boolean) { context.dataStore.edit { it[Keys.PASSTHROUGH_AUDIO] = v } }
     val pitchIndependent: Flow<Float> = context.dataStore.data.map { it[Keys.PITCH_INDEPENDENT] ?: 1.0f }
     val volumeBoostMb: Flow<Int> = context.dataStore.data.map { it[Keys.VOLUME_BOOST_MB] ?: 0 }
     val subtitleDelayMs: Flow<Int> = context.dataStore.data.map { it[Keys.SUBTITLE_DELAY_MS] ?: 0 }

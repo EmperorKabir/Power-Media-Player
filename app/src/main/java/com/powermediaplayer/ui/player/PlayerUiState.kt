@@ -90,6 +90,10 @@ data class PlayerUiState(
     // Video support
     val isVideoContent: Boolean = false,
 
+    // Audio output indicator — codec · channel layout · sample rate.
+    // Empty when no audio track is selected.
+    val audioFormatLabel: String = "",
+
     // Content kind drives the dynamic label on Prev/Next buttons
     // (Track/Album/Chapter/Episode/etc.). Inferred in PlayerViewModel
     // from playerState fields; UNKNOWN falls back to File/Chapter.

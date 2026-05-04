@@ -748,6 +748,21 @@ private fun TrackInfoSection(uiState: PlayerUiState, coverColors: CoverArtColors
                 overflow = TextOverflow.Ellipsis
             )
         }
+        // Audio format indicator — codec + channel layout + sample rate.
+        // Visible for both audio and video tracks (most films have a
+        // separate audio track and the user often cares about whether
+        // they're getting Atmos vs stereo downmix).
+        if (uiState.audioFormatLabel.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = uiState.audioFormatLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
         if (uiState.description.isNotEmpty()) {
             Spacer(modifier = Modifier.height(6.dp))
             Text(

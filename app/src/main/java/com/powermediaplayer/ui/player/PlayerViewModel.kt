@@ -538,6 +538,54 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.setPlaybackParametersWithPitch(speed, clamped)
     }
 
+    // ── PresetReverb (audio effect) ───────────────────────────────
+    private var presetReverb: android.media.audiofx.PresetReverb? = null
+
+    init {
+        // Reactive: when the user changes the reverb preset in
+        // Settings, attach / detach / reconfigure the effect on the
+        // current ExoPlayer audio session.
+        viewModelScope.launch {
+            settingsDataStore.reverbPreset.collect { preset ->
+                applyReverbPreset(preset)
+            }
+        }
+    }
+
+    /**
+     * Map our 0–5 setting onto Android's PresetReverb presets.
+     * 0 = Off, 1 = Room, 2 = Medium Hall, 3 = Large Hall, 4 = Plate,
+     * 5 = "Cave" (mapped to PRESET_LARGEROOM, the most cavernous
+     * preset Android actually exposes).
+     */
+    private fun applyReverbPreset(preset: Int) {
+        val sessionId = com.powermediaplayer.service.PlaybackService
+            .getExoPlayer()?.audioSessionId ?: 0
+        if (sessionId == 0) return
+        try {
+            if (preset == 0) {
+                presetReverb?.release()
+                presetReverb = null
+                return
+            }
+            val androidPreset: Short = when (preset) {
+                1 -> android.media.audiofx.PresetReverb.PRESET_SMALLROOM
+                2 -> android.media.audiofx.PresetReverb.PRESET_MEDIUMHALL
+                3 -> android.media.audiofx.PresetReverb.PRESET_LARGEHALL
+                4 -> android.media.audiofx.PresetReverb.PRESET_PLATE
+                5 -> android.media.audiofx.PresetReverb.PRESET_LARGEROOM
+                else -> android.media.audiofx.PresetReverb.PRESET_NONE
+            }
+            val pr = presetReverb ?: android.media.audiofx.PresetReverb(0, sessionId).also {
+                presetReverb = it
+                it.enabled = true
+            }
+            pr.preset = androidPreset
+        } catch (t: Throwable) {
+            android.util.Log.w("PMP_DIAG", "PresetReverb apply failed", t)
+        }
+    }
+
     // ── LoudnessEnhancer volume boost ─────────────────────────────
     private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
     private val _volumeBoostMb = MutableStateFlow(0)
@@ -698,6 +746,7 @@ class PlayerViewModel @Inject constructor(
                 ) && playerState.isSeekable
             ),
             isVideoContent = playerState.isVideoContent,
+            audioFormatLabel = playerState.audioFormatLabel,
             mediaKind = inferMediaKind(playerState)
         )
     }

@@ -33,7 +33,11 @@ data class SettingsUiState(
     val replayGainEnabled: Boolean = false,
     val crossfadeMs: Int = 0,
     val resumeOnBt: Boolean = false,
-    val prefetchNextCloud: Boolean = true
+    val prefetchNextCloud: Boolean = true,
+    val reverbPreset: Int = 0,
+    val stereoFlip: Boolean = false,
+    val monoMix: Boolean = false,
+    val passthroughAudio: Boolean = true
 )
 
 /**
@@ -67,7 +71,11 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.replayGainEnabled,
             settingsDataStore.crossfadeMs,
             settingsDataStore.resumeOnBt,
-            settingsDataStore.prefetchNextCloud
+            settingsDataStore.prefetchNextCloud,
+            settingsDataStore.reverbPreset,
+            settingsDataStore.stereoFlip,
+            settingsDataStore.monoMix,
+            settingsDataStore.passthroughAudio
         )
     ) { v ->
         SettingsUiState(
@@ -91,7 +99,11 @@ class SettingsViewModel @Inject constructor(
             replayGainEnabled = v[17] as Boolean,
             crossfadeMs = v[18] as Int,
             resumeOnBt = v[19] as Boolean,
-            prefetchNextCloud = v[20] as Boolean
+            prefetchNextCloud = v[20] as Boolean,
+            reverbPreset = v[21] as Int,
+            stereoFlip = v[22] as Boolean,
+            monoMix = v[23] as Boolean,
+            passthroughAudio = v[24] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -137,6 +149,10 @@ class SettingsViewModel @Inject constructor(
     fun setSubtitleDelay(ms: Int) = viewModelScope.launch { settingsDataStore.setSubtitleDelayMs(ms) }.let{}
     fun setAudioDelay(ms: Int) = viewModelScope.launch { settingsDataStore.setAudioDelayMs(ms) }.let{}
     fun setGapless(v: Boolean) = viewModelScope.launch { settingsDataStore.setGaplessPlayback(v) }.let{}
+    fun setReverbPreset(p: Int) = viewModelScope.launch { settingsDataStore.setReverbPreset(p) }.let{}
+    fun setStereoFlip(v: Boolean) = viewModelScope.launch { settingsDataStore.setStereoFlip(v) }.let{}
+    fun setMonoMix(v: Boolean) = viewModelScope.launch { settingsDataStore.setMonoMix(v) }.let{}
+    fun setPassthroughAudio(v: Boolean) = viewModelScope.launch { settingsDataStore.setPassthroughAudio(v) }.let{}
     fun setReplayGain(v: Boolean) = viewModelScope.launch { settingsDataStore.setReplayGainEnabled(v) }.let{}
     fun setCrossfade(ms: Int) = viewModelScope.launch { settingsDataStore.setCrossfadeMs(ms) }.let{}
     fun setResumeOnBt(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnBt(v) }.let{}
