@@ -562,35 +562,45 @@ class SpotifyProvider @Inject constructor(
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
             context.startActivity(spotify)
             android.util.Log.i("PMP_DIAG", "Spotify auto-launch fired")
-            // Bounce our own MainActivity to the foreground. We launch
-            // through the Activity instance held by MainActivityHolder
-            // (set in MainActivity.onResume) instead of the application
-            // context — Activity.startActivity preserves the
-            // user-interaction token Android's BAL (background-activity-
-            // launch) restriction looks for. Falls back to the app
-            // context if the activity has been destroyed (e.g. user
-            // removed our task before tapping a Spotify track).
+            // Bounce our own MainActivity to the foreground. PendingIntent
+            // captures the creator's privileges at construction time and
+            // can launch activities even when our app has lost foreground
+            // — bypassing Android's BAL (background-activity-launch)
+            // restriction that silently dropped previous Activity-direct
+            // attempts on cold-start. The Activity-path stays as a fast-
+            // path fallback when MainActivityHolder has a live ref.
+            val bounceIntent = Intent(
+                context,
+                com.powermediaplayer.MainActivity::class.java
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+            }
+            val bouncePi = android.app.PendingIntent.getActivity(
+                context,
+                BOUNCE_PI_REQUEST_CODE,
+                bounceIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    android.app.PendingIntent.FLAG_IMMUTABLE
+            )
             fun bringOursForward(tag: String) {
                 runCatching {
                     val activity = com.powermediaplayer.MainActivityHolder.get()
-                    val ours = Intent(
-                        context,
-                        com.powermediaplayer.MainActivity::class.java
-                    ).apply {
-                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                            Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                            (if (activity == null) Intent.FLAG_ACTIVITY_NEW_TASK else 0)
-                    }
                     if (activity != null && !activity.isFinishing) {
-                        activity.startActivity(ours)
+                        activity.startActivity(bounceIntent)
+                        android.util.Log.i("PMP_DIAG", "Bounced via Activity ($tag)")
                     } else {
-                        context.startActivity(ours)
+                        bouncePi.send()
+                        android.util.Log.i("PMP_DIAG", "Bounced via PendingIntent ($tag)")
                     }
-                    android.util.Log.i(
-                        "PMP_DIAG",
-                        "Bounced back to MainActivity ($tag, viaActivity=${activity != null})"
-                    )
+                }.onFailure { e ->
+                    android.util.Log.w("PMP_DIAG", "Bounce ($tag) failed", e)
+                    runCatching {
+                        bouncePi.send()
+                        android.util.Log.i("PMP_DIAG", "Bounced via PendingIntent fallback ($tag)")
+                    }
                 }
             }
             pollScope.launch {
@@ -887,6 +897,7 @@ class SpotifyProvider @Inject constructor(
     // overwrites the null with stale snap, leaving the Spotify mirror
     // visible while local m4b plays underneath.
     @Volatile private var pollGen: Int = 0
+    private val BOUNCE_PI_REQUEST_CODE = 0x10A1
 
     fun startPlaybackPolling() {
         if (pollJob?.isActive == true) return

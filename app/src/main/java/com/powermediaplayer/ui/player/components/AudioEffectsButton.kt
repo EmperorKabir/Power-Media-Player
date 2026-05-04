@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -37,10 +38,18 @@ fun AudioEffectsButton(
 ) {
     val s by settingsVm.uiState.collectAsStateWithLifecycle()
     var showSheet by remember { mutableStateOf(false) }
+    var lastInteract by remember { mutableStateOf(0L) }
     val anyOn = s.reverbPreset != 0 || s.stereoFlip || s.monoMix
+    fun touch() { lastInteract = System.currentTimeMillis() }
+    LaunchedEffect(showSheet, lastInteract) {
+        if (showSheet) {
+            kotlinx.coroutines.delay(3000)
+            showSheet = false
+        }
+    }
 
     IconButton(
-        onClick = { showSheet = true },
+        onClick = { showSheet = true; touch() },
         modifier = modifier.size(40.dp)
     ) {
         Icon(
@@ -90,7 +99,7 @@ fun AudioEffectsButton(
                     reverbOptions.forEach { (id, label) ->
                         FilterChip(
                             selected = s.reverbPreset == id,
-                            onClick = { settingsVm.setReverbPreset(id) },
+                            onClick = { settingsVm.setReverbPreset(id); touch() },
                             label = {
                                 Text(
                                     label,
@@ -107,19 +116,19 @@ fun AudioEffectsButton(
                     icon = Icons.Filled.SwapHoriz,
                     label = "Stereo flip (L↔R)",
                     on = s.stereoFlip,
-                    onChange = { settingsVm.setStereoFlip(it) }
+                    onChange = { settingsVm.setStereoFlip(it); touch() }
                 )
                 AudioEffectToggleRow(
                     icon = Icons.Filled.Adjust,
                     label = "Mono mix",
                     on = s.monoMix,
-                    onChange = { settingsVm.setMonoMix(it) }
+                    onChange = { settingsVm.setMonoMix(it); touch() }
                 )
                 AudioEffectToggleRow(
                     icon = Icons.Filled.Speaker,
                     label = "Multi-channel passthrough",
                     on = s.passthroughAudio,
-                    onChange = { settingsVm.setPassthroughAudio(it) }
+                    onChange = { settingsVm.setPassthroughAudio(it); touch() }
                 )
                 Spacer(Modifier.height(16.dp))
             }

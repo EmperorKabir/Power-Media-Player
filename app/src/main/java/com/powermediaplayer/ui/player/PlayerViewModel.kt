@@ -181,6 +181,12 @@ class PlayerViewModel @Inject constructor(
         // start. Auto-play is off so audio doesn't surprise the user.
         viewModelScope.launch(Dispatchers.Main) {
             kotlinx.coroutines.delay(800) // wait for service connection
+            // Don't clobber an active Spotify mirror — when the user
+            // switches tabs and comes back, the VM may be recreated
+            // and this block re-runs. Without the guard, the local
+            // resume overwrites the live Spotify state and the user
+            // sees a paused old local video where Spotify should be.
+            if (spotifyProvider.spotifyState.value != null) return@launch
             val recent = withContext(Dispatchers.IO) {
                 runCatching { lastPlayedRepo.mostRecent() }.getOrNull()
             } ?: return@launch

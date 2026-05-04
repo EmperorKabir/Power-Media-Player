@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Tonality
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -35,11 +36,21 @@ fun VideoEffectsButton(
 ) {
     val s by settingsVm.uiState.collectAsStateWithLifecycle()
     var showSheet by remember { mutableStateOf(false) }
+    var lastInteract by remember { mutableStateOf(0L) }
     val anyOn = s.videoFlipH || s.videoFlipV || s.videoBw ||
         s.videoSepia || s.videoInvert || s.videoRotation != 0
+    fun touch() { lastInteract = System.currentTimeMillis() }
+    // 3-second auto-dismiss; the timer restarts whenever the user
+    // interacts with any control inside the sheet (lastInteract bump).
+    LaunchedEffect(showSheet, lastInteract) {
+        if (showSheet) {
+            kotlinx.coroutines.delay(3000)
+            showSheet = false
+        }
+    }
 
     IconButton(
-        onClick = { showSheet = true },
+        onClick = { showSheet = true; touch() },
         modifier = modifier.size(40.dp)
     ) {
         Icon(
@@ -72,31 +83,31 @@ fun VideoEffectsButton(
                     icon = Icons.Filled.Flip,
                     label = "Mirror horizontally",
                     on = s.videoFlipH,
-                    onChange = { settingsVm.setVideoFlipH(it) }
+                    onChange = { settingsVm.setVideoFlipH(it); touch() }
                 )
                 EffectToggleRow(
                     icon = Icons.Filled.Flip,
                     label = "Flip vertically (upside-down)",
                     on = s.videoFlipV,
-                    onChange = { settingsVm.setVideoFlipV(it) }
+                    onChange = { settingsVm.setVideoFlipV(it); touch() }
                 )
                 EffectToggleRow(
                     icon = Icons.Filled.Tonality,
                     label = "Black & white",
                     on = s.videoBw,
-                    onChange = { settingsVm.setVideoBw(it) }
+                    onChange = { settingsVm.setVideoBw(it); touch() }
                 )
                 EffectToggleRow(
                     icon = Icons.Filled.FilterDrama,
                     label = "Sepia",
                     on = s.videoSepia,
-                    onChange = { settingsVm.setVideoSepia(it) }
+                    onChange = { settingsVm.setVideoSepia(it); touch() }
                 )
                 EffectToggleRow(
                     icon = Icons.Filled.InvertColors,
                     label = "Invert colours",
                     on = s.videoInvert,
-                    onChange = { settingsVm.setVideoInvert(it) }
+                    onChange = { settingsVm.setVideoInvert(it); touch() }
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(
@@ -111,7 +122,7 @@ fun VideoEffectsButton(
                     listOf(0, 90, 180, 270).forEach { deg ->
                         FilterChip(
                             selected = s.videoRotation == deg,
-                            onClick = { settingsVm.setVideoRotation(deg) },
+                            onClick = { settingsVm.setVideoRotation(deg); touch() },
                             label = { Text("${deg}°") },
                             modifier = Modifier.padding(end = 4.dp)
                         )
