@@ -342,12 +342,56 @@ fun CloudBrowserScreen(
                             )
                         }
                     }
+                    // At Drive root, expose an "+ Add folder" entry so the
+                    // user can grant another folder without backing out
+                    // through the provider-cards screen. Only shown when
+                    // browsing Drive at depth 0 with at least one picked
+                    // folder already (otherwise the bare ProviderCards
+                    // screen shows "Pick a folder").
+                    val atDriveRoot = uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE &&
+                        uiState.folderStack.size <= 1
+                    if (atDriveRoot) {
+                        item(key = "add_more_folders") {
+                            Surface(
+                                color = SurfaceElevated,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                                    .clickable { viewModel.openPickerChooser() }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Add,
+                                        contentDescription = null,
+                                        tint = TealAccent,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        "Add another folder",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = TealAccent
+                                    )
+                                }
+                            }
+                        }
+                    }
                     itemsIndexed(uiState.items, key = { idx, it -> "${it.id}_$idx" }) { _, item ->
                         val isDriveFolder = item.isFolder &&
                             item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
                         val isDriveTrack = !item.isFolder &&
                             item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
                         val isSpotify = item.sourceProvider == CloudProviderType.SPOTIFY
+                        // Show a "Forget this folder" trailing icon on
+                        // ROOT-level picked folders only (depth 0 and
+                        // marked as folder). Drilling into a folder
+                        // hides it so we don't accidentally forget a
+                        // sub-folder.
+                        val canForgetRoot = atDriveRoot && isDriveFolder
                         val isFav = when {
                             isDriveFolder -> uiState.driveFavourites.any { it.id == item.id }
                             isDriveTrack -> uiState.driveFavouriteTracks.any { it.id == item.id }
@@ -372,6 +416,8 @@ fun CloudBrowserScreen(
                                     isSpotify -> viewModel.toggleSpotifyFav(item)
                                 }
                             },
+                            canForget = canForgetRoot,
+                            onForget = { viewModel.forgetPickedFolder(item) },
                             onClick = {
                                 if (item.isFolder) {
                                     viewModel.openItem(item)
@@ -671,7 +717,9 @@ private fun CloudItemRow(
     onClick: () -> Unit,
     isFavourite: Boolean = false,
     canFavourite: Boolean = false,
-    onToggleFavourite: () -> Unit = {}
+    onToggleFavourite: () -> Unit = {},
+    canForget: Boolean = false,
+    onForget: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -711,6 +759,16 @@ private fun CloudItemRow(
                     contentDescription = if (isFavourite) "Remove from favourites" else "Add to favourites",
                     tint = if (isFavourite) TealAccent else TextTertiary,
                     modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        if (canForget) {
+            IconButton(onClick = onForget, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Forget this folder",
+                    tint = TextTertiary,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }

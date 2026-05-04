@@ -714,6 +714,29 @@ class CloudViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Forget a single picked folder. Routes to the SAF or Drive REST
+     * provider based on the item's id format. After removal, the
+     * active folder list refreshes so the row disappears immediately.
+     */
+    fun forgetPickedFolder(item: CloudMediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (item.id.startsWith("content://")) {
+                driveProvider.forgetPickedRoot(item.id)
+            } else {
+                driveOAuthProvider.forgetPickedFolder(item.id)
+            }
+            // Refresh the root list if it's currently visible.
+            if (_uiState.value.folderStack.size <= 1 &&
+                _uiState.value.activeProvider == CloudProviderType.GOOGLE_DRIVE
+            ) {
+                val safRoots = driveProvider.listFiles(null).getOrDefault(emptyList())
+                val driveRoots = driveOAuthProvider.listFiles(null).getOrDefault(emptyList())
+                _uiState.update { it.copy(items = safRoots + driveRoots) }
+            }
+        }
+    }
+
     fun signOutSpotify() {
         viewModelScope.launch { spotifyProvider.signOut() }
     }
