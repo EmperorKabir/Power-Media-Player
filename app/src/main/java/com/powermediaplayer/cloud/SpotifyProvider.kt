@@ -508,9 +508,10 @@ class SpotifyProvider @Inject constructor(
                 val launched = launchSpotifyAndReturn()
                 if (launched) {
                     // Spotify takes ~1–3 s to start up + register with
-                    // Connect. Poll the devices endpoint up to 5 s
-                    // before giving up.
-                    repeat(10) { attempt ->
+                    // Connect. Poll the devices endpoint up to 5 s,
+                    // breaking out the moment a device is visible so
+                    // we don't keep hitting the API for 5 more seconds.
+                    for (attempt in 0 until 10) {
                         kotlinx.coroutines.delay(500)
                         devices = listDevices(token)
                         if (devices.isNotEmpty()) {
@@ -518,7 +519,7 @@ class SpotifyProvider @Inject constructor(
                                 "PMP_DIAG",
                                 "Spotify.play device appeared after ${(attempt + 1) * 500}ms"
                             )
-                            return@repeat
+                            break
                         }
                     }
                 }
