@@ -562,24 +562,33 @@ class SpotifyProvider @Inject constructor(
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
             context.startActivity(spotify)
             android.util.Log.i("PMP_DIAG", "Spotify auto-launch fired")
-            // Bounce our own MainActivity to the foreground after a
-            // short delay so the Spotify splash is just a flash and
-            // the user lands back in our UI ready to play.
-            pollScope.launch {
-                kotlinx.coroutines.delay(1500)
+            // Bounce our own MainActivity to the foreground in two
+            // attempts: a short fast attempt (~250 ms) that usually
+            // succeeds while Spotify is still resuming, and a backup
+            // (~1200 ms) for slow Spotify cold-starts. Two attempts
+            // because Android's background-activity-launch (BAL)
+            // restriction can drop the first one when our app has
+            // just lost foreground state to Spotify.
+            fun bringOursForward(tag: String) {
                 runCatching {
                     val ours = Intent(
                         context,
                         com.powermediaplayer.MainActivity::class.java
                     ).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP or
                             Intent.FLAG_ACTIVITY_NO_ANIMATION
                     }
                     context.startActivity(ours)
-                    android.util.Log.i("PMP_DIAG", "Bounced back to MainActivity")
+                    android.util.Log.i("PMP_DIAG", "Bounced back to MainActivity ($tag)")
                 }
+            }
+            pollScope.launch {
+                kotlinx.coroutines.delay(250)
+                bringOursForward("fast")
+                kotlinx.coroutines.delay(1000)
+                bringOursForward("slow-backup")
             }
             true
         } catch (e: Exception) {

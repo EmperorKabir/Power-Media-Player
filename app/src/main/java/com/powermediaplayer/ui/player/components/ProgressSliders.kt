@@ -136,10 +136,13 @@ private fun PositionSlider(
             colors = SliderDefaults.colors(
                 thumbColor = activeColor,
                 activeTrackColor = activeColor,
-                inactiveTrackColor = if (enabled) DisabledContent else DisabledContent.copy(alpha = 0.4f),
+                // Tinted teal instead of plain grey so the unfilled
+                // portion reads as part of the same control surface.
+                inactiveTrackColor = if (enabled) activeColor.copy(alpha = 0.25f)
+                    else activeColor.copy(alpha = 0.12f),
                 disabledThumbColor = DisabledGrey,
                 disabledActiveTrackColor = DisabledGrey.copy(alpha = 0.5f),
-                disabledInactiveTrackColor = DisabledContent.copy(alpha = 0.4f)
+                disabledInactiveTrackColor = activeColor.copy(alpha = 0.12f)
             )
         )
 

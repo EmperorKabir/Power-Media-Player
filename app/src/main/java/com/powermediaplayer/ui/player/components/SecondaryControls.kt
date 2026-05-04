@@ -63,7 +63,7 @@ fun VolumeAndBrightnessControls(
                 colors = SliderDefaults.colors(
                     thumbColor = TealAccent,
                     activeTrackColor = TealAccent,
-                    inactiveTrackColor = DisabledContent
+                    inactiveTrackColor = TealAccent.copy(alpha = 0.25f)
                 )
             )
             Icon(
@@ -108,7 +108,7 @@ fun VolumeAndBrightnessControls(
                 colors = SliderDefaults.colors(
                     thumbColor = Teal300,
                     activeTrackColor = Teal300,
-                    inactiveTrackColor = DisabledContent,
+                    inactiveTrackColor = TealAccent.copy(alpha = 0.25f),
                     disabledThumbColor = DisabledGrey,
                     disabledActiveTrackColor = DisabledGrey,
                     disabledInactiveTrackColor = DisabledContent

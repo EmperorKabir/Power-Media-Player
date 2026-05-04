@@ -188,10 +188,11 @@ private fun SkipButton(
     val fillColor = if (enabled) TealAccent else DisabledGrey
     val outlineColor = Color.Black
 
-    // Shared text styles — reverted to original sizes to avoid the
-    // heavier text rendering cost the user noticed as stutter.
-    val numStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
-    val sStyle   = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+    // 20% bump from prior 15/11 sp so 5s/10s/30s read at glance even on
+    // an unfolded fold. Compose only re-rasterises on size change so
+    // the runtime cost is one-shot.
+    val numStyle = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+    val sStyle   = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
 
     IconButton(
         onClick = wrappedClick,

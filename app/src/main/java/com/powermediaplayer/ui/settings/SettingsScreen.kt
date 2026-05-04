@@ -390,7 +390,11 @@ private fun SliderRow(
             valueRange = range,
             onValueChange = { local = it },
             onValueChangeFinished = { onChange(local) },
-            colors = SliderDefaults.colors(thumbColor = TealAccent, activeTrackColor = TealAccent)
+            colors = SliderDefaults.colors(
+                thumbColor = TealAccent,
+                activeTrackColor = TealAccent,
+                inactiveTrackColor = TealAccent.copy(alpha = 0.25f)
+            )
         )
     }
 }

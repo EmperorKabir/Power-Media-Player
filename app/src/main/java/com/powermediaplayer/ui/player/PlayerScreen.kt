@@ -507,6 +507,12 @@ private fun OverlayContent(
             if (uiState.isVideoContent) {
                 VideoEffectsButton()
             }
+            // Audio effects (reverb / stereo flip / mono mix /
+            // passthrough) — applies to ANY audio stream so it shows
+            // in both audio and video modes. Same SettingsViewModel
+            // backing as Settings → Audio effects, just exposed as
+            // a quick popup so the user doesn't leave the Player.
+            AudioEffectsButton()
             BluetoothButton(modifier = Modifier.size(48.dp))
         }
         // Bookmark chips for the currently playing item.
