@@ -42,7 +42,10 @@ fun VideoEffectsButton(
         Icon(
             imageVector = Icons.Filled.Tune,
             contentDescription = "Video effects",
-            tint = if (anyOn) TealAccent else TextSecondary
+            // Always teal so the button matches the surrounding control
+            // strip; "on" state stays at full opacity, "off" dims to
+            // 60 % so the user still sees a visual difference.
+            tint = if (anyOn) TealAccent else TealAccent.copy(alpha = 0.6f)
         )
     }
 

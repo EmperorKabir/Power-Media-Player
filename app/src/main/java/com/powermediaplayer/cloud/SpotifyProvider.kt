@@ -562,26 +562,35 @@ class SpotifyProvider @Inject constructor(
                 Intent.FLAG_ACTIVITY_NO_ANIMATION
             context.startActivity(spotify)
             android.util.Log.i("PMP_DIAG", "Spotify auto-launch fired")
-            // Bounce our own MainActivity to the foreground in two
-            // attempts: a short fast attempt (~250 ms) that usually
-            // succeeds while Spotify is still resuming, and a backup
-            // (~1200 ms) for slow Spotify cold-starts. Two attempts
-            // because Android's background-activity-launch (BAL)
-            // restriction can drop the first one when our app has
-            // just lost foreground state to Spotify.
+            // Bounce our own MainActivity to the foreground. We launch
+            // through the Activity instance held by MainActivityHolder
+            // (set in MainActivity.onResume) instead of the application
+            // context — Activity.startActivity preserves the
+            // user-interaction token Android's BAL (background-activity-
+            // launch) restriction looks for. Falls back to the app
+            // context if the activity has been destroyed (e.g. user
+            // removed our task before tapping a Spotify track).
             fun bringOursForward(tag: String) {
                 runCatching {
+                    val activity = com.powermediaplayer.MainActivityHolder.get()
                     val ours = Intent(
                         context,
                         com.powermediaplayer.MainActivity::class.java
                     ).apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or
                             Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                            Intent.FLAG_ACTIVITY_NO_ANIMATION
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                            (if (activity == null) Intent.FLAG_ACTIVITY_NEW_TASK else 0)
                     }
-                    context.startActivity(ours)
-                    android.util.Log.i("PMP_DIAG", "Bounced back to MainActivity ($tag)")
+                    if (activity != null && !activity.isFinishing) {
+                        activity.startActivity(ours)
+                    } else {
+                        context.startActivity(ours)
+                    }
+                    android.util.Log.i(
+                        "PMP_DIAG",
+                        "Bounced back to MainActivity ($tag, viaActivity=${activity != null})"
+                    )
                 }
             }
             pollScope.launch {
@@ -887,12 +896,16 @@ class SpotifyProvider @Inject constructor(
             var lastTrackUri = ""
             var lastLyrics: String? = null
             var lastSynced: List<LyricLine> = emptyList()
+            // Iteration counter — first ~10 iterations poll at 200 ms
+            // because Spotify's /v1/me/player is eventually-consistent
+            // for a second or two after a /play call. Without the burst
+            // the album art / title / artist on the player tab can be
+            // stale for 1.5 s+ after the user taps a new track.
+            var iter = 0
             while (isActive) {
                 val token = currentAccessToken()
                 if (token != null) {
                     val snap = fetchCurrentState(token)
-                    // Recheck generation after the suspending HTTP call —
-                    // if stopPlaybackPolling fired in-between, drop the snap.
                     if (gen != pollGen) return@launch
                     if (snap != null) {
                         if (snap.trackUri != lastTrackUri) {
@@ -910,7 +923,8 @@ class SpotifyProvider @Inject constructor(
                         lastSynced = emptyList()
                     }
                 }
-                delay(1000)
+                iter++
+                delay(if (iter < 10) 200 else 1000)
             }
         }
     }

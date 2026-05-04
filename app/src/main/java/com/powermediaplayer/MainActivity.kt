@@ -28,6 +28,20 @@ private data class Quad(val a: Int, val b: Int, val c: Boolean, val d: Boolean)
  * Computes WindowSizeClass once here and passes it to navigation
  * so all screens can adapt to phone/tablet/foldable widths.
  */
+/**
+ * Holder for the currently-resumed MainActivity, used by SpotifyProvider
+ * to bounce our app back to the foreground after auto-launching Spotify.
+ * Calling Activity.startActivity (vs Application.startActivity) carries
+ * the user-interaction token that satisfies Android's BAL
+ * (background-activity-launch) restriction so the bounce-back works
+ * reliably even on second + third invocations within a session.
+ */
+object MainActivityHolder {
+    private var ref: java.lang.ref.WeakReference<android.app.Activity>? = null
+    fun set(a: android.app.Activity) { ref = java.lang.ref.WeakReference(a) }
+    fun get(): android.app.Activity? = ref?.get()
+}
+
 @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -42,9 +56,15 @@ class MainActivity : ComponentActivity() {
      */
     private val isInPip = androidx.compose.runtime.mutableStateOf(false)
 
+    override fun onResume() {
+        super.onResume()
+        MainActivityHolder.set(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        MainActivityHolder.set(this)
         playbackConnection.connect()
 
         // Keep PiP params in sync with playback state so SDK 31+

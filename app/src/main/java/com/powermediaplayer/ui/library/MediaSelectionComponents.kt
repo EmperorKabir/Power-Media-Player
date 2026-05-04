@@ -68,9 +68,9 @@ fun FavoriteLabeledAction(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder
-    val label = if (isFavorite) "Favorited" else "Favorite"
-    val tint = if (isFavorite) Color.Red else TealAccent
+    val icon = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder
+    val label = if (isFavorite) "Favourited" else "Favourite"
+    val tint = if (isFavorite) TealAccent else TealAccent.copy(alpha = 0.6f)
 
     LabeledActionIcon(
         icon = icon,

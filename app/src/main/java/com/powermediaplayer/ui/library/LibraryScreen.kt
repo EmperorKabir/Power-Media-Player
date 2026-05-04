@@ -448,12 +448,13 @@ private fun MediaFileItem(
             )
         }
 
-        // Favorite toggle
+        // Favourite toggle — star icon for visual consistency with the
+        // Drive favourites strip and Pinned section in Last Played.
         IconButton(onClick = onToggleFavorite) {
             Icon(
-                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                tint = if (isFavorite) androidx.compose.ui.graphics.Color.Red else TextTertiary,
+                imageVector = if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                contentDescription = if (isFavorite) "Remove from favourites" else "Add to favourites",
+                tint = if (isFavorite) TealAccent else TextTertiary,
                 modifier = Modifier.size(20.dp)
             )
         }

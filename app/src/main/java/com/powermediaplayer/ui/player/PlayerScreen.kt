@@ -682,6 +682,10 @@ private fun PlayerScreenExpanded(
                     Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
                         tint = TealAccent)
                 }
+                // Audio effects (reverb / stereo flip / mono mix /
+                // passthrough) — applies to any audio track so it's
+                // present in both layouts.
+                AudioEffectsButton()
                 BluetoothButton(modifier = Modifier.size(48.dp))
             }
             val bookmarksE by viewModel.bookmarks.collectAsStateWithLifecycle()
