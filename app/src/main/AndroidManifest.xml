@@ -23,6 +23,7 @@
     <!-- Background playback -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Media library access (SDK 33+) -->
@@ -99,6 +100,18 @@
             android:label="Pick a Drive folder"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
             android:theme="@style/Theme.PowerMediaPlayer" />
+
+        <!-- Tiny foreground service that gives us BAL (background
+             activity launch) exemption while we auto-launch Spotify
+             and bounce back to our own UI. Self-stops after 10 s. -->
+        <service
+            android:name=".service.SpotifyBounceService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="spotify_bounce_back" />
+        </service>
 
         <!-- Media Playback Service -->
         <service
