@@ -28,6 +28,8 @@ import com.powermediaplayer.cloud.CloudMediaItem
 import com.powermediaplayer.cloud.CloudProviderType
 import com.powermediaplayer.ui.theme.*
 
+private val SpotifyGreen = androidx.compose.ui.graphics.Color(0xFF1DB954)
+
 /**
  * Cloud browser — shows provider sign-in cards when signed out and a
  * file/folder list once authenticated. Selecting a track hands it to
@@ -192,6 +194,58 @@ fun CloudBrowserScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
+                    val spotifyFavCount = uiState.spotifyFavTracks.size +
+                        uiState.spotifyFavAlbums.size +
+                        uiState.spotifyFavPodcasts.size
+                    if (spotifyFavCount > 0) {
+                        item(key = "sp_fav_header") {
+                            Text(
+                                text = "Favourite tracks/albums/podcasts ($spotifyFavCount)",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = SpotifyGreen,
+                                modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)
+                            )
+                        }
+                        items(
+                            uiState.spotifyFavTracks,
+                            key = { "spfavt_${it.id}" }
+                        ) { fav ->
+                            SpotifyFavRow(
+                                fav = fav,
+                                kindIcon = Icons.Filled.MusicNote,
+                                onClick = { viewModel.playSpotifyFavourite(fav.id, fav.name, "track", onNavigateToPlayer) },
+                                onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
+                            )
+                        }
+                        items(
+                            uiState.spotifyFavAlbums,
+                            key = { "spfava_${it.id}" }
+                        ) { fav ->
+                            SpotifyFavRow(
+                                fav = fav,
+                                kindIcon = Icons.Filled.Album,
+                                onClick = { viewModel.openSpotifyContainer(fav.id, fav.name) },
+                                onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
+                            )
+                        }
+                        items(
+                            uiState.spotifyFavPodcasts,
+                            key = { "spfavp_${it.id}" }
+                        ) { fav ->
+                            SpotifyFavRow(
+                                fav = fav,
+                                kindIcon = Icons.Filled.Podcasts,
+                                onClick = { viewModel.openSpotifyContainer(fav.id, fav.name) },
+                                onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
+                            )
+                        }
+                        item(key = "sp_fav_divider") {
+                            HorizontalDivider(
+                                color = SurfaceElevated,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
                     items(
                         items = com.powermediaplayer.cloud.SpotifySection.values().toList(),
                         key = { it.name }
@@ -278,22 +332,25 @@ fun CloudBrowserScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    // Favourites strip — only at Drive root, only when
-                    // there's at least one favourite. Single horizontal
-                    // section above the regular file list.
+                    // Favourites strip — only at Drive root, shown when
+                    // either folders or files are starred. Header now
+                    // covers both since users can star tracks too via
+                    // the per-row star icon.
+                    val favFolders = uiState.driveFavourites
+                    val favTracks = uiState.driveFavouriteTracks
                     val showFavourites = uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE &&
                         uiState.folderStack.size <= 1 &&
-                        uiState.driveFavourites.isNotEmpty()
+                        (favFolders.isNotEmpty() || favTracks.isNotEmpty())
                     if (showFavourites) {
                         item(key = "fav_header") {
                             Text(
-                                text = "Favourite folders",
+                                text = "Favourite folders/files",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TealAccent,
                                 modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)
                             )
                         }
-                        items(uiState.driveFavourites, key = { "fav_${it.id}" }) { fav ->
+                        items(favFolders, key = { "favfolder_${it.id}" }) { fav ->
                             FavouriteFolderRow(
                                 fav = fav,
                                 onClick = { viewModel.openDriveFavourite(fav) },
@@ -307,6 +364,31 @@ fun CloudBrowserScreen(
                                             downloadUrl = "",
                                             sourceProvider = CloudProviderType.GOOGLE_DRIVE,
                                             isFolder = true
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                        items(favTracks, key = { "favtrack_${it.id}" }) { fav ->
+                            FavouriteTrackRow(
+                                fav = fav,
+                                onClick = {
+                                    viewModel.playDriveFavouriteTrack(
+                                        fav.id,
+                                        fav.name,
+                                        onPlaybackStarted = onNavigateToPlayer
+                                    )
+                                },
+                                onUnstar = {
+                                    viewModel.toggleDriveFavouriteTrack(
+                                        CloudMediaItem(
+                                            id = fav.id,
+                                            name = fav.name,
+                                            mimeType = "",
+                                            size = 0L,
+                                            downloadUrl = "",
+                                            sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                                            isFolder = false
                                         )
                                     )
                                 }
@@ -748,6 +830,101 @@ private fun CloudItemRow(
                     modifier = Modifier.size(18.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SpotifyFavRow(
+    fav: com.powermediaplayer.data.preferences.SpotifyFavourite,
+    kindIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    onUnstar: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(SpotifyGreen.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                kindIcon,
+                contentDescription = null,
+                tint = SpotifyGreen,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = fav.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onUnstar, modifier = Modifier.size(36.dp)) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = "Remove from favourites",
+                tint = SpotifyGreen,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FavouriteTrackRow(
+    fav: com.powermediaplayer.data.preferences.DriveFavouriteFolder,
+    onClick: () -> Unit,
+    onUnstar: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Teal800),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.AudioFile,
+                contentDescription = "Favourite track",
+                tint = TealAccent,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = fav.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onUnstar, modifier = Modifier.size(36.dp)) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = "Remove from favourites",
+                tint = TealAccent,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

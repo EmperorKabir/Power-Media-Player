@@ -284,6 +284,28 @@ class DriveOAuthProvider @Inject constructor(
         Result.success(Uri.parse(item.downloadUrl))
 
     /**
+     * Fetch full metadata for a single Drive file by id and build a
+     * playable [CloudMediaItem]. Used by the Cloud screen when the
+     * user taps a starred-track row whose downloadUrl/mimeType
+     * weren't persisted (favourites only store id + display name).
+     */
+    suspend fun getFileMetadata(id: String): CloudMediaItem? = withContext(Dispatchers.IO) {
+        val token = fetchAccessTokenBlocking() ?: return@withContext null
+        val url = "https://www.googleapis.com/drive/v3/files/$id?" +
+            "fields=id,name,mimeType,size,parents,thumbnailLink"
+        val req = Request.Builder().url(url)
+            .addHeader("Authorization", "Bearer $token").build()
+        try {
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val body = resp.body?.string().orEmpty()
+                val obj = JsonParser.parseString(body).asJsonObject
+                toCloudItem(obj, parentId = null)
+            }
+        } catch (_: Exception) { null }
+    }
+
+    /**
      * Range download to local cache. Used by the M4B chapter parser /
      * MediaMetadataRetriever / FFmpeg path that need a seekable file.
      */

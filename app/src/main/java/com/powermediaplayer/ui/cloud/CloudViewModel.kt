@@ -142,6 +142,113 @@ class CloudViewModel @Inject constructor(
             settingsDataStore.toggleDriveFavouriteTrack(item.id, item.name)
         }
     }
+
+    /**
+     * Play a Drive favourite track from the Cloud root strip. The
+     * favourite entry only has `id + name` so we build a full
+     * [CloudMediaItem] either from the SAF content URI directly (id
+     * starts with `content://`) or by fetching metadata via the Drive
+     * REST API.
+     */
+    fun playDriveFavouriteTrack(
+        id: String,
+        name: String,
+        onPlaybackStarted: () -> Unit = {}
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val item = if (id.startsWith("content://")) {
+                val ext = name.substringAfterLast('.', "").lowercase()
+                val mime = when {
+                    ext in setOf("mp3","flac","ogg","oga","opus","wav","aac",
+                        "m4a","m4b","m4p","aiff","aif","ape","wma") -> "audio/${ext}"
+                    ext in setOf("mp4","m4v","mkv","webm","mov","avi","wmv","flv",
+                        "ts","3gp","3g2") -> "video/${ext}"
+                    else -> ""
+                }
+                CloudMediaItem(
+                    id = id, name = name, mimeType = mime, size = 0L,
+                    downloadUrl = id,
+                    sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                    isFolder = false, parentId = null
+                )
+            } else {
+                driveOAuthProvider.getFileMetadata(id)
+            }
+            if (item == null) {
+                _uiState.update { it.copy(errorMessage = "Couldn't load $name — it may have been removed from Drive.") }
+                return@launch
+            }
+            withContext(Dispatchers.Main) {
+                openItem(item, onPlaybackStarted = onPlaybackStarted)
+            }
+        }
+    }
+    /** Tear off a starred Spotify URI by its `id` (= the spotify:… URI). */
+    fun unstarSpotifyFavourite(uri: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            when {
+                uri.startsWith("spotify:track") ->
+                    settingsDataStore.toggleSpotifyFavouriteTrack(uri, "")
+                uri.startsWith("spotify:album") ->
+                    settingsDataStore.toggleSpotifyFavouriteAlbum(uri, "")
+                uri.startsWith("spotify:show") || uri.startsWith("spotify:episode") ->
+                    settingsDataStore.toggleSpotifyFavouritePodcast(uri, "")
+            }
+        }
+    }
+
+    /**
+     * Play a starred Spotify track from the section-picker favourites
+     * strip. Routes through Spotify Connect (auto-launch + transfer
+     * fallback handled inside SpotifyProvider).
+     */
+    fun playSpotifyFavourite(
+        uri: String,
+        name: String,
+        @Suppress("UNUSED_PARAMETER") kind: String,
+        onPlaybackStarted: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            // Pause any local playback so the two streams don't overlap.
+            runCatching { playbackConnection.pause() }
+            val r = spotifyProvider.playTrackOnConnectDevice(uri, contextUri = null)
+            r.onSuccess {
+                spotifyProvider.startPlaybackPolling()
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Playing on Spotify: $name"
+                )
+                onPlaybackStarted()
+            }.onFailure { ex ->
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = ex.message ?: "Spotify playback failed"
+                )
+            }
+        }
+    }
+
+    /**
+     * Drill into a starred Spotify album / playlist / show from the
+     * section-picker favourites strip — same code path as tapping a
+     * folder inside a section listing.
+     */
+    fun openSpotifyContainer(containerUri: String, name: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isLoading = true) }
+            val r = spotifyProvider.listContainer(containerUri)
+            val list = r.getOrDefault(emptyList())
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    items = list,
+                    activeProvider = CloudProviderType.SPOTIFY,
+                    spotifySection = com.powermediaplayer.cloud.SpotifySection.SAVED_ALBUMS,
+                    folderStack = listOf(null to "Spotify Library", containerUri to name),
+                    errorMessage = r.exceptionOrNull()?.message
+                )
+            }
+        }
+    }
+
     fun toggleSpotifyFav(item: CloudMediaItem) {
         if (item.sourceProvider != CloudProviderType.SPOTIFY) return
         val uri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl

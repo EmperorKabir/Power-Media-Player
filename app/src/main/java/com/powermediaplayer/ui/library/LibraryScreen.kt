@@ -305,11 +305,58 @@ fun LibraryScreen(
                 LaunchedEffect(uiState.sortMode, uiState.selectedTab) {
                     listState.scrollToItem(0)
                 }
+                // Favourites strip — shown only when the active tab has
+                // at least one starred file. Mirrors the Drive strip in
+                // the Cloud tab so the user gets quick access to pinned
+                // files at the top of the list. Tapping a favourite
+                // plays it via the same path as the main list (single
+                // for video, queue for audio).
+                val favouriteFiles = remember(files, uiState.favorites) {
+                    files.filter { it.uri.toString() in uiState.favorites }
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
+                    if (favouriteFiles.isNotEmpty()) {
+                        item(key = "fav_header") {
+                            Text(
+                                text = "Favourite files (${favouriteFiles.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TealAccent,
+                                modifier = Modifier.padding(
+                                    start = 16.dp, top = 4.dp, bottom = 4.dp
+                                )
+                            )
+                        }
+                        itemsIndexed(
+                            favouriteFiles,
+                            key = { _, f -> "fav_${f.id}" }
+                        ) { _, file ->
+                            val originalIndex = files.indexOfFirst { it.id == file.id }
+                                .coerceAtLeast(0)
+                            MediaFileItem(
+                                file = file,
+                                isFavorite = true,
+                                onClick = {
+                                    if (file.isVideo) {
+                                        viewModel.playSingle(file)
+                                    } else {
+                                        viewModel.playFiles(files, originalIndex)
+                                    }
+                                    onNavigateToPlayer()
+                                },
+                                onToggleFavorite = { viewModel.toggleFavorite(file.uri) }
+                            )
+                        }
+                        item(key = "fav_divider") {
+                            HorizontalDivider(
+                                color = SurfaceElevated,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
                     itemsIndexed(files, key = { _, file -> file.id }) { index, file ->
                         MediaFileItem(
                             file = file,
