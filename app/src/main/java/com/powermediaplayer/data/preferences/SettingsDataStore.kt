@@ -74,6 +74,46 @@ class SettingsDataStore @Inject constructor(
         // Storage Access Framework: tree URIs the user has granted via
         // ACTION_OPEN_DOCUMENT_TREE. Each entry is "treeUri|displayName".
         val DRIVE_PICKED_ROOTS = stringSetPreferencesKey("drive_picked_roots")
+
+        // Drive OAuth (drive.file scope): folder ids the user has
+        // granted via the Drive Picker WebView. Each entry "id|name".
+        val DRIVE_OAUTH_PICKED_FOLDERS = stringSetPreferencesKey("drive_oauth_picked_folders")
+    }
+
+    // ── Drive OAuth picked folders (drive.file via JS Picker) ─────
+    val driveOauthPickedFolders: Flow<List<DriveFavouriteFolder>> =
+        context.dataStore.data.map { prefs ->
+            (prefs[Keys.DRIVE_OAUTH_PICKED_FOLDERS] ?: emptySet()).mapNotNull { entry ->
+                val sep = entry.indexOf('|')
+                if (sep <= 0) null
+                else DriveFavouriteFolder(
+                    id = entry.substring(0, sep),
+                    name = entry.substring(sep + 1)
+                )
+            }.sortedBy { it.name.lowercase() }
+        }
+
+    suspend fun addDriveOauthPickedFolder(id: String, name: String) {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[Keys.DRIVE_OAUTH_PICKED_FOLDERS] ?: emptySet()).toMutableSet()
+            current.removeAll { it.startsWith("$id|") }
+            current.add("$id|$name")
+            prefs[Keys.DRIVE_OAUTH_PICKED_FOLDERS] = current
+        }
+    }
+
+    suspend fun removeDriveOauthPickedFolder(id: String) {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[Keys.DRIVE_OAUTH_PICKED_FOLDERS] ?: emptySet()).toMutableSet()
+            current.removeAll { it.startsWith("$id|") }
+            prefs[Keys.DRIVE_OAUTH_PICKED_FOLDERS] = current
+        }
+    }
+
+    suspend fun clearDriveOauthPickedFolders() {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DRIVE_OAUTH_PICKED_FOLDERS] = emptySet()
+        }
     }
 
     // ── Drive (SAF) picked roots ────────────────────────────────

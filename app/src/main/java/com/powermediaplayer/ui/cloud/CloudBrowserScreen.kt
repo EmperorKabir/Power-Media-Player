@@ -15,6 +15,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +61,45 @@ fun CloudBrowserScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { result -> viewModel.handleSpotifyResult(result.data) }
 
+    // Drive Picker (WebView) launcher — fires after OAuth sign-in
+    // succeeds and we have an access token. Returns picked folder
+    // ID/name which we persist to the user's Drive picked-folders list.
+    val drivePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val id = result.data?.getStringExtra(
+                com.powermediaplayer.cloud.DrivePickerActivity.RESULT_FOLDER_ID
+            )
+            val name = result.data?.getStringExtra(
+                com.powermediaplayer.cloud.DrivePickerActivity.RESULT_FOLDER_NAME
+            )
+            if (!id.isNullOrBlank() && !name.isNullOrBlank()) {
+                viewModel.rememberPickedDriveFolder(id, name)
+            }
+        }
+    }
+
+    val pickerScope = rememberCoroutineScope()
+
+    // Drive OAuth sign-in launcher. On success, fetch a token off-main
+    // and launch the Picker WebView. On failure or user cancel, dismiss.
+    val driveOAuthLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        pickerScope.launch {
+            val ok = viewModel.handleDriveOAuthResult(result.data)
+            if (ok) {
+                val token = viewModel.fetchDriveAccessToken()
+                if (!token.isNullOrBlank()) {
+                    drivePickerLauncher.launch(
+                        com.powermediaplayer.cloud.DrivePickerActivity.intent(context, token)
+                    )
+                }
+            }
+        }
+    }
+
     // Source-chooser dialog: shown when the user taps "Pick a folder"
     // or "Add folder" so they can pick a DocumentsProvider root
     // (Drive · email, OneDrive · email, Internal storage, USB-OTG, …)
@@ -68,8 +109,15 @@ fun CloudBrowserScreen(
         SourceChooserDialog(
             roots = uiState.pickerRoots,
             onPick = { root ->
-                val intent = viewModel.buildDeepLinkedDriveIntent(root)
-                driveLauncher.launch(intent)
+                // Google Drive routes through OAuth + WebView Picker
+                // (drive.file scope, no verification). Other sources
+                // use the SAF picker with a deep-linked initial URI.
+                if (root.packageName == "com.google.android.apps.docs") {
+                    driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
+                } else {
+                    val intent = viewModel.buildDeepLinkedDriveIntent(root)
+                    driveLauncher.launch(intent)
+                }
                 viewModel.dismissPickerChooser()
             },
             onPickAnything = {

@@ -51,6 +51,9 @@ class PlaybackService : MediaSessionService() {
     lateinit var googleDriveProvider: GoogleDriveProvider
 
     @javax.inject.Inject
+    lateinit var driveOAuthProvider: com.powermediaplayer.cloud.DriveOAuthProvider
+
+    @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
 
 
@@ -152,7 +155,10 @@ class PlaybackService : MediaSessionService() {
             .setAllowCrossProtocolRedirects(true)
         val resolvingHttpFactory = ResolvingDataSource.Factory(httpFactory) { spec ->
             if (spec.uri.host?.contains("googleapis.com") == true) {
-                val token = googleDriveProvider.fetchAccessTokenBlocking()
+                // googleapis.com URLs only originate from the Drive REST
+                // provider (drive.file scope); the SAF provider returns
+                // content:// URIs that bypass HTTP entirely.
+                val token = driveOAuthProvider.fetchAccessTokenBlocking()
                 if (token != null) {
                     val newHeaders = spec.httpRequestHeaders.toMutableMap().apply {
                         put("Authorization", "Bearer $token")

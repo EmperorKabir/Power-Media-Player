@@ -125,4 +125,12 @@ object AppModule {
         @ApplicationContext context: Context,
         settingsDataStore: SettingsDataStore
     ): GoogleDriveProvider = GoogleDriveProvider(context, settingsDataStore)
+
+    @Provides
+    @Singleton
+    fun provideDriveOAuthProvider(
+        @ApplicationContext context: Context,
+        settingsDataStore: SettingsDataStore
+    ): com.powermediaplayer.cloud.DriveOAuthProvider =
+        com.powermediaplayer.cloud.DriveOAuthProvider(context, settingsDataStore)
 }

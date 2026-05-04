@@ -84,6 +84,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Drive Picker WebView host. Launched via startActivityForResult
+             from CloudBrowserScreen; receives an OAuth token in
+             EXTRA_OAUTH_TOKEN, returns picked folder ID + name. Single-
+             task so the back button cleanly returns to the cloud screen. -->
+        <activity
+            android:name=".cloud.DrivePickerActivity"
+            android:exported="false"
+            android:label="Pick a Drive folder"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
+            android:theme="@style/Theme.PowerMediaPlayer" />
+
         <!-- Media Playback Service -->
         <service
             android:name=".service.PlaybackService"

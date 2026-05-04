@@ -19,6 +19,7 @@ import com.powermediaplayer.util.M4bChapterParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +59,7 @@ data class CloudUiState(
 class CloudViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val driveProvider: GoogleDriveProvider,
+    private val driveOAuthProvider: com.powermediaplayer.cloud.DriveOAuthProvider,
     private val spotifyProvider: SpotifyProvider,
     private val playbackConnection: PlaybackConnection,
     private val settingsDataStore: SettingsDataStore,
@@ -98,9 +100,13 @@ class CloudViewModel @Inject constructor(
         // StateFlow.update {} to atomically read-modify-write so two
         // simultaneous emissions can't drop each other's changes.
         viewModelScope.launch {
-            combine(driveProvider.isLoggedIn, spotifyProvider.isLoggedIn) { d, s -> d to s }
-                .collect { (d, s) ->
-                    _uiState.update { it.copy(driveLoggedIn = d, spotifyLoggedIn = s) }
+            combine(
+                driveProvider.isLoggedIn,
+                driveOAuthProvider.isLoggedIn,
+                spotifyProvider.isLoggedIn
+            ) { saf, drive, sp -> Triple(saf || drive, sp, Unit) }
+                .collect { (anyDriveSource, sp, _) ->
+                    _uiState.update { it.copy(driveLoggedIn = anyDriveSource, spotifyLoggedIn = sp) }
                 }
         }
         viewModelScope.launch {
@@ -173,6 +179,31 @@ class CloudViewModel @Inject constructor(
 
     fun buildDriveSignInIntent(): Intent = driveProvider.buildSignInIntent()
     fun buildSpotifyAuthIntent(): Intent = spotifyProvider.buildAuthIntent()
+    fun buildDriveOAuthSignInIntent(): Intent = driveOAuthProvider.buildSignInIntent()
+
+    /** Process the Google Sign-In result. Returns true on success. */
+    suspend fun handleDriveOAuthResult(data: Intent?): Boolean {
+        val r = driveOAuthProvider.handleSignInResult(data)
+        if (r.isFailure) {
+            _uiState.update { it.copy(errorMessage = r.exceptionOrNull()?.message) }
+        }
+        return r.isSuccess
+    }
+
+    /**
+     * Fetch a Drive access token off-Main so the picker activity can
+     * inject it into the WebView. Returns null if not signed in.
+     */
+    suspend fun fetchDriveAccessToken(): String? = withContext(Dispatchers.IO) {
+        driveOAuthProvider.fetchAccessTokenBlocking()
+    }
+
+    /** Persist a folder picked via the Drive Picker WebView. */
+    fun rememberPickedDriveFolder(folderId: String, folderName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            driveOAuthProvider.rememberPickedFolder(folderId, folderName)
+        }
+    }
 
     /**
      * Populate [CloudUiState.pickerRoots] with every available
@@ -226,7 +257,16 @@ class CloudViewModel @Inject constructor(
                 isLoading = true,
                 activeProvider = CloudProviderType.GOOGLE_DRIVE
             )
-            val result = driveProvider.listFiles(folderId)
+            val result = if (folderId == null) {
+                // Root view: union of SAF tree URIs + Drive OAuth picked
+                // folders. Each appears as a virtual folder entry the
+                // user can tap into.
+                val safRoots = driveProvider.listFiles(null).getOrDefault(emptyList())
+                val driveRoots = driveOAuthProvider.listFiles(null).getOrDefault(emptyList())
+                Result.success(safRoots + driveRoots)
+            } else {
+                pickerForId(folderId).listFiles(folderId)
+            }
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 items = result.getOrDefault(emptyList()),
@@ -236,6 +276,17 @@ class CloudViewModel @Inject constructor(
             )
         }
     }
+
+    /**
+     * Decide which underlying provider owns [folderId]. Storage Access
+     * Framework tree URIs always start with `content://`; everything
+     * else (alphanumeric Drive IDs returned by the Picker) goes to the
+     * Drive REST provider. Used by browseDrive/search/openItem so the
+     * single CloudUiState can mix entries from both backends without
+     * the UI having to know the difference.
+     */
+    private fun pickerForId(folderId: String): com.powermediaplayer.cloud.CloudStorageProvider =
+        if (folderId.startsWith("content://")) driveProvider else driveOAuthProvider
 
     fun browseSpotify() {
         // Land on the section picker — empty items + spotifySection=null
@@ -307,7 +358,13 @@ class CloudViewModel @Inject constructor(
         val active = _uiState.value.activeProvider
         if (active == CloudProviderType.GOOGLE_DRIVE) {
             viewModelScope.launch(Dispatchers.IO) {
-                val result = driveProvider.listFiles(parent.first)
+                val result = if (parent.first == null) {
+                    val safRoots = driveProvider.listFiles(null).getOrDefault(emptyList())
+                    val driveRoots = driveOAuthProvider.listFiles(null).getOrDefault(emptyList())
+                    Result.success(safRoots + driveRoots)
+                } else {
+                    pickerForId(parent.first!!).listFiles(parent.first)
+                }
                 _uiState.value = _uiState.value.copy(
                     items = result.getOrDefault(emptyList()),
                     folderStack = stack.dropLast(1)
@@ -423,7 +480,9 @@ class CloudViewModel @Inject constructor(
         // token automatically for googleapis.com URLs.
         run {
             val streamResult = when (item.sourceProvider) {
-                CloudProviderType.GOOGLE_DRIVE -> driveProvider.getMediaStreamUri(item)
+                CloudProviderType.GOOGLE_DRIVE ->
+                    if (item.id.startsWith("content://")) driveProvider.getMediaStreamUri(item)
+                    else driveOAuthProvider.getMediaStreamUri(item)
                 CloudProviderType.SPOTIFY -> spotifyProvider.getMediaStreamUri(item)
                 else -> return false
             }
@@ -513,9 +572,11 @@ class CloudViewModel @Inject constructor(
                     //       structure (ftyp + moov + mdat), so partial
                     //       tail-only downloads can't actually be parsed.
                     //   (3) skip — file too big or already extracted
+                    val isSafItem = item.id.startsWith("content://")
                     var found = false
                     var tempFile = try {
-                        driveProvider.downloadToCache(item)
+                        if (isSafItem) driveProvider.downloadToCache(item)
+                        else driveOAuthProvider.downloadToCache(item)
                     } catch (_: Throwable) { null }
                     if (tempFile != null) {
                         found = parseAndApply(item, tempFile)
@@ -523,7 +584,8 @@ class CloudViewModel @Inject constructor(
                     }
                     if (!found) {
                         tempFile = try {
-                            driveProvider.downloadFullToCache(item)
+                            if (isSafItem) driveProvider.downloadFullToCache(item)
+                            else driveOAuthProvider.downloadFullToCache(item)
                         } catch (_: Throwable) { null }
                         if (tempFile != null) {
                             parseAndApply(item, tempFile)
@@ -622,8 +684,11 @@ class CloudViewModel @Inject constructor(
             val provider = _uiState.value.activeProvider
             val results = when {
                 query.isBlank() -> emptyList()
-                provider == CloudProviderType.GOOGLE_DRIVE ->
-                    driveProvider.searchFiles(query).getOrDefault(emptyList())
+                provider == CloudProviderType.GOOGLE_DRIVE -> {
+                    val safMatches = driveProvider.searchFiles(query).getOrDefault(emptyList())
+                    val driveMatches = driveOAuthProvider.searchFiles(query).getOrDefault(emptyList())
+                    safMatches + driveMatches
+                }
                 provider == CloudProviderType.SPOTIFY ->
                     spotifyProvider.search(query).getOrDefault(emptyList())
                 else -> emptyList()
@@ -643,7 +708,10 @@ class CloudViewModel @Inject constructor(
     }
 
     fun signOutDrive() {
-        viewModelScope.launch { driveProvider.signOut() }
+        viewModelScope.launch {
+            driveProvider.signOut()
+            driveOAuthProvider.signOut()
+        }
     }
 
     fun signOutSpotify() {

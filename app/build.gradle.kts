@@ -35,6 +35,12 @@ android {
         buildConfigField("String", "GDRIVE_ANDROID_CLIENT_ID", "\"${localProp("GDRIVE_ANDROID_CLIENT_ID")}\"")
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${localProp("SPOTIFY_CLIENT_ID")}\"")
         buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"${localProp("SPOTIFY_REDIRECT_URI")}\"")
+        // Drive Picker — JS Picker requires (a) the GCP project number
+        // ("App ID") and (b) a Google API Key restricted to Picker API.
+        // Both are public-by-design (the API key is restricted by API
+        // and origin, not by secrecy).
+        buildConfigField("String", "DRIVE_PICKER_APP_ID", "\"${localProp("DRIVE_PICKER_APP_ID")}\"")
+        buildConfigField("String", "DRIVE_PICKER_API_KEY", "\"${localProp("DRIVE_PICKER_API_KEY")}\"")
 
         // AppAuth needs the redirect URI scheme registered as a manifest
         // placeholder so its RedirectUriReceiverActivity can be auto-merged.
@@ -197,16 +203,20 @@ dependencies {
     implementation("com.google.code.gson:gson:2.12.1")
 
     // ── Cloud / OAuth ────────────────────────────────────────────
-    // AppAuth: PKCE OAuth flows with Custom Tabs (Spotify only — Drive
-    // moved to Storage Access Framework, no OAuth required).
+    // AppAuth: PKCE OAuth flows with Custom Tabs (Spotify).
     implementation("net.openid:appauth:0.11.1")
-    // OkHttp: Spotify Web API HTTP client.
+    // OkHttp: Spotify + Drive REST HTTP client.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // Storage Access Framework: DocumentFile wrapper for the system
-    // folder picker. Used by the cloud browser to enumerate user-granted
-    // Drive / OneDrive / Dropbox / USB folders without requiring per-
-    // provider OAuth or Google verification.
+    // Storage Access Framework — kept for OneDrive / Dropbox / USB /
+    // local-storage flow on devices whose SAF picker exposes those
+    // sources. (Drive uses its own JS Picker via WebView since the
+    // SAF picker hides Drive on some Samsung / fold builds.)
     implementation("androidx.documentfile:documentfile:1.0.1")
+    // Google Sign-In + drive.file OAuth — Google's official SDK
+    // returns OAuth tokens scoped to specific files/folders the user
+    // picks via the Drive Picker. No Google verification required
+    // because drive.file is non-sensitive.
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
 
     // ── Testing ──────────────────────────────────────────────────
     testImplementation("junit:junit:4.13.2")
