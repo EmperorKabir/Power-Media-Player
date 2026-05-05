@@ -81,6 +81,11 @@ class SettingsDataStore @Inject constructor(
 
         val LIBRARY_SORT_MODE = stringPreferencesKey("library_sort_mode")
 
+        // Cover-art scaling mode for the now-playing surface — "fit"
+        // (default; show whole cover with margins) or "fill" (no
+        // margins, may crop edges).
+        val ARTWORK_SCALE_MODE = stringPreferencesKey("artwork_scale_mode")
+
         // Storage Access Framework: tree URIs the user has granted via
         // ACTION_OPEN_DOCUMENT_TREE. Each entry is "treeUri|displayName".
         val DRIVE_PICKED_ROOTS = stringSetPreferencesKey("drive_picked_roots")
@@ -418,6 +423,22 @@ class SettingsDataStore @Inject constructor(
     suspend fun setCrossfadeMs(ms: Int) { context.dataStore.edit { it[Keys.CROSSFADE_MS] = ms } }
     suspend fun setResumeOnBt(v: Boolean) { context.dataStore.edit { it[Keys.RESUME_ON_BT] = v } }
     suspend fun setPrefetchNextCloud(v: Boolean) { context.dataStore.edit { it[Keys.PREFETCH_NEXT_CLOUD] = v } }
+
+    val artworkScaleMode: Flow<String> = context.dataStore.data.map {
+        // Coerce unknown values back to "fit" so older / corrupt entries
+        // never propagate an invalid ContentScale into the UI.
+        when (val v = it[Keys.ARTWORK_SCALE_MODE]) {
+            "fit", "fill" -> v
+            else -> "fit"
+        }
+    }
+
+    suspend fun setArtworkScaleMode(mode: String) {
+        val coerced = if (mode == "fill") "fill" else "fit"
+        context.dataStore.edit { prefs ->
+            prefs[Keys.ARTWORK_SCALE_MODE] = coerced
+        }
+    }
 
     /**
      * Synchronous snapshot of the Bluetooth mapping — used by
