@@ -311,6 +311,28 @@ class PlaybackService : MediaSessionService() {
             )
             .build()
 
+        // Defensive: snapshot the user's BT skip seconds so we can wire
+        // them into Player.seekForward() / seekBack() — used by any AVRCP
+        // path that bypasses our onPlayerCommandRequest interception.
+        // Snapshot synchronously with a short timeout so a sluggish
+        // DataStore can never ANR service start; defaults (30s/30s in
+        // BtMappingSnapshot) apply on timeout. Media3 1.6.0 only exposes
+        // these as Builder setters (no runtime mutation), so live changes
+        // to the BT seconds don't update the increments — but the live
+        // BT path is already covered by the callback in Tasks 1 & 2.
+        val initialBtMapping = runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(200) {
+                    settingsDataStore.btMappingSnapshot()
+                }
+            }
+        }.getOrNull() ?: BtMappingSnapshot(
+            prevAction = BluetoothMediaActions.PREV_TRACK,
+            nextAction = BluetoothMediaActions.NEXT_TRACK,
+            skipBackSeconds = 30,
+            skipForwardSeconds = 30
+        )
+
         // Build ExoPlayer with audio focus and wake lock.
         // Audio offload is left at the default (DISABLED) so AudioSink can
         // be re-initialised on sample-rate changes mid-stream — common in
@@ -327,6 +349,8 @@ class PlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setSeekBackIncrementMs(initialBtMapping.skipBackSeconds * 1000L)
+            .setSeekForwardIncrementMs(initialBtMapping.skipForwardSeconds * 1000L)
             .build()
 
         // PREVIOUS_SYNC always seeks to the keyframe BEFORE the requested
@@ -392,7 +416,11 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         // Keep the Bluetooth mapping snapshot fresh. Combine into a
-        // single Flow so we set the @Volatile field atomically.
+        // single Flow so we set the @Volatile field atomically. The
+        // Player's seek increments are set once at Builder time above
+        // (Media3 1.6.0 has no runtime setters); btMapping itself feeds
+        // applyAction on every BT press so live changes still take
+        // effect on the primary code path.
         serviceScope.launch {
             kotlinx.coroutines.flow.combine(
                 settingsDataStore.btPrevAction,
