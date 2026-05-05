@@ -546,6 +546,14 @@ class PlayerViewModel @Inject constructor(
 
     // ── EnvironmentalReverb (heavier than PresetReverb) ─────────────
     private var environmentalReverb: android.media.audiofx.EnvironmentalReverb? = null
+    // Most recent preset the user wants applied. Held independently
+    // of the actual effect attachment because EnvironmentalReverb's
+    // global-aux session (id = 0) can fail to attach on cold start
+    // with AudioFlinger error -3 ("Cannot initialize effect engine")
+    // before the audio pipeline has spun up. Whenever the player
+    // (re)connects we retry-apply this remembered preset.
+    @Volatile private var pendingReverbPreset: Int = 0
+    @Volatile private var reverbAttachInFlight: Boolean = false
 
     init {
         // Reactive: when the user changes the reverb preset in
@@ -553,23 +561,36 @@ class PlayerViewModel @Inject constructor(
         // current ExoPlayer audio session.
         viewModelScope.launch {
             settingsDataStore.reverbPreset.collect { preset ->
+                pendingReverbPreset = preset
                 applyReverbPreset(preset)
+            }
+        }
+        // Re-apply on player (re)connect. EqualizerEffectController
+        // uses the same hook to attach EQ; reverb piggy-backs because
+        // the underlying audio session becomes valid at the same
+        // moment.
+        viewModelScope.launch {
+            playbackConnection.playerFlow.collect { p ->
+                if (p != null && pendingReverbPreset != 0 && environmentalReverb == null) {
+                    applyReverbPreset(pendingReverbPreset)
+                }
             }
         }
     }
 
     /**
      * Map our 0–5 setting onto custom EnvironmentalReverb parameters.
-     * Switched from PresetReverb because the user wanted a noticeably
-     * stronger effect. EnvironmentalReverb exposes decayTime,
-     * reverbLevel, and other knobs that let us push beyond what the
-     * fixed Android presets allow:
-     *   - reverbLevel up to +2000 (max), versus PresetReverb's
-     *     baked-in modest gain;
-     *   - decayTime up to 20 000 ms for genuinely cavernous tails.
-     * Routing remains via ExoPlayer.setAuxEffectInfo at sendLevel=1.0
-     * so the reverbed signal mixes at unity gain on top of the dry
-     * output.
+     * Levels chosen so the wet bus is actually audible on phone
+     * speakers / earbuds: roomLevel = 0 (no master attenuation),
+     * reverbLevel = +2000 (platform max), reflectionsLevel near 0
+     * so early reflections — the cue the ear uses to identify "space"
+     * — aren't muted.
+     *
+     * Robustness: on cold start AudioFlinger may reject the global
+     * aux session with error -3. We retry up to 5×200 ms inside the
+     * VM scope; if all attempts fail we leave [pendingReverbPreset]
+     * set so the playerFlow observer above can retry on the next
+     * MediaController connect.
      */
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun applyReverbPreset(preset: Int) {
@@ -583,14 +604,11 @@ class PlayerViewModel @Inject constructor(
                         )
                     )
                 }
-                environmentalReverb?.release()
+                environmentalReverb?.runCatching { release() }
                 environmentalReverb = null
                 android.util.Log.i("PMP_DIAG", "Reverb off")
                 return
             }
-            // Per-preset tuning — chosen to be roughly 2× louder than
-            // the corresponding Android PresetReverb preset, which the
-            // user reported as too quiet to notice.
             data class ReverbSpec(
                 val decayMs: Int,
                 val decayHfRatio: Short,
@@ -601,28 +619,53 @@ class PlayerViewModel @Inject constructor(
                 val diffusion: Short
             )
             val spec = when (preset) {
-                1 -> ReverbSpec(decayMs = 1100, decayHfRatio = 830,
-                    reverbLevel = 1000, roomLevel = -800,
-                    reflectionsLevel = -1000, density = 600, diffusion = 1000)
-                2 -> ReverbSpec(decayMs = 2400, decayHfRatio = 700,
-                    reverbLevel = 1500, roomLevel = -500,
-                    reflectionsLevel = -1500, density = 800, diffusion = 1000)
-                3 -> ReverbSpec(decayMs = 4800, decayHfRatio = 600,
-                    reverbLevel = 1800, roomLevel = -200,
-                    reflectionsLevel = -2000, density = 900, diffusion = 1000)
-                4 -> ReverbSpec(decayMs = 1700, decayHfRatio = 1200,
-                    reverbLevel = 2000, roomLevel = -200,
-                    reflectionsLevel = -800, density = 700, diffusion = 1000)
-                5 -> ReverbSpec(decayMs = 9000, decayHfRatio = 500,
+                1 -> ReverbSpec(decayMs = 1200, decayHfRatio = 830,
                     reverbLevel = 2000, roomLevel = 0,
-                    reflectionsLevel = -2200, density = 1000, diffusion = 1000)
+                    reflectionsLevel = -300, density = 700, diffusion = 900)
+                2 -> ReverbSpec(decayMs = 2600, decayHfRatio = 700,
+                    reverbLevel = 2000, roomLevel = 0,
+                    reflectionsLevel = -200, density = 800, diffusion = 1000)
+                3 -> ReverbSpec(decayMs = 5500, decayHfRatio = 600,
+                    reverbLevel = 2000, roomLevel = 0,
+                    reflectionsLevel = -100, density = 900, diffusion = 1000)
+                4 -> ReverbSpec(decayMs = 1700, decayHfRatio = 1200,
+                    reverbLevel = 2000, roomLevel = 0,
+                    reflectionsLevel = 0, density = 600, diffusion = 1000)
+                5 -> ReverbSpec(decayMs = 10000, decayHfRatio = 500,
+                    reverbLevel = 2000, roomLevel = 0,
+                    reflectionsLevel = -100, density = 1000, diffusion = 1000)
                 else -> return
             }
-            val er = environmentalReverb
-                ?: android.media.audiofx.EnvironmentalReverb(0, 0).also {
-                    environmentalReverb = it
-                    it.enabled = true
+            val er = environmentalReverb ?: tryConstructEnvironmentalReverb()
+            if (er == null) {
+                // Construction failed; schedule a retry loop unless
+                // one is already pending. Keep pendingReverbPreset
+                // set so next playerFlow emission also tries.
+                if (!reverbAttachInFlight) {
+                    reverbAttachInFlight = true
+                    viewModelScope.launch {
+                        try {
+                            for (attempt in 1..5) {
+                                kotlinx.coroutines.delay(200)
+                                val want = pendingReverbPreset
+                                if (want == 0) return@launch
+                                val built = tryConstructEnvironmentalReverb()
+                                if (built != null) {
+                                    applyReverbPreset(want)
+                                    return@launch
+                                }
+                                android.util.Log.i(
+                                    "PMP_DIAG",
+                                    "Reverb retry $attempt/5 still pending preset=$want"
+                                )
+                            }
+                        } finally {
+                            reverbAttachInFlight = false
+                        }
+                    }
                 }
+                return
+            }
             er.decayTime = spec.decayMs
             er.decayHFRatio = spec.decayHfRatio
             er.reverbLevel = spec.reverbLevel
@@ -640,6 +683,17 @@ class PlayerViewModel @Inject constructor(
         } catch (t: Throwable) {
             android.util.Log.w("PMP_DIAG", "EnvironmentalReverb apply failed", t)
         }
+    }
+
+    private fun tryConstructEnvironmentalReverb(): android.media.audiofx.EnvironmentalReverb? {
+        return runCatching {
+            android.media.audiofx.EnvironmentalReverb(0, 0).also {
+                it.enabled = true
+                environmentalReverb = it
+            }
+        }.onFailure {
+            android.util.Log.w("PMP_DIAG", "EnvironmentalReverb construct failed (will retry)", it)
+        }.getOrNull()
     }
 
     // ── LoudnessEnhancer volume boost ─────────────────────────────

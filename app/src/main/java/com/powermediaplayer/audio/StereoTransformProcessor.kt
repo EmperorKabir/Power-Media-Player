@@ -71,17 +71,23 @@ class StereoTransformProcessor(
         }
 
         // Iterate by frame (4 bytes = 1 frame: int16 L + int16 R).
+        // Avoid per-frame Pair<Int,Int> allocations: at 48 kHz/2ch
+        // that would be ~96k Pair instances per second.
         val frames = byteCount / 4
+        val mono = monoEnabled
+        val flip = flipEnabled && !mono   // mono wins over flip
         for (i in 0 until frames) {
             val l = src.short.toInt()
             val r = src.short.toInt()
-            val (newL, newR) = when {
-                monoEnabled -> {
+            val newL: Int
+            val newR: Int
+            when {
+                mono -> {
                     val m = ((l + r) / 2).coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
-                    m to m
+                    newL = m; newR = m
                 }
-                flipEnabled -> r to l
-                else -> l to r
+                flip -> { newL = r; newR = l }
+                else -> { newL = l; newR = r }
             }
             out.putShort(newL.toShort())
             out.putShort(newR.toShort())

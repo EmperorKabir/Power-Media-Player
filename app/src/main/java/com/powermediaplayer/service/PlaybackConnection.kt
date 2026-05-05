@@ -176,6 +176,20 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var updateScheduled = false
 
+    // Caches for values that change only on discrete listener events,
+    // not on every position tick. Avoids walking the Timeline + Tracks
+    // (~hundreds of IPC calls/sec on long playlists) twice per second
+    // for data that didn't change.
+    @Volatile
+    private var cachedAudioFormatLabel: String = ""
+    @Volatile
+    private var cachedTotalPlaylistDurationMs: Long = 0L
+    /** Cumulative window-offset table built on every onTimelineChanged.
+     *  cachedWindowOffsetsMs[i] = sum of durationMs of windows 0..i-1.
+     *  cachedWindowOffsetsMs[length-1] = total playlist duration. */
+    @Volatile
+    private var cachedWindowOffsetsMs: LongArray = LongArray(0)
+
     // Reactive player reference — updates when the MediaController connects/disconnects.
     // Collected from the UI so VideoSurface attaches after the async connect completes.
     private val _playerFlow = MutableStateFlow<Player?>(null)
@@ -497,7 +511,7 @@ class PlaybackConnection @Inject constructor(
     fun previousChapterOrTrack() {
         val state = _playerState.value
         val isFolderMode = folderChapters != null
-        val absolutePos = controller?.let { calculatePlaylistPosition(it) } ?: 0L
+        val absolutePos = controller?.let { cachedPlaylistPosition(it) } ?: 0L
         val trackPos = controller?.currentPosition ?: 0L
         val referencePos = if (isFolderMode) absolutePos else trackPos
         if (state.hasChapters) {
@@ -583,13 +597,19 @@ class PlaybackConnection @Inject constructor(
             }
             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) { scheduleUpdate() }
             override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) { scheduleUpdate() }
-            override fun onTimelineChanged(timeline: Timeline, reason: Int) { scheduleUpdate() }
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                controller?.let { recomputeTimelineCache(it) }
+                scheduleUpdate()
+            }
             override fun onIsLoadingChanged(isLoading: Boolean) {
                 android.util.Log.i("PMP_DIAG", "evt loadingChanged=$isLoading")
                 scheduleUpdate()
             }
             // Track changes populate isVideoContent — must be listened to separately
-            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { scheduleUpdate() }
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                controller?.let { cachedAudioFormatLabel = describeAudioFormat(it) }
+                scheduleUpdate()
+            }
             override fun onMetadata(metadata: Metadata) {
                 val desc = extractDescription(metadata)
                 if (desc.isNotEmpty() && desc != _playerState.value.description) {
@@ -656,7 +676,7 @@ class PlaybackConnection @Inject constructor(
                     _playerState.value = currentState.copy(
                         currentPosition = c.currentPosition.coerceAtLeast(0L),
                         bufferedPercentage = c.bufferedPercentage,
-                        totalPlaylistPosition = calculatePlaylistPosition(c)
+                        totalPlaylistPosition = cachedPlaylistPosition(c)
                     )
                 }
                 delay(500)
@@ -681,7 +701,7 @@ class PlaybackConnection @Inject constructor(
         val itemMetadata = c.currentMediaItem?.mediaMetadata
         val chapters = extractChapters(c)
         val isFolderMode = folderChapters != null
-        val absolutePlaylistPos = calculatePlaylistPosition(c)
+        val absolutePlaylistPos = cachedPlaylistPosition(c)
         val currentChapter = if (isFolderMode) {
             chapters.indexOfLast { absolutePlaylistPos >= it.startTimeMs }
         } else {
@@ -745,8 +765,8 @@ class PlaybackConnection @Inject constructor(
             isLoading = c.isLoading,
             hasNext = c.hasNextMediaItem(),
             hasPrevious = c.hasPreviousMediaItem(),
-            totalPlaylistDuration = calculateTotalPlaylistDuration(c),
-            totalPlaylistPosition = calculatePlaylistPosition(c),
+            totalPlaylistDuration = cachedTotalPlaylistDurationMs,
+            totalPlaylistPosition = cachedPlaylistPosition(c),
             chapters = chapters,
             currentChapterIndex = currentChapter,
             hasChapters = chapters.isNotEmpty(),
@@ -760,7 +780,7 @@ class PlaybackConnection @Inject constructor(
                 (overArtworkBytes ?: metadata.artworkData) != null,
             isVideoContent = hasVideoTrack,
             isSeekable = c.isCurrentMediaItemSeekable,
-            audioFormatLabel = describeAudioFormat(c)
+            audioFormatLabel = cachedAudioFormatLabel
         )
     }
 
@@ -852,31 +872,40 @@ class PlaybackConnection @Inject constructor(
         } catch (_: Throwable) { "" }
     }
 
-    private fun calculateTotalPlaylistDuration(controller: MediaController): Long {
-        var total = 0L
+    /**
+     * Rebuilds [cachedWindowOffsetsMs] + [cachedTotalPlaylistDurationMs]
+     * from the current timeline. Called once per onTimelineChanged
+     * event (i.e. queue swap, playlist edit) — NOT on every position
+     * tick. cachedPlaylistPosition then reads the cumulative offset
+     * in O(1).
+     */
+    private fun recomputeTimelineCache(controller: MediaController) {
         val timeline = controller.currentTimeline
+        val n = timeline.windowCount
+        val offsets = LongArray(n + 1)
         val window = Timeline.Window()
-        for (i in 0 until timeline.windowCount) {
+        var total = 0L
+        for (i in 0 until n) {
             timeline.getWindow(i, window)
-            if (window.durationMs > 0) {
-                total += window.durationMs
-            }
+            offsets[i] = total
+            if (window.durationMs > 0) total += window.durationMs
         }
-        return total
+        offsets[n] = total
+        cachedWindowOffsetsMs = offsets
+        cachedTotalPlaylistDurationMs = total
     }
 
-    private fun calculatePlaylistPosition(controller: MediaController): Long {
-        var position = 0L
-        val timeline = controller.currentTimeline
-        val window = Timeline.Window()
-        for (i in 0 until controller.currentMediaItemIndex) {
-            timeline.getWindow(i, window)
-            if (window.durationMs > 0) {
-                position += window.durationMs
-            }
-        }
-        position += controller.currentPosition.coerceAtLeast(0L)
-        return position
+    /**
+     * O(1) absolute playlist position using the cached cumulative
+     * offsets. Falls through to 0L when the cache is empty (e.g.
+     * before the first onTimelineChanged) — equivalent to the old
+     * loop's behaviour on an empty timeline.
+     */
+    private fun cachedPlaylistPosition(controller: MediaController): Long {
+        val idx = controller.currentMediaItemIndex.coerceAtLeast(0)
+        val offsets = cachedWindowOffsetsMs
+        val base = if (idx < offsets.size) offsets[idx] else 0L
+        return base + controller.currentPosition.coerceAtLeast(0L)
     }
 
 }

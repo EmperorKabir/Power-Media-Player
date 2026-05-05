@@ -38,7 +38,9 @@ import com.powermediaplayer.data.db.entity.PlaybackStateEntity
     ],
     // v5: PlaybackHistory + HistoryFavourite switched to autogen IDs;
     // added HistoryBookmark + FavouriteBookmark snapshot tables.
-    version = 5,
+    // v6: BookmarkEntity gained an index on mediaUri (the only read
+    // predicate) — bumped to force schema regeneration.
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

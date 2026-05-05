@@ -487,7 +487,7 @@ fun CloudBrowserScreen(
                             }
                         }
                     }
-                    itemsIndexed(uiState.items, key = { idx, it -> "${it.id}_$idx" }) { _, item ->
+                    itemsIndexed(uiState.items, key = { _, it -> "${it.sourceProvider}_${it.id}" }) { _, item ->
                         val isDriveFolder = item.isFolder &&
                             item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
                         val isDriveTrack = !item.isFolder &&
