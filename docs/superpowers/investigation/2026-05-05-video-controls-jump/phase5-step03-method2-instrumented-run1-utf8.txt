@@ -1,0 +1,82 @@
+--------- beginning of main
+05-05 23:09:48.657 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=0 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:49.492 25138 25138 I PMP_DIAG: evt isPlayingChanged=true
+05-05 23:09:49.502 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=0 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:49.928 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=408 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:50.436 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=913 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:50.937 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=1416 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:51.438 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=1920 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:51.941 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=2423 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:52.445 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=2926 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:52.968 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=3306 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:53.701 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=3807 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:53.977 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=4309 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:54.481 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=4812 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:54.993 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=5324 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:55.027 25138 25138 I PMP_DIAG: seekTo target=52045ms
+05-05 23:09:55.027 25138 25138 I PMP_DIAG: evt playbackState=2
+05-05 23:09:55.027 25138 25138 I PMP_DIAG: evt isPlayingChanged=false
+05-05 23:09:55.041 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=52045 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:55.068 25138 25138 I PMP_DIAG: evt playbackState=3
+05-05 23:09:55.068 25138 25138 I PMP_DIAG: evt isPlayingChanged=true
+05-05 23:09:55.074 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=51689 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:55.491 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=52102 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:55.992 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=52605 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:56.501 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=53108 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:57.001 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=53611 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:57.501 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=54114 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:58.008 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=54620 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:58.601 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=55004 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:59.016 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=55508 dur=113661 chapStart=0 chapDur=113661
+05-05 23:09:59.516 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=56011 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:00.025 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=56515 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:00.234 25138 25138 I PMP_DIAG: SkipBtn click fwd=false sec=30 enabled=true
+05-05 23:10:00.234 25138 25138 I PMP_DIAG: VM.skipBack(30s)
+05-05 23:10:00.234 25138 25138 I PMP_DIAG: Conn.skipBack(30s) action=ACTION_SKIP_BACK_30 ctrl=true
+05-05 23:10:00.235 25138 25138 I PMP_DIAG: skip delta=-30000ms pos=56730ms base=56730ms target=26730ms pending=-1
+05-05 23:10:00.416 25138 25138 I PMP_DIAG: debounced seekTo target=26730ms
+05-05 23:10:00.420 25138 25138 I PMP_DIAG: evt playbackState=2
+05-05 23:10:00.420 25138 25138 I PMP_DIAG: evt isPlayingChanged=false
+05-05 23:10:00.426 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=26730 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:00.455 25138 25138 I PMP_DIAG: evt loadingChanged=true
+05-05 23:10:00.464 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=true pos=25835 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:00.465 25138 25138 I PMP_DIAG_VIDEO: loading-spinner-block ENTERED — adding 8dp Spacer + 24dp CircularProgressIndicator
+05-05 23:10:00.471 25138 25138 I PMP_DIAG: evt playbackState=3
+05-05 23:10:00.471 25138 25138 I PMP_DIAG: evt isPlayingChanged=true
+05-05 23:10:00.484 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=true pos=25855 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:00.486 25138 25138 I PMP_DIAG_VIDEO: loading-spinner-block ENTERED — adding 8dp Spacer + 24dp CircularProgressIndicator
+05-05 23:10:00.523 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=true pos=25889 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:00.526 25138 25138 I PMP_DIAG_VIDEO: loading-spinner-block ENTERED — adding 8dp Spacer + 24dp CircularProgressIndicator
+05-05 23:10:00.552 25138 25138 I PMP_DIAG: evt loadingChanged=false
+05-05 23:10:00.557 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=25844 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:01.025 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=26310 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:01.532 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=26815 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:02.032 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=27317 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:02.533 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=27819 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:03.083 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=28353 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:04.674 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=29827 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:05.081 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=30330 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:05.581 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=30832 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:06.081 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=31335 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:06.190 25138 25138 I PMP_DIAG: SkipBtn click fwd=true sec=30 enabled=true
+05-05 23:10:06.190 25138 25138 I PMP_DIAG: VM.skipForward(30s)
+05-05 23:10:06.191 25138 25138 I PMP_DIAG: Conn.skipForward(30s) action=ACTION_SKIP_FORWARD_30 ctrl=true
+05-05 23:10:06.191 25138 25138 I PMP_DIAG: skip delta=30000ms pos=31450ms base=31450ms target=61450ms pending=-1
+05-05 23:10:06.372 25138 25138 I PMP_DIAG: debounced seekTo target=61450ms
+05-05 23:10:06.376 25138 25138 I PMP_DIAG: evt playbackState=2
+05-05 23:10:06.376 25138 25138 I PMP_DIAG: evt isPlayingChanged=false
+05-05 23:10:06.382 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=61450 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:06.419 25138 25138 I PMP_DIAG: evt playbackState=3
+05-05 23:10:06.419 25138 25138 I PMP_DIAG: evt isPlayingChanged=true
+05-05 23:10:06.424 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=60631 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:06.583 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=60787 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:07.088 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=61289 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:07.589 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=61792 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:08.097 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=62295 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:08.597 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=62797 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:09.130 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=63323 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:11.438 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=65201 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:11.658 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=65706 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:12.105 25138 25138 I PMP_DIAG: evt isPlayingChanged=false
+05-05 23:10:12.112 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=66182 dur=113661 chapStart=0 chapDur=113661
+05-05 23:10:12.152 25138 25138 I PMP_DIAG_VIDEO: overlay-recompose isLoading=false pos=66191 dur=113661 chapStart=0 chapDur=113661
