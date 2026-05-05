@@ -1,5 +1,6 @@
 package com.powermediaplayer.ui.cloud
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -47,6 +48,16 @@ fun CloudBrowserScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // System back: walk back up the cloud directory stack one level at a
+    // time (delegate to viewModel.navigateUp which already encodes the
+    // provider-specific semantics — Spotify section drill-down, Drive
+    // folder pop, root → provider-selection). Only intercept when the
+    // user is inside a provider; at top-level provider selection, fall
+    // through so NavHost pops the Cloud tab back to Player.
+    BackHandler(enabled = uiState.activeProvider != null) {
+        viewModel.navigateUp()
+    }
 
     // Toast fires on every NEW non-null error message — guarantees the
     // user sees the failure even if they don't notice the inline banner.
