@@ -1,0 +1,418 @@
+--------- beginning of system
+05-06 00:01:44.832  2642  3174 I ActivityManager: Changes in 10246 19 to 11, 0 to 128
+05-06 00:01:44.833  2642  6936 I ActivityManager: Changes in 10246 11 to 19, 128 to 0
+05-06 00:01:44.840  2642  7666 I ActivityManager: Changes in 10246 19 to 8, 0 to 128
+05-06 00:01:44.845  2642  3984 I ActivityManager: Changes in 10246 8 to 10, 128 to 0
+05-06 00:01:45.001  2642  6937 D ActivityTaskManager: startActivityAsUser: callingPid=2642, callingUid=1000, caller=com.android.server.wm.ActivityTaskManagerService.startActivityAsUser:1 android.app.ContextImpl.startActivityAsUser:1217 android.app.ContextImpl.startActivityAsUser:1184 android.content.ContextWrapper.startActivityAsUser:453 com.android.server.telecom.CallsManager.maybeSendPostCallScreenIntent:7468 com.android.server.telecom.CallsManager.setCallState:5295 com.android.server.telecom.CallsManager.markCallAsDisconnected:4620 
+05-06 00:01:45.001  2642  6937 I ActivityTaskManager: START u0 {act=android.telecom.action.POST_CALL flg=0x10000000 xflg=0x4 pkg=com.samsung.android.dialer (has extras)} with LAUNCH_MULTIPLE from uid 1000 result code=-91
+05-06 00:01:45.002  2642  6937 D ActivityTaskManager: startActivity: reason=startActivityAsUser, result=-91
+05-06 00:01:45.012  2642  3174 I ActivityManager: Changes in 10346 19 to 11, 0 to 128
+05-06 00:01:45.012  2642  3174 I ActivityManager: Changes in 10246 19 to 11, 0 to 128
+05-06 00:01:45.012  2642  3174 I ActivityManager: Changes in 10143 19 to 11, 0 to 128
+05-06 00:01:45.016  2642  5702 I ActivityManager: Changes in 10246 11 to 19, 128 to 0
+05-06 00:01:45.017  2642  7666 I ActivityManager: Changes in 10346 11 to 19, 128 to 0
+05-06 00:01:45.018  2642  5702 I ActivityManager: Changes in 10246 19 to 8, 0 to 128
+05-06 00:01:45.021  2642 13529 I ActivityManager: Changes in 10055 10 to 5, 0 to 144
+05-06 00:01:45.027  2642  6936 I ActivityManager: Changes in 10143 11 to 19, 128 to 0
+05-06 00:01:45.030  2642  2642 I ActivityManager: Changes in 10246 8 to 10, 128 to 0
+05-06 00:01:45.072  2642  2642 I ActivityManager: Changes in 10124 19 to 19, 0 to 128
+05-06 00:01:45.361  2642  3174 I ActivityManager: Changes in 10053 19 to 11, 0 to 128
+05-06 00:01:45.364  2642  7691 I ActivityManager: Changes in 10053 11 to 3, 128 to 144
+05-06 00:01:45.573  2642  4060 I ActivityManager: Changes in 10120 10 to 8, 0 to 128
+05-06 00:01:46.961  2642  3167 I ActivityManager: Changes in 10492 3 to 15, 184 to 0
+05-06 00:01:46.962  2642  3167 I ActivityManager: Changes in 10116 5 to 15, 144 to 0
+05-06 00:01:47.039  2642  2642 I ActivityManager: Changes in 10513 3 to 3, 255 to 184
+05-06 00:01:47.040  2642  2642 I ActivityManager: Changes in 10064 5 to 10, 184 to 128
+05-06 00:01:47.040  2642  2642 I ActivityManager: Changes in 10127 5 to 6, 184 to 128
+05-06 00:01:47.045  2642  4772 I ActivityManager: Changes in 10513 3 to 3, 184 to 255
+05-06 00:01:47.173  2642  3167 I ActivityManager: Changes in 10357 5 to 15, 144 to 0
+05-06 00:01:47.682  2642  3984 I ActivityManager: Changes in 10120 8 to 10, 128 to 0
+05-06 00:01:49.904  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10463, drop=false
+05-06 00:01:50.095  2642  4772 I ActivityManager: Changes in 10097 6 to 5, 128 to 184
+05-06 00:01:50.402  2642  7691 D ActivityManager: sync unfroze 9262 com.samsung.cmh for 7
+05-06 00:01:50.403  2642  7691 I ActivityManager: Changes in 5004 19 to 5, 0 to 144
+05-06 00:01:50.410  2642  4772 I ActivityManager: Changes in 10116 15 to 5, 0 to 144
+05-06 00:01:50.416  2642  4772 I ActivityManager: Changes in 10346 19 to 5, 0 to 144
+05-06 00:01:50.442  2642  4542 I ActivityManager: Changes in 10328 6 to 10, 128 to 0
+05-06 00:01:50.740  2642  4094 D ActivityManager: Received BROADCAST intent 0x7b52f9f Key{broadcastIntent pkg=com.google.android.calendar intent=act=com.google.android.calendar.intent.action.MIDNIGHT id=2461167 xflg=0x4 cmp=com.google.android.calendar/com.google.android.apps.calendar.usernotificationsframework.common.UserNotificationBroadcastReceiver flags=0x4000000 u=0} requestCode=0 sent=0 from uid 1000
+05-06 00:01:50.741  2642  3174 I ActivityManager: Changes in 10285 19 to 11, 0 to 128
+05-06 00:01:50.741  2642  4094 D ActivityManager: Received BROADCAST intent 0x320f909 Key{broadcastIntent pkg=com.google.android.gms/com.google.android.gms.scheduler intent=act=com.google.android.gms.gcm.ACTION_CHECK_QUEUE xflg=0x4 pkg=com.google.android.gms cmp=com.google.android.gms/.gcm.nts.SchedulerInternalReceiver flags=0x2000000 u=0} requestCode=0 sent=0 from uid 1000
+05-06 00:01:50.780  2642  4772 I ActivityManager: Changes in 10285 11 to 19, 128 to 0
+05-06 00:01:51.015  2642  3167 I ActivityManager: Changes in 10064 10 to 15, 128 to 0
+05-06 00:01:51.370  2642  3167 I ActivityManager: Changes in 10053 3 to 15, 144 to 0
+05-06 00:01:51.624  2642  4078 D ActivityManager: freezing 13400 com.samsung.android.app.sharelive
+05-06 00:01:51.647  2642  3167 I ActivityManager: Changes in 10504 5 to 15, 144 to 0
+05-06 00:01:51.778  2642  3174 I ActivityManager: Changes in 10119 5 to 5, 184 to 144
+05-06 00:01:55.946  2642  7706 I ActivityManager: Changes in 10118 3 to 10, 184 to 0
+05-06 00:01:56.173  2642  3167 I ActivityManager: Changes in 10119 5 to 10, 144 to 128
+05-06 00:01:56.410  2642  3167 I ActivityManager: Changes in 5004 5 to 15, 144 to 0
+05-06 00:01:56.429  2642  3167 I ActivityManager: Changes in 10346 5 to 15, 144 to 0
+05-06 00:01:56.430  2642  3167 I ActivityManager: Changes in 10116 5 to 15, 144 to 0
+05-06 00:01:57.066  2642  4078 D ActivityManager: freezing 12898 com.samsung.crane
+05-06 00:01:57.067  2642  4078 D ActivityManager: freezing 12883 com.samsung.android.incallui
+05-06 00:01:58.169  2642  4060 I ActivityManager: Changes in 10237 19 to 19, 128 to 0
+05-06 00:02:00.441  2642  6937 I ActivityManager: Changes in 10097 5 to 6, 184 to 128
+05-06 00:02:01.730  2642  3167 I ActivityManager: Changes in 10055 5 to 15, 144 to 0
+05-06 00:02:02.162  2642  8634 I ActivityManager: Changes in 10055 15 to 5, 0 to 144
+05-06 00:02:02.193  2642 13680 I ActivityManager: Changes in 10124 19 to 5, 128 to 184
+05-06 00:02:02.198  2642  6937 I ActivityManager: Changes in 10124 5 to 10, 184 to 128
+05-06 00:02:02.207  2642 13680 D ActivityManager: sync unfroze 12883 com.samsung.android.incallui for 6
+05-06 00:02:02.211  2642 13680 I ActivityManager: Changes in 10513 3 to 3, 255 to 184
+05-06 00:02:02.212  2642  6937 I ActivityManager: Changes in 10513 3 to 3, 184 to 255
+05-06 00:02:02.212  2642  6937 I ActivityManager: Changes in 10266 19 to 5, 0 to 144
+05-06 00:02:02.213  2642 13680 I ActivityManager: Changes in 10064 15 to 5, 0 to 184
+05-06 00:02:02.213  2642  7706 I ActivityManager: Changes in 10513 3 to 3, 255 to 184
+05-06 00:02:02.213  2642  6936 I ActivityManager: Changes in 10513 3 to 3, 184 to 255
+05-06 00:02:02.214  2642 13680 I ActivityManager: Changes in 10119 10 to 5, 128 to 184
+05-06 00:02:02.215  2642 13680 D ActivityManager: sync unfroze 12898 com.samsung.crane for 6
+05-06 00:02:02.219  2642  3174 I ActivityManager: Changes in 10346 15 to 11, 0 to 128
+05-06 00:02:02.219  2642  3174 I ActivityManager: Changes in 10246 19 to 11, 0 to 128
+05-06 00:02:02.219  2642  3174 I ActivityManager: Changes in 10143 19 to 11, 0 to 128
+05-06 00:02:02.222  2642  6937 I ActivityManager: Changes in 10246 11 to 19, 128 to 0
+05-06 00:02:02.223  2642  6937 I ActivityManager: Changes in 10346 11 to 15, 128 to 0
+05-06 00:02:02.225  2642  3984 I ActivityManager: Changes in 10246 19 to 8, 0 to 128
+05-06 00:02:02.226  2642  2642 I ActivityManager: Changes in 10513 3 to 3, 255 to 184
+05-06 00:02:02.228  2642  7666 I ActivityManager: Changes in 10143 11 to 19, 128 to 0
+05-06 00:02:02.273  2642  2642 I ActivityManager: Changes in 10246 8 to 10, 128 to 0
+05-06 00:02:02.275  2642  3984 I ActivityManager: Changes in 10126 19 to 5, 0 to 144
+05-06 00:02:02.280  2642  7666 I ActivityManager: Changes in 10127 6 to 5, 128 to 184
+05-06 00:02:02.290  2642  7666 I ActivityManager: Changes in 10423 19 to 5, 0 to 144
+05-06 00:02:02.292  2642  4772 I ActivityManager: Background started FGS: Allowed [callingPackage: com.samsung.android.incallui; callingUid: 1001; uidState: PER ; uidBFSL: [BFSL]; intent: Intent { act=android.telecom.InCallService cmp=com.samsung.android.incallui/com.android.incallui.InCallServiceImpl }; code:PROC_STATE_PERSISTENT; tempAllowListReason:<,reasonCode:SYSTEM_ALLOW_LISTED,duration:9223372036854775807,callingUid:-1>; allowWiu:10; targetSdkVersion:36; callerTargetSdkVersion:36; startForegroundCount:0; bindFromPackage:null: isBindService:false]
+05-06 00:02:02.293  2642  4772 I ActivityManager: Changes in 10513 3 to 3, 184 to 255
+05-06 00:02:02.298  2642  6936 I ActivityManager: Background started FGS: Allowed [callingPackage: com.samsung.android.incallui; callingUid: 1001; uidState: PER ; uidBFSL: [BFSL]; intent: Intent { act=android.telecom.InCallService cmp=com.samsung.android.incallui/com.android.incallui.InCallServiceImpl }; code:PROC_STATE_PERSISTENT; tempAllowListReason:<,reasonCode:SYSTEM_ALLOW_LISTED,duration:9223372036854775807,callingUid:-1>; allowWiu:10; targetSdkVersion:36; callerTargetSdkVersion:36; startForegroundCount:1; bindFromPackage:null: isBindService:false]
+05-06 00:02:02.319  2642  4772 D ActivityTaskManager: startActivityAsUser: callingPid=12883, callingUid=1001, caller=com.android.server.wm.ActivityTaskManagerService.startActivity:123 android.app.IActivityTaskManager$Stub.onTransact:1507 com.android.server.wm.ActivityTaskManagerService.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 <bottom of call stack> <bottom of call stack> 
+05-06 00:02:02.320  2642  4772 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=null task null, skipping
+05-06 00:02:02.320  2642  4772 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=null display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:02.321  2642  4772 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t-1} task null, skipping
+05-06 00:02:02.321  2642  4772 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:02.323  2642  4772 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t-1} task null, skipping
+05-06 00:02:02.323  2642  4772 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:02.326  2642  4772 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{ecdf2d0 #510 type=standard A=1001:com.samsung.android.incallui} activity=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t-1} non-desktop, skipping
+05-06 00:02:02.326  2642  4772 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{ecdf2d0 #510 type=standard A=1001:com.samsung.android.incallui} activity=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-task=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:02.327  2642  4772 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{5404155 u0 com.sec.android.app.launcher/.activities.LauncherActivity t466}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:18 com.android.server.wm.TaskDisplayArea.positionChildAt:252 com.android.server.wm.Task.moveToFront:40 com.android.server.wm.ActivityStarter.startActivityInner:315 com.android.server.wm.ActivityStarter.startActivityUnchecked:205 
+05-06 00:02:02.327  2642  4772 D ActivityTaskManager: addStartingWindow: type=2 typeParameter=af
+05-06 00:02:02.328  2642  4772 I ActivityTaskManager: START u0 {flg=0x30040000 xflg=0x4 cmp=com.samsung.android.incallui/com.android.incallui.call.InCallActivity (has extras)} with LAUNCH_SINGLE_INSTANCE from uid 1001 (BAL_ALLOW_ALLOWLISTED_COMPONENT) result code=0
+05-06 00:02:02.334  2642  6936 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t510}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:52 com.android.server.wm.TaskFragment.setResumedActivity:75 com.android.server.wm.ActivityRecord.setState:116 com.android.server.wm.ActivityTaskSupervisor.realStartActivityLocked:497 com.android.server.wm.ActivityTaskSupervisor.startSpecificActivity:27 
+05-06 00:02:02.430  2642  3067 I ActivityTaskManager: done cause=notifyTransitionStarting drawn timestamp=13875153807466 info=TransitionInfo{17f1cd9 a=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t510} d=true}
+--------- beginning of main
+05-06 00:02:02.438  2642  3061 I ActivityTaskManager: Displayed com.samsung.android.incallui/com.android.incallui.call.InCallActivity for user 0: +104ms
+05-06 00:02:02.452  2642  5644 D ActivityManager: FCA:FCA recordedFileRss = 0, and changeinRss = 46284
+05-06 00:02:02.462  2642  5644 D ActivityManager: FCA:FCA recordedFileRss = 61832, and changeinRss = 2048
+05-06 00:02:02.495  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10504, drop=false
+05-06 00:02:02.496  2642  4092 I ActivityManager: Changes in 10504 15 to 5, 0 to 144
+05-06 00:02:02.542  2642  3175 I ActivityManager: Start proc 13746:com.samsung.android.callassistant/u0a62 for content provider {com.samsung.android.callassistant/com.samsung.android.callassistant.recordtranscript.provider.CallRecordingProvider}
+05-06 00:02:02.542  2642  3175 I ActivityManager: ProcessObserver broadcast disabled
+05-06 00:02:02.552  2642  3066 I ActivityManager: Changes in 10153 2 to 5, 255 to 184
+05-06 00:02:02.624  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10463, drop=false
+05-06 00:02:02.632  2642  4772 I ActivityManager: Changes in 10062 19 to 3, 0 to 144
+05-06 00:02:04.006  2642  3174 I ActivityManager: Changes in 10318 19 to 11, 0 to 128
+05-06 00:02:04.015  2642  4772 I ActivityManager: Changes in 10318 11 to 19, 128 to 0
+05-06 00:02:04.455  2642  4078 D ActivityManager: FCA:Reclamation for pid: 2599
+05-06 00:02:04.466  2642  4078 D ActivityManager: FCA:Reclamation for pid: 27135
+05-06 00:02:06.174  2642  3174 I ActivityManager: Changes in 10148 19 to 11, 0 to 128
+05-06 00:02:06.185  2642  6937 I ActivityManager: Changes in 10148 11 to 19, 128 to 0
+05-06 00:02:06.185  2642  3175 I ActivityManager: Start proc 13812:com.sec.hearingadjust/u0a46 for broadcast {com.sec.hearingadjust/com.sec.hearingadjust.receiver.AndroidMediaReceiver}
+05-06 00:02:06.186  2642  3175 I ActivityManager: ProcessObserver broadcast disabled
+05-06 00:02:06.204  2642  4772 E ActivityManager: Sending non-protected broadcast com.samsung.rcs.CALL_STATE_CHANGED from system 4583:com.android.phone/1001 pkg com.android.phone
+05-06 00:02:06.204  2642  4772 E ActivityManager: java.lang.Throwable
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at com.android.server.am.BroadcastController.checkBroadcastFromSystem(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:252)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at com.android.server.am.BroadcastController.broadcastIntentLockedTraced(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:344)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at com.android.server.am.BroadcastController.broadcastIntentLocked(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:18)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:149)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at android.app.IActivityManager$Stub.onTransact$broadcastIntentWithFeature$(IActivityManager.java:12274)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:3162)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at com.android.server.am.ActivityManagerService.onTransact(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:425)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at android.os.Binder.execTransactInternal(Binder.java:1462)
+05-06 00:02:06.204  2642  4772 E ActivityManager: 	at android.os.Binder.execTransact(Binder.java:1401)
+05-06 00:02:06.218  2642  3174 I ActivityManager: Changes in 10143 19 to 11, 0 to 128
+05-06 00:02:06.218  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10346, drop=false
+05-06 00:02:06.219  2642  3174 I ActivityManager: Changes in 10346 15 to 11, 0 to 128
+05-06 00:02:06.219  2642  3174 I ActivityManager: Changes in 10246 19 to 11, 0 to 128
+05-06 00:02:06.220  2642  7691 I ActivityManager: Changes in 10346 11 to 15, 128 to 0
+05-06 00:02:06.220  2642  7691 I ActivityManager: Changes in 10246 11 to 19, 128 to 0
+05-06 00:02:06.223  2642  6937 I ActivityManager: Changes in 10143 11 to 19, 128 to 0
+05-06 00:02:06.226  2642  7691 I ActivityManager: Changes in 10246 19 to 8, 0 to 128
+05-06 00:02:06.233  2642  7687 I ActivityManager: Changes in 10246 8 to 10, 128 to 0
+05-06 00:02:06.246  2642  3174 I ActivityManager: Changes in 10246 19 to 11, 0 to 128
+05-06 00:02:06.246  2642  7687 I ActivityManager: Changes in 10246 11 to 19, 128 to 0
+05-06 00:02:06.251  2642  7666 I ActivityManager: Changes in 10246 19 to 8, 0 to 128
+05-06 00:02:06.256  2642  2680 I ActivityManager: Changes in 10246 8 to 10, 128 to 0
+05-06 00:02:06.470  2642  7666 I ActivityManager: Changes in 10148 19 to 11, 0 to 128
+05-06 00:02:06.470  2642  7666 I ActivityManager: Changes in 10046 19 to 11, 0 to 128
+05-06 00:02:06.473  2642  7666 I ActivityManager: Changes in 10148 11 to 19, 128 to 0
+05-06 00:02:06.473  2642  7666 I ActivityManager: Changes in 10046 11 to 19, 128 to 0
+05-06 00:02:06.476  2642  3174 I ActivityManager: Changes in 10148 19 to 11, 0 to 128
+05-06 00:02:06.476  2642  3174 I ActivityManager: Changes in 10046 19 to 11, 0 to 128
+05-06 00:02:06.485  2642  7706 I ActivityManager: Changes in 10148 11 to 19, 128 to 0
+05-06 00:02:06.485  2642  7706 I ActivityManager: Changes in 10046 11 to 19, 128 to 0
+05-06 00:02:07.864  2642  3174 I ActivityManager: Changes in 10148 19 to 11, 0 to 128
+05-06 00:02:07.864  2642  3174 I ActivityManager: Changes in 10046 19 to 11, 0 to 128
+05-06 00:02:07.867  2642  7666 I ActivityManager: Changes in 10046 11 to 19, 128 to 0
+05-06 00:02:07.867  2642  3174 I ActivityManager: Changes in 10046 19 to 11, 0 to 128
+05-06 00:02:07.871  2642  7666 I ActivityManager: Changes in 10046 11 to 19, 128 to 0
+05-06 00:02:07.871  2642  7691 I ActivityManager: Changes in 10148 11 to 19, 128 to 0
+05-06 00:02:08.278  2642  3167 I ActivityManager: Changes in 10126 3 to 15, 144 to 0
+05-06 00:02:08.312  2642  3167 I ActivityManager: Changes in 10423 5 to 15, 144 to 0
+05-06 00:02:08.530  2642  3167 I ActivityManager: Changes in 10055 3 to 15, 144 to 0
+05-06 00:02:08.633  2642  3167 I ActivityManager: Changes in 10062 3 to 15, 144 to 0
+05-06 00:02:09.866  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10463, drop=false
+05-06 00:02:12.228  2642  5644 D ActivityManager: FCA:FCA recordedFileRss = 0, and changeinRss = 45644
+05-06 00:02:13.274  2642  2680 D ActivityManager: Received BROADCAST intent 0xc8e43c0 Key{broadcastIntent pkg=com.samsung.android.mcfds intent=act=com.samsung.android.ce.sensor.location.PASSIVE_INTENT xflg=0x4 pkg=com.samsung.android.mcfds flags=0x2000000 u=0} requestCode=20247613 sent=0 from uid 1000
+05-06 00:02:13.279  2642  7666 D ActivityManager: Received SERVICE intent 0xb88340b Key{startService pkg=com.google.android.gms/com.google.android.gms.findmydevice intent=act=com.google.android.gms.findmydevice.spot.locationreporting.ASSIGN_LOCATION cat=[targeted_intent_op_prefix:.findmydevice.spot.locationreporting.LocationAssigningIntentOperation,SelfLocationUpdate] dat= typ=*/* xflg=0x4 pkg=com.google.android.gms cmp=com.google.android.gms/.chimera.PersistentIntentOperationService clip={text/vnd.android.intent hasLabel(0) {I:xflg=0x4}} flags=0x2000000 u=0} requestCode=0 from uid 10281
+05-06 00:02:13.280  2642  7691 D ActivityManager: Received SERVICE intent 0x1f3fff4 Key{startService pkg=com.google.android.gms/current_semantic_location intent=act=com.google.android.gms.semanticlocation.ACTION_LOCATION xflg=0x4 cmp=com.google.android.gms/.semanticlocation.service.SemanticLocationService flags=0x2000000 u=0} requestCode=0 from uid 10281
+05-06 00:02:13.283  2642  7666 I ActivityManager: Changes in 10118 19 to 3, 0 to 184
+05-06 00:02:13.734  2642  3167 I ActivityManager: Changes in 10504 5 to 15, 144 to 0
+05-06 00:02:14.231  2642  4078 D ActivityManager: FCA:Reclamation for pid: 2599
+05-06 00:02:15.076  2642  4060 I ActivityManager: Changes in 10124 19 to 19, 128 to 0
+05-06 00:02:18.311  2642  7666 I ActivityManager: Changes in 10118 3 to 10, 184 to 0
+05-06 00:02:20.297  2642  4078 D ActivityManager: freezing 28375 com.android.settings
+05-06 00:02:20.298  2642  4078 D ActivityManager: freezing 28133 com.samsung.android.dqagent
+05-06 00:02:20.298  2642  4078 D ActivityManager: freezing 32015 com.samsung.android.lool
+05-06 00:02:20.299  2642  4078 D ActivityManager: freezing 20356 com.samsung.android.forest
+05-06 00:02:20.300  2642  4078 D ActivityManager: freezing 8189 com.samsung.android.provider.filterprovider
+05-06 00:02:20.301  2642  4078 D ActivityManager: freezing 8121 com.android.keychain
+05-06 00:02:20.301  2642  4078 D ActivityManager: freezing 10577 com.samsung.android.vtcamerasettings
+05-06 00:02:20.301  2642  4078 D ActivityManager: freezing 27451 com.samsung.android.fmm
+05-06 00:02:20.302  2642  4078 D ActivityManager: freezing 9256 com.samsung.android.smartface
+05-06 00:02:20.302  2642  4078 D ActivityManager: freezing 17481 com.samsung.android.da.daagent
+05-06 00:02:20.303  2642  4078 D ActivityManager: freezing 27372 com.samsung.sait.sohservice
+05-06 00:02:25.216  2642  3174 I ActivityManager: Changes in 10246 19 to 11, 0 to 128
+05-06 00:02:25.217  2642  7706 I ActivityManager: Changes in 10246 11 to 19, 128 to 0
+05-06 00:02:25.225  2642  7666 I ActivityManager: Changes in 10246 19 to 8, 0 to 128
+05-06 00:02:25.232  2642  2680 I ActivityManager: Changes in 10246 8 to 10, 128 to 0
+05-06 00:02:25.234  2642  7666 D ActivityTaskManager: startActivityAsUser: callingPid=2642, callingUid=1000, caller=com.android.server.wm.ActivityTaskManagerService.startActivityAsUser:1 android.app.ContextImpl.startActivityAsUser:1217 android.app.ContextImpl.startActivityAsUser:1184 android.content.ContextWrapper.startActivityAsUser:453 com.android.server.telecom.CallsManager.maybeSendPostCallScreenIntent:7468 com.android.server.telecom.CallsManager.setCallState:5295 com.android.server.telecom.CallsManager.markCallAsDisconnected:4620 
+05-06 00:02:25.234  2642  7666 I ActivityTaskManager: START u0 {act=android.telecom.action.POST_CALL flg=0x10000000 xflg=0x4 pkg=com.samsung.android.dialer (has extras)} with LAUNCH_MULTIPLE from uid 1000 result code=-91
+05-06 00:02:25.234  2642  7666 D ActivityTaskManager: startActivity: reason=startActivityAsUser, result=-91
+05-06 00:02:25.236  2642  7706 E ActivityManager: Sending non-protected broadcast com.samsung.rcs.CALL_STATE_CHANGED from system 4583:com.android.phone/1001 pkg com.android.phone
+05-06 00:02:25.236  2642  7706 E ActivityManager: java.lang.Throwable
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at com.android.server.am.BroadcastController.checkBroadcastFromSystem(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:252)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at com.android.server.am.BroadcastController.broadcastIntentLockedTraced(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:344)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at com.android.server.am.BroadcastController.broadcastIntentLocked(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:18)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at com.android.server.am.ActivityManagerService.broadcastIntentWithFeature(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:149)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at android.app.IActivityManager$Stub.onTransact$broadcastIntentWithFeature$(IActivityManager.java:12274)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:3162)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at com.android.server.am.ActivityManagerService.onTransact(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:425)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at android.os.Binder.execTransactInternal(Binder.java:1462)
+05-06 00:02:25.236  2642  7706 E ActivityManager: 	at android.os.Binder.execTransact(Binder.java:1401)
+05-06 00:02:25.248  2642  3174 D ActivityManager: sync unfroze 28375 com.android.settings for 3
+05-06 00:02:25.249  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10346, drop=false
+05-06 00:02:25.254  2642  3174 I ActivityManager: Changes in 10346 19 to 11, 0 to 128
+05-06 00:02:25.254  2642  3174 I ActivityManager: Changes in 10246 19 to 11, 0 to 128
+05-06 00:02:25.254  2642  3174 I ActivityManager: Changes in 10143 19 to 11, 0 to 128
+05-06 00:02:25.254  2642  7718 I ActivityManager: Changes in 10246 11 to 19, 128 to 0
+05-06 00:02:25.262  2642  7718 I ActivityManager: Changes in 10346 11 to 19, 128 to 0
+05-06 00:02:25.263  2642  6936 I ActivityManager: Changes in 10246 19 to 8, 0 to 128
+05-06 00:02:25.265  2642  6937 I ActivityManager: Changes in 10143 11 to 19, 128 to 0
+05-06 00:02:25.267  2642 13529 I ActivityManager: Changes in 10055 15 to 5, 0 to 144
+05-06 00:02:25.276  2642  2642 I ActivityManager: Changes in 10246 8 to 10, 128 to 0
+05-06 00:02:25.280  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10504, drop=false
+05-06 00:02:25.283  2642  4092 I ActivityManager: Changes in 10504 15 to 5, 0 to 144
+05-06 00:02:25.513  2642  3174 D ActivityManager: sync unfroze 28133 com.samsung.android.dqagent for 3
+05-06 00:02:25.804  2642  4060 I ActivityManager: Changes in 10124 19 to 8, 0 to 128
+05-06 00:02:25.808  2642  4060 I ActivityManager: Changes in 10120 19 to 8, 0 to 128
+05-06 00:02:25.810  2642  7706 I ActivityManager: Changes in 10124 8 to 10, 128 to 0
+05-06 00:02:26.416  2642  4078 D ActivityManager: freezing 9262 com.samsung.cmh
+05-06 00:02:26.632  2642  3066 I ActivityManager: Changes in 10153 5 to 2, 184 to 255
+05-06 00:02:26.633  2642  7691 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t510}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.endDeferResume:21 com.android.server.wm.WindowOrganizerController.applyTransaction:185 com.android.server.wm.WindowOrganizerController.applyTransaction:16 com.android.server.wm.WindowOrganizerController$$ExternalSyntheticLambda5.onCollectStarted:27 com.android.server.wm.TransitionController.startCollectOrQueue:113 
+05-06 00:02:26.634  2642  7691 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.handleTopResumedStateReleased:44 com.android.server.wm.ActivityClientController.activityTopResumedStateLost:14 android.app.IActivityClientController$Stub.onTransact:702 com.android.server.wm.ActivityClientController.onTransact:1 android.os.Binder.execTransactInternal:1457 
+05-06 00:02:26.888  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10463, drop=false
+05-06 00:02:26.980  2642  7691 W ActivityTaskManager: Finishing task with all activities already finished
+05-06 00:02:26.981  2642  7691 W ActivityTaskManager: Duplicate finish request for r=ActivityRecord{181253837 u0 com.samsung.android.incallui/com.android.incallui.call.InCallActivity t510 f}}
+05-06 00:02:27.172  2642  2680 W ActivityTaskManager: removeTask: No task remove with id=510
+05-06 00:02:27.284  2642  2642 I ActivityManager: Changes in 10064 5 to 10, 184 to 0
+05-06 00:02:27.285  2642  2642 I ActivityManager: Changes in 10266 5 to 10, 144 to 0
+05-06 00:02:27.285  2642  2642 I ActivityManager: Changes in 10127 5 to 6, 184 to 128
+05-06 00:02:27.287  2642  2642 I ActivityManager: Changes in 10513 5 to 5, 255 to 184
+05-06 00:02:27.301  2642  7691 I ActivityManager: Changes in 10513 5 to 5, 184 to 255
+05-06 00:02:27.867  2642  7718 I ActivityManager: Changes in 10120 8 to 10, 128 to 0
+05-06 00:02:28.318  2642  4078 D ActivityManager: freezing 11480 com.skms.android.agent:remote
+05-06 00:02:30.312  2642  7718 I ActivityManager: Changes in 10097 6 to 5, 128 to 184
+05-06 00:02:30.405  2642  7718 D ActivityManager: sync unfroze 9262 com.samsung.cmh for 7
+05-06 00:02:30.405  2642  7718 I ActivityManager: Changes in 5004 19 to 5, 0 to 144
+05-06 00:02:30.413  2642  7718 I ActivityManager: Changes in 10116 19 to 5, 0 to 144
+05-06 00:02:30.418  2642  7718 I ActivityManager: Changes in 10346 19 to 5, 0 to 144
+05-06 00:02:30.622  2642  7718 D ActivityTaskManager: startActivityAsUser: callingPid=31521, callingUid=10153, caller=com.android.server.wm.ActivityTaskManagerService.startActivity:123 android.app.IActivityTaskManager$Stub.onTransact:1507 com.android.server.wm.ActivityTaskManagerService.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 <bottom of call stack> <bottom of call stack> 
+05-06 00:02:30.624  2642  7718 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=null task null, skipping
+05-06 00:02:30.624  2642  7718 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=null display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:30.625  2642  7718 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{89976083 u0 com.sec.android.app.launcher/.activities.LauncherActivity t-1} task null, skipping
+05-06 00:02:30.625  2642  7718 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{89976083 u0 com.sec.android.app.launcher/.activities.LauncherActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:30.625  2642  7718 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{b84e656 #466 type=home I=com.sec.android.app.launcher/.activities.LauncherActivity} activity=ActivityRecord{89976083 u0 com.sec.android.app.launcher/.activities.LauncherActivity t-1} non-desktop, skipping
+05-06 00:02:30.625  2642  7718 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{b84e656 #466 type=home I=com.sec.android.app.launcher/.activities.LauncherActivity} activity=ActivityRecord{89976083 u0 com.sec.android.app.launcher/.activities.LauncherActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-task=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:30.625  2642  7718 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{b84e656 #466 type=home I=com.sec.android.app.launcher/.activities.LauncherActivity} activity=ActivityRecord{89976083 u0 com.sec.android.app.launcher/.activities.LauncherActivity t-1} non-desktop, skipping
+05-06 00:02:30.626  2642  7718 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{b84e656 #466 type=home I=com.sec.android.app.launcher/.activities.LauncherActivity} activity=ActivityRecord{89976083 u0 com.sec.android.app.launcher/.activities.LauncherActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-task=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:30.626  2642  7718 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:18 com.android.server.wm.TaskDisplayArea.positionChildAt:252 com.android.server.wm.WindowContainer.positionChildAt:84 com.android.server.wm.Task.positionChildAt:19 com.android.server.wm.Task.moveToFront:40 
+05-06 00:02:30.626  2642  7718 D ActivityTaskManager: addStartingWindow: type=0 typeParameter=36
+05-06 00:02:30.630  2642  7718 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.HOME] flg=0x10000000 xflg=0x4 cmp=com.sec.android.app.launcher/.activities.LauncherActivity (has extras)} with LAUNCH_SINGLE_TASK from uid 10153 (BAL_ALLOW_VISIBLE_WINDOW) result code=2
+05-06 00:02:30.634  2642  7718 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{5404155 u0 com.sec.android.app.launcher/.activities.LauncherActivity t466}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.handleTopResumedStateReleased:44 com.android.server.wm.ActivityClientController.activityTopResumedStateLost:14 android.app.IActivityClientController$Stub.onTransact:702 com.android.server.wm.ActivityClientController.onTransact:1 android.os.Binder.execTransactInternal:1457 
+05-06 00:02:30.672  2642  3067 I ActivityTaskManager: done cause=notifyTransitionStarting drawn timestamp=13903396193705 info=TransitionInfo{d72dd99 a=ActivityRecord{5404155 u0 com.sec.android.app.launcher/.activities.LauncherActivity t466} d=true}
+05-06 00:02:31.291  2642  3167 I ActivityManager: Changes in 10504 5 to 15, 144 to 0
+05-06 00:02:31.557  2642  7687 D ActivityTaskManager: startActivityAsUser: callingPid=31521, callingUid=10153, caller=com.android.server.wm.ActivityTaskManagerService.startActivity:123 android.app.IActivityTaskManager$Stub.onTransact:1507 com.android.server.wm.ActivityTaskManagerService.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 <bottom of call stack> <bottom of call stack> 
+05-06 00:02:31.557  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=null task null, skipping
+05-06 00:02:31.557  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=null display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:31.558  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{53194708 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t-1} task null, skipping
+05-06 00:02:31.558  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{53194708 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:31.558  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity} activity=ActivityRecord{53194708 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t-1} non-desktop, skipping
+05-06 00:02:31.558  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity} activity=ActivityRecord{53194708 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-task=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:31.558  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity} activity=ActivityRecord{53194708 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t-1} non-desktop, skipping
+05-06 00:02:31.558  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity} activity=ActivityRecord{53194708 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-task=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:31.559  2642  7687 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{5404155 u0 com.sec.android.app.launcher/.activities.LauncherActivity t466}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:18 com.android.server.wm.TaskDisplayArea.positionChildAt:252 com.android.server.wm.Task.moveToFront:40 com.android.server.wm.ActivityRecord.moveFocusableActivityToTop:251 com.android.server.wm.Task.moveTaskToFront:196 
+05-06 00:02:31.559  2642  7687 D ActivityTaskManager: addStartingWindow: type=0 typeParameter=1e
+05-06 00:02:31.561  2642  7687 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT] flg=0x10000000 xflg=0x4 cmp=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity bnds=[0,0][0,0]} with LAUNCH_SINGLE_TASK from uid 10153 (BAL_ALLOW_VISIBLE_WINDOW) result code=2
+05-06 00:02:31.562  2642  7687 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.handleTopResumedStateReleased:44 com.android.server.wm.ActivityClientController.activityTopResumedStateLost:14 android.app.IActivityClientController$Stub.onTransact:702 com.android.server.wm.ActivityClientController.onTransact:1 android.os.Binder.execTransactInternal:1457 
+05-06 00:02:31.578  2642  3067 I ActivityTaskManager: done cause=notifyTransitionStarting drawn timestamp=13904302548080 info=TransitionInfo{b03a834 a=ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473} d=true}
+05-06 00:02:31.579  2642  3066 I ActivityManager: Changes in 10119 5 to 5, 184 to 144
+05-06 00:02:31.588  2642  3066 I ActivityManager: Changes in 10119 5 to 5, 144 to 184
+05-06 00:02:31.736  2642  3066 I ActivityManager: Changes in 10119 5 to 5, 184 to 144
+05-06 00:02:31.737  2642  3066 I ActivityManager: Changes in 10119 5 to 5, 144 to 184
+05-06 00:02:32.790  2642  3984 D ActivityTaskManager: startActivityAsUser: callingPid=2642, callingUid=1000, caller=com.android.server.wm.ActivityTaskManagerService.startActivity:123 android.app.Instrumentation.execStartActivity:2010 android.app.ContextImpl.startActivity:1207 com.android.server.am.ActivityManagerService.doActiveLaunch:101 android.app.IActivityManager$Stub.onTransact:5087 com.android.server.am.ActivityManagerService.onTransact:425 android.os.Binder.execTransactInternal:1462 
+05-06 00:02:32.791  2642  3984 E ActivityTaskManager: Checking for the Active launch isPkgEverLaunched :true, isPkgStopped : true, isPkgSuspended : false
+05-06 00:02:32.791  2642  3984 D ActivityTaskManager: request preloading for newly launching app
+05-06 00:02:32.791  2642  3984 I ActivityManager: No activity to handle assist action.
+05-06 00:02:32.791  2642  3984 I ActivityManager: android.util.AndroidRuntimeException: Activity could not be started for Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10000000 xflg=0x4 pkg=com.powermediaplayer cmp=com.powermediaplayer/.MainActivity }
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at android.app.Instrumentation.checkStartActivityResult(Instrumentation.java:2509)
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at android.app.Instrumentation.execStartActivity(Instrumentation.java:2015)
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at android.app.ContextImpl.startActivity(ContextImpl.java:1207)
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at com.android.server.am.ActivityManagerService.doActiveLaunch(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:101)
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at android.app.IActivityManager$Stub.onTransact(IActivityManager.java:5087)
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at com.android.server.am.ActivityManagerService.onTransact(qb/108023582 999c05e5e863f5a91343e9c689fb95844edbcca50f200155ef5f15f7dea487dc:425)
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at android.os.Binder.execTransactInternal(Binder.java:1462)
+05-06 00:02:32.791  2642  3984 I ActivityManager: 	at android.os.Binder.execTransact(Binder.java:1401)
+05-06 00:02:32.791  2642  3984 D ActivityManager: starting Active launch
+05-06 00:02:32.829  2642  7687 D ActivityTaskManager: startActivityAsUser: callingPid=31521, callingUid=10153, caller=com.android.server.wm.ActivityTaskManagerService.startActivityAsUser:1 android.app.IActivityTaskManager$Stub.onTransact:1563 com.android.server.wm.ActivityTaskManagerService.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 <bottom of call stack> <bottom of call stack> 
+05-06 00:02:32.830  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=null task null, skipping
+05-06 00:02:32.830  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=null display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:32.832  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t-1} task null, skipping
+05-06 00:02:32.832  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:32.832  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t-1} task null, skipping
+05-06 00:02:32.832  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-source=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:32.833  2642  7687 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t-1} non-desktop, skipping
+05-06 00:02:32.833  2642  7687 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t-1} display-from-option=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-source=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:32.833  2642  7687 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:18 com.android.server.wm.TaskDisplayArea.positionChildAt:252 com.android.server.wm.Task.moveToFront:40 com.android.server.wm.TaskDisplayArea.moveHomeRootTaskToFront:9 com.android.server.wm.Task.moveToFront:28 
+05-06 00:02:32.834  2642  7687 D ActivityTaskManager: addStartingWindow: type=2 typeParameter=8b
+05-06 00:02:32.835  2642  7687 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10204000 xflg=0x4 cmp=com.powermediaplayer/.MainActivity} with LAUNCH_MULTIPLE from uid 10153 (sr=173265583) (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+05-06 00:02:32.847  2642  6936 I ActivityManager: Changes in 10119 5 to 5, 184 to 144
+05-06 00:02:32.850  2642  3066 I ActivityManager: Changes in 10119 5 to 5, 144 to 184
+05-06 00:02:32.854  2642  3175 I ActivityManager: Start proc 14085:com.powermediaplayer/u0a565 for next-top-activity {com.powermediaplayer/com.powermediaplayer.MainActivity}
+05-06 00:02:32.854  2642  3175 I ActivityManager: ProcessObserver broadcast disabled
+05-06 00:02:32.856  2642  3066 I ActivityManager: Changes in 10119 5 to 5, 184 to 144
+05-06 00:02:32.905  2642  7687 I ActivityManager: Changes in 10565 19 to 2, 0 to 255
+05-06 00:02:33.098  2642  2680 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t511}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:52 com.android.server.wm.TaskFragment.setResumedActivity:75 com.android.server.wm.ActivityRecord.setState:116 com.android.server.wm.ActivityTaskSupervisor.realStartActivityLocked:497 com.android.server.wm.RootWindowContainer.attachApplication:92 
+05-06 00:02:33.485  2642  3061 I ActivityTaskManager: Displayed com.powermediaplayer/.MainActivity for user 0: +653ms
+05-06 00:02:33.520  2642  7718 I ActivityManager: Changes in 10153 2 to 5, 255 to 184
+05-06 00:02:33.520  2642  7718 I ActivityManager: Changes in 10119 5 to 5, 144 to 184
+05-06 00:02:33.523  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10513, drop=false
+05-06 00:02:33.678  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10463, drop=false
+05-06 00:02:35.280  2642  4078 D ActivityManager: freezing 28375 com.android.settings
+05-06 00:02:35.528  2642  4078 D ActivityManager: freezing 28133 com.samsung.android.dqagent
+05-06 00:02:35.878  2642  7687 I ActivityManager: Changes in 10119 5 to 5, 184 to 144
+05-06 00:02:36.390  2642  3167 I ActivityManager: Changes in 10119 5 to 10, 144 to 0
+05-06 00:02:36.415  2642  3167 I ActivityManager: Changes in 5004 5 to 15, 144 to 0
+05-06 00:02:36.430  2642  3167 I ActivityManager: Changes in 10346 5 to 15, 144 to 0
+05-06 00:02:36.431  2642  3167 I ActivityManager: Changes in 10116 5 to 15, 144 to 0
+05-06 00:02:37.289  2642  4078 D ActivityManager: freezing 12898 com.samsung.crane
+05-06 00:02:37.425  2642  4078 D ActivityManager: freezing 12883 com.samsung.android.incallui
+05-06 00:02:39.257  2642  4078 D ActivityManager: freezing 13003 com.samsung.SMT
+05-06 00:02:40.437  2642  7718 I ActivityManager: Changes in 10097 5 to 6, 184 to 128
+05-06 00:02:40.586  2642  6936 D ActivityManager: sync unfroze 11480 com.skms.android.agent:remote for 5
+05-06 00:02:41.214  2642  7691 D ActivityTaskManager: startActivityAsUser: callingPid=14085, callingUid=10565, caller=com.android.server.wm.ActivityTaskManagerService.startActivity:123 android.app.IActivityTaskManager$Stub.onTransact:1507 com.android.server.wm.ActivityTaskManagerService.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 <bottom of call stack> <bottom of call stack> 
+05-06 00:02:41.215  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=null task null, skipping
+05-06 00:02:41.215  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=null display-area-from-current-params=null display-area-source-process=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:41.216  2642  7691 D ActivityTaskManager: Non-opaque activity is created, styleTranslucent=true, r=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity
+05-06 00:02:41.219  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t-1} task null, skipping
+05-06 00:02:41.219  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t-1} display-area-from-current-params=null display-area-for-launching-record=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:41.220  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t-1} non-desktop, skipping
+05-06 00:02:41.220  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t-1} display-from-task=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-task=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:41.220  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t-1} non-desktop, skipping
+05-06 00:02:41.220  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t-1} display-from-task=0 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-task=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:41.221  2642  7691 D ActivityTaskManager: addStartingWindow: type=0 typeParameter=2c
+05-06 00:02:41.221  2642  7691 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t511}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:18 com.android.server.wm.TaskFragment.setResumedActivity:75 com.android.server.wm.ActivityRecord.setState:91 com.android.server.wm.TaskFragment.startPausing:242 com.android.server.wm.TaskFragment.resumeTopActivity:710 
+05-06 00:02:41.222  2642  7691 I ActivityTaskManager: START u0 {flg=0x10000000 xflg=0x4 cmp=com.powermediaplayer/.service.SpotifyBounceBridgeActivity} with LAUNCH_MULTIPLE from uid 10565 (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+05-06 00:02:41.228  2642  7706 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t511}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:52 com.android.server.wm.TaskFragment.setResumedActivity:75 com.android.server.wm.ActivityRecord.setState:116 com.android.server.wm.ActivityTaskSupervisor.realStartActivityLocked:497 com.android.server.wm.ActivityTaskSupervisor.startSpecificActivity:27 
+05-06 00:02:41.230  2642  7706 I ActivityManager: Background started FGS: Allowed [callingPackage: com.powermediaplayer; callingUid: 10565; uidState: TOP ; uidBFSL: [BFSL]; intent: Intent { xflg=0x4 cmp=com.powermediaplayer/.service.SpotifyBounceService }; code:PROC_STATE_TOP; tempAllowListReason:<null>; allowWiu:12; targetSdkVersion:35; callerTargetSdkVersion:35; startForegroundCount:0; bindFromPackage:null: isBindService:false]
+05-06 00:02:41.232  2642  6936 D ActivityTaskManager: startActivityAsUser: callingPid=14085, callingUid=10565, caller=com.android.server.wm.ActivityTaskManagerService.startActivity:123 android.app.IActivityTaskManager$Stub.onTransact:1507 com.android.server.wm.ActivityTaskManagerService.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 <bottom of call stack> <bottom of call stack> 
+05-06 00:02:41.233  2642  6936 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=null task null, skipping
+05-06 00:02:41.233  2642  6936 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=null display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:41.233  2642  6936 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t-1} task null, skipping
+05-06 00:02:41.233  2642  6936 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t-1} display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:41.233  2642  6936 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t-1} task null, skipping
+05-06 00:02:41.233  2642  6936 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t-1} display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-source=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:41.234  2642  6936 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{c6e345d #512 type=standard A=10366:com.spotify.music} activity=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t-1} non-desktop, skipping
+05-06 00:02:41.234  2642  6936 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{c6e345d #512 type=standard A=10366:com.spotify.music} activity=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t-1} display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-source=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:41.235  2642  6936 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t511}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:18 com.android.server.wm.TaskDisplayArea.positionChildAt:252 com.android.server.wm.Task.moveToFront:40 com.android.server.wm.ActivityStarter.startActivityInner:315 com.android.server.wm.ActivityStarter.startActivityUnchecked:205 
+05-06 00:02:41.235  2642  6936 D ActivityTaskManager: addStartingWindow: type=2 typeParameter=ab
+05-06 00:02:41.236  2642  6936 I ActivityTaskManager: START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10050000 xflg=0x4 pkg=com.spotify.music cmp=com.spotify.music/.MainActivity} with LAUNCH_SINGLE_TASK from uid 10565 (sr=10414907) (BAL_ALLOW_VISIBLE_WINDOW) result code=0
+05-06 00:02:41.250  2642  3175 I ActivityManager: Start proc 14219:com.spotify.music/u0a366 for next-top-activity {com.spotify.music/com.spotify.music.MainActivity}
+05-06 00:02:41.255  2642  3175 I ActivityManager: ProcessObserver broadcast disabled
+05-06 00:02:41.266  2642  6936 I ActivityTaskManager: Process com.spotify.music restarted
+05-06 00:02:41.268  2642  6936 I ActivityManager: Changes in 10366 19 to 2, 0 to 255
+05-06 00:02:41.360  2642  4772 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t512}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:52 com.android.server.wm.TaskFragment.setResumedActivity:75 com.android.server.wm.ActivityRecord.setState:116 com.android.server.wm.ActivityTaskSupervisor.realStartActivityLocked:497 com.android.server.wm.RootWindowContainer.attachApplication:92 
+05-06 00:02:41.416  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10399, drop=false
+05-06 00:02:41.418  2642  4772 I ActivityManager: Changes in 10399 19 to 3, 0 to 144
+05-06 00:02:41.467  2642  7687 I ActivityManager: Changes in 10118 19 to 3, 0 to 184
+05-06 00:02:41.467  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10118, drop=false
+05-06 00:02:41.512  2642  3061 I ActivityTaskManager: Displayed com.spotify.music/.MainActivity for user 0: +298ms
+05-06 00:02:41.522  2642  5680 I ActivityManager: Changes in 10266 19 to 3, 0 to 144
+05-06 00:02:41.525  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10280, drop=false
+05-06 00:02:41.536  2642  3066 I ActivityManager: Changes in 10565 2 to 4, 255 to 248
+05-06 00:02:41.635  2642  3175 I ActivityManager: Start proc 14404:com.google.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0/u0i37 for  {com.spotify.music/org.chromium.content.app.SandboxedProcessService0:0}
+05-06 00:02:41.635  2642  3175 I ActivityManager: ProcessObserver broadcast disabled
+05-06 00:02:41.659  2642  7666 I ActivityManager: Changes in 99037 19 to 3, 0 to 184
+05-06 00:02:41.712  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10463, drop=false
+05-06 00:02:41.877  2642  3167 I ActivityManager: Changes in 10055 5 to 15, 144 to 0
+05-06 00:02:42.071  2642  3061 I ActivityTaskManager: Fully drawn com.spotify.music/.MainActivity: +856ms
+05-06 00:02:42.736  2642  7691 D ActivityTaskManager: startActivityAsUser: callingPid=14085, callingUid=10565, caller=com.android.server.wm.ActivityTaskManagerService.startActivity:123 android.app.IActivityTaskManager$Stub.onTransact:1507 com.android.server.wm.ActivityTaskManagerService.onTransact:1 android.os.Binder.execTransactInternal:1457 android.os.Binder.execTransact:1401 <bottom of call stack> <bottom of call stack> 
+05-06 00:02:42.737  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=null task null, skipping
+05-06 00:02:42.737  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=null display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:42.738  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=null activity=ActivityRecord{74785668 u0 com.powermediaplayer/.MainActivity t-1} task null, skipping
+05-06 00:02:42.738  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=null activity=ActivityRecord{74785668 u0 com.powermediaplayer/.MainActivity t-1} display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739
+05-06 00:02:42.738  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{74785668 u0 com.powermediaplayer/.MainActivity t-1} non-desktop, skipping
+05-06 00:02:42.738  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{74785668 u0 com.powermediaplayer/.MainActivity t-1} display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-source=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:42.738  2642  7691 D ActivityTaskManager: DesktopModeLaunchParamsModifier: task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{74785668 u0 com.powermediaplayer/.MainActivity t-1} non-desktop, skipping
+05-06 00:02:42.738  2642  7691 D ActivityTaskManager: TaskLaunchParamsModifier:task=Task{89146bc #511 type=standard A=10565:com.powermediaplayer} activity=ActivityRecord{74785668 u0 com.powermediaplayer/.MainActivity t-1} display-area-from-source=DefaultTaskDisplayArea_d0@151765739 display-id=0 task-display-area-windowing-mode=1 suggested-display-area=DefaultTaskDisplayArea_d0@151765739 inherit-from-source=fullscreen non-freeform-task-display-area display-area=DefaultTaskDisplayArea_d0@151765739 default-portrait freeform-size-mismatch=Rect(601, 523 - 1584, 1409)
+05-06 00:02:42.738  2642  7691 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=false, r=ActivityRecord{188263988 u0 com.spotify.music/.MainActivity t512}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateLossIfNeeded:19 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:18 com.android.server.wm.TaskDisplayArea.positionChildAt:252 com.android.server.wm.Task.moveToFront:40 com.android.server.wm.ActivityRecord.moveFocusableActivityToTop:251 com.android.server.wm.Task.moveTaskToFront:196 
+05-06 00:02:42.739  2642  7691 D ActivityTaskManager: addStartingWindow: type=2 typeParameter=b6
+05-06 00:02:42.740  2642  7691 I ActivityTaskManager: START u0 {flg=0x34010000 xflg=0x4 cmp=com.powermediaplayer/.MainActivity} with LAUNCH_MULTIPLE from uid 10565 (sr=10414907) (BAL_ALLOW_GRACE_PERIOD) result code=2
+05-06 00:02:42.741  2642  5680 W ActivityTaskManager: Duplicate finish request for r=ActivityRecord{10414907 u0 com.powermediaplayer/.service.SpotifyBounceBridgeActivity t511 f}}
+05-06 00:02:42.748  2642  7691 D ActivityTaskManager: scheduleTopResumedActivityChanged, onTop=true, r=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t511}, caller=com.android.server.wm.ActivityTaskSupervisor.scheduleTopResumedActivityStateIfNeeded:18 com.android.server.wm.ActivityTaskSupervisor.updateTopResumedActivityIfNeeded:52 com.android.server.wm.TaskFragment.setResumedActivity:75 com.android.server.wm.ActivityRecord.setState:116 com.android.server.wm.TaskFragment.resumeTopActivity:1718 com.android.server.wm.Task.resumeTopActivityInnerLocked:174 
+05-06 00:02:42.763  2642  7691 I ActivityManager: Changes in 10565 4 to 2, 248 to 255
+05-06 00:02:42.790  2642  3067 I ActivityTaskManager: done cause=notifyWindowsDrawn timestamp=13915514040003 info=TransitionInfo{2aee4a4 a=ActivityRecord{80870030 u0 com.powermediaplayer/.MainActivity t511} d=true}
+05-06 00:02:43.030  2642  3066 I ActivityManager: Changes in 99037 3 to 10, 184 to 128
+05-06 00:02:43.030  2642  3066 I ActivityManager: Changes in 10399 3 to 10, 144 to 128
+05-06 00:02:43.030  2642  3066 I ActivityManager: Changes in 10366 2 to 10, 255 to 128
+05-06 00:02:43.030  2642  3066 I ActivityManager: Changes in 10266 3 to 10, 144 to 128
+05-06 00:02:43.030  2642  3066 I ActivityManager: Changes in 10118 3 to 10, 184 to 128
+05-06 00:02:43.100  2642  6937 I ActivityManager: Changes in 99037 10 to 10, 128 to 0
+05-06 00:02:43.100  2642  6937 I ActivityManager: Changes in 10399 10 to 10, 128 to 0
+05-06 00:02:43.100  2642  6937 I ActivityManager: Changes in 10366 10 to 10, 128 to 0
+05-06 00:02:43.100  2642  6937 I ActivityManager: Changes in 10266 10 to 10, 128 to 0
+05-06 00:02:43.100  2642  6937 I ActivityManager: Changes in 10118 10 to 10, 128 to 0
+05-06 00:02:43.174  2642  3174 I ActivityManager: Changes in 99037 10 to 10, 0 to 128
+05-06 00:02:43.174  2642  3174 I ActivityManager: Changes in 10399 10 to 10, 0 to 128
+05-06 00:02:43.174  2642  3174 I ActivityManager: Changes in 10366 10 to 10, 0 to 128
+05-06 00:02:43.174  2642  3174 I ActivityManager: Changes in 10266 10 to 10, 0 to 128
+05-06 00:02:43.174  2642  3174 I ActivityManager: Changes in 10118 10 to 10, 0 to 128
+05-06 00:02:43.185  2642  7691 I ActivityManager: Changes in 99037 10 to 10, 128 to 0
+05-06 00:02:43.185  2642  7691 I ActivityManager: Changes in 10399 10 to 10, 128 to 0
+05-06 00:02:43.185  2642  7691 I ActivityManager: Changes in 10366 10 to 10, 128 to 0
+05-06 00:02:43.185  2642  7691 I ActivityManager: Changes in 10266 10 to 10, 128 to 0
+05-06 00:02:43.185  2642  7691 I ActivityManager: Changes in 10118 10 to 10, 128 to 0
+05-06 00:02:45.300  2642  3174 I ActivityManager: Changes in 99037 10 to 10, 0 to 128
+05-06 00:02:45.300  2642  3174 I ActivityManager: Changes in 10399 10 to 10, 0 to 128
+05-06 00:02:45.300  2642  3174 I ActivityManager: Changes in 10366 10 to 10, 0 to 128
+05-06 00:02:45.300  2642  3174 I ActivityManager: Changes in 10266 10 to 10, 0 to 128
+05-06 00:02:45.300  2642  3174 I ActivityManager: Changes in 10118 10 to 10, 0 to 128
+05-06 00:02:45.308  2642  7691 I ActivityManager: Background started FGS: Allowed [callingPackage: com.spotify.music; callingUid: 10366; uidState: TOP ; uidBFSL: [BFSL]; intent: Intent { xflg=0x4 cmp=com.spotify.music/com.spotify.musicappplatform.state.foregroundkeeperservice.impl.ForegroundKeeperService (has extras) }; code:PROC_STATE_TOP; tempAllowListReason:<null>; allowWiu:12; targetSdkVersion:36; callerTargetSdkVersion:36; startForegroundCount:0; bindFromPackage:null: isBindService:false]
+05-06 00:02:45.309  2642  7691 I ActivityManager: Changes in 99037 10 to 4, 128 to 184
+05-06 00:02:45.309  2642  7691 I ActivityManager: Changes in 10399 10 to 5, 128 to 144
+05-06 00:02:45.309  2642  7691 I ActivityManager: Changes in 10366 10 to 4, 128 to 248
+05-06 00:02:45.309  2642  7691 I ActivityManager: Changes in 10266 10 to 5, 128 to 144
+05-06 00:02:45.309  2642  7691 I ActivityManager: Changes in 10118 10 to 4, 128 to 184
+05-06 00:02:45.314  2642  5636 D ActivityManager: unpendingScheduleServiceRestart: u=10504, drop=false
+05-06 00:02:45.315  2642  4092 I ActivityManager: Changes in 10504 15 to 5, 0 to 144
+05-06 00:02:45.361  2642  4389 I ActivityManager: Changes in 10148 19 to 5, 0 to 144
+05-06 00:02:46.689  2642  4094 D ActivityManager: Received BROADCAST intent 0x320f909 Key{broadcastIntent pkg=com.google.android.gms/com.google.android.gms.scheduler intent=act=com.google.android.gms.gcm.ACTION_CHECK_QUEUE xflg=0x4 pkg=com.google.android.gms cmp=com.google.android.gms/.gcm.nts.SchedulerInternalReceiver flags=0x2000000 u=0} requestCode=0 sent=0 from uid 1000
+05-06 00:02:47.598  2642  3167 I ActivityManager: Changes in 10399 5 to 15, 144 to 0
+05-06 00:02:49.525  2642  3167 I ActivityManager: Changes in 10266 5 to 15, 144 to 0
+05-06 00:02:51.364  2642  3167 I ActivityManager: Changes in 10148 5 to 15, 144 to 0
+05-06 00:02:51.695  2642  3167 I ActivityManager: Changes in 10504 5 to 15, 144 to 0
+05-06 00:02:58.105  2642  5702 I ActivityManager: Changes in 10118 4 to 19, 184 to 0

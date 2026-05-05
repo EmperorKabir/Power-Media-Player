@@ -8,21 +8,24 @@ import android.os.Looper
 import com.powermediaplayer.MainActivity
 
 /**
- * INVESTIGATION-PROTOTYPE for fix-shape (c) of the cold-start bounce
- * RCA at docs/superpowers/investigation/2026-05-05-spotify-cold-start-bounce/.
+ * Translucent bridge activity that owns the Spotify auto-launch and the
+ * deferred bounce-back. Lives in MainActivity's task (no taskAffinity
+ * override) so the deferred startActivity falls under Android's
+ * BAL grace-period exemption (system logs the launch as
+ * `BAL_ALLOW_GRACE_PERIOD`).
  *
- * Theory: Samsung One UI's `balDontBringExistingBackgroundTaskStackToFg`
- * policy + `realInVisibleTask=false` rejects our 1500-ms-deferred
- * bouncePi.send() because by the time it fires, our task isn't visible
- * (Spotify slid in front). If we instead launch a translucent, no-history
- * activity OF OURS first, then have *that* activity launch Spotify and
- * schedule the bounce, the bridge is the actual caller of the bounce
- * intent. Whether Samsung's policy honours "task contained a recently-
- * visible activity" is the empirical question this prototype answers.
+ * Background: the previous PendingIntent.send-from-pollScope approach
+ * was BAL_BLOCK'd by Samsung One UI's
+ * `balDontBringExistingBackgroundTaskStackToFg=true` policy on cold
+ * start (see RCA at
+ * docs/superpowers/investigation/2026-05-05-spotify-cold-start-bounce/).
+ * This bridge sidesteps that policy because the bounce intent's caller
+ * is an Activity (this one) that was visible ≤ 1.5 s before the bounce,
+ * which qualifies for the BAL grace period.
  *
- * If a cold-start run with this bridge in place still emits BAL_BLOCK in
- * ActivityTaskManager, the prototype has falsified fix-shape (c) and we
- * fall back to (b). If the run shows BAL_ALLOW, ship.
+ * MUST NOT have `noHistory=true` in the manifest — that auto-finishes
+ * the bridge the moment Spotify takes foreground, killing the deferred
+ * handler before the bounce can fire (verified empirically).
  */
 class SpotifyBounceBridgeActivity : Activity() {
 

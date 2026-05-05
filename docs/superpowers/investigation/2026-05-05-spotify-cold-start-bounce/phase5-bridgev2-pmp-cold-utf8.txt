@@ -1,0 +1,71 @@
+--------- beginning of main
+05-06 00:02:33.323 14085 14085 I PMP_DIAG: CoverArt skip: hasCoverArt=false artworkUri=null
+05-06 00:02:33.487 14085 14085 I PMP_DIAG: DriveOAuth attached account=bhasin.kabir@gmail.com
+05-06 00:02:33.488 14085 14085 I PMP_DIAG: PlaybackService renderer mode swPreferred=false extMode=0
+05-06 00:02:33.710 14085 14085 I PMP_DIAG: audioDelayMs=0 (logged; no-op until audio renderer)
+05-06 00:02:33.710 14085 14085 I PMP_DIAG: subtitleDelayMs=0 (logged; no-op until subtitle pipeline)
+05-06 00:02:33.711 14085 14085 I PMP_DIAG: Reverb off
+05-06 00:02:33.711 14085 14085 I PMP_DIAG: audioDelayMs=0 (logged; no-op until audio renderer)
+05-06 00:02:33.711 14085 14085 I PMP_DIAG: subtitleDelayMs=0 (logged; no-op until subtitle pipeline)
+05-06 00:02:33.711 14085 14085 I PMP_DIAG: Reverb off
+05-06 00:02:40.739 14085 14113 I PMP_DIAG: Spotify.playTrackOnConnectDevice spotify:track:6Gf9yJrOUxvYVGZZS2u95B context=null
+05-06 00:02:40.765 14085 14085 I PMP_DIAG: CoverArt skip: hasCoverArt=false artworkUri=null
+05-06 00:02:41.094 14085 14113 I PMP_DIAG: Spotify.playRequest http=404
+05-06 00:02:41.094 14085 14113 I PMP_DIAG: Spotify.play no active device — listing
+05-06 00:02:41.222 14085 14113 I PMP_DIAG: Spotify auto-launch dispatched via BounceBridge
+05-06 00:02:41.230 14085 14085 I PMP_DIAG: BounceBridge.onCreate
+05-06 00:02:41.232 14085 14085 I PMP_DIAG: SpotifyBounceService started
+05-06 00:02:41.236 14085 14085 I PMP_DIAG: BounceBridge: Spotify auto-launch fired
+05-06 00:02:42.740 14085 14085 I PMP_DIAG: BounceBridge: bounce startActivity dispatched
+05-06 00:02:42.741 14085 14085 I PMP_DIAG: BounceBridge.onDestroy
+05-06 00:02:44.291 14085 14113 I PMP_DIAG: Spotify.play device appeared after 2500ms
+05-06 00:02:44.292 14085 14113 I PMP_DIAG: Spotify.play activating device 42b9e3ed6a7b7205b97af0e8f17a57ab73389cab (Kabir's Z Fold7)
+05-06 00:02:44.646 14085 14113 I PMP_DIAG: Spotify.transferPlayback http=204
+05-06 00:02:45.339 14085 14113 I PMP_DIAG: Spotify.playRequest http=204
+05-06 00:02:45.339 14085 14113 I PMP_DIAG: Spotify.startPlaybackPolling gen=1
+05-06 00:02:45.759 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:48.752 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:48.819 14085 14085 I PMP_DIAG: CoverArt AsyncImage onSuccess uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:49.067 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:49.075 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:49.390 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:49.400 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:49.693 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:49.700 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:50.026 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:50.033 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:50.364 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:50.375 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:50.687 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:50.708 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:51.033 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:51.042 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:51.245 14085 14085 I PMP_DIAG: SpotifyBounceService self-stop
+05-06 00:02:51.365 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:51.374 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:52.505 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:52.542 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:53.644 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:53.667 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:54.877 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:54.917 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:56.017 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:56.041 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:57.186 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:57.206 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:58.419 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:58.457 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:59.543 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:02:59.581 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:00.679 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:00.706 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:01.793 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:01.830 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:02.887 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:02.914 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:04.025 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:04.039 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:05.121 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:05.164 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:06.406 14085 14113 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-06 00:03:06.414 14085 14085 I PMP_DIAG: CoverArt AsyncImage building uri=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458

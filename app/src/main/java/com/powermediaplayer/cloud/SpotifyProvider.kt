@@ -560,14 +560,14 @@ class SpotifyProvider @Inject constructor(
      * user doesn't have Spotify installed.
      */
     private fun launchSpotifyAndReturn(): Boolean {
-        // Investigation prototype for fix-shape (c). The previous
-        // pollScope.launch { delay; bouncePi.send() } path is provably
-        // BAL_BLOCK'd on Samsung One UI (see RCA at
-        // docs/superpowers/investigation/2026-05-05-spotify-cold-start-bounce/).
-        // Delegate to a translucent bridge activity that lives in
-        // MainActivity's task; if the system's `realInVisibleTask`
-        // check honours "task contained a recently-visible activity",
-        // the bounce will succeed.
+        // Delegate to SpotifyBounceBridgeActivity — a translucent, in-
+        // task Activity that owns the Spotify auto-launch and the
+        // 1.5 s deferred bounce-back. The bridge's startActivity
+        // qualifies for Android's BAL grace period (system logs
+        // `BAL_ALLOW_GRACE_PERIOD`), which sidesteps Samsung One UI's
+        // `balDontBringExistingBackgroundTaskStackToFg=true` policy
+        // that BAL_BLOCK's the previous PendingIntent.send approach.
+        // See docs/superpowers/investigation/2026-05-05-spotify-cold-start-bounce/.
         return try {
             val pm = context.packageManager
             if (pm.getLaunchIntentForPackage("com.spotify.music") == null) {
