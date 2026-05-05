@@ -578,6 +578,10 @@ class SpotifyProvider @Inject constructor(
                 context,
                 com.powermediaplayer.service.SpotifyBounceBridgeActivity::class.java
             ).apply {
+                // FLAG_ACTIVITY_NEW_TASK is required when starting an
+                // Activity from a non-Activity Context (provider).
+                // The bridge's manifest does NOT declare its own
+                // taskAffinity, so it lands in MainActivity's task.
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(bridge)

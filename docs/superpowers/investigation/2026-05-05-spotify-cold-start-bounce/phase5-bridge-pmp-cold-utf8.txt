@@ -1,0 +1,38 @@
+--------- beginning of main
+05-05 23:59:39.497 11613 11613 I PMP_DIAG: DriveOAuth attached account=bhasin.kabir@gmail.com
+05-05 23:59:39.513 11613 11613 I PMP_DIAG: PlaybackService renderer mode swPreferred=false extMode=0
+05-05 23:59:39.703 11613 11613 I PMP_DIAG: CoverArt skip: hasCoverArt=false artworkUri=null
+05-05 23:59:40.022 11613 11613 I PMP_DIAG: audioDelayMs=0 (logged; no-op until audio renderer)
+05-05 23:59:40.022 11613 11613 I PMP_DIAG: subtitleDelayMs=0 (logged; no-op until subtitle pipeline)
+05-05 23:59:40.022 11613 11613 I PMP_DIAG: Reverb off
+05-05 23:59:40.024 11613 11613 I PMP_DIAG: audioDelayMs=0 (logged; no-op until audio renderer)
+05-05 23:59:40.024 11613 11613 I PMP_DIAG: subtitleDelayMs=0 (logged; no-op until subtitle pipeline)
+05-05 23:59:40.024 11613 11613 I PMP_DIAG: Reverb off
+05-05 23:59:44.621 11613 11746 I PMP_DIAG: Spotify.playTrackOnConnectDevice spotify:track:6Gf9yJrOUxvYVGZZS2u95B context=null
+05-05 23:59:44.673 11613 11613 I PMP_DIAG: CoverArt skip: hasCoverArt=false artworkUri=null
+05-05 23:59:44.883 11613 11746 I PMP_DIAG: Spotify.playRequest http=404
+05-05 23:59:44.884 11613 11746 I PMP_DIAG: Spotify.play no active device — listing
+05-05 23:59:44.930 11613 11746 I PMP_DIAG: Spotify auto-launch dispatched via BounceBridge
+05-05 23:59:44.934 11613 11613 I PMP_DIAG: BounceBridge.onCreate
+05-05 23:59:44.935 11613 11613 I PMP_DIAG: SpotifyBounceService started
+05-05 23:59:44.940 11613 11613 I PMP_DIAG: BounceBridge: Spotify auto-launch fired
+05-05 23:59:45.320 11613 11613 I PMP_DIAG: BounceBridge.onDestroy
+05-05 23:59:47.611 11613 11746 I PMP_DIAG: Spotify.play device appeared after 2500ms
+05-05 23:59:47.611 11613 11746 I PMP_DIAG: Spotify.play activating device 42b9e3ed6a7b7205b97af0e8f17a57ab73389cab (Kabir's Z Fold7)
+05-05 23:59:47.744 11613 11746 I PMP_DIAG: Spotify.transferPlayback http=204
+05-05 23:59:48.265 11613 11746 I PMP_DIAG: Spotify.playRequest http=204
+05-05 23:59:48.265 11613 11746 I PMP_DIAG: Spotify.startPlaybackPolling gen=1
+05-05 23:59:48.362 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:51.907 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:52.409 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:52.869 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:53.277 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:53.687 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:54.165 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:54.556 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:54.969 11613 11613 I PMP_DIAG: SpotifyBounceService self-stop
+05-05 23:59:55.004 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:55.460 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:56.656 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:57.884 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
+05-05 23:59:59.113 11613 11746 I PMP_DIAG: Spotify.fetchCurrentState artwork=https://i.scdn.co/image/ab67616d0000b27361404603e0266ba121e9a458
