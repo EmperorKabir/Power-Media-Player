@@ -116,7 +116,7 @@ fun CloudBrowserScreen(
 
     fun launchDriveOAuth() {
         if (firstPickWarningSeen) {
-            launchDriveOAuth()
+            driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
         } else {
             pendingFirstPickWarning = true
         }
