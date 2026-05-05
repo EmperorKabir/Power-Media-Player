@@ -1,0 +1,26 @@
+--------- beginning of main
+05-05 23:04:32.582 23290 23290 I PMP_DIAG: seekTo target=62363ms
+05-05 23:04:32.583 23290 23290 I PMP_DIAG: evt playbackState=2
+05-05 23:04:32.638 23290 23290 I PMP_DIAG: evt playbackState=3
+05-05 23:04:33.144 23290 23290 I PMP_DIAG: evt isPlayingChanged=true
+05-05 23:04:41.731 23290 23290 I PMP_DIAG: SkipBtn click fwd=false sec=30 enabled=true
+05-05 23:04:41.731 23290 23290 I PMP_DIAG: VM.skipBack(30s)
+05-05 23:04:41.731 23290 23290 I PMP_DIAG: Conn.skipBack(30s) action=ACTION_SKIP_BACK_30 ctrl=true
+05-05 23:04:41.732 23290 23290 I PMP_DIAG: skip delta=-30000ms pos=70051ms base=70051ms target=40051ms pending=-1
+05-05 23:04:41.945 23290 23290 I PMP_DIAG: debounced seekTo target=40051ms
+05-05 23:04:41.950 23290 23290 I PMP_DIAG: evt playbackState=2
+05-05 23:04:41.950 23290 23290 I PMP_DIAG: evt isPlayingChanged=false
+05-05 23:04:41.975 23290 23290 I PMP_DIAG: evt loadingChanged=true
+05-05 23:04:41.995 23290 23290 I PMP_DIAG: evt playbackState=3
+05-05 23:04:41.995 23290 23290 I PMP_DIAG: evt isPlayingChanged=true
+05-05 23:04:42.058 23290 23290 I PMP_DIAG: evt loadingChanged=false
+05-05 23:04:46.788 23290 23290 I PMP_DIAG: SkipBtn click fwd=true sec=30 enabled=true
+05-05 23:04:46.788 23290 23290 I PMP_DIAG: VM.skipForward(30s)
+05-05 23:04:46.788 23290 23290 I PMP_DIAG: Conn.skipForward(30s) action=ACTION_SKIP_FORWARD_30 ctrl=true
+05-05 23:04:46.788 23290 23290 I PMP_DIAG: skip delta=30000ms pos=44444ms base=44444ms target=74444ms pending=-1
+05-05 23:04:46.969 23290 23290 I PMP_DIAG: debounced seekTo target=74444ms
+05-05 23:04:46.974 23290 23290 I PMP_DIAG: evt playbackState=2
+05-05 23:04:46.974 23290 23290 I PMP_DIAG: evt isPlayingChanged=false
+05-05 23:04:47.045 23290 23290 I PMP_DIAG: evt playbackState=3
+05-05 23:04:47.045 23290 23290 I PMP_DIAG: evt isPlayingChanged=true
+05-05 23:05:03.692 23290 23290 I PMP_DIAG: evt isPlayingChanged=false
