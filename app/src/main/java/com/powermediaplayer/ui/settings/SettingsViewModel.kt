@@ -39,7 +39,8 @@ data class SettingsUiState(
     val reverbPreset: Int = 0,
     val stereoFlip: Boolean = false,
     val monoMix: Boolean = false,
-    val passthroughAudio: Boolean = true
+    val passthroughAudio: Boolean = true,
+    val artworkScaleMode: String = "fit"
 )
 
 /**
@@ -88,7 +89,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.monoMix,
             settingsDataStore.passthroughAudio,
             settingsDataStore.videoSepia,
-            settingsDataStore.videoInvert
+            settingsDataStore.videoInvert,
+            settingsDataStore.artworkScaleMode
         )
     ) { v ->
         SettingsUiState(
@@ -118,7 +120,8 @@ class SettingsViewModel @Inject constructor(
             monoMix = v[23] as Boolean,
             passthroughAudio = v[24] as Boolean,
             videoSepia = v[25] as Boolean,
-            videoInvert = v[26] as Boolean
+            videoInvert = v[26] as Boolean,
+            artworkScaleMode = v[27] as String
         )
     }.stateIn(
         scope = viewModelScope,
@@ -174,4 +177,5 @@ class SettingsViewModel @Inject constructor(
     fun setCrossfade(ms: Int) = viewModelScope.launch { settingsDataStore.setCrossfadeMs(ms) }.let{}
     fun setResumeOnBt(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnBt(v) }.let{}
     fun setPrefetchNextCloud(v: Boolean) = viewModelScope.launch { settingsDataStore.setPrefetchNextCloud(v) }.let{}
+    fun setArtworkScaleMode(mode: String) = viewModelScope.launch { settingsDataStore.setArtworkScaleMode(mode) }.let{}
 }
