@@ -141,6 +141,24 @@ fun SettingsScreen(
         SettingsDivider()
 
         // ══════════════════════════════════════════════════════════
+        // DISPLAY — cover-art scaling mode for the now-playing screen
+        // ══════════════════════════════════════════════════════════
+        SettingsSectionHeader("Display")
+        Text(
+            text = "Choose whether the now-playing cover art shows the " +
+                "whole image with margins (Fit) or fills the screen, " +
+                "cropping edges if needed (Fill).",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
+        ArtworkScalePicker(
+            currentMode = uiState.artworkScaleMode,
+            onModeChange = { viewModel.setArtworkScaleMode(it) }
+        )
+        SettingsDivider()
+
+        // ══════════════════════════════════════════════════════════
         // BLUETOOTH — car media-button remapping
         // ══════════════════════════════════════════════════════════
         SettingsSectionHeader("Bluetooth Car Controls")
@@ -595,6 +613,77 @@ private fun SubtitleFormatOption(
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ArtworkScalePicker(
+    currentMode: String,
+    onModeChange: (String) -> Unit
+) {
+    val options = listOf(
+        "fit" to "Fit (show whole cover)",
+        "fill" to "Fill (no margins, may crop edges)"
+    )
+    val selected = options.firstOrNull { it.first == currentMode } ?: options.first()
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = "Cover-art sizing",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Spacer(Modifier.height(6.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = menuExpanded,
+            onExpandedChange = { menuExpanded = it },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = selected.second,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealAccent,
+                    unfocusedBorderColor = DisabledContent,
+                    focusedTextColor = TealAccent,
+                    unfocusedTextColor = TextPrimary,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated
+                )
+            )
+            ExposedDropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier.background(SurfaceElevated)
+            ) {
+                options.forEach { (token, label) ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = label,
+                                color = if (token == currentMode) TealAccent else TextPrimary
+                            )
+                        },
+                        onClick = {
+                            onModeChange(token)
+                            menuExpanded = false
+                        }
+                    )
+                }
+            }
         }
     }
 }
