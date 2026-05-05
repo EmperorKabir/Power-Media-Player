@@ -16,11 +16,14 @@
 - Device: `RFCY70BARDJ` (Samsung Z Fold 6 — adaptive 1-120 Hz panel; the same device that exhibited the prior frame-rate-strategy regression; `project_operational_state.md` notes the frame-rate strategy was *intentionally* left at default for it).
 - adb: `C:\Users\Kabir\AppData\Local\Android\Sdk\platform-tools\adb.exe` (NOT on PATH; always invoke by full path).
 - App build: latest `main` debug.
-- Test corpus: 3 video files, all locally stored (not Drive — eliminates network jitter as a confound):
-  - `4k_landscape.mp4` — 3840×2160, ≥60 s, H.264 high profile, ≥10 Mbit/s.
-  - `4k_portrait.mp4` — 2160×3840 (or 1080×1920 portrait HEVC if 4K portrait is unavailable), ≥60 s.
-  - `1080p_landscape.mp4` — 1920×1080 baseline, control case to falsify "the jump is purely a 4K decoder cost" hypothesis.
-  - If the user does not already have these on the device, we acquire them via `adb push` from the host's downloads or use a known sample. Filenames recorded in the evidence log; do not alter the content during the investigation.
+- **Test corpus is whatever is already in the device's local library** — no host-side pushes. Use the app's own Library tab sort to pick the candidate files. Concrete protocol:
+  - Open the Library tab, sort by **Duration desc**: pick the top file as the "long-duration probe".
+  - Sort by **Size desc** (or whatever the closest analogue available is): pick the top file as the "large-file probe".
+  - If the same file tops both sorts, accept it as a single primary probe and pick the next-ranked distinct file from each sort as a secondary.
+  - Pick a third "control" file from the bottom of the Duration sort (smallest / shortest video already on device). It is the contrast case used to falsify decoder-cost hypotheses.
+  - Filenames + `MediaStore` paths + duration + bytes + WxH are recorded in the evidence log on capture. Files are NOT modified during the investigation.
+  - We never push our own corpus — we use whatever the user has, because (a) per project rules we don't synthesise content, (b) the user's own files are the production-realistic test set, and (c) if the bug is content-dependent we want it to surface against the user's actual content distribution.
+  - If sorted Library shows fewer than 3 distinct video files, stop and tell the user; ask them to add content before we proceed.
 
 **Evidence directory:** `docs/superpowers/investigation/2026-05-05-video-controls-jump/` — created in Phase 0. All artefacts (logcat captures, screen recordings, perfetto traces, gfxinfo dumps, annotated screenshots) land here, named `phase<N>-step<M>-<short-tag>.<ext>`. The final RCA document lives at the root of that directory.
 
@@ -68,15 +71,37 @@ Document at the top of CHANGELOG: *"This investigation MUST NOT be paused mid-ph
 
 We do not move on until we have at least one screen-recording for each of (4K landscape, 4K portrait, 1080p landscape) showing the bug clearly, plus at least one negative case (forward scrub) confirming that direction matters. If 1080p landscape does not exhibit the bug, that itself is a data point — record it.
 
-- [ ] **Step 1.1: Push the test corpus to the device.**
+- [ ] **Step 1.1: Pick the test corpus from the device's existing library via the in-app sort.**
+
+a. Launch the app. Navigate to the **Library** tab.
+
+b. Sort by **Duration desc**. Screencap, save as `phase1-step01a-library-by-duration.png`. Capture the file id, name, size, and duration of the top entry from the on-screen list. Cross-check against MediaStore directly so we have the canonical metadata, not screen-OCR:
 
 ```powershell
-& $adb push "<host-path>\4k_landscape.mp4" /sdcard/Download/
-& $adb push "<host-path>\4k_portrait.mp4"  /sdcard/Download/
-& $adb push "<host-path>\1080p_landscape.mp4" /sdcard/Download/
+$adb = 'C:\Users\Kabir\AppData\Local\Android\Sdk\platform-tools\adb.exe'
+& $adb shell "content query --uri content://media/external/video/media --projection _id,_data,_display_name,duration,_size,width,height --sort 'duration DESC LIMIT 5'" `
+    > "$dir\phase1-step01a-mediastore-by-duration.txt"
 ```
 
-If the user already has these locally on the device, list them via `& $adb shell ls -l /sdcard/Download/*.mp4` and record the chosen filenames. Do not duplicate. Each file must remain unchanged for the rest of the investigation.
+c. Sort by **Size desc** (or the analogue available — name TBD by the in-app implementation; check `LibraryViewModel`). Screencap as `phase1-step01b-library-by-size.png`. Pull MediaStore by size:
+
+```powershell
+& $adb shell "content query --uri content://media/external/video/media --projection _id,_data,_display_name,duration,_size,width,height --sort '_size DESC LIMIT 5'" `
+    > "$dir\phase1-step01b-mediastore-by-size.txt"
+```
+
+d. Compare the two top entries. If they differ, our **primary probe** = the top by Duration, **secondary probe** = the top by Size. If they're the same file, secondary = #2 by Size.
+
+e. Take the bottom (shortest) by Duration as the **control probe**. Pull it the same way:
+
+```powershell
+& $adb shell "content query --uri content://media/external/video/media --projection _id,_data,_display_name,duration,_size,width,height --sort 'duration ASC LIMIT 1'" `
+    > "$dir\phase1-step01c-mediastore-control.txt"
+```
+
+f. Record the three probes in CHANGELOG with: filename, full path, duration (ms), size (bytes), WxH, codec mime if available. Format `<role>: <filename> (<duration_ms> ms / <bytes> bytes / <WxH>)`. These three names are the ONLY content we touch for the rest of the investigation.
+
+g. Hard stop if the Library has fewer than 3 distinct video entries. Tell user. Do not synthesise.
 
 - [ ] **Step 1.2: Define the exact reproduction steps for "jump on backward scrub".**
 
@@ -213,8 +238,22 @@ The exhaustive substrate list, pre-committed before evidence is examined so we c
 | C10 | Scrim `remember(uiState.isVideoContent)` re-evaluation thrashing, forcing a Brush rebuild on each frame | A minor allocation-driven hitch during scrub | perfetto: GC slices, allocation counters |
 | C11 | Choreographer skipping a frame because RenderThread missed deadline due to 4K decoder pressure during seek-flush | Frame deadline misses correspond exactly to jump | perfetto / gfxinfo: late-frame flag |
 | C12 | Compose's `LookaheadScope` / animation-driven layout causing a one-frame intermediate size during AnimatedVisibility re-fade | AnimatedVisibility wrapping `OverlayContent` is the actual culprit on video paths | perfetto: AnimatedVisibility recompose; visual: jump always coincides with controls fade-out timer expiry |
+| C13 | `ExoPlayer.setSeekParameters(SeekParameters.PREVIOUS_SYNC)` causing backward seeks to land on a far-back keyframe (longer than the requested skip), producing a much longer decoder flush than the symmetric forward seek | The asymmetry FW vs BW is *built into seek-parameters semantics* and would only show on backward | logcat: actual landed position vs requested; perfetto: MediaCodec flush slice duration BW vs FW |
+| C14 | `LaunchedEffect(uiState.isVideoContent, controlsVisible)` re-keying mid-scrub because a state field flips, restarting the 4 s auto-hide and incidentally causing a recomposition of its parent | Auto-hide timer state changes during scrub | logcat: instrument LaunchedEffect entry/exit; perfetto: recompose around the scrub boundary |
+| C15 | `parentTapModifier` swap: when `controlsVisible` flips during the scrub, the parent Box modifier chain swaps from `pointerInput { … }` to `Modifier`, causing the child subtree to re-attach | Modifier-chain identity changes mid-scrub | perfetto: layout-pass on parent Box at scrub boundary; instrumentation: log every `controlsVisible` flip |
+| C16 | `onTracksChanged` firing on seek-flush, recomputing `audioFormatLabel`, propagating into `PlayerUiState`, recomposing the controls cluster | Tracks-change event coincides with the jump | logcat: `cachedAudioFormatLabel` change instrumentation; existing `PMP_DIAG`: track-change logs if any |
+| C17 | `coverColors` (palette) extraction completing on a worker frame and emitting state — even on video, if the path is not properly gated | Palette emission on video files | logcat: `Cover decoded` lines during video; `PaletteHelper.extractColorSet` traces |
+| C18 | `SettingsViewModel` collected inside `VideoSurface` (`val s by settingsVm.uiState.collectAsStateWithLifecycle()`): every Settings flow tick recomposes the AndroidView holding the TextureView | Any settings change during scrub triggers Composer-level work that touches the surface | log: instrument `SettingsViewModel.uiState` emissions; visual: bug correlates with any pref tick |
+| C19 | Window insets / system-bar visibility flicker during the gesture (some Samsung gestures flash bars), forcing OverlayContent to re-pad | System-bar visibility transitions in window state during scrub | perfetto: WindowManager / InsetsController slices |
+| C20 | PiP / multi-window listener firing on lifecycle events tangential to the scrub | Multi-window mode change during scrub | logcat: `onPictureInPictureModeChanged` / `onMultiWindowModeChanged` |
+| C21 | Frame-rate strategy: 4K decoder asks the panel to switch refresh rate; the swap itself is a one-frame visual hitch (`project_operational_state.md` notes the strategy was left at default specifically for the Z Fold 6 panel) | Refresh-rate switch coincident with seek | perfetto: `DisplayManager.setFrameRate` slices; SurfaceFlinger refresh-rate change |
+| C22 | `OverlayContent`'s `Box(fillMaxSize().background(scrim))` painting first and then `Column.fillMaxSize` second — if either child reports a different intrinsic height after the seek (e.g. ProgressSliders' formatted strings change width on a long position number "00:00" → "1:23:45"), the bottom-anchored Column may shift while the rest of the tree is steady | A two-line / two-token text length change at the seek boundary | log: instrument the formatted-position strings and the Column intrinsic height calls |
+| C23 | `ProgressSliders` slider thumb position updates from a stale `trackProgress` after the seek but before the position-poll catches up: the slider shows a brief incorrect position, then corrects on the next tick — visually the slider "jumps" | Two-emission slider position reading | log: `trackProgress` immediately before/after seek vs first poll-tick after |
+| C24 | The act of letting go of the slider drag causes a `pointerInput` release-handler to re-emit a state change to the slider's controller, which triggers a Layout pass independent of the seek | Slider release event correlates with the jump | perfetto: input-event slice at finger-up; instrumentation in slider handler |
+| C25 | The bottom-up `Arrangement.Bottom` with `Spacer(weight(1f))` reflows whenever a sibling's intrinsic height changes; if any element above the controls cluster resizes (e.g. the gradient scrim, the VideoSurface aspectRatio) the controls visually shift | Vertical arrangement reflow at the boundary | layout instrumentation; visual: jump direction (always down? always up?) consistent with a sibling growing/shrinking by the observed pixel count |
+| C26 | `chapters` field on `PlayerUiState` is rebuilt with `.map { it.copy(...) }` in `mapToUiState` on every emission, producing a fresh `List<ChapterInfo>` reference even when content is identical → Compose treats it as changed → controls cluster recomposition | Recompose-counter increase on every poll-tick | Compose recompose counter via `Modifier.composed` instrumentation OR perfetto recompose slice frequency |
 
-This is exhaustive on purpose. **No substrate is ruled in or out at this step.**
+This is exhaustive on purpose. **No substrate is ruled in or out at this step.** New candidates may be appended ONLY with explicit justification (a Phase-2 observation that doesn't fit any existing candidate). They MUST NOT be added to fit a guess.
 
 ---
 
@@ -222,7 +261,7 @@ This is exhaustive on purpose. **No substrate is ruled in or out at this step.**
 
 Now and only now do we narrow.
 
-- [ ] **Step 4.1: For each candidate C1-C12, look up the corresponding Phase 2 evidence artefact and write a one-line PASS / FAIL / INCONCLUSIVE verdict.**
+- [ ] **Step 4.1: For each candidate C1-C26, look up the corresponding Phase 2 evidence artefact and write a one-line PASS / FAIL / INCONCLUSIVE verdict.**
 
 Output: `phase4-falsification.md`. Format:
 
@@ -234,15 +273,38 @@ PASS = the evidence shows this substrate IS active during the jump moment.
 FAIL = the evidence shows this substrate is NOT active during the jump moment.
 INCONCLUSIVE = the evidence does not speak to it; needs targeted instrumentation in Phase 5.
 
-Hard rule: **do not mark anything as PASS without a citation to a specific timestamp + file.** Without evidence, it is INCONCLUSIVE, not "likely". This is the rule that prior sessions broke.
+Hard rules:
+- Do not mark anything PASS without a citation to a specific timestamp + file.
+- Without evidence, it is INCONCLUSIVE, not "likely". This is the rule prior sessions broke.
+- A FAIL verdict requires a *positive* observation that the substrate did NOT fire (e.g. "no recompose slice in window"); absence of mention is not absence.
 
-- [ ] **Step 4.2: Identify the smallest set of substrates whose PASS verdicts can collectively explain the observed bug AND whose FAIL verdicts on the rejected ones is supported by Phase 2 evidence.**
+- [ ] **Step 4.2: Direction-asymmetry check.**
 
-Document the ranked shortlist (typically 1-3 candidates) in `phase4-shortlist.md`. Each shortlisted candidate gets a *predicted observation* — a specific reading we expect from a targeted instrumentation in Phase 5. If Phase 5 doesn't observe the prediction, we drop the candidate.
+For every candidate marked PASS, verify the same artefact for the *forward* direction shows the substrate is **NOT** active (or active to a measurably lesser degree). A candidate that fires identically on forward and backward cannot explain a direction-asymmetric bug. Mark it `FAIL_DIR_ASYM` if it does, with citation to both directions.
+
+- [ ] **Step 4.3: File-class-asymmetry check.**
+
+For every PASS candidate, check whether the same substrate is active on the **control probe** (smallest video file). If it fires identically on the control file (where the bug should be absent or weaker per Phase 1.4 observations), the substrate cannot be the *sole* explanation — it must combine with another file-class-dependent factor. Mark the substrate `FAIL_FILE_ASYM` if so, or `COMBINES_WITH_<X>` if a coupling is plausible from the artefacts (no speculation; only when both substrates are PASS in the same window).
+
+- [ ] **Step 4.4: Repeatability check.**
+
+Re-run Phase 1.3's screen-recording capture and Phase 2 captures on the **primary probe** TWO MORE times (so 3 runs total, not counting the first). For each PASS candidate verify it fires in all three runs. If it only fires in 1/3 or 2/3, mark `INTERMITTENT` and require Phase 5 instrumentation; do not promote to shortlist on a single observation.
+
+- [ ] **Step 4.5: Two-substrate corroboration rule.**
+
+A candidate is only allowed onto the Phase 5 shortlist when it has supporting evidence from at least TWO of the four Phase 2 substrates (gfxinfo, perfetto, SurfaceFlinger, PMP_DIAG). Single-substrate signals are too easy to misread. Document each shortlisted candidate's two corroborating citations.
+
+- [ ] **Step 4.6: Negative-control candidate.**
+
+Add `Cnull` to the shortlist by default — meaning "the bug is an artefact of the test rig (rendering pipeline / panel / OS), not the app". Falsifiable by: same APK + same files on a second device, OR an OS-level repro outside the app. If we never get to verify on a second device, `Cnull` stays INCONCLUSIVE on the rejected list — never silently dropped.
+
+- [ ] **Step 4.7: Build the shortlist.**
+
+Identify the smallest set of substrates whose PASS verdicts can collectively explain the observed bug AND whose FAIL verdicts on the rejected ones are supported by Phase 2 evidence. Each shortlisted candidate gets a *predicted observation* — a specific reading we expect from a targeted instrumentation in Phase 5. If Phase 5 doesn't observe the prediction, we drop the candidate.
 
 If the shortlist is empty (no candidate has direct Phase-2 evidence), we either:
-- Re-capture Phase 2 with different categories enabled in perfetto (e.g. add `gfx`, `dalvik` if missing), OR
-- Add a NEW candidate to Phase 3 with explicit justification, OR
+- Re-capture Phase 2 with different categories enabled in perfetto (e.g. add `gfx`, `dalvik`, `memory` if missing), OR
+- Add a NEW candidate to Phase 3 with explicit justification anchored in a Phase-2 observation, OR
 - Stop and report that the existing tool kit cannot see the bug; ask user.
 
 We **do not invent a fix** at this point regardless of how confident the shortlist looks.
