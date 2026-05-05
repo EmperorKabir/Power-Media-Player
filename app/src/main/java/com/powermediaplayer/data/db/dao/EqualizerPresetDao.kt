@@ -17,12 +17,6 @@ interface EqualizerPresetDao {
     @Query("SELECT * FROM equalizer_presets WHERE id = :id")
     suspend fun getPresetById(id: Long): EqualizerPresetEntity?
 
-    @Query("SELECT * FROM equalizer_presets WHERE isDefault = 1")
-    fun getDefaultPresets(): Flow<List<EqualizerPresetEntity>>
-
-    @Query("SELECT * FROM equalizer_presets WHERE isDefault = 0")
-    fun getUserPresets(): Flow<List<EqualizerPresetEntity>>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPreset(preset: EqualizerPresetEntity): Long
 

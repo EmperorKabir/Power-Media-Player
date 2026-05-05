@@ -105,7 +105,7 @@ class DriveOAuthProvider @Inject constructor(
             // "signed-in but no folders yet" state until they do.
             Result.success(Unit)
         } catch (e: Exception) {
-            android.util.Log.e("PMP_DIAG", "DriveOAuth.handleSignInResult failed", e)
+            com.powermediaplayer.util.Diag.e("PMP_DIAG", "DriveOAuth.handleSignInResult failed", e)
             _isLoggedIn.value = false
             Result.failure(e)
         }
@@ -113,7 +113,7 @@ class DriveOAuthProvider @Inject constructor(
 
     private fun attach(acc: GoogleSignInAccount) {
         account = acc
-        android.util.Log.i("PMP_DIAG", "DriveOAuth attached account=${acc.email}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "DriveOAuth attached account=${acc.email}")
     }
 
     override suspend fun authenticate(context: Context): Result<Unit> =
@@ -147,7 +147,7 @@ class DriveOAuthProvider @Inject constructor(
                 "oauth2:https://www.googleapis.com/auth/drive.file"
             )
         } catch (e: Exception) {
-            android.util.Log.w("PMP_DIAG", "DriveOAuth.fetchAccessTokenBlocking failed", e)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "DriveOAuth.fetchAccessTokenBlocking failed", e)
             null
         }
     }
@@ -158,7 +158,7 @@ class DriveOAuthProvider @Inject constructor(
      */
     suspend fun rememberPickedFolder(folderId: String, folderName: String) {
         settingsDataStore.addDriveOauthPickedFolder(folderId, folderName)
-        android.util.Log.i("PMP_DIAG", "DriveOAuth picked folder $folderName ($folderId)")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "DriveOAuth picked folder $folderName ($folderId)")
         _isLoggedIn.value = true
     }
 
@@ -317,7 +317,7 @@ class DriveOAuthProvider @Inject constructor(
     ): java.io.File? = withContext(Dispatchers.IO) {
         val tag = "PowerMediaPlayer"
         val token = fetchAccessTokenBlocking() ?: run {
-            android.util.Log.e(tag, "Drive download: no access token (signed out?)")
+            com.powermediaplayer.util.Diag.e(tag, "Drive download: no access token (signed out?)")
             return@withContext null
         }
         val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}_$suffix")
@@ -330,7 +330,7 @@ class DriveOAuthProvider @Inject constructor(
                 .build()
             http.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) {
-                    android.util.Log.e(tag, "Drive download failed: HTTP ${resp.code}")
+                    com.powermediaplayer.util.Diag.e(tag, "Drive download failed: HTTP ${resp.code}")
                     return@withContext null
                 }
                 resp.body?.byteStream()?.use { input ->
@@ -339,7 +339,7 @@ class DriveOAuthProvider @Inject constructor(
             }
             cacheFile
         } catch (e: Exception) {
-            android.util.Log.e(tag, "Drive download exception", e)
+            com.powermediaplayer.util.Diag.e(tag, "Drive download exception", e)
             runCatching { cacheFile.delete() }
             null
         }

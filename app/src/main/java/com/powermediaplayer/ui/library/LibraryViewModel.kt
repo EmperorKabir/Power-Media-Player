@@ -278,7 +278,7 @@ class LibraryViewModel @Inject constructor(
                 playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
                 files.getOrNull(idx)?.let { recordLocalPlay(it) }
             } catch (t: Throwable) {
-                android.util.Log.e("PowerMediaPlayer", "playFiles failed", t)
+                com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "playFiles failed", t)
             }
         }
     }
@@ -319,7 +319,7 @@ class LibraryViewModel @Inject constructor(
                 playbackConnection.setVideoModeHint(file.isVideo)
                 recordLocalPlay(file)
             } catch (t: Throwable) {
-                android.util.Log.e("PowerMediaPlayer", "playSingle failed", t)
+                com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "playSingle failed", t)
             }
         }
     }

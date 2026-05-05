@@ -33,7 +33,7 @@ class SpotifyBounceBridgeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        android.util.Log.i("PMP_DIAG", "BounceBridge.onCreate")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "BounceBridge.onCreate")
 
         // (1) Foreground service for BAL exemption — same as before.
         SpotifyBounceService.start(this)
@@ -41,7 +41,7 @@ class SpotifyBounceBridgeActivity : Activity() {
         // (2) Spotify launch.
         val spotify = packageManager.getLaunchIntentForPackage("com.spotify.music")
         if (spotify == null) {
-            android.util.Log.w("PMP_DIAG", "BounceBridge: Spotify not installed; finishing without bounce")
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "BounceBridge: Spotify not installed; finishing without bounce")
             finish()
             return
         }
@@ -49,7 +49,7 @@ class SpotifyBounceBridgeActivity : Activity() {
             Intent.FLAG_ACTIVITY_NO_USER_ACTION or
             Intent.FLAG_ACTIVITY_NO_ANIMATION
         startActivity(spotify)
-        android.util.Log.i("PMP_DIAG", "BounceBridge: Spotify auto-launch fired")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "BounceBridge: Spotify auto-launch fired")
 
         // (3) Bounce back to MainActivity 1500 ms later. Crucially, this
         //     startActivity is invoked FROM this bridge — which is part
@@ -67,9 +67,9 @@ class SpotifyBounceBridgeActivity : Activity() {
             }
             runCatching {
                 startActivity(bounce)
-                android.util.Log.i("PMP_DIAG", "BounceBridge: bounce startActivity dispatched")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "BounceBridge: bounce startActivity dispatched")
             }.onFailure { e ->
-                android.util.Log.w("PMP_DIAG", "BounceBridge: bounce startActivity failed", e)
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "BounceBridge: bounce startActivity failed", e)
             }
             finish()
         }, 1500)
@@ -77,7 +77,7 @@ class SpotifyBounceBridgeActivity : Activity() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        android.util.Log.i("PMP_DIAG", "BounceBridge.onDestroy")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "BounceBridge.onDestroy")
         super.onDestroy()
     }
 }

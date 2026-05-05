@@ -23,7 +23,7 @@ fun CastButton(modifier: Modifier = Modifier) {
                     runCatching { CastButtonFactory.setUpMediaRouteButton(ctx, btn) }
                 }
             }.getOrElse {
-                android.util.Log.w("PowerMediaPlayer", "CastButton init failed", it)
+                com.powermediaplayer.util.Diag.w("PowerMediaPlayer", "CastButton init failed", it)
                 View(ctx)  // empty stand-in — preserves layout, no crash
             }
         },

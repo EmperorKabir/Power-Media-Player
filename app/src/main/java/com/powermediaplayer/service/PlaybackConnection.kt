@@ -254,7 +254,7 @@ class PlaybackConnection @Inject constructor(
     }
 
     fun seekTo(positionMs: Long) {
-        android.util.Log.i("PMP_DIAG", "seekTo target=${positionMs}ms")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "seekTo target=${positionMs}ms")
         controller?.seekTo(positionMs)
     }
     fun seekToNext() { controller?.seekToNextMediaItem() }
@@ -269,7 +269,7 @@ class PlaybackConnection @Inject constructor(
             30 -> PlaybackService.ACTION_SKIP_BACK_30
             else -> return
         }
-        android.util.Log.i("PMP_DIAG", "Conn.skipBack(${seconds}s) action=$action ctrl=${controller != null}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Conn.skipBack(${seconds}s) action=$action ctrl=${controller != null}")
         controller?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), Bundle.EMPTY)
     }
 
@@ -282,7 +282,7 @@ class PlaybackConnection @Inject constructor(
             30 -> PlaybackService.ACTION_SKIP_FORWARD_30
             else -> return
         }
-        android.util.Log.i("PMP_DIAG", "Conn.skipForward(${seconds}s) action=$action ctrl=${controller != null}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Conn.skipForward(${seconds}s) action=$action ctrl=${controller != null}")
         controller?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), Bundle.EMPTY)
     }
 
@@ -302,11 +302,11 @@ class PlaybackConnection @Inject constructor(
      *  the user-visible setting persists; full sync needs a custom audio
      *  renderer pipeline. */
     fun setAudioDelayMs(ms: Int) {
-        android.util.Log.i("PMP_DIAG", "audioDelayMs=$ms (logged; no-op until audio renderer)")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "audioDelayMs=$ms (logged; no-op until audio renderer)")
     }
     /** Subtitle delay (ms; +/-). Same caveat as audio delay. */
     fun setSubtitleDelayMs(ms: Int) {
-        android.util.Log.i("PMP_DIAG", "subtitleDelayMs=$ms (logged; no-op until subtitle pipeline)")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "subtitleDelayMs=$ms (logged; no-op until subtitle pipeline)")
     }
 
     fun setVolume(volume: Float) {
@@ -356,7 +356,7 @@ class PlaybackConnection @Inject constructor(
      */
     fun setLocalMetadata(meta: LocalMetadataOverride?) {
         localMetadata = meta
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PowerMediaPlayer",
             "setLocalMetadata: title=${meta?.title} artBytes=${meta?.artworkBytes?.size ?: 0} artUri=${meta?.artworkUri}"
         )
@@ -374,7 +374,7 @@ class PlaybackConnection @Inject constructor(
      */
     fun setLocalChapters(chapters: List<ChapterInfo>?) {
         localChapters = chapters?.takeIf { it.isNotEmpty() }
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PowerMediaPlayer",
             "setLocalChapters: count=${localChapters?.size ?: 0}"
         )
@@ -416,7 +416,7 @@ class PlaybackConnection @Inject constructor(
             updatePlayerState()
             val durMs = (android.os.SystemClock.elapsedRealtimeNanos() - t0) / 1_000_000
             if (durMs >= 4) {
-                android.util.Log.i("PMP_DIAG", "updatePlayerState dur=${durMs}ms")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "updatePlayerState dur=${durMs}ms")
             }
         }
     }
@@ -581,18 +581,18 @@ class PlaybackConnection @Inject constructor(
     private fun setupPlayerListener() {
         controller?.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                android.util.Log.i("PMP_DIAG", "evt isPlayingChanged=$isPlaying")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "evt isPlayingChanged=$isPlaying")
                 scheduleUpdate()
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                android.util.Log.i("PMP_DIAG", "evt mediaItemTransition reason=$reason")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "evt mediaItemTransition reason=$reason")
                 // Reset description + previous error — the new track may not emit
                 // metadata immediately and shouldn't inherit the prior failure.
                 _playerState.value = _playerState.value.copy(description = "", playerError = null)
                 scheduleUpdate()
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
-                android.util.Log.i("PMP_DIAG", "evt playbackState=$playbackState")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "evt playbackState=$playbackState")
                 scheduleUpdate()
             }
             override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) { scheduleUpdate() }
@@ -602,7 +602,7 @@ class PlaybackConnection @Inject constructor(
                 scheduleUpdate()
             }
             override fun onIsLoadingChanged(isLoading: Boolean) {
-                android.util.Log.i("PMP_DIAG", "evt loadingChanged=$isLoading")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "evt loadingChanged=$isLoading")
                 scheduleUpdate()
             }
             // Track changes populate isVideoContent — must be listened to separately

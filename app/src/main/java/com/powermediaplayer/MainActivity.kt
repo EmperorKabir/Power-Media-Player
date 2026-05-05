@@ -132,7 +132,7 @@ class MainActivity : ComponentActivity() {
         newConfig: android.content.res.Configuration
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
-        android.util.Log.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
+        com.powermediaplayer.util.Diag.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
         isInPip.value = isInPictureInPictureMode
         // Re-bind the player to the freshly-recomposed VideoSurface.
         // Compose creates a new SurfaceView when the conditional tree
@@ -160,7 +160,7 @@ class MainActivity : ComponentActivity() {
         val state = playbackConnection.playerState.value
         val isVideo = state.isVideoContent
         val isPlaying = state.isPlaying
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PMP_PIP",
             "onUserLeaveHint isVideo=$isVideo isPlaying=$isPlaying w=${state.videoWidth} h=${state.videoHeight}"
         )
@@ -182,9 +182,9 @@ class MainActivity : ComponentActivity() {
                     builder.setAutoEnterEnabled(true)
                 }
                 val ok = enterPictureInPictureMode(builder.build())
-                android.util.Log.i("PMP_PIP", "enterPictureInPictureMode returned=$ok aspect=$safeAspect")
+                com.powermediaplayer.util.Diag.i("PMP_PIP", "enterPictureInPictureMode returned=$ok aspect=$safeAspect")
             }.onFailure {
-                android.util.Log.w("PMP_PIP", "PiP enter failed", it)
+                com.powermediaplayer.util.Diag.w("PMP_PIP", "PiP enter failed", it)
             }
         }
     }

@@ -56,7 +56,7 @@ fun CoverArtBackground(
                 withContext(Dispatchers.Default) {
                     runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
                         .onFailure {
-                            android.util.Log.w(
+                            com.powermediaplayer.util.Diag.w(
                                 "PowerMediaPlayer",
                                 "Cover decode failed for ${bytes.size} bytes",
                                 it
@@ -64,7 +64,7 @@ fun CoverArtBackground(
                         }
                         .getOrNull()
                 }.also {
-                    android.util.Log.i(
+                    com.powermediaplayer.util.Diag.i(
                         "PowerMediaPlayer",
                         "Cover decoded: bytes=${bytes.size} bitmap=${it != null} " +
                             "size=${it?.width}x${it?.height}"
@@ -92,7 +92,7 @@ fun CoverArtBackground(
 
         if (hasCoverArt && artworkUri != null) {
             val context = LocalContext.current
-            android.util.Log.i(
+            com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
                 "CoverArt AsyncImage building uri=$artworkUri"
             )
@@ -105,14 +105,14 @@ fun CoverArtBackground(
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { result ->
-                    android.util.Log.i("PMP_DIAG", "CoverArt AsyncImage onSuccess uri=$artworkUri")
+                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "CoverArt AsyncImage onSuccess uri=$artworkUri")
                     runCatching {
                         val bm = (result.result as? SuccessResult)?.image?.toBitmap()
                         onColorsExtracted(bm?.let { PaletteHelper.extractColorSet(it) })
                     }.onFailure { onColorsExtracted(null) }
                 },
                 onError = { err ->
-                    android.util.Log.w(
+                    com.powermediaplayer.util.Diag.w(
                         "PMP_DIAG",
                         "CoverArt AsyncImage onError uri=$artworkUri throwable=${err.result.throwable}"
                     )
@@ -120,7 +120,7 @@ fun CoverArtBackground(
                 }
             )
         } else {
-            android.util.Log.i(
+            com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
                 "CoverArt skip: hasCoverArt=$hasCoverArt artworkUri=$artworkUri"
             )

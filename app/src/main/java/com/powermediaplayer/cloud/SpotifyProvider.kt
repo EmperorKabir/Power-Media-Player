@@ -163,7 +163,7 @@ class SpotifyProvider @Inject constructor(
      * fires this and routes the result to [handleAuthResponse].
      */
     fun buildAuthIntent(): Intent {
-        android.util.Log.i("PMP_DIAG", "Spotify.buildAuthIntent start")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.buildAuthIntent start")
         val t0 = System.currentTimeMillis()
         val request = AuthorizationRequest.Builder(
             serviceConfig,
@@ -174,7 +174,7 @@ class SpotifyProvider @Inject constructor(
             .setScope(scopes)
             .build()
         val intent = authService.getAuthorizationRequestIntent(request)
-        android.util.Log.i("PMP_DIAG", "Spotify.buildAuthIntent done ${System.currentTimeMillis() - t0}ms")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.buildAuthIntent done ${System.currentTimeMillis() - t0}ms")
         return intent
     }
 
@@ -183,11 +183,11 @@ class SpotifyProvider @Inject constructor(
      * Called from the UI's ActivityResult callback after the Custom Tab returns.
      */
     suspend fun handleAuthResponse(data: Intent?): Result<Unit> = withContext(Dispatchers.IO) {
-        android.util.Log.i("PMP_DIAG", "Spotify.handleAuthResponse start data=${data != null}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.handleAuthResponse start data=${data != null}")
         if (data == null) return@withContext Result.failure(IllegalStateException("No auth result data"))
         val resp = AuthorizationResponse.fromIntent(data)
         val ex = AuthorizationException.fromIntent(data)
-        android.util.Log.i("PMP_DIAG", "Spotify.handleAuthResponse parsed resp=${resp != null} ex=${ex?.message}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.handleAuthResponse parsed resp=${resp != null} ex=${ex?.message}")
         if (resp == null) return@withContext Result.failure(ex ?: IllegalStateException("Auth canceled"))
 
         val authState = AuthState(serviceConfig).apply { update(resp, ex) }
@@ -195,7 +195,7 @@ class SpotifyProvider @Inject constructor(
         val t0 = System.currentTimeMillis()
         val result = suspendCancellableCoroutine<Result<Unit>> { cont ->
             authService.performTokenRequest(resp.createTokenExchangeRequest()) { tokenResp, tokenEx ->
-                android.util.Log.i(
+                com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
                     "Spotify.tokenRequest cb ${System.currentTimeMillis() - t0}ms ok=${tokenResp != null} ex=${tokenEx?.message}"
                 )
@@ -213,7 +213,7 @@ class SpotifyProvider @Inject constructor(
         if (result.isSuccess) {
             tokenStore.write(authState.jsonSerializeString())
             _isLoggedIn.value = true
-            android.util.Log.i("PMP_DIAG", "Spotify.handleAuthResponse persisted token")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.handleAuthResponse persisted token")
         }
         result
     }
@@ -241,14 +241,14 @@ class SpotifyProvider @Inject constructor(
      */
     override suspend fun listFiles(folderId: String?): Result<List<CloudMediaItem>> =
         withContext(Dispatchers.IO) {
-            android.util.Log.i("PMP_DIAG", "Spotify.listFiles start")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listFiles start")
             val t0 = System.currentTimeMillis()
             val token = currentAccessToken()
             if (token == null) {
-                android.util.Log.w("PMP_DIAG", "Spotify.listFiles no token")
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "Spotify.listFiles no token")
                 return@withContext Result.failure(IllegalStateException("Not authenticated"))
             }
-            android.util.Log.i("PMP_DIAG", "Spotify.listFiles got token ${System.currentTimeMillis() - t0}ms")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listFiles got token ${System.currentTimeMillis() - t0}ms")
 
             val url = "https://api.spotify.com/v1/me/library?type=track,album,playlist&limit=50"
             val req = Request.Builder()
@@ -259,7 +259,7 @@ class SpotifyProvider @Inject constructor(
             val items = mutableListOf<CloudMediaItem>()
             try {
                 http.newCall(req).execute().use { resp ->
-                    android.util.Log.i("PMP_DIAG", "Spotify.listFiles http=${resp.code} ${System.currentTimeMillis() - t0}ms")
+                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listFiles http=${resp.code} ${System.currentTimeMillis() - t0}ms")
                     if (!resp.isSuccessful) {
                         // Fall back to per-type endpoints if generic 404s on this account
                         return@withContext fetchPerType(token)
@@ -273,7 +273,7 @@ class SpotifyProvider @Inject constructor(
                         val item = obj.getAsJsonObject(type) ?: obj
                         items.add(jsonToCloudItem(item, type))
                     }
-                    android.util.Log.i("PMP_DIAG", "Spotify.listFiles parsed=${items.size}")
+                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listFiles parsed=${items.size}")
                 }
             } catch (e: Exception) {
                 return@withContext Result.failure(e)
@@ -312,13 +312,13 @@ class SpotifyProvider @Inject constructor(
             val items = mutableListOf<CloudMediaItem>()
             try {
                 val body: String = http.newCall(req).execute().use { resp ->
-                    android.util.Log.i("PMP_DIAG", "Spotify.section $section http=${resp.code}")
+                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.section $section http=${resp.code}")
                     if (!resp.isSuccessful) "" else resp.body?.string().orEmpty()
                 }
                 if (body.isNotBlank()) {
                     val root = JsonParser.parseString(body).asJsonObject
                     parseSectionInto(section, root, items)
-                    android.util.Log.i(
+                    com.powermediaplayer.util.Diag.i(
                         "PMP_DIAG",
                         "Spotify.section $section parsed=${items.size}"
                     )
@@ -447,7 +447,7 @@ class SpotifyProvider @Inject constructor(
      * the Spotify Android SDK + a Premium account, not implemented here.
      */
     override suspend fun getMediaStreamUri(item: CloudMediaItem): Result<Uri> {
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
             "Spotify.getMediaStreamUri name=${item.name} url=${item.downloadUrl.take(80)}"
         )
@@ -486,7 +486,7 @@ class SpotifyProvider @Inject constructor(
         contextUri: String? = null
     ): Result<Unit> =
         withContext(Dispatchers.IO) {
-            android.util.Log.i(
+            com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
                 "Spotify.playTrackOnConnectDevice $spotifyUri context=$contextUri"
             )
@@ -507,7 +507,7 @@ class SpotifyProvider @Inject constructor(
                 return@withContext firstAttempt
             }
 
-            android.util.Log.i("PMP_DIAG", "Spotify.play no active device — listing")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.play no active device — listing")
             var devices = listDevices(token)
             if (devices.isEmpty()) {
                 // Spotify isn't running anywhere. Auto-launch the
@@ -524,7 +524,7 @@ class SpotifyProvider @Inject constructor(
                         kotlinx.coroutines.delay(500)
                         devices = listDevices(token)
                         if (devices.isNotEmpty()) {
-                            android.util.Log.i(
+                            com.powermediaplayer.util.Diag.i(
                                 "PMP_DIAG",
                                 "Spotify.play device appeared after ${(attempt + 1) * 500}ms"
                             )
@@ -540,7 +540,7 @@ class SpotifyProvider @Inject constructor(
                             "phone or another device, then try again."
                     )
                 )
-            android.util.Log.i("PMP_DIAG", "Spotify.play activating device ${first.first} (${first.second})")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.play activating device ${first.first} (${first.second})")
             val transferred = transferPlayback(token, first.first)
             if (transferred.isFailure) return@withContext transferred
             // Tiny gap so Spotify finishes activating the device before
@@ -571,7 +571,7 @@ class SpotifyProvider @Inject constructor(
         return try {
             val pm = context.packageManager
             if (pm.getLaunchIntentForPackage("com.spotify.music") == null) {
-                android.util.Log.w("PMP_DIAG", "Spotify auto-launch skipped — app not installed")
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "Spotify auto-launch skipped — app not installed")
                 return false
             }
             val bridge = Intent(
@@ -585,10 +585,10 @@ class SpotifyProvider @Inject constructor(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(bridge)
-            android.util.Log.i("PMP_DIAG", "Spotify auto-launch dispatched via BounceBridge")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify auto-launch dispatched via BounceBridge")
             true
         } catch (e: Exception) {
-            android.util.Log.w("PMP_DIAG", "Spotify auto-launch (bridge) failed", e)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "Spotify auto-launch (bridge) failed", e)
             false
         }
     }
@@ -645,7 +645,7 @@ class SpotifyProvider @Inject constructor(
             .build()
         return try {
             http.newCall(req).execute().use { resp ->
-                android.util.Log.i("PMP_DIAG", "Spotify.playRequest http=${resp.code}")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.playRequest http=${resp.code}")
                 when (resp.code) {
                     in 200..299 -> Result.success(Unit)
                     401 -> Result.failure(IllegalStateException("Spotify session expired — sign in again"))
@@ -694,7 +694,7 @@ class SpotifyProvider @Inject constructor(
             .build()
         return try {
             http.newCall(req).execute().use { resp ->
-                android.util.Log.i("PMP_DIAG", "Spotify.transferPlayback http=${resp.code}")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.transferPlayback http=${resp.code}")
                 if (resp.code in 200..299) Result.success(Unit)
                 else Result.failure(IllegalStateException("Transfer playback HTTP ${resp.code}"))
             }
@@ -754,7 +754,7 @@ class SpotifyProvider @Inject constructor(
                             JsonParser.parseString(raw).asJsonObject.keySet().joinToString(",")
                         }.getOrDefault("?")
                     } else ""
-                    android.util.Log.i(
+                    com.powermediaplayer.util.Diag.i(
                         "PMP_DIAG",
                         "Spotify.listContainer $containerUri http=${resp.code} bytes=${raw.length} rootKeys=[$keys]"
                     )
@@ -779,16 +779,16 @@ class SpotifyProvider @Inject constructor(
                                     }
                                 } ?: root.getAsJsonObject(containerKey)?.getAsJsonArray("items")
                             }.getOrNull()
-                            android.util.Log.i(
+                            com.powermediaplayer.util.Diag.i(
                                 "PMP_DIAG",
                                 "Spotify.listContainer parsed arrSize=${arr?.size() ?: -1}"
                             )
                             arr ?: return@withContext Result.success(items)
                             val childType = if (type == "show") "episode" else "track"
-                            android.util.Log.i("PMP_DIAG", "Spotify.listContainer iterating arr.size=${arr.size()}")
+                            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer iterating arr.size=${arr.size()}")
                             if (arr.size() > 0) {
                                 val first = arr[0]
-                                android.util.Log.i("PMP_DIAG", "Spotify.listContainer firstElem=${first.toString().take(800)}")
+                                com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer firstElem=${first.toString().take(800)}")
                             }
                             for (el in arr) {
                                 if (!el.isJsonObject) continue
@@ -811,7 +811,7 @@ class SpotifyProvider @Inject constructor(
                                 val item = jsonToCloudItem(core, childType)
                                 items.add(item.copy(contextUri = containerUri))
                             }
-                            android.util.Log.i("PMP_DIAG", "Spotify.listContainer items=${items.size}")
+                            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer items=${items.size}")
                         }
                         "artist" -> {
                             val arr = root.getAsJsonArray("tracks") ?: return@withContext Result.success(items)
@@ -859,7 +859,7 @@ class SpotifyProvider @Inject constructor(
                         }
                     }
                 }
-                android.util.Log.i("PMP_DIAG", "Spotify.search q='$query' n=${results.size}")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.search q='$query' n=${results.size}")
                 Result.success(results)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -874,12 +874,11 @@ class SpotifyProvider @Inject constructor(
     // overwrites the null with stale snap, leaving the Spotify mirror
     // visible while local m4b plays underneath.
     @Volatile private var pollGen: Int = 0
-    private val BOUNCE_PI_REQUEST_CODE = 0x10A1
 
     fun startPlaybackPolling() {
         if (pollJob?.isActive == true) return
         val gen = ++pollGen
-        android.util.Log.i("PMP_DIAG", "Spotify.startPlaybackPolling gen=$gen")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.startPlaybackPolling gen=$gen")
         // Banner ON until the first fully-resolved emit arrives.
         _spotifyMetadataFetching.value = true
         pollJob = pollScope.launch {
@@ -959,7 +958,7 @@ class SpotifyProvider @Inject constructor(
                 val syncedRaw = root.get("syncedLyrics")?.takeIf { !it.isJsonNull }?.asString
                 val parsed = syncedRaw?.let { parseLrc(it) }.orEmpty()
                 val plainFallback = plain ?: syncedRaw?.let { stripLrcTimestamps(it) }
-                android.util.Log.i(
+                com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
                     "Spotify.lyrics LRCLib synced=${parsed.size} plain=${plainFallback?.length ?: 0} title='$title' artist='$firstArtist'"
                 )
@@ -1001,7 +1000,7 @@ class SpotifyProvider @Inject constructor(
         pollJob = null
         _spotifyState.value = null
         _spotifyMetadataFetching.value = false
-        android.util.Log.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
     }
 
     private fun fetchCurrentState(token: String): SpotifyPlaybackState? {
@@ -1023,7 +1022,7 @@ class SpotifyProvider @Inject constructor(
                 val artwork = album?.getAsJsonArray("images")?.firstOrNull()
                     ?.asJsonObject?.get("url")?.asString
                 val device = root.getAsJsonObject("device")
-                android.util.Log.i(
+                com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
                     "Spotify.fetchCurrentState artwork=${artwork ?: "null"}"
                 )

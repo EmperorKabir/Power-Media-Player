@@ -211,7 +211,7 @@ class PlaybackService : MediaSessionService() {
             DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
         else
             DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
             "PlaybackService renderer mode swPreferred=$swPreferred extMode=$rendererMode"
         )
@@ -750,7 +750,7 @@ class PlaybackService : MediaSessionService() {
         val rawTarget = base + deltaMs
         val duration = player.duration.let { if (it == C.TIME_UNSET) Long.MAX_VALUE else it }
         val target = rawTarget.coerceIn(0L, duration)
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
             "skip delta=${deltaMs}ms pos=${pos}ms base=${base}ms target=${target}ms pending=${pendingSeekTarget}"
         )
@@ -772,10 +772,10 @@ class PlaybackService : MediaSessionService() {
             if (finalTarget >= 0L &&
                 kotlin.math.abs(player.currentPosition - finalTarget) > 250L
             ) {
-                android.util.Log.i("PMP_DIAG", "debounced seekTo target=${finalTarget}ms")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "debounced seekTo target=${finalTarget}ms")
                 player.seekTo(finalTarget)
             } else {
-                android.util.Log.i("PMP_DIAG", "debounced seek SKIPPED (within 250ms of target)")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "debounced seek SKIPPED (within 250ms of target)")
             }
         }
 

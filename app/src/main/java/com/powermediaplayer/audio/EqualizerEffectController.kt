@@ -65,10 +65,10 @@ class EqualizerEffectController @Inject constructor(
                 enabled = true
             }
             lastSessionId = sessionId
-            android.util.Log.i("PMP_DIAG", "EQ attached session=$sessionId bands=${eq?.numberOfBands}")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "EQ attached session=$sessionId bands=${eq?.numberOfBands}")
             applyLevels(bandLevels.value)
         }.onFailure {
-            android.util.Log.w("PMP_DIAG", "EQ attach failed for session=$sessionId", it)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "EQ attach failed for session=$sessionId", it)
         }
     }
 
@@ -80,9 +80,9 @@ class EqualizerEffectController @Inject constructor(
             for (i in 0 until n) {
                 e.setBandLevel(i.toShort(), safe[i].toShort())
             }
-            android.util.Log.i("PMP_DIAG", "EQ levels applied first3=${safe.take(3)}")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "EQ levels applied first3=${safe.take(3)}")
         }.onFailure {
-            android.util.Log.w("PMP_DIAG", "EQ setBandLevel failed", it)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "EQ setBandLevel failed", it)
         }
     }
 

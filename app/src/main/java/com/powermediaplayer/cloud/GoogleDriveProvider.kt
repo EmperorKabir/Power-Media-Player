@@ -132,7 +132,7 @@ class GoogleDriveProvider @Inject constructor(
         for (pkg in pm.getInstalledPackages(PackageManager.GET_PROVIDERS)) {
             installed.add(pkg.packageName)
         }
-        android.util.Log.i("PMP_DIAG", "Installed pkg count for chooser: ${installed.size}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Installed pkg count for chooser: ${installed.size}")
         val out = mutableListOf<CloudRoot>()
         // Google Drive — initial URI uses the documented "root" doc ID;
         // even when the picker's drawer is unreachable, this navigates
@@ -187,7 +187,7 @@ class GoogleDriveProvider @Inject constructor(
                 packageName = "com.android.externalstorage"
             )
         )
-        android.util.Log.i("PMP_DIAG", "Chooser roots: ${out.size}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Chooser roots: ${out.size}")
         out
     }
 
@@ -207,12 +207,12 @@ class GoogleDriveProvider @Inject constructor(
                 // Some DocumentsProviders (e.g. internal storage on
                 // ancient devices) don't support persistable grants —
                 // fall through; the URI works for this session only.
-                android.util.Log.w("PMP_DIAG", "Drive: takePersistableUriPermission failed", e)
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "Drive: takePersistableUriPermission failed", e)
             }
             val displayName = DocumentFile.fromTreeUri(context, treeUri)?.name
                 ?: "Picked folder"
             settingsDataStore.addDrivePickedRoot(treeUri.toString(), displayName)
-            android.util.Log.i("PMP_DIAG", "Drive picked root: $displayName ($treeUri)")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Drive picked root: $displayName ($treeUri)")
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -387,7 +387,7 @@ class GoogleDriveProvider @Inject constructor(
         val cacheFile = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_$suffix")
         val start = rangeStart ?: 0L
         val end = rangeEnd ?: Long.MAX_VALUE
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             tag,
             "Drive cache download: ${item.name} ($suffix) start=$start end=$end size=${item.size}"
         )
@@ -410,16 +410,16 @@ class GoogleDriveProvider @Inject constructor(
                             out.write(buf, 0, n)
                             written += n
                         }
-                        android.util.Log.i(tag, "Drive cache wrote $written bytes to ${cacheFile.name}")
+                        com.powermediaplayer.util.Diag.i(tag, "Drive cache wrote $written bytes to ${cacheFile.name}")
                     }
                 }
             } ?: run {
-                android.util.Log.e(tag, "Drive cache: openFileDescriptor returned null for $sourceUri")
+                com.powermediaplayer.util.Diag.e(tag, "Drive cache: openFileDescriptor returned null for $sourceUri")
                 return@withContext null
             }
             cacheFile
         } catch (e: Exception) {
-            android.util.Log.e(tag, "Drive cache download exception", e)
+            com.powermediaplayer.util.Diag.e(tag, "Drive cache download exception", e)
             runCatching { cacheFile.delete() }
             null
         }
@@ -449,7 +449,7 @@ class GoogleDriveProvider @Inject constructor(
     suspend fun downloadFullToCache(item: CloudMediaItem): java.io.File? {
         val cap = 4L * 1024 * 1024 * 1024
         if (item.size in 1L..Long.MAX_VALUE && item.size > cap) {
-            android.util.Log.w(
+            com.powermediaplayer.util.Diag.w(
                 "PowerMediaPlayer",
                 "Drive full download skipped: ${item.name} size=${item.size} > cap=$cap"
             )

@@ -376,7 +376,7 @@ class CloudViewModel @Inject constructor(
     }
 
     fun handleSpotifyResult(data: Intent?) {
-        android.util.Log.i("PMP_DIAG", "Cloud.handleSpotifyResult data=${data != null}")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cloud.handleSpotifyResult data=${data != null}")
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             val result = spotifyProvider.handleAuthResponse(data)
@@ -516,7 +516,7 @@ class CloudViewModel @Inject constructor(
      *   (Spotify previews removed, Drive 401, etc.) do not navigate.
      */
     fun openItem(item: CloudMediaItem, onPlaybackStarted: () -> Unit = {}) {
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
             "Cloud.openItem name=${item.name} provider=${item.sourceProvider} folder=${item.isFolder} mime=${item.mimeType}"
         )
@@ -534,7 +534,7 @@ class CloudViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(isLoading = true)
                         val r = spotifyProvider.listContainer(containerUri)
                         val list = r.getOrDefault(emptyList())
-                        android.util.Log.i("PMP_DIAG", "Cloud.openItem container loaded n=${list.size} first=${list.firstOrNull()?.name}")
+                        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cloud.openItem container loaded n=${list.size} first=${list.firstOrNull()?.name}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             items = list,
@@ -589,7 +589,7 @@ class CloudViewModel @Inject constructor(
                     onPlaybackStarted()
                 }
             } catch (t: Throwable) {
-                android.util.Log.e("PowerMediaPlayer", "openItem failed", t)
+                com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "openItem failed", t)
                 _uiState.value = _uiState.value.copy(
                     errorMessage = "Couldn't play: ${t.javaClass.simpleName}: ${t.message}"
                 )
@@ -658,7 +658,7 @@ class CloudViewModel @Inject constructor(
                 nameExt in audioExts -> false
                 else -> item.mimeType.startsWith("video/")
             }
-            android.util.Log.i(
+            com.powermediaplayer.util.Diag.i(
                 "PowerMediaPlayer",
                 "openItem: name=${item.name} ext=$nameExt mime=${item.mimeType} → isVideo=$isVideo"
             )
@@ -746,7 +746,7 @@ class CloudViewModel @Inject constructor(
     private fun parseAndApply(item: CloudMediaItem, tempFile: java.io.File): Boolean {
         var found = false
         val tempUri = android.net.Uri.fromFile(tempFile)
-        android.util.Log.i(
+        com.powermediaplayer.util.Diag.i(
             "PowerMediaPlayer",
             "parseAndApply: file=${tempFile.absolutePath} bytes=${tempFile.length()}"
         )
@@ -782,7 +782,7 @@ class CloudViewModel @Inject constructor(
                     )
                     if (artBytes != null) found = true
                 }
-                android.util.Log.i(
+                com.powermediaplayer.util.Diag.i(
                     "PowerMediaPlayer",
                     "MMR result: title=$title artist=$artist album=$album " +
                         "artBytes=${artBytes?.size ?: 0}"
@@ -792,7 +792,7 @@ class CloudViewModel @Inject constructor(
         runCatching {
             val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
             val count = bundle.getInt("chapter_count", 0)
-            android.util.Log.i("PowerMediaPlayer", "M4B parser: chapter_count=$count")
+            com.powermediaplayer.util.Diag.i("PowerMediaPlayer", "M4B parser: chapter_count=$count")
             if (count > 0) {
                 val chapters = (0 until count).mapNotNull { i ->
                     val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"

@@ -181,7 +181,7 @@ private fun SkipButton(
     onClick: () -> Unit
 ) {
     val wrappedClick: () -> Unit = {
-        android.util.Log.i("PMP_DIAG", "SkipBtn click fwd=$isForward sec=$seconds enabled=$enabled")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "SkipBtn click fwd=$isForward sec=$seconds enabled=$enabled")
         onClick()
     }
     val iconTint  = if (enabled) TextPrimary.copy(alpha = 0.5f) else DisabledGrey.copy(alpha = 0.35f)

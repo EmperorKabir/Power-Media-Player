@@ -91,7 +91,7 @@ class PlayerViewModel @Inject constructor(
                     label = label
                 )
             )
-            android.util.Log.i("PMP_DIAG", "Bookmark added @ ${pos}ms uri=$mediaUri sessionId=$sessionId")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Bookmark added @ ${pos}ms uri=$mediaUri sessionId=$sessionId")
             // Mirror into the session's snapshot so the Recents row's
             // dropdown reflects it. Skip if no session is active yet
             // (rare — would only happen if user adds a bookmark before
@@ -214,7 +214,7 @@ class PlayerViewModel @Inject constructor(
                 playbackConnection.setMediaItems(listOf(item), 0)
                 playbackConnection.seekTo(recent.lastPositionMs)
                 player.playWhenReady = false
-                android.util.Log.i(
+                com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
                     "Cold-start restored '${recent.title}' @ ${recent.lastPositionMs}ms"
                 )
@@ -264,7 +264,7 @@ class PlayerViewModel @Inject constructor(
                         }.getOrDefault(0 to null)
                     }
                     val mb = mbAndRaw.first
-                    android.util.Log.i(
+                    com.powermediaplayer.util.Diag.i(
                         "PMP_DIAG",
                         "ReplayGain mb=$mb (raw='${mbAndRaw.second}')"
                     )
@@ -411,7 +411,7 @@ class PlayerViewModel @Inject constructor(
         else playbackConnection.seekToPrevious()
     }
     fun skipBack(seconds: Int) {
-        android.util.Log.i("PMP_DIAG", "VM.skipBack(${seconds}s)")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "VM.skipBack(${seconds}s)")
         if (isSpotifyActive) {
             val target = ((spotifyProvider.spotifyState.value?.positionMs ?: 0L) - seconds * 1000L)
                 .coerceAtLeast(0L)
@@ -421,7 +421,7 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.skipBack(seconds)
     }
     fun skipForward(seconds: Int) {
-        android.util.Log.i("PMP_DIAG", "VM.skipForward(${seconds}s)")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "VM.skipForward(${seconds}s)")
         if (isSpotifyActive) {
             val target = (spotifyProvider.spotifyState.value?.positionMs ?: 0L) + seconds * 1000L
             viewModelScope.launch { spotifyProvider.seekTo(target) }
@@ -483,7 +483,7 @@ class PlayerViewModel @Inject constructor(
             playbackConnection.pause()
             _sleepTimerRemainingMs.value = 0
             _sleepTimerExpired.value = true
-            android.util.Log.i("PMP_DIAG", "SleepTimer expired — paused playback")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "SleepTimer expired — paused playback")
         }
     }
 
@@ -508,7 +508,7 @@ class PlayerViewModel @Inject constructor(
                 playbackConnection.playerState.value.duration
             }
             val deltaMs = (target - pos).coerceAtLeast(1_000L)
-            android.util.Log.i("PMP_DIAG", "SleepAtEndOfChapter delta=${deltaMs}ms target=${target}ms")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "SleepAtEndOfChapter delta=${deltaMs}ms target=${target}ms")
             _sleepTimerRemainingMs.value = deltaMs
             var remaining = deltaMs
             while (remaining > 0) {
@@ -553,7 +553,7 @@ class PlayerViewModel @Inject constructor(
         when {
             _abLoopStart.value == null -> {
                 _abLoopStart.value = currentPositionMsAnySource()
-                android.util.Log.i("PMP_DIAG", "AB-loop A=${_abLoopStart.value}ms src=${if (isSpotifyActive) "spotify" else "local"}")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop A=${_abLoopStart.value}ms src=${if (isSpotifyActive) "spotify" else "local"}")
             }
             _abLoopEnd.value == null -> {
                 val end = currentPositionMsAnySource()
@@ -579,13 +579,13 @@ class PlayerViewModel @Inject constructor(
                         }
                     }
                 }
-                android.util.Log.i("PMP_DIAG", "AB-loop B=${end}ms (loop active, src=${if (isSpotifyActive) "spotify" else "local"})")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop B=${end}ms (loop active, src=${if (isSpotifyActive) "spotify" else "local"})")
             }
             else -> {
                 _abLoopStart.value = null
                 _abLoopEnd.value = null
                 abLoopJob?.cancel()
-                android.util.Log.i("PMP_DIAG", "AB-loop cleared")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop cleared")
             }
         }
     }
@@ -664,7 +664,7 @@ class PlayerViewModel @Inject constructor(
                 }
                 environmentalReverb?.runCatching { release() }
                 environmentalReverb = null
-                android.util.Log.i("PMP_DIAG", "Reverb off")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "Reverb off")
                 return
             }
             data class ReverbSpec(
@@ -712,7 +712,7 @@ class PlayerViewModel @Inject constructor(
                                     applyReverbPreset(want)
                                     return@launch
                                 }
-                                android.util.Log.i(
+                                com.powermediaplayer.util.Diag.i(
                                     "PMP_DIAG",
                                     "Reverb retry $attempt/5 still pending preset=$want"
                                 )
@@ -734,12 +734,12 @@ class PlayerViewModel @Inject constructor(
             exoPlayer.setAuxEffectInfo(
                 androidx.media3.common.AuxEffectInfo(er.id, 1.0f)
             )
-            android.util.Log.i(
+            com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
                 "Reverb applied: preset=$preset decay=${spec.decayMs}ms reverbLvl=${spec.reverbLevel} auxId=${er.id}"
             )
         } catch (t: Throwable) {
-            android.util.Log.w("PMP_DIAG", "EnvironmentalReverb apply failed", t)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "EnvironmentalReverb apply failed", t)
         }
     }
 
@@ -750,7 +750,7 @@ class PlayerViewModel @Inject constructor(
                 environmentalReverb = it
             }
         }.onFailure {
-            android.util.Log.w("PMP_DIAG", "EnvironmentalReverb construct failed (will retry)", it)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "EnvironmentalReverb construct failed (will retry)", it)
         }.getOrNull()
     }
 
@@ -776,7 +776,7 @@ class PlayerViewModel @Inject constructor(
             }
             le.setTargetGain(clamped)
         } catch (t: Throwable) {
-            android.util.Log.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
         }
     }
 

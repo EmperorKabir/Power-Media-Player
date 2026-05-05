@@ -57,7 +57,7 @@ class SpotifyBounceService : Service() {
         // our bounce-back PendingIntent to fire even if the user is
         // on a slow phone.
         handler.postDelayed({
-            android.util.Log.i("PMP_DIAG", "SpotifyBounceService self-stop")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "SpotifyBounceService self-stop")
             stopSelf()
         }, 10_000)
         return START_NOT_STICKY
@@ -103,9 +103,9 @@ class SpotifyBounceService : Service() {
                 } else {
                     context.startService(intent)
                 }
-                android.util.Log.i("PMP_DIAG", "SpotifyBounceService started")
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "SpotifyBounceService started")
             }.onFailure {
-                android.util.Log.w("PMP_DIAG", "SpotifyBounceService start failed", it)
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "SpotifyBounceService start failed", it)
             }
         }
     }
