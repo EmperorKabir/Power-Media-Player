@@ -404,9 +404,6 @@ private fun OverlayContent(
     onShowSleepTimer: () -> Unit,
     onShowChapterPicker: () -> Unit
 ) {
-    com.powermediaplayer.util.diagV {
-        "overlay-recompose isLoading=${uiState.isLoading} pos=${uiState.currentPosition} dur=${uiState.duration} chapStart=${uiState.chapterStartMs} chapDur=${uiState.chapterDurationMs}"
-    }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -557,11 +554,6 @@ private fun OverlayContent(
                     )
                 }
             }
-        }
-        if (uiState.isLoading) {
-            com.powermediaplayer.util.diagV { "loading-spinner-block ENTERED — adding 8dp Spacer + 24dp CircularProgressIndicator" }
-            Spacer(modifier = Modifier.height(8.dp))
-            CircularProgressIndicator(color = TealAccent, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         }
         Spacer(modifier = Modifier.height(16.dp))
     }
