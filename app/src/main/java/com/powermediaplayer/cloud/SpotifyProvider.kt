@@ -111,6 +111,15 @@ class SpotifyProvider @Inject constructor(
     private val _spotifyState = MutableStateFlow<SpotifyPlaybackState?>(null)
     val spotifyState: StateFlow<SpotifyPlaybackState?> = _spotifyState.asStateFlow()
 
+    // True while we're waiting for the first fully-resolved Spotify
+    // metadata for the current track — covers (a) the gap between
+    // startPlaybackPolling and the first non-null state arriving, and
+    // (b) the LRCLib lyrics fetch on every track change. Drives the
+    // shared "Loading metadata… please wait…" banner alongside the
+    // Drive cloudFetchInProgress flag.
+    private val _spotifyMetadataFetching = MutableStateFlow(false)
+    val spotifyMetadataFetching: StateFlow<Boolean> = _spotifyMetadataFetching.asStateFlow()
+
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
 
@@ -928,6 +937,8 @@ class SpotifyProvider @Inject constructor(
         if (pollJob?.isActive == true) return
         val gen = ++pollGen
         android.util.Log.i("PMP_DIAG", "Spotify.startPlaybackPolling gen=$gen")
+        // Banner ON until the first fully-resolved emit arrives.
+        _spotifyMetadataFetching.value = true
         pollJob = pollScope.launch {
             var lastTrackUri = ""
             var lastLyrics: String? = null
@@ -945,6 +956,13 @@ class SpotifyProvider @Inject constructor(
                     if (gen != pollGen) return@launch
                     if (snap != null) {
                         if (snap.trackUri != lastTrackUri) {
+                            // Mid-session track change also re-fires the
+                            // banner — the upcoming lyrics fetch is the
+                            // slow point and the user shouldn't see a
+                            // half-resolved track.
+                            if (lastTrackUri.isNotEmpty()) {
+                                _spotifyMetadataFetching.value = true
+                            }
                             lastTrackUri = snap.trackUri
                             val pair = fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
                             if (gen != pollGen) return@launch
@@ -952,11 +970,15 @@ class SpotifyProvider @Inject constructor(
                             lastSynced = pair?.second.orEmpty()
                         }
                         _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
+                        // Metadata fully resolved for this track.
+                        _spotifyMetadataFetching.value = false
                     } else {
                         _spotifyState.value = null
                         lastTrackUri = ""
                         lastLyrics = null
                         lastSynced = emptyList()
+                        // No Spotify activity → nothing to wait for.
+                        _spotifyMetadataFetching.value = false
                     }
                 }
                 iter++
@@ -1035,6 +1057,7 @@ class SpotifyProvider @Inject constructor(
         pollJob?.cancel()
         pollJob = null
         _spotifyState.value = null
+        _spotifyMetadataFetching.value = false
         android.util.Log.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
     }
 

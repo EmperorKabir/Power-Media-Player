@@ -312,10 +312,16 @@ class PlayerViewModel @Inject constructor(
     val uiState: StateFlow<PlayerUiState> = combine(
         playbackConnection.playerState,
         _sleepTimerRemainingMs,
-        spotifyProvider.spotifyState
-    ) { playerState, sleepRemaining, spotify ->
+        spotifyProvider.spotifyState,
+        spotifyProvider.spotifyMetadataFetching
+    ) { playerState, sleepRemaining, spotify, spotifyFetching ->
         val base = mapToUiState(playerState, sleepRemaining)
-        if (spotify != null) overlaySpotifyState(base, spotify) else base
+        val withSpotify = if (spotify != null) overlaySpotifyState(base, spotify) else base
+        // Banner is shared: either Drive's post-load extraction OR
+        // Spotify's first-resolved-state wait turns it on.
+        if (spotifyFetching && !withSpotify.cloudFetchInProgress) {
+            withSpotify.copy(cloudFetchInProgress = true)
+        } else withSpotify
     }.stateIn(
         scope = viewModelScope,
         // Eagerly keeps the combiner running so navigation to the player

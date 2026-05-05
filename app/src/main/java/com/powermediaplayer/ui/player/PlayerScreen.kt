@@ -142,7 +142,7 @@ fun PlayerScreen(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Loading chapters & metadata…",
+                        text = "Loading metadata… please wait…",
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodySmall
                     )
