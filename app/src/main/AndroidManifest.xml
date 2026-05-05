@@ -113,6 +113,22 @@
                 android:value="spotify_bounce_back" />
         </service>
 
+        <!-- Translucent activity that owns the Spotify auto-launch and
+             the deferred bounce-back. See class doc — investigation
+             prototype for fix-shape (c) of the cold-start RCA at
+             docs/superpowers/investigation/2026-05-05-spotify-cold-start-bounce/.
+             Lives in MainActivity's task (no taskAffinity override) so
+             the bounce intent has a chance of clearing Samsung One UI's
+             realInVisibleTask check. -->
+        <activity
+            android:name=".service.SpotifyBounceBridgeActivity"
+            android:exported="false"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
+
         <!-- Media Playback Service -->
         <service
             android:name=".service.PlaybackService"

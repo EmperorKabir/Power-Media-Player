@@ -560,92 +560,31 @@ class SpotifyProvider @Inject constructor(
      * user doesn't have Spotify installed.
      */
     private fun launchSpotifyAndReturn(): Boolean {
+        // Investigation prototype for fix-shape (c). The previous
+        // pollScope.launch { delay; bouncePi.send() } path is provably
+        // BAL_BLOCK'd on Samsung One UI (see RCA at
+        // docs/superpowers/investigation/2026-05-05-spotify-cold-start-bounce/).
+        // Delegate to a translucent bridge activity that lives in
+        // MainActivity's task; if the system's `realInVisibleTask`
+        // check honours "task contained a recently-visible activity",
+        // the bounce will succeed.
         return try {
             val pm = context.packageManager
-            val spotify = pm.getLaunchIntentForPackage("com.spotify.music") ?: run {
+            if (pm.getLaunchIntentForPackage("com.spotify.music") == null) {
                 android.util.Log.w("PMP_DIAG", "Spotify auto-launch skipped — app not installed")
                 return false
             }
-            // Start the BAL-exemption foreground service BEFORE we
-            // launch Spotify. This grants our process foreground
-            // status, which Android's BAL policy uses to decide
-            // whether to honour our subsequent bounce-back activity
-            // launch. Without this, Samsung One UI 6 / Android 14+
-            // silently rejects the launch with BAL_BLOCK even when
-            // fired via AlarmManager + PendingIntent.
-            com.powermediaplayer.service.SpotifyBounceService.start(context)
-            spotify.flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_NO_USER_ACTION or
-                Intent.FLAG_ACTIVITY_NO_ANIMATION
-            context.startActivity(spotify)
-            android.util.Log.i("PMP_DIAG", "Spotify auto-launch fired")
-            // Bounce our own MainActivity to the foreground via
-            // AlarmManager. Why not Activity.startActivity / coroutine
-            // delay? On Samsung One UI's Freecess (and Android's BAL
-            // policy generally), our app process gets FROZEN the
-            // moment Spotify takes foreground — coroutines stop
-            // running, network goes silent, PendingIntent.send() never
-            // fires from inside our process. AlarmManager fires from
-            // the SYSTEM process, which isn't frozen, and the system
-            // unfreezes us only to deliver the launch PendingIntent.
-            // This bypasses both Freecess and BAL on every device.
-            val bounceIntent = Intent(
+            val bridge = Intent(
                 context,
-                com.powermediaplayer.MainActivity::class.java
+                com.powermediaplayer.service.SpotifyBounceBridgeActivity::class.java
             ).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                    Intent.FLAG_ACTIVITY_NO_ANIMATION
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            // BAL opt-in chain (Android 14+ / API 34): both the
-            // PendingIntent CREATOR (us) and the SENDER (us, in the
-            // coroutine path) must explicitly grant background-
-            // activity-start. Without these, the system rejects the
-            // launch with BAL_BLOCK even from a foreground service.
-            val creatorOpts = android.app.ActivityOptions.makeBasic().apply {
-                if (android.os.Build.VERSION.SDK_INT >= 34) {
-                    setPendingIntentCreatorBackgroundActivityStartMode(
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
-                }
-            }
-            val bouncePi = android.app.PendingIntent.getActivity(
-                context,
-                BOUNCE_PI_REQUEST_CODE,
-                bounceIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                    android.app.PendingIntent.FLAG_IMMUTABLE,
-                creatorOpts.toBundle()
-            )
-            val senderOpts = android.app.ActivityOptions.makeBasic().apply {
-                if (android.os.Build.VERSION.SDK_INT >= 34) {
-                    setPendingIntentBackgroundActivityStartMode(
-                        android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
-                }
-            }
-            // Fire the bounce from our own process via pollScope —
-            // SpotifyBounceService keeps us alive long enough for the
-            // delay to elapse. Sending from our own process (with both
-            // creator + sender BAL opt-in) is more reliable than
-            // AlarmManager because the system-fired path doesn't
-            // forward our sender opt-in.
-            pollScope.launch {
-                kotlinx.coroutines.delay(1500)
-                runCatching {
-                    bouncePi.send(
-                        context, 0, null, null, null, null,
-                        senderOpts.toBundle()
-                    )
-                    android.util.Log.i("PMP_DIAG", "Bounce sent via PendingIntent (BAL opt-in)")
-                }.onFailure { e ->
-                    android.util.Log.w("PMP_DIAG", "Bounce send failed", e)
-                }
-            }
+            context.startActivity(bridge)
+            android.util.Log.i("PMP_DIAG", "Spotify auto-launch dispatched via BounceBridge")
             true
         } catch (e: Exception) {
-            android.util.Log.w("PMP_DIAG", "Spotify auto-launch failed", e)
+            android.util.Log.w("PMP_DIAG", "Spotify auto-launch (bridge) failed", e)
             false
         }
     }
