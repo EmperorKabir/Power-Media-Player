@@ -665,6 +665,20 @@ class PlaybackService : MediaSessionService() {
                     applyAction(player, mapping.nextAction, mapping.skipForwardSeconds, isPrev = false)
                     SessionResult.RESULT_INFO_SKIPPED
                 }
+                // AVRCP FAST_FORWARD / REWIND are semantically "seek by N
+                // seconds" (distinct from NEXT/PREV which navigate items),
+                // so they always go through SKIP_FORWARD / SKIP_BACK
+                // regardless of the user's prevAction / nextAction
+                // remapping. Some car head-units bind their forward / back
+                // keys to these instead of NEXT / PREV.
+                Player.COMMAND_SEEK_FORWARD -> {
+                    applyAction(player, BluetoothMediaActions.SKIP_FORWARD, mapping.skipForwardSeconds, isPrev = false)
+                    SessionResult.RESULT_INFO_SKIPPED
+                }
+                Player.COMMAND_SEEK_BACK -> {
+                    applyAction(player, BluetoothMediaActions.SKIP_BACK, mapping.skipBackSeconds, isPrev = true)
+                    SessionResult.RESULT_INFO_SKIPPED
+                }
                 else -> @Suppress("DEPRECATION") super.onPlayerCommandRequest(session, controller, playerCommand)
             }
         }
