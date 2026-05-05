@@ -544,8 +544,8 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.setPlaybackParametersWithPitch(speed, clamped)
     }
 
-    // ── PresetReverb (audio effect) ───────────────────────────────
-    private var presetReverb: android.media.audiofx.PresetReverb? = null
+    // ── EnvironmentalReverb (heavier than PresetReverb) ─────────────
+    private var environmentalReverb: android.media.audiofx.EnvironmentalReverb? = null
 
     init {
         // Reactive: when the user changes the reverb preset in
@@ -559,26 +559,20 @@ class PlayerViewModel @Inject constructor(
     }
 
     /**
-     * Map our 0–5 setting onto Android's PresetReverb presets.
-     * 0 = Off, 1 = Room, 2 = Medium Hall, 3 = Large Hall, 4 = Plate,
-     * 5 = "Cave" (mapped to PRESET_LARGEROOM, the most cavernous
-     * preset Android actually exposes).
+     * Map our 0–5 setting onto custom EnvironmentalReverb parameters.
+     * Switched from PresetReverb because the user wanted a noticeably
+     * stronger effect. EnvironmentalReverb exposes decayTime,
+     * reverbLevel, and other knobs that let us push beyond what the
+     * fixed Android presets allow:
+     *   - reverbLevel up to +2000 (max), versus PresetReverb's
+     *     baked-in modest gain;
+     *   - decayTime up to 20 000 ms for genuinely cavernous tails.
+     * Routing remains via ExoPlayer.setAuxEffectInfo at sendLevel=1.0
+     * so the reverbed signal mixes at unity gain on top of the dry
+     * output.
      */
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun applyReverbPreset(preset: Int) {
-        // PRESET_REVERB IS AN AUXILIARY EFFECT — attaching it to the
-        // session ID alone (which is what we did in the first
-        // implementation) does NOT route audio through it; the
-        // reverb instance just sits there inert and the user hears
-        // no change. The proper wiring is:
-        //   1. Construct PresetReverb on session 0 (global aux mix).
-        //   2. Set the desired preset + enable it.
-        //   3. Tell ExoPlayer to send a portion of its audio output
-        //      to that aux effect via AuxEffectInfo(effectId, sendLevel).
-        // sendLevel = 1.0 mixes the reverb at unity gain — the most
-        // pronounced setting Android exposes via this API. For
-        // "even more reverb" we'd have to switch to
-        // EnvironmentalReverb with custom decay/density (more code).
         val exoPlayer = com.powermediaplayer.service.PlaybackService.getExoPlayer() ?: return
         try {
             if (preset == 0) {
@@ -589,32 +583,62 @@ class PlayerViewModel @Inject constructor(
                         )
                     )
                 }
-                presetReverb?.release()
-                presetReverb = null
+                environmentalReverb?.release()
+                environmentalReverb = null
+                android.util.Log.i("PMP_DIAG", "Reverb off")
                 return
             }
-            val androidPreset: Short = when (preset) {
-                1 -> android.media.audiofx.PresetReverb.PRESET_SMALLROOM
-                2 -> android.media.audiofx.PresetReverb.PRESET_MEDIUMHALL
-                3 -> android.media.audiofx.PresetReverb.PRESET_LARGEHALL
-                4 -> android.media.audiofx.PresetReverb.PRESET_PLATE
-                5 -> android.media.audiofx.PresetReverb.PRESET_LARGEROOM
-                else -> android.media.audiofx.PresetReverb.PRESET_NONE
+            // Per-preset tuning — chosen to be roughly 2× louder than
+            // the corresponding Android PresetReverb preset, which the
+            // user reported as too quiet to notice.
+            data class ReverbSpec(
+                val decayMs: Int,
+                val decayHfRatio: Short,
+                val reverbLevel: Short,
+                val roomLevel: Short,
+                val reflectionsLevel: Short,
+                val density: Short,
+                val diffusion: Short
+            )
+            val spec = when (preset) {
+                1 -> ReverbSpec(decayMs = 1100, decayHfRatio = 830,
+                    reverbLevel = 1000, roomLevel = -800,
+                    reflectionsLevel = -1000, density = 600, diffusion = 1000)
+                2 -> ReverbSpec(decayMs = 2400, decayHfRatio = 700,
+                    reverbLevel = 1500, roomLevel = -500,
+                    reflectionsLevel = -1500, density = 800, diffusion = 1000)
+                3 -> ReverbSpec(decayMs = 4800, decayHfRatio = 600,
+                    reverbLevel = 1800, roomLevel = -200,
+                    reflectionsLevel = -2000, density = 900, diffusion = 1000)
+                4 -> ReverbSpec(decayMs = 1700, decayHfRatio = 1200,
+                    reverbLevel = 2000, roomLevel = -200,
+                    reflectionsLevel = -800, density = 700, diffusion = 1000)
+                5 -> ReverbSpec(decayMs = 9000, decayHfRatio = 500,
+                    reverbLevel = 2000, roomLevel = 0,
+                    reflectionsLevel = -2200, density = 1000, diffusion = 1000)
+                else -> return
             }
-            val pr = presetReverb ?: android.media.audiofx.PresetReverb(0, 0).also {
-                presetReverb = it
-                it.enabled = true
-            }
-            pr.preset = androidPreset
+            val er = environmentalReverb
+                ?: android.media.audiofx.EnvironmentalReverb(0, 0).also {
+                    environmentalReverb = it
+                    it.enabled = true
+                }
+            er.decayTime = spec.decayMs
+            er.decayHFRatio = spec.decayHfRatio
+            er.reverbLevel = spec.reverbLevel
+            er.roomLevel = spec.roomLevel
+            er.reflectionsLevel = spec.reflectionsLevel
+            er.density = spec.density
+            er.diffusion = spec.diffusion
             exoPlayer.setAuxEffectInfo(
-                androidx.media3.common.AuxEffectInfo(pr.id, 1.0f)
+                androidx.media3.common.AuxEffectInfo(er.id, 1.0f)
             )
             android.util.Log.i(
                 "PMP_DIAG",
-                "Reverb applied: preset=$preset auxId=${pr.id} sendLevel=1.0"
+                "Reverb applied: preset=$preset decay=${spec.decayMs}ms reverbLvl=${spec.reverbLevel} auxId=${er.id}"
             )
         } catch (t: Throwable) {
-            android.util.Log.w("PMP_DIAG", "PresetReverb apply failed", t)
+            android.util.Log.w("PMP_DIAG", "EnvironmentalReverb apply failed", t)
         }
     }
 
