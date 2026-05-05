@@ -88,6 +88,12 @@ class SettingsDataStore @Inject constructor(
         // Drive OAuth (drive.file scope): folder ids the user has
         // granted via the Drive Picker WebView. Each entry "id|name".
         val DRIVE_OAUTH_PICKED_FOLDERS = stringSetPreferencesKey("drive_oauth_picked_folders")
+
+        // One-shot acknowledgement that the user has read the
+        // "pick a FOLDER, not a file" Drive Picker warning. Set true
+        // the first time the user taps the "I understand" button on
+        // the warning dialog; never reset.
+        val DRIVE_FIRST_PICK_WARNING_SEEN = booleanPreferencesKey("drive_first_pick_warning_seen")
     }
 
     // ── Drive OAuth picked folders (drive.file via JS Picker) ─────
@@ -124,6 +130,13 @@ class SettingsDataStore @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[Keys.DRIVE_OAUTH_PICKED_FOLDERS] = emptySet()
         }
+    }
+
+    val driveFirstPickWarningSeen: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.DRIVE_FIRST_PICK_WARNING_SEEN] ?: false
+    }
+    suspend fun markDriveFirstPickWarningSeen() {
+        context.dataStore.edit { it[Keys.DRIVE_FIRST_PICK_WARNING_SEEN] = true }
     }
 
     // ── Drive (SAF) picked roots ────────────────────────────────

@@ -304,6 +304,20 @@ class CloudViewModel @Inject constructor(
     fun buildSpotifyAuthIntent(): Intent = spotifyProvider.buildAuthIntent()
     fun buildDriveOAuthSignInIntent(): Intent = driveOAuthProvider.buildSignInIntent()
 
+    /**
+     * One-shot: true after the user has seen and acknowledged the
+     * "pick a FOLDER, not a file" warning that fires before the very
+     * first Drive Picker launch. Subsequent picks skip the dialog.
+     */
+    val driveFirstPickWarningSeen: kotlinx.coroutines.flow.Flow<Boolean> =
+        settingsDataStore.driveFirstPickWarningSeen
+
+    fun markDriveFirstPickWarningSeen() {
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsDataStore.markDriveFirstPickWarningSeen()
+        }
+    }
+
     /** Process the Google Sign-In result. Returns true on success. */
     suspend fun handleDriveOAuthResult(data: Intent?): Boolean {
         val r = driveOAuthProvider.handleSignInResult(data)

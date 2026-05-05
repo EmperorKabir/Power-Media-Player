@@ -15,7 +15,10 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,10 +105,55 @@ fun CloudBrowserScreen(
         }
     }
 
-    // Direct Drive OAuth + Picker flow — the source chooser was
-    // removed since SAF / OneDrive don't reliably work on this device
-    // and Phone-storage isn't a "cloud" source the user wants here.
-    // All cloud-folder buttons now go straight to the Drive flow.
+    // One-time "pick a FOLDER, not a file" warning. Shown the very
+    // first time the user taps any of the Drive-launch buttons; the
+    // acknowledgement is persisted so subsequent taps skip straight
+    // to the Picker. Mitigates the new-user confusion that surfaced
+    // when a tester tapped INTO a Drive folder and saw "No documents".
+    val firstPickWarningSeen by viewModel.driveFirstPickWarningSeen
+        .collectAsStateWithLifecycle(initialValue = true)
+    var pendingFirstPickWarning by remember { mutableStateOf(false) }
+
+    fun launchDriveOAuth() {
+        if (firstPickWarningSeen) {
+            launchDriveOAuth()
+        } else {
+            pendingFirstPickWarning = true
+        }
+    }
+
+    if (pendingFirstPickWarning) {
+        AlertDialog(
+            onDismissRequest = { pendingFirstPickWarning = false },
+            title = {
+                Text(
+                    "Pick a FOLDER, not a file",
+                    color = TealAccent,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Text(
+                    "Please select the FOLDER CONTAINING the files you want, " +
+                        "and NOT the files themselves — files won't appear on the " +
+                        "selection screen. You'll then be able to browse the FILES " +
+                        "here in the app.",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.markDriveFirstPickWarningSeen()
+                    pendingFirstPickWarning = false
+                    launchDriveOAuth()
+                }) {
+                    Text("I understand", color = TealAccent)
+                }
+            },
+            containerColor = OledBlack
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -160,7 +208,7 @@ fun CloudBrowserScreen(
             spotifyLoggedIn = uiState.spotifyLoggedIn,
             onSelectDrive = {
                 if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
-                else driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
+                else launchDriveOAuth()
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
@@ -173,7 +221,7 @@ fun CloudBrowserScreen(
             ProviderCards(
                 driveLoggedIn = uiState.driveLoggedIn,
                 spotifyLoggedIn = uiState.spotifyLoggedIn,
-                onConnectDrive = { driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent()) },
+                onConnectDrive = { launchDriveOAuth() },
                 onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
                 onBrowseDrive = { viewModel.browseDrive(null, "Root") },
                 onBrowseSpotify = { viewModel.browseSpotify() },
@@ -417,7 +465,7 @@ fun CloudBrowserScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp, vertical = 4.dp)
-                                    .clickable { driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent()) }
+                                    .clickable { launchDriveOAuth() }
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
