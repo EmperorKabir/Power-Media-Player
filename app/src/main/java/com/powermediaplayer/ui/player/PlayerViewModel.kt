@@ -346,14 +346,24 @@ class PlayerViewModel @Inject constructor(
      * UI state would force the entire player tree to recompose on every
      * 500 ms position-poll tick. Distinct value emissions only — when
      * the underlying reference is unchanged StateFlow conflates.
+     *
+     * When Spotify is the active source, emit null so CoverArtBackground
+     * falls through to the URI path (uiState.artworkUri carries the
+     * Spotify cover URL). Without this, the previously-decoded local
+     * file's bytes win the bytes-vs-URI precedence in CoverArtBackground
+     * and the Spotify cover never renders.
      */
-    val artworkBytes: StateFlow<ByteArray?> = playbackConnection.playerState
-        .map { it.artworkBytes }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.Eagerly,
-            initialValue = playbackConnection.playerState.value.artworkBytes
-        )
+    val artworkBytes: StateFlow<ByteArray?> = combine(
+        playbackConnection.playerState,
+        spotifyProvider.spotifyState
+    ) { playerState, spotify ->
+        if (spotify != null) null else playerState.artworkBytes
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = if (spotifyProvider.spotifyState.value != null) null
+            else playbackConnection.playerState.value.artworkBytes
+    )
 
     /**
      * Current cover-art scaling mode pulled from Settings — drives
