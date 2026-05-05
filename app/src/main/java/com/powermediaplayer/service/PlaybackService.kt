@@ -754,11 +754,13 @@ class PlaybackService : MediaSessionService() {
             BluetoothMediaActions.PREV_TRACK -> player.seekToPreviousMediaItem()
             BluetoothMediaActions.NEXT_TRACK -> player.seekToNextMediaItem()
             BluetoothMediaActions.SKIP_BACK -> {
-                val target = (player.currentPosition - seconds * 1000L).coerceAtLeast(0L)
-                player.seekTo(target)
+                // Route through the same cumulativeSkip path the in-app
+                // skip buttons use — inherits cross-boundary spill,
+                // duration clamping, debounce, and rapid-tap accumulation.
+                cumulativeSkip(player, -seconds * 1000L)
             }
             BluetoothMediaActions.SKIP_FORWARD -> {
-                player.seekTo(player.currentPosition + seconds * 1000L)
+                cumulativeSkip(player, seconds * 1000L)
             }
             BluetoothMediaActions.RESTART_TRACK -> player.seekTo(0L)
             BluetoothMediaActions.PREV_CHAPTER,
