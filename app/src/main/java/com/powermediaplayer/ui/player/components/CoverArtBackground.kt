@@ -38,7 +38,8 @@ fun CoverArtBackground(
     hasCoverArt: Boolean,
     onColorsExtracted: (CoverArtColors?) -> Unit = {},
     artworkBytes: ByteArray? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit
 ) {
     Box(
         modifier = modifier
@@ -83,7 +84,7 @@ fun CoverArtBackground(
             Image(
                 bitmap = decoded!!.asImageBitmap(),
                 contentDescription = "Album cover art",
-                contentScale = ContentScale.Fit,
+                contentScale = contentScale,
                 modifier = Modifier.fillMaxSize()
             )
             return@Box
@@ -101,7 +102,7 @@ fun CoverArtBackground(
                     .allowHardware(false)
                     .build(),
                 contentDescription = "Album cover art",
-                contentScale = ContentScale.Fit,
+                contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { result ->
                     android.util.Log.i("PMP_DIAG", "CoverArt AsyncImage onSuccess uri=$artworkUri")
