@@ -1,0 +1,5 @@
+﻿samsung/q7qxeea/q7q:16/BP2A.250605.031.A3/F966BXXS9AZC8_OXM9AZC8:user/release-keys
+    versionCode=2 minSdk=30 targetSdk=35     versionName=1.0.0-friends
+Physical size: 1968x2184
+Physical density: 420 Override density: 311
+

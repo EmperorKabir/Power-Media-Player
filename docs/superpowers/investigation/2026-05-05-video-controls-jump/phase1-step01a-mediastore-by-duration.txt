@@ -1,0 +1,64 @@
+﻿Row: 0 _id=28795, _data=/storage/emulated/0/DCIM/Camera/20260323_130942.mp4, _display_name=20260323_130942.mp4, duration=168238, _size=3032122320, width=3840, height=2160
+Row: 1 _id=32909, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260426-WA0032.mp4, _display_name=VID-20260426-WA0032.mp4, duration=113662, _size=26638306, width=1280, height=720
+Row: 2 _id=33499, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260501-WA0024.mp4, _display_name=VID-20260501-WA0024.mp4, duration=89583, _size=9359691, width=1024, height=576
+Row: 3 _id=22334, _data=/storage/emulated/0/DCIM/DJI Album/DJI_20260117_230023_17_null_video.mp4, _display_name=DJI_20260117_230023_17_null_video.mp4, duration=70060, _size=91330547, width=1920, height=1080
+Row: 4 _id=31387, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260417-WA0019.mp4, _display_name=VID-20260417-WA0019.mp4, duration=68731, _size=14356065, width=1024, height=576
+Row: 5 _id=33251, _data=/storage/emulated/0/DCIM/Camera/20260429_195640.mp4, _display_name=20260429_195640.mp4, duration=68287, _size=1231202869, width=3840, height=2160
+Row: 6 _id=28896, _data=/storage/emulated/0/DCIM/Camera/20260324_130855.mp4, _display_name=20260324_130855.mp4, duration=61096, _size=1102426632, width=3840, height=2160
+Row: 7 _id=33487, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260501-WA0016.mp4, _display_name=VID-20260501-WA0016.mp4, duration=57771, _size=6938496, width=1024, height=576
+Row: 8 _id=34118, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260505-WA0004.mp4, _display_name=VID-20260505-WA0004.mp4, duration=56657, _size=9732169, width=1024, height=576
+Row: 9 _id=22330, _data=/storage/emulated/0/DCIM/DJI Album/DJI_20260117_225909_16_null_video.mp4, _display_name=DJI_20260117_225909_16_null_video.mp4, duration=50898, _size=55039963, width=1920, height=1080
+Row: 10 _id=33417, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260430-WA0030.mp4, _display_name=VID-20260430-WA0030.mp4, duration=49435, _size=5967507, width=576, height=1024
+Row: 11 _id=34122, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260505-WA0005.mp4, _display_name=VID-20260505-WA0005.mp4, duration=46904, _size=8018869, width=1024, height=576
+Row: 12 _id=30092, _data=/storage/emulated/0/DCIM/Camera/20260405_151516.mp4, _display_name=20260405_151516.mp4, duration=46630, _size=839994645, width=3840, height=2160
+Row: 13 _id=34000, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260504-WA0027.mp4, _display_name=VID-20260504-WA0027.mp4, duration=45372, _size=9522056, width=1024, height=576
+Row: 14 _id=32863, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260426-WA0016.mp4, _display_name=VID-20260426-WA0016.mp4, duration=41726, _size=9765671, width=1280, height=720
+Row: 15 _id=33586, _data=/storage/emulated/0/DCIM/Camera/20260502_022037.mp4, _display_name=20260502_022037.mp4, duration=41173, _size=174049083, width=1920, height=1080
+Row: 16 _id=33521, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260501-WA0032.mp4, _display_name=VID-20260501-WA0032.mp4, duration=39102, _size=6746655, width=1024, height=576
+Row: 17 _id=32758, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260425-WA0003.mp4, _display_name=VID-20260425-WA0003.mp4, duration=34833, _size=7858679, width=1280, height=720
+Row: 18 _id=31554, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260417-WA0028.mp4, _display_name=VID-20260417-WA0028.mp4, duration=31742, _size=6661942, width=1024, height=576
+Row: 19 _id=28908, _data=/storage/emulated/0/DCIM/Camera/20260324_160829.mp4, _display_name=20260324_160829.mp4, duration=30443, _size=547843841, width=3840, height=2160
+Row: 20 _id=22328, _data=/storage/emulated/0/DCIM/DJI Album/DJI_20260117_225808_14_null_video.mp4, _display_name=DJI_20260117_225808_14_null_video.mp4, duration=30107, _size=35854413, width=1920, height=1080
+Row: 21 _id=33395, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260430-WA0020.mp4, _display_name=VID-20260430-WA0020.mp4, duration=29582, _size=11271482, width=720, height=1280
+Row: 22 _id=28683, _data=/storage/emulated/0/DCIM/Camera/20260322_194508.mp4, _display_name=20260322_194508.mp4, duration=29528, _size=526161839, width=3840, height=2160
+Row: 23 _id=33262, _data=/storage/emulated/0/DCIM/Camera/20260429_213344.mp4, _display_name=20260429_213344.mp4, duration=28992, _size=521965441, width=3840, height=2160
+Row: 24 _id=34052, _data=/storage/emulated/0/DCIM/Camera/20260504_220151.mp4, _display_name=20260504_220151.mp4, duration=26614, _size=479726749, width=3840, height=2160
+Row: 25 _id=33686, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0024.mp4, _display_name=VID-20260502-WA0024.mp4, duration=26006, _size=5481421, width=1024, height=576
+Row: 26 _id=32169, _data=/storage/emulated/0/DCIM/Camera/20260420_204327.mp4, _display_name=20260420_204327.mp4, duration=23674, _size=97261092, width=1920, height=1080
+Row: 27 _id=28837, _data=/storage/emulated/0/DCIM/UseePlus/Video_2026-03-23 19_12_40_128.mp4, _display_name=Video_2026-03-23 19_12_40_128.mp4, duration=19717, _size=50097268, width=1920, height=1440
+Row: 28 _id=31651, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260418-WA0015.mp4, _display_name=VID-20260418-WA0015.mp4, duration=19667, _size=2377205, width=1024, height=576
+Row: 29 _id=28096, _data=/storage/emulated/0/DCIM/Camera/20260317_125732.mp4, _display_name=20260317_125732.mp4, duration=19542, _size=348276066, width=3840, height=2160
+Row: 30 _id=22329, _data=/storage/emulated/0/DCIM/DJI Album/DJI_20260117_225843_15_null_video.mp4, _display_name=DJI_20260117_225843_15_null_video.mp4, duration=18181, _size=22772512, width=1920, height=1080
+Row: 31 _id=25121, _data=/storage/emulated/0/Movies/Hallway camera  2026-02-13 19-22-44.mp4, _display_name=Hallway camera  2026-02-13 19-22-44.mp4, duration=16130, _size=5536248, width=1920, height=1080
+Row: 32 _id=28613, _data=/storage/emulated/0/DCIM/Camera/20260322_141533.mp4, _display_name=20260322_141533.mp4, duration=16085, _size=289970768, width=3840, height=2160
+Row: 33 _id=30027, _data=/storage/emulated/0/DCIM/Camera/20260404_164103.mp4, _display_name=20260404_164103.mp4, duration=15399, _size=277655702, width=3840, height=2160
+Row: 34 _id=33771, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0056.mp4, _display_name=VID-20260502-WA0056.mp4, duration=14420, _size=3026969, width=768, height=576
+Row: 35 _id=34004, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260504-WA0028.mp4, _display_name=VID-20260504-WA0028.mp4, duration=13769, _size=2231060, width=1024, height=576
+Row: 36 _id=31074, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260415-WA0018.mp4, _display_name=VID-20260415-WA0018.mp4, duration=13700, _size=3227802, width=720, height=1280
+Row: 37 _id=28040, _data=/storage/emulated/0/DCIM/Screen recordings/Screen_Recording_20260316_191314_Deliveroo.mp4, _display_name=Screen_Recording_20260316_191314_Deliveroo.mp4, duration=13425, _size=10366665, width=1080, height=2520
+Row: 38 _id=33483, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260501-WA0015.mp4, _display_name=VID-20260501-WA0015.mp4, duration=12980, _size=2190893, width=1024, height=576
+Row: 39 _id=28233, _data=/storage/emulated/0/DCIM/Camera/20260318_195732.mp4, _display_name=20260318_195732.mp4, duration=12096, _size=219516526, width=3840, height=2160
+Row: 40 _id=33783, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0057.mp4, _display_name=VID-20260502-WA0057.mp4, duration=10635, _size=2236842, width=768, height=576
+Row: 41 _id=34016, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260504-WA0031.mp4, _display_name=VID-20260504-WA0031.mp4, duration=10194, _size=1784647, width=1024, height=576
+Row: 42 _id=33629, _data=/storage/emulated/0/DCIM/Camera/20260502_171857.mp4, _display_name=20260502_171857.mp4, duration=9614, _size=175170434, width=3840, height=2160
+Row: 43 _id=33764, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0053.mp4, _display_name=VID-20260502-WA0053.mp4, duration=9195, _size=1937026, width=768, height=576
+Row: 44 _id=24853, _data=/storage/emulated/0/DCIM/Screen recordings/Screen_Recording_20260210_235027_Stremio.mp4, _display_name=Screen_Recording_20260210_235027_Stremio.mp4, duration=9112, _size=2106908, width=1200, height=1080
+Row: 45 _id=28799, _data=/storage/emulated/0/DCIM/Camera/20260323_131345.mp4, _display_name=20260323_131345.mp4, duration=8962, _size=160967131, width=3840, height=2160
+Row: 46 _id=34008, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260504-WA0029.mp4, _display_name=VID-20260504-WA0029.mp4, duration=8824, _size=1247204, width=1024, height=576
+Row: 47 _id=31525, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260417-WA0025.mp4, _display_name=VID-20260417-WA0025.mp4, duration=8800, _size=1091293, width=1024, height=576
+Row: 48 _id=23077, _data=/storage/emulated/0/Movies/1769186318546.mp4, _display_name=1769186318546.mp4, duration=8000, _size=2886833, width=720, height=1280
+Row: 49 _id=33755, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0050.mp4, _display_name=VID-20260502-WA0050.mp4, duration=7988, _size=1682411, width=768, height=576
+Row: 50 _id=33777, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0055.mp4, _display_name=VID-20260502-WA0055.mp4, duration=7895, _size=1661509, width=768, height=576
+Row: 51 _id=28600, _data=/storage/emulated/0/DCIM/Camera/20260322_135939.mp4, _display_name=20260322_135939.mp4, duration=7692, _size=138399998, width=3840, height=2160
+Row: 52 _id=34020, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260504-WA0032.mp4, _display_name=VID-20260504-WA0032.mp4, duration=7570, _size=1555568, width=1024, height=576
+Row: 53 _id=33682, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0023.mp4, _display_name=VID-20260502-WA0023.mp4, duration=7245, _size=1552441, width=1024, height=576
+Row: 54 _id=34012, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260504-WA0030.mp4, _display_name=VID-20260504-WA0030.mp4, duration=7198, _size=881288, width=1024, height=576
+Row: 55 _id=33763, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0052.mp4, _display_name=VID-20260502-WA0052.mp4, duration=6618, _size=1459103, width=768, height=576
+Row: 56 _id=33773, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0054.mp4, _display_name=VID-20260502-WA0054.mp4, duration=5619, _size=1174759, width=768, height=576
+Row: 57 _id=31182, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260416-WA0013.mp4, _display_name=VID-20260416-WA0013.mp4, duration=5035, _size=4034369, width=1072, height=1920
+Row: 58 _id=22073, _data=/storage/emulated/0/DCIM/Camera/20260116_195953.mp4, _display_name=20260116_195953.mp4, duration=4395, _size=79300378, width=3840, height=2160
+Row: 59 _id=33757, _data=/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-20260502-WA0051.mp4, _display_name=VID-20260502-WA0051.mp4, duration=4389, _size=930298, width=768, height=576
+Row: 60 _id=22178, _data=/storage/emulated/0/DCIM/Camera/20260116_215919.mp4, _display_name=20260116_215919.mp4, duration=3496, _size=63354338, width=3840, height=2160
+Row: 61 _id=33261, _data=/storage/emulated/0/DCIM/Camera/20260429_213340.mp4, _display_name=20260429_213340.mp4, duration=2589, _size=46861550, width=3840, height=2160
+Row: 62 _id=24209, _data=/storage/emulated/0/DCIM/Camera/20260204_223218.mp4, _display_name=20260204_223218.mp4, duration=2008, _size=33408829, width=3840, height=2160
+Row: 63 _id=28599, _data=/storage/emulated/0/DCIM/Camera/20260322_135931.mp4, _display_name=20260322_135931.mp4, duration=1267, _size=23582618, width=3840, height=2160
