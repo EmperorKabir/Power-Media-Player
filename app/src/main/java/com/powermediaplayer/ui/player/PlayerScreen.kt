@@ -55,6 +55,13 @@ fun PlayerScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val artworkBytes by viewModel.artworkBytes.collectAsStateWithLifecycle()
     val sleepTimerExpired by viewModel.sleepTimerExpired.collectAsStateWithLifecycle()
+    val artworkScaleMode by viewModel.artworkScaleMode.collectAsStateWithLifecycle()
+    val artworkContentScale: androidx.compose.ui.layout.ContentScale =
+        if (artworkScaleMode == "fill") {
+            androidx.compose.ui.layout.ContentScale.Crop
+        } else {
+            androidx.compose.ui.layout.ContentScale.Fit
+        }
     var coverColors by remember { mutableStateOf<CoverArtColors?>(null) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showChapterPicker by remember { mutableStateOf(false) }
@@ -67,6 +74,7 @@ fun PlayerScreen(
             uiState.isVideoContent -> PlayerScreenCompact(
                 uiState = uiState,
                 artworkBytes = artworkBytes,
+                artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -77,6 +85,7 @@ fun PlayerScreen(
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded -> PlayerScreenExpanded(
                 uiState = uiState,
                 artworkBytes = artworkBytes,
+                artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -86,6 +95,7 @@ fun PlayerScreen(
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium -> PlayerScreenCompact(
                 uiState = uiState,
                 artworkBytes = artworkBytes,
+                artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -96,6 +106,7 @@ fun PlayerScreen(
             else -> PlayerScreenCompact(
                 uiState = uiState,
                 artworkBytes = artworkBytes,
+                artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
@@ -235,6 +246,7 @@ fun PlayerScreen(
 private fun PlayerScreenCompact(
     uiState: PlayerUiState,
     artworkBytes: ByteArray?,
+    artworkContentScale: androidx.compose.ui.layout.ContentScale,
     viewModel: PlayerViewModel,
     coverColors: CoverArtColors?,
     onColorsExtracted: (CoverArtColors?) -> Unit,
@@ -296,7 +308,8 @@ private fun PlayerScreenCompact(
                 artworkUri = uiState.artworkUri,
                 artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
-                onColorsExtracted = onColorsExtracted
+                onColorsExtracted = onColorsExtracted,
+                contentScale = artworkContentScale
             )
         }
 
@@ -556,6 +569,7 @@ private fun OverlayContent(
 private fun PlayerScreenExpanded(
     uiState: PlayerUiState,
     artworkBytes: ByteArray?,
+    artworkContentScale: androidx.compose.ui.layout.ContentScale,
     viewModel: PlayerViewModel,
     coverColors: CoverArtColors?,
     onColorsExtracted: (CoverArtColors?) -> Unit,
@@ -578,7 +592,8 @@ private fun PlayerScreenExpanded(
                 artworkUri = uiState.artworkUri,
                 artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
-                onColorsExtracted = onColorsExtracted
+                onColorsExtracted = onColorsExtracted,
+                contentScale = artworkContentScale
             )
         }
 
