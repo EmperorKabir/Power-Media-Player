@@ -355,6 +355,18 @@ class PlayerViewModel @Inject constructor(
             initialValue = playbackConnection.playerState.value.artworkBytes
         )
 
+    /**
+     * Current cover-art scaling mode pulled from Settings — drives
+     * ContentScale on the now-playing surface so the user can flip
+     * between Fit (show whole cover) and Fill (no margins, may crop).
+     */
+    val artworkScaleMode: StateFlow<String> = settingsDataStore.artworkScaleMode
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = "fit"
+        )
+
 
     // ── Transport Controls (delegated to PlaybackConnection) ─────
 
