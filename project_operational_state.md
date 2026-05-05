@@ -1,5 +1,5 @@
 # project_operational_state.md
-*Generated 2026-05-05. Application: Power Media Player. Repo: github.com/EmperorKabir/Power-Media-Player. Branch: main.*
+*Generated 2026-05-05 (revision 2). Application: Power Media Player. Repo: github.com/EmperorKabir/Power-Media-Player. Branch: main. HEAD: 146887a.*
 
 ## 1. Project Objectives
 
@@ -7,7 +7,7 @@
 
 **Key features (all currently implemented)**:
 - Local audio + video playback (any format Android Media3 supports: MP3, FLAC, AAC, OGG, OPUS, WAV, M4A, M4B audiobooks, MP4, MKV, WEBM, MOV, AVI, FLV, WMV, TS).
-- 10-band equaliser with custom presets, BassBoost, LoudnessEnhancer.
+- 10-band equaliser with audibility-tuned default presets (Flat, Classical, Rock, Pop, Jazz, Bass Boost, Treble Boost, Vocal, Electronic, Acoustic), custom user presets, BassBoost via the Bass Boost preset.
 - A-B loop with Spotify-aware seek routing.
 - Frame-by-frame video stepping.
 - Sleep timer + sleep-at-end-of-chapter.
@@ -18,15 +18,17 @@
 - Bluetooth A2DP/AVRCP control with re-mappable next/prev keys.
 - Chromecast streaming (play-services-cast-framework).
 - Picture-in-picture (PiP) auto-enter on home press.
-- Per-track speed (0.5×–2.0×), pitch-independent shift, ReplayGain.
-- Subtitle / audio delay sliders.
-- Crossfade between tracks.
+- Per-track speed (0.5×–2.0×), pitch-independent shift, ReplayGain (now full ±15 dB — boost via LoudnessEnhancer, attenuation via ExoPlayer.volume).
+- Audio delay slider (0–2000 ms positive; via custom AudioDelayProcessor PCM ring buffer).
+- Crossfade slider (0–10000 ms; volume-ramp on track transitions, skipped on queue's last track).
+- Subtitle delay slider (UI plumbed; logged-only — pending subtitle pipeline implementation).
 - Folder-as-audiobook aggregator with absolute cross-file chapters.
 - Cover-art extraction via MMR + M4B chapter parser.
 - Audio output indicator: codec · channel-layout · sample-rate (AAC/AC-3/E-AC-3/E-AC-3-JOC-Atmos/AC-4/TrueHD/DTS/DTS-HD/PCM/FLAC/Opus/Vorbis).
-- Audio effects: 5 reverb presets (EnvironmentalReverb, decay 1.1s–9.0s, reverbLevel up to +2000), Stereo flip (L↔R), Mono mix, Multi-channel passthrough toggle.
+- Audio effects: 5 reverb presets (EnvironmentalReverb at platform-max wet bus + cold-start retry loop), Stereo flip (L↔R), Mono mix, Multi-channel passthrough toggle.
+- Audio output detection: true-mono speakers disable Stereo flip + Mono mix toggles with a hint; phones with stereo speakers and BT/wired/cast outputs unaffected.
 - Video effects: Mirror H, Flip V, Black & white, Sepia, Invert colours, 0/90/180/270 rotation, all stackable.
-- Cloud: Google Drive via OAuth + drive.file scope + WebView Drive Picker (no Google verification required).
+- Cloud: Google Drive via OAuth + drive.file scope + WebView Drive Picker (no Google verification required) + first-pick warning dialog.
 - Cloud: Spotify Web API + Connect (PKCE OAuth via AppAuth, Premium-only full playback, LRCLib synced lyrics, auto-launch + bounce-back on Spotify cold-start).
 - Storage Access Framework path retained for OneDrive / USB / phone storage (alongside Drive).
 - Drive favourites strip (folders + files) + Spotify favourites strip + Library favourites; star icon throughout (no hearts).
@@ -52,7 +54,7 @@
 
 **Required workflows**:
 - Build verification before commit when material code change touches compile path.
-- adb-driven smoke test before claiming functional fixes verified.
+- adb-driven smoke test before claiming functional fixes verified (waived only when user explicitly says "no phone connection").
 - logcat evidence required for diagnosis claims; no guessing.
 - TaskCreate/TaskUpdate for multi-step (≥3) work.
 
@@ -85,7 +87,10 @@ com.powermediaplayer
 ├── MainActivity.kt                      single-activity Compose host + MainActivityHolder
 ├── PowerMediaPlayerApp.kt               Hilt application
 ├── audio/
-│   └── StereoTransformProcessor.kt      AudioProcessor for stereo flip + mono mix
+│   ├── StereoTransformProcessor.kt      AudioProcessor for stereo flip + mono mix
+│   ├── AudioDelayProcessor.kt           PCM-16 ring buffer for 0–2000 ms audio delay
+│   ├── AudioOutputDetector.kt           AudioDeviceCallback singleton; isTrueMonoOutput Flow
+│   └── EqualizerEffectController.kt     10-band Equalizer, attaches on playerFlow
 ├── cast/
 │   └── CastOptionsProviderImpl.kt       Chromecast init
 ├── cloud/
@@ -98,48 +103,54 @@ com.powermediaplayer
 │   └── SpotifyTokenStore.kt             AuthState JSON in DataStore
 ├── data/
 │   ├── db/
-│   │   ├── AppDatabase.kt               Room v5
-│   │   ├── dao/
-│   │   │   ├── BookmarkDao              per-mediaUri
-│   │   │   ├── HistoryBookmarkDao       per-session FK historyId
-│   │   │   ├── FavouriteBookmarkDao     per-pin FK favouriteId
-│   │   │   ├── PlaybackHistoryDao       autogen id
-│   │   │   ├── HistoryFavouriteDao      autogen id, full snapshot
-│   │   │   ├── PlaybackStateDao
-│   │   │   ├── EqualizerPresetDao
-│   │   │   └── FavoriteDao              local-file favourites (legacy uri set)
-│   │   └── entity/                      mirrors above DAOs
+│   │   ├── AppDatabase.kt               Room v7 (destructive migration)
+│   │   ├── dao/                         BookmarkDao, HistoryBookmarkDao, FavouriteBookmarkDao,
+│   │   │                                PlaybackHistoryDao, HistoryFavouriteDao, PlaybackStateDao,
+│   │   │                                EqualizerPresetDao, FavoriteDao
+│   │   └── entity/                      mirrors above DAOs (BookmarkEntity now Index('mediaUri'))
 │   ├── preferences/
-│   │   └── SettingsDataStore.kt         All non-Room prefs incl. fav strips, picked roots, drive_first_pick_warning_seen
+│   │   └── SettingsDataStore.kt         All non-Room prefs incl. fav strips, picked roots,
+│   │                                    drive_first_pick_warning_seen, audioDelayMs,
+│   │                                    crossfadeMs, replayGainEnabled, reverbPreset,
+│   │                                    stereoFlip, monoMix, passthroughAudio, video effects
 │   └── repository/
 │       └── LastPlayedRepository.kt      Recents + Pinned + sessionId state
 ├── di/
 │   └── AppModule.kt                     Hilt providers
 ├── service/
-│   ├── PlaybackService.kt               MediaSessionService + ExoPlayer + StereoTransformProcessor injection
-│   ├── PlaybackConnection.kt            MediaController IPC + PlayerState mapping
+│   ├── PlaybackService.kt               MediaSessionService + ExoPlayer + StereoTransformProcessor
+│   │                                    + AudioDelayProcessor injection + crossfade controller
+│   │                                    + volume mixer (replayGainFactor × crossfadeFactor)
+│   ├── PlaybackConnection.kt            MediaController IPC + PlayerState mapping (cached
+│   │                                    audioFormatLabel + cumulative window-offset table)
 │   └── SpotifyBounceService.kt          10-second foreground-service for BAL exemption
 ├── ui/
-│   ├── cloud/                           CloudBrowserScreen + CloudViewModel
+│   ├── cloud/                           CloudBrowserScreen + CloudViewModel (stable LazyColumn key)
 │   ├── lastplayed/                      LastPlayedScreen + ViewModel
 │   ├── library/                         LibraryScreen + ViewModel + MediaSelectionComponents
-│   ├── player/                          PlayerScreen (Compact + Expanded layouts) + ViewModel + UiState
-│   │   └── components/                  AudioEffectsButton, VideoEffectsButton, BluetoothButton, CastButton, VideoSurface, ProgressSliders, SecondaryControls, PlaybackControls, MiniPlayerBar, ChapterPickerDialog, CoverArtBackground
-│   ├── equalizer/                       EQ tab
-│   ├── settings/                        Settings tab
+│   ├── player/                          PlayerScreen + ViewModel + UiState + reverb retry loop
+│   │   └── components/                  AudioEffectsButton (mono-output hint), VideoEffectsButton,
+│   │                                    BluetoothButton, CastButton, VideoSurface, ProgressSliders,
+│   │                                    SecondaryControls, PlaybackControls, MiniPlayerBar,
+│   │                                    ChapterPickerDialog, CoverArtBackground
+│   ├── equalizer/                       EQ tab (audibility-tuned defaults)
+│   ├── settings/                        Settings tab (injects AudioOutputDetector)
 │   ├── components/                      shared
 │   ├── theme/                           Color palette, typography
 │   └── navigation/                      AppNavigation + tab routing
-└── util/                                TextNormalizer, TimeFormatter, M4bChapterParser, MediaMetadataHelper, FolderChapterAggregator, BluetoothHelper, BrightnessHelper, PaletteHelper, TextRecognitionManager
+└── util/                                TextNormalizer, TimeFormatter, M4bChapterParser,
+                                         MediaMetadataHelper, FolderChapterAggregator,
+                                         BluetoothHelper, BrightnessHelper, PaletteHelper,
+                                         TextRecognitionManager
 ```
 
-**Database schema (Room v5, destructive migration)**:
-- `bookmarks` — id PK, mediaUri, positionMs, label, createdAtMs.
+**Database schema (Room v7, destructive migration)**:
+- `bookmarks` — id PK, mediaUri (indexed), positionMs, label, createdAtMs.
 - `playback_history` — autogen id PK, mediaUri (indexed, non-unique), title/subtitle/artworkUri/source/mediaKindOrdinal/lastPositionMs/durationMs/lastPlayedAt.
 - `history_bookmarks` — id PK, historyId FK CASCADE, positionMs, label, createdAtMs.
-- `history_favourites` — autogen id PK, full snapshot of mediaUri/title/subtitle/artwork/source/mediaKindOrdinal/lastPositionMs/durationMs/pinOrder/pinnedAtMs.
+- `history_favourites` — autogen id PK, full snapshot.
 - `favourite_bookmarks` — id PK, favouriteId FK CASCADE, positionMs, label, createdAtMs.
-- `favorites` (local files), `equalizer_presets`, `playback_state` — pre-existing.
+- `favorites`, `equalizer_presets`, `playback_state` — pre-existing.
 
 **OAuth/scope state**:
 - Google: `https://www.googleapis.com/auth/drive.file` (non-sensitive). Consent screen Production-published. Authorised domain `emperorkabir.github.io`. SHA-1 `BD:78:32:1D:87:BC:14:76:F8:F3:D6:A5:3E:22:07:7E:B6:DE:BF:AE`. Picker API enabled. `DRIVE_PICKER_APP_ID=184142114356`, `DRIVE_PICKER_API_KEY` restricted to Picker API only.
@@ -151,32 +162,45 @@ com.powermediaplayer
 - Foreground service types declared: `mediaPlayback` (PlaybackService), `specialUse` (SpotifyBounceService) with `PROPERTY_SPECIAL_USE_FGS_SUBTYPE=spotify_bounce_back`.
 - Activities: MainActivity (LAUNCHER, audio/video VIEW intent), DrivePickerActivity (single-task themed).
 
+**Audio chain (in order)**:
+1. ExoPlayer decoder.
+2. `StereoTransformProcessor` (stereo flip / mono mix; rejects non-PCM-16-stereo so multichannel passes through).
+3. `AudioDelayProcessor` (0–2000 ms positive delay; rejects non-PCM-16 so passthrough surround unaffected).
+4. `DefaultAudioSink` → AudioTrack.
+5. Side-channel: `EnvironmentalReverb` aux bus (session 0, AuxEffectInfo sendLevel=1.0) + `LoudnessEnhancer` boost + `Equalizer` 10-band, all attached to ExoPlayer's audio session.
+
+**Volume mixer (PlaybackService.Companion)**:
+- `replayGainFactor` × `crossfadeFactor` → ExoPlayer.volume.
+- Sources: PlayerViewModel ReplayGain attenuation path, internal crossfade controller. Either source's setter applies the mixed product so neither overwrites the other.
+
 ## 4. Active State
 
 **Unresolved bugs**:
 
 | ID | Symptom | Diagnostic hypothesis | Evidence |
 |----|---------|----------------------|----------|
-| B-1 | Spotify cold-start bounce-back fails on Samsung One UI 6 + "Optimize" widget tapped | `balDontBringExistingBackgroundTaskStackToFg=true` set by Samsung battery policy; no Android API can override | logcat `BAL_BLOCK result code=3` despite full opt-in chain (creator + sender ALLOW_BAL, foreground-service process state, MODE_BACKGROUND_ACTIVITY_START_ALLOWED on both ends) |
-| B-2 | Spotify bounce intermittently fails even without Optimize widget | User-action token may expire near 1500ms boundary; race conditions between Spotify foreground transition and our bounce fire | Not yet captured in logcat; user-reported only |
-| B-3 | Reverb may still be subtle on certain output paths | EnvironmentalReverb auxSendLevel 1.0f is API max; cannot push higher without DSP-side processing | Not measured — verification deferred to user audio test |
-| B-4 | Friend reports "No documents" inside Drive Picker | Picker MIME filter set to folders-only; sub-folder navigation shows no files (intentional) — UX confusion | Mitigated by one-time warning dialog (commit `a6186a2`) but not validated in field |
+| B-1 | Spotify cold-start bounce-back fails on Samsung One UI 6 + "Optimize" widget tapped | `balDontBringExistingBackgroundTaskStackToFg=true` set by Samsung battery policy; no Android API can override | logcat `BAL_BLOCK result code=3` despite full opt-in chain |
+| B-2 | Spotify bounce intermittently fails even without Optimize widget | User-action token may expire near 1500ms boundary; race between Spotify foreground transition and our bounce fire | Not yet captured in logcat; user-reported only |
+| B-3 | Subtitle delay slider is a no-op | `setSubtitleDelayMs` in PlaybackConnection is a logged placeholder; full sync requires custom subtitle pipeline | code review |
+| B-4 | Audio delay is positive-only (negative slider value collapses to 0) | An audio AudioProcessor cannot make audio play earlier than video; would require video-side delay (out of scope) | by design — slider remains bidirectional in UI |
 
-**Resolved-this-session, latest-state**:
-- Video effect stacking after toggle cycle: fixed by unified TextureView + Compose graphicsLayer (`d93b4c9`).
-- Spotify favourites missing from Last Played: fixed by adding recordCloudPlay to playSpotifyFavourite (`18f1bed`).
-- Player tab showing stale local video after Spotify mirror: fixed by gating cold-start resume on spotifyState (`8335640`).
-- Reverb inaudible: PresetReverb was not aux-routed; switched to EnvironmentalReverb + setAuxEffectInfo (`559ee8c`).
-- Effect popup auto-dismiss: 3s timer with interaction-reset (`8335640`).
-- Spotify polling latency / album-art delay: 200ms burst for first 10 iterations (`69b1473`).
+**Resolved (feature-complete; awaiting on-device verification by user)**:
+- Reverb audibility + cold-start retry (`146887a` shipped over `6f43622`'s prior boost).
+- Audio delay slider implemented via `AudioDelayProcessor` (`146887a`).
+- Crossfade slider implemented via volume-ramp controller in `PlaybackService` (`146887a`).
+- ReplayGain attenuation routing fixed (`146887a`) — negative track-gains no longer dropped.
+- Mono-speaker hint disables Stereo flip / Mono mix on true-mono outputs (`146887a`).
+- EQ Classical + Acoustic preset audibility (`146887a`; DB v6→v7 destructive reseed).
+- StackOverflow on Add folder tap (`2dfe943`).
+- Video effect stacking after toggle cycle (`d93b4c9`).
 
 **Precise next algorithmic steps**:
 
-1. **Capture failing logcat for B-2**: instruct user to run `adb logcat -d *:S PMP_DIAG:I ActivityTaskManager:V` immediately after a failure and paste output. Without, no fix.
-2. **Spotify Extension Request** (operational, not code): record 2–3 min demo screencast on phone, submit form at developer.spotify.com/dashboard with paste-ready text already written in `release/PLAYBOOK.md` §8.
-3. **Play Store Internal Testing upload** (operational): generate release keystore via `keytool`, populate `RELEASE_*` keys in `local.properties`, run `./gradlew :app:bundleRelease`, upload to Play Console per `release/PLAYBOOK.md` §9.
-4. **Optional**: relax DrivePicker MIME filter to also surface files (greyed for selection) to further mitigate B-4. Trade-off: introduces second confusion vector ("why can't I select this audio file?").
-5. **Optional**: add `USE_FULL_SCREEN_INTENT` permission + post a full-screen-intent Notification as ultimate bounce-back fallback for B-1 (requires Android 14+ user grant for non-default-handler apps).
+1. **Capture failing logcat for B-2**: `adb logcat -d *:S PMP_DIAG:I ActivityTaskManager:V` immediately after a Spotify-bounce failure.
+2. **Spotify Extension Request**: 2–3 min demo screencast → developer.spotify.com/dashboard form per `release/PLAYBOOK.md` §8.
+3. **Play Store Internal Testing upload**: keytool keystore → `local.properties` → `./gradlew :app:bundleRelease` → Play Console per `release/PLAYBOOK.md` §9.
+4. **B-3 follow-up**: implement subtitle delay via custom RenderersFactory.buildTextRenderers override; out of scope for friends release.
+5. **Optional**: relax DrivePicker MIME filter to surface files greyed-out.
 
 ## 5. Chronological Decision Log
 
@@ -184,22 +208,25 @@ Format: `commit | change | rationale | testing | result`.
 
 | Commit | Date | Change | Rationale | Testing | Result |
 |--------|------|--------|-----------|---------|--------|
-| `2082c6c` | 2026-05-03 | Replace Drive REST + drive.readonly + GoogleSignIn with SAF DocumentFile flow | Eliminate Google verification requirement (CASA Tier 2) by using non-OAuth file access | Manual install on Z Fold 6 | Drive REST gone; SAF picker on Z Fold landscape did not expose Drive in source drawer — required follow-up |
-| `7f1e33d` | 2026-05-04 | Schema rewrite: per-session PlaybackHistory autogen id; HistoryFavouriteEntity with full snapshot; new HistoryBookmark + FavouriteBookmark tables; DB v4→v5 destructive | User contract: A→B→A produces 3 Recents rows; Player deletions don't cascade to Last Played; Pinned snapshots independent | adb dump verified 3 distinct rows after A/B/A play sequence; bookmark dropdowns survive Player delete | Success — schema enables session-scoped semantics required by user spec |
-| `ff369be` | 2026-05-04 | Source-chooser dialog (Drive/OneDrive/local) for SAF picker + simultaneous-audio fix | SAF on Z Fold landscape doesn't expose Drive; chooser deep-links via EXTRA_INITIAL_URI; simultaneous local+Spotify audio confused users | adb verified chooser dialog appears with Drive/OneDrive/Phone storage entries | Partial — Drive deep-link rejected by Drive DocumentsProvider (synthetic root docId); chooser path retained for OneDrive only |
-| `7772c21` | 2026-05-04 | Add DriveOAuthProvider (drive.file + Google Sign-In) + DrivePickerActivity (WebView with Picker JS) | SAF unable to reach Drive on Z Fold; drive.file scope avoids verification entirely; WebView Picker bypasses SAF source-drawer issue | adb-driven full flow: Sign-In → consent → Picker → folder pick → REST list → m4b play with bearer-token streaming | Success — confirmed end-to-end via PMP_DIAG `picked folder ... ID` + parseAndApply cache write |
-| `5213ea0` | 2026-05-04 | Swipe-to-dismiss on Recents rows + per-bookmark swipe + Clear all button | User explicit ask | Visual check via UI dump | Compiled, deployed; user accepted |
-| `2ee2f10` | 2026-05-04 | Auto-launch Spotify when no Connect device + bounce-back via Activity.startActivity | "No Spotify device found" error blocked playback when Spotify was force-stopped | adb cold-start: track tap → Spotify launch → bounce → playback (~2.4s end-to-end) | Initial success on warm-start |
-| `eae67fa` | 2026-05-04 | Spotify-bounce two-attempt retry (250ms + 1250ms) with NEW_TASK + CLEAR_TOP + SINGLE_TOP | First-attempt bounce dropped intermittently; double attempt covers slow Spotify cold-start | adb verified | Success on default-bucket; failed on restricted-bucket |
-| `8335640` | 2026-05-05 | Bounce via PendingIntent + cold-start resume guard (skip when spotifyState != null) + 3s sheet auto-dismiss | PendingIntent captures launch privileges at construction; cold-start resume was clobbering live Spotify mirror on tab navigation | adb tab-switch test | Cold-start resume guard verified; bounce still BAL_BLOCK on restricted device |
-| `5d83eef` | 2026-05-05 | Full BAL opt-in chain (creator + sender ALLOW_BAL ActivityOptions) + SpotifyBounceService 10s foreground service + AlarmManager fallback | Logcat showed `balRequireOptInByPendingIntentCreator=true` + Freecess freezing our process | adb cold-start with both apps force-stopped | Coroutines kept running (foreground exemption working); ActivityTaskManager still rejected with `BAL_BLOCK` due to Samsung `balDontBringExistingBackgroundTaskStackToFg` policy — system-level block, not bypassable from app code |
-| `559ee8c` | 2026-05-05 | Replace PresetReverb with EnvironmentalReverb (custom decay 1.1–9.0s, reverbLevel up to +2000) | User reported reverb inaudible; PresetReverb's fixed presets cap reverbLevel; EnvironmentalReverb exposes raw knobs | Code change only; user-side audio test | Compiled; user has not reported back on audibility |
-| `d93b4c9` | 2026-05-05 | Unified TextureView path (drop SurfaceView fast-path) + Compose Modifier.graphicsLayer for flip/rotation | Path-switching SurfaceView↔TextureView on each toggle caused detach/reattach + stale view dimensions in setTransform pivot → off-frame video and stuck-effect state | Code review: graphicsLayer pivot is layout-correct, no view.post race; cost ~80ms peak frame at 4K acceptable | Compiled; deployed; awaits user verification |
-| `a6186a2` | 2026-05-05 | One-time AlertDialog warning before first Drive Picker launch ("Pick a FOLDER, not a file") | Friend tester tapped INTO a folder, saw "No documents" because Picker is folder-only filtered, concluded app couldn't see files | Compile-only sanity (no device) | Compiled; deployed via push only — not yet field-validated |
+| `2082c6c` | 2026-05-03 | Replace Drive REST + drive.readonly + GoogleSignIn with SAF DocumentFile flow | Eliminate Google verification (CASA Tier 2) | Manual install on Z Fold 6 | Drive REST gone; SAF picker on Z Fold landscape didn't expose Drive |
+| `7f1e33d` | 2026-05-04 | Schema rewrite: per-session PlaybackHistory autogen id; HistoryFavouriteEntity full snapshot; new bookmark snapshot tables; DB v4→v5 | A→B→A produces 3 Recents rows; Pinned snapshots independent | adb dump | Success |
+| `ff369be` | 2026-05-04 | Source-chooser dialog (Drive/OneDrive/local) + simultaneous-audio fix | SAF on Z Fold doesn't expose Drive; chooser deep-links via EXTRA_INITIAL_URI | adb verified | Partial — Drive deep-link rejected |
+| `7772c21` | 2026-05-04 | DriveOAuthProvider (drive.file) + DrivePickerActivity (WebView Picker) | drive.file avoids verification; WebView Picker bypasses SAF source-drawer | adb full flow incl. m4b play with bearer-token streaming | Success |
+| `5213ea0` | 2026-05-04 | Swipe-to-dismiss on Recents + per-bookmark swipe + Clear all | User explicit ask | UI dump | Accepted |
+| `2ee2f10` | 2026-05-04 | Auto-launch Spotify when no Connect device + bounce-back via Activity.startActivity | "No Spotify device found" blocked playback | adb cold-start | Success on warm-start |
+| `eae67fa` | 2026-05-04 | Spotify-bounce two-attempt retry (250ms + 1250ms) | First-attempt drop intermittent | adb verified | Success default-bucket; failed restricted-bucket |
+| `8335640` | 2026-05-05 | PendingIntent bounce + cold-start resume guard + 3s sheet auto-dismiss | PendingIntent captures launch privileges; cold-start clobbered Spotify mirror | adb tab-switch | Resume guard verified; bounce still BAL_BLOCK |
+| `5d83eef` | 2026-05-05 | Full BAL opt-in chain + SpotifyBounceService 10s FGS + AlarmManager fallback | logcat showed `balRequireOptInByPendingIntentCreator=true` + Freecess freezing | adb cold-start with both apps force-stopped | Coroutines stayed alive; ATM still BAL_BLOCK due to Samsung policy |
+| `559ee8c` | 2026-05-05 | Replace PresetReverb with EnvironmentalReverb + custom decay/level | PresetReverb's fixed presets cap reverbLevel | Code only | User reported still inaudible |
+| `d93b4c9` | 2026-05-05 | Unified TextureView path + Compose Modifier.graphicsLayer for flip/rotation | Path-switching SurfaceView↔TextureView caused detach/reattach + stale pivot | Code review | Compiled, deployed |
+| `a6186a2` | 2026-05-05 | One-time AlertDialog warning before first Drive Picker launch | Friend tapped INTO folder, saw "No documents" because Picker is folder-filtered | Compile-only | Deployed |
+| `2dfe943` | 2026-05-05 | Fix StackOverflowError: launchDriveOAuth() recursed instead of calling driveOAuthLauncher.launch() | Typo in `a6186a2` self-call | adb logcat captured the recursion | Fixed |
+| `6f43622` | 2026-05-05 | Audible reverb (option b): roomLevel=0 + reverbLevel=+2000 across all 5 presets + cold-start retry loop on AudioFlinger error -3; safe optimisations bundle (Pair removal, BookmarkEntity index, audioFormat cache, playlist duration cache, LazyColumn key) | User reported reverb still inaudible; logcat showed `Cannot initialize effect engine ... Error: -3` cold-start race | Compile-only (no phone) | Deployed |
+| `146887a` | 2026-05-05 | Implement audio delay slider (AudioDelayProcessor PCM ring buffer); implement crossfade slider (volume-ramp controller in PlaybackService); fix ReplayGain attenuation routing (negative track-gains via ExoPlayer.volume); mono-speaker hint via AudioOutputDetector + AudioDeviceCallback; EQ Classical + Acoustic preset audibility; volume mixer (replayGain × crossfade); DB v6→v7 reseed | Sense-check found three sliders were no-ops + EQ presets too subtle on phone speakers + ReplayGain dropped negatives | Compile-only (no phone per user instruction) | Deployed (current HEAD) |
 
 **Key abandoned approaches**:
-- AlarmManager.set with PendingIntent for bounce (`5d83eef`): system-fired path doesn't carry sender BAL opt-in; replaced with same-process coroutine PendingIntent.send.
-- PresetReverb attached to ExoPlayer audioSession (`5095f09`): aux effects require setAuxEffectInfo routing; replaced with global session 0 + AuxEffectInfo wiring.
-- view.post + view.setTransform for video effects (`18f1bed`): pivot raced view measurement; replaced with Compose graphicsLayer.
-- SAF DocumentFile-only Drive path (`2082c6c`): system picker on Z Fold landscape doesn't expose Drive source drawer; supplanted by drive.file OAuth + WebView Picker for Drive while SAF retained for non-Drive sources.
-- Stricter source-chooser dialog (`ff369be`): user wanted Drive-only direct path with no source picker; chooser bypassed in `5213ea0` for Drive; SAF code retained but unreachable from Drive UI now.
+- AlarmManager.set with PendingIntent for bounce: system-fired path doesn't carry sender BAL opt-in.
+- PresetReverb attached to ExoPlayer audioSession alone: aux effects need setAuxEffectInfo routing.
+- view.post + view.setTransform for video effects: pivot raced view measurement; replaced with Compose graphicsLayer.
+- SAF DocumentFile-only Drive path on Z Fold: system picker doesn't expose Drive source drawer.
+- ReplayGain `coerceAtLeast(0)`: silently dropped negative track-gain tags (loud-track normalisation, the more common case).
