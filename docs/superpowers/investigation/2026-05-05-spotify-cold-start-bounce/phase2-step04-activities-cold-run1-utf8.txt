@@ -1,0 +1,1061 @@
+ACTIVITY MANAGER ACTIVITIES (dumpsys activity activities)
+Display #0 (activities from top to bottom):
+  * Task{2753e32 #507 type=standard A=10366:com.spotify.music U=0 visible=true visibleRequested=true mode=fullscreen translucent=false sz=1}
+    mOrientationOverride=Enabled
+    mCutoutPolicy=OverlapWithTheCameraCutout
+    mLastNonFullscreenBounds=Rect(601, 523 - 1584, 1409)
+    isSleeping=false
+    topResumedActivity=ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}
+    * Hist  #0: ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}
+      packageName=com.spotify.music processName=com.spotify.music
+      launchedFromUid=10565 launchedFromPackage=com.powermediaplayer launchedFromFeature=null userId=0
+      app=ProcessRecord{7c4a4d7 5552:com.spotify.music/u0a366}
+      Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10050000 xflg=0x4 pkg=com.spotify.music cmp=com.spotify.music/.MainActivity }
+      rootOfTask=true task=Task{2753e32 #507 type=standard A=10366:com.spotify.music}
+      taskAffinity=10366:com.spotify.music
+      mActivityComponent=com.spotify.music/.SpotifyMainActivity
+      baseDir=/data/app/~~h_rphdoifQiWmPx2Sex_aA==/com.spotify.music-EOd-dZpIP3t6SbahwrCgUw==/base.apk
+      dataDir=/data/user/0/com.spotify.music
+      splitDir=[/data/app/~~h_rphdoifQiWmPx2Sex_aA==/com.spotify.music-EOd-dZpIP3t6SbahwrCgUw==/split_audiomodelimpl_dynamic_wrapper.apk, /data/app/~~h_rphdoifQiWmPx2Sex_aA==/com.spotify.music-EOd-dZpIP3t6SbahwrCgUw==/split_audiomodelimpl_dynamic_wrapper.config.arm64_v8a.apk, /data/app/~~h_rphdoifQiWmPx2Sex_aA==/com.spotify.music-EOd-dZpIP3t6SbahwrCgUw==/split_config.arm64_v8a.apk, /data/app/~~h_rphdoifQiWmPx2Sex_aA==/com.spotify.music-EOd-dZpIP3t6SbahwrCgUw==/split_config.en.apk, /data/app/~~h_rphdoifQiWmPx2Sex_aA==/com.spotify.music-EOd-dZpIP3t6SbahwrCgUw==/split_config.xxhdpi.apk, /data/app/~~h_rphdoifQiWmPx2Sex_aA==/com.spotify.music-EOd-dZpIP3t6SbahwrCgUw==/split_listening_party_message_source_dynamic_wrapper.apk]
+      appMetaData=Bundle[{com.spotify.music.githash=g951e8dfd, com.google.android.play.billingclient.version=8.3.0, com.facebook.sdk.ApplicationId=174829003346, com.android.dynamic.apk.fused.modules=accountswitcher_dynamic_wrapper,base, com.samsung.android.multidisplay.keep_process_alive=true, androidx.car.app.minCarApiLevel=8, com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME=com.spotify.connect.castbasic.config.CastOptionsProvider, com.facebook.sdk.AutoInitEnabled=false, com.android.vending.derived.apk.id=4, asset_statements=2131952237, com.android.stamp.source=https://play.google.com/store, com.android.vending.splits.required=true, com.google.android.gms.car.notification.SmallIcon=2131233586, com.microsoft.crossdevice.resumeActivityProvider=true, com.google.android.geo.API_KEY=AIzaSyDHC8Sz4yd65VzBjYBgI8bZ5bpFSr4h92g, firebase_crashlytics_collection_enabled=true, com.samsung.android.sdk.multiwindow.enable=true, com.google.android.gms.version=12451000, androidx.car.app.TintableAttributionIcon=2131232329, com.android.vending.splits=2132148261, com.google.android.gms.car.application=2132148225, com.facebook.sdk.ClientToken=892e40f54a536e2df0041ee946fc5c7d, com.google.android.engage.service.ENV=PRODUCTION, com.android.stamp.type=STAMP_TYPE_DISTRIBUTION_APK, com.facebook.sdk.AutoLogAppEventsEnabled=false, com.microsoft.crossdevice.trigger.PartnerApp=4, com.crashlytics.ApiKey=ed79a89851fe4ae8eb60f37284a088b1055997d8}]
+      stateNotNeeded=false componentSpecified=true mActivityType=standard
+      compat={311dpi always-compat} theme=0x7f1403fe
+      mLastReportedConfigurations:
+        mGlobalConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=off} s.1215 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+        mOverrideConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=off} s.2 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+      mLastReportedActivityWindowInfo=ActivityWindowInfo{isEmbedded=false, taskBounds=Rect(0, 0 - 2184, 1968), taskFragmentBounds=Rect(0, 0 - 2184, 1968)}
+      CurrentConfiguration={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=off} s.2 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+      RequestedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=standard mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=undefined} ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      ResolvedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=undefined mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=undefined} s.2 ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      taskDescription: label="null" icon=null iconResource=/0 iconFilename=null primaryColor=ff121212
+        backgroundColor=ff121212 statusBarColor=ff121212 navigationBarColor=ff000000
+       backgroundColorFloating=ff424242
+      launchFailed=false launchCount=1 lastLaunchTime=-28s893ms
+      mHaveState=false mIcicle=null
+      state=RESUMED delayedResume=false finishing=false
+      keysPaused=false inHistory=true idle=true
+      occludesParent=true mNoDisplay=false immersive=false launchMode=2
+      mActivityType=standard
+      windows=[Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}]
+      windowType=2
+      mOccludesParent=true
+      mStyleFillsParent=true
+      overrideOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+      requestedOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+      mVisibleRequested=true mVisible=true mClientVisible=true reportedDrawn=true reportedVisible=true
+      mNumInterestingWindows=1 mNumDrawnWindows=1 allDrawn=true)
+      startingData=null firstWindowDrawn=true
+      nowVisible=true lastVisibleTime=-28s707ms
+      resizeMode=RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION
+      mLastReportedMultiWindowMode=false mLastReportedPictureInPictureMode=false
+      supportsSizeChanges=SIZE_CHANGES_UNSUPPORTED_METADATA
+      configChanges=0x23
+      neverSandboxDisplayApis=false
+      alwaysSandboxDisplayApis=false
+      mUniversalResizeableOverride=true
+      activityMetaData=Bundle[{android.app.shortcuts=2132148252, com.sonymobile.media.dashboard.BACKGROUND_ICON=2131230986, com.sonymobile.media.dashboard.SMALL_ICON=2131233586, com.sonymobile.media.dashboard.TITLE=2131952158}]
+      isTransparentPolicyRunning=false
+      areBoundsLetterboxed=false
+      isLetterboxRunning=false
+      mLastSurfaceShowing=true
+
+  * Task{49b7e9f #506 type=standard A=10565:com.powermediaplayer U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+    mCutoutPolicy=OverlapWithTheCameraCutout
+    mLastNonFullscreenBounds=Rect(601, 523 - 1584, 1409)
+    isSleeping=false
+    * Hist  #0: ActivityRecord{234065982 u0 com.powermediaplayer/.MainActivity t506}
+      packageName=com.powermediaplayer processName=com.powermediaplayer
+      launchedFromUid=10153 launchedFromPackage=com.sec.android.app.launcher launchedFromFeature=null userId=0
+      app=ProcessRecord{15925a1 5242:com.powermediaplayer/u0a565}
+      Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 xflg=0x4 cmp=com.powermediaplayer/.MainActivity bnds=[1092,262][1385,510] }
+      rootOfTask=true task=Task{49b7e9f #506 type=standard A=10565:com.powermediaplayer}
+      taskAffinity=10565:com.powermediaplayer
+      mActivityComponent=com.powermediaplayer/.MainActivity
+      baseDir=/data/app/~~HaswBOlzk7c1AWNjFFpsqg==/com.powermediaplayer-I79_Tb72I3ln9Co8SuXd3A==/base.apk
+      dataDir=/data/user/0/com.powermediaplayer
+      appMetaData=Bundle[{com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME=com.powermediaplayer.cast.CastOptionsProviderImpl, com.google.android.gms.version=12451000}]
+      stateNotNeeded=false componentSpecified=true mActivityType=standard
+      compat={311dpi always-compat} theme=0x7f11014c
+      mLastReportedConfigurations:
+        mGlobalConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=off} s.1214 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+        mOverrideConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=off} s.2 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+      mLastReportedActivityWindowInfo=ActivityWindowInfo{isEmbedded=false, taskBounds=Rect(0, 0 - 2184, 1968), taskFragmentBounds=Rect(0, 0 - 2184, 1968)}
+      CurrentConfiguration={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=standard mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=off} s.2 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+      RequestedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=standard mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=undefined} ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      ResolvedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=undefined mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=false mFlexPanelMode=undefined} s.2 ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      taskDescription: label="null" icon=null iconResource=/0 iconFilename=null primaryColor=ff00bfa5
+        backgroundColor=ff303030 statusBarColor=0 navigationBarColor=0
+       backgroundColorFloating=ff424242
+      Pending New Intents:
+        - flg=0x34010000 xflg=0x4 cmp=com.powermediaplayer/.MainActivity
+      launchFailed=false launchCount=0 lastLaunchTime=-39s53ms
+      launchCookie=android.os.BinderProxy@2fdcfae
+      mHaveState=true mIcicle=Bundle[mParcelledData.dataSize=11672]
+      state=STOPPED delayedResume=false finishing=false
+      keysPaused=false inHistory=true idle=true
+      occludesParent=true mNoDisplay=false immersive=false launchMode=0
+      mActivityType=standard
+      windows=[Window{5b7aba0 u0 com.powermediaplayer/com.powermediaplayer.MainActivity}]
+      windowType=2
+      mOccludesParent=true
+      mStyleFillsParent=true
+      overrideOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+      requestedOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+      mVisibleRequested=false mVisible=false mClientVisible=false reportedDrawn=false reportedVisible=false
+      mAppStopped=true
+      mNumInterestingWindows=1 mNumDrawnWindows=1 allDrawn=false)
+      nowVisible=false lastVisibleTime=-38s653ms
+      resizeMode=RESIZE_MODE_RESIZEABLE
+      mLastReportedMultiWindowMode=false mLastReportedPictureInPictureMode=false
+      supportsPictureInPicture=true
+      supportsEnterPipOnTaskSwitch: false
+      mPauseSchedulePendingForPip=false
+      supportPictureInPictureAppOps=true
+      supportsSizeChanges=SIZE_CHANGES_UNSUPPORTED_METADATA
+      configChanges=0xda3
+      neverSandboxDisplayApis=false
+      alwaysSandboxDisplayApis=false
+      mUniversalResizeableOverride=false
+      isTransparentPolicyRunning=false
+      areBoundsLetterboxed=false
+      isLetterboxRunning=false
+      mLastSurfaceShowing=false
+
+  * Task{ff2b1ea #1 type=home U=0 visible=false visibleRequested=false mode=fullscreen translucent=false sz=1}
+    * Task{b84e656 #466 type=home I=com.sec.android.app.launcher/.activities.LauncherActivity U=0 rootTaskId=1 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+      mLastPausedActivity: ActivityRecord{5404155 u0 com.sec.android.app.launcher/.activities.LauncherActivity t466}
+      mCutoutPolicy=OverlapWithTheCameraCutout
+      mLastNonFullscreenBounds=Rect(601, 523 - 1584, 1409)
+      isSleeping=false
+      * Hist  #0: ActivityRecord{5404155 u0 com.sec.android.app.launcher/.activities.LauncherActivity t466}
+        packageName=com.sec.android.app.launcher processName=com.sec.android.app.launcher
+        launchedFromUid=0 launchedFromPackage=null launchedFromFeature=null userId=0
+        app=ProcessRecord{59a33c5 31521:com.sec.android.app.launcher/u0a153}
+        Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] flg=0x10000100 cmp=com.sec.android.app.launcher/.activities.LauncherActivity (has extras) }
+        rootOfTask=true task=Task{b84e656 #466 type=home I=com.sec.android.app.launcher/.activities.LauncherActivity}
+        taskAffinity=null
+        mActivityComponent=com.sec.android.app.launcher/.Launcher
+        baseDir=/system/priv-app/TouchWizHome_2017/TouchWizHome_2017.apk
+        dataDir=/data/user/0/com.sec.android.app.launcher
+        appMetaData=Bundle[{theming-meta=meta_033_recents, meta_008_1_homescreen, meta_008_3_homescreen_overlay, search_color_theme_meta, meta_044_4_appsedge, meta_044_edge, meta_004_1_panel_for_dex, com.samsung.android.sdk.bixby2.companionApp=true, SamsungBasicInteraction=SEP10, SPDE.env.version=8.7.3/G36.1.14/1.2.11, com.samsung.android.notification.logging=runestone, com.samsung.android.samsungaccount.receive_minor_info=true, com.samsung.android.multidisplay.keep_process_alive=true, android.content.APP_RESTRICTIONS=2132213761, theming-meta-define1=2132213796, theming-meta-define2=2132213794, theming-meta-define3=2132213795, theming-meta-define4=2132213803, theming-meta-define5=2132213797, theming-meta-define6=2132213798, theming-meta-define7=2132213793, SPDE.build.signature=8b707ceb83b47f132543a196afe14ce3eea8d466/179453024/release/TouchWizHome-1705013-17.0.07, com.samsung.android.gtscell.VERSION=2, backup_content_uri=content://com.sec.android.app.launcher.backup, android.supports_size_changes=true, android.max_aspect=5.0, com.samsung.android.keepalive.density=true, com.samsung.android.multidisplay.primarydisplay=default, com.samsung.android.sdk.bixby2.version=1.1.3, com.samsung.android.rubin.runestone_enabled=true, backup_name=2132213763, com.samsung.android.sdk.routines.v3.meta.ACTION=2132213802, com.samsung.android.dex.kill_process_timeout=5sec}]
+        stateNotNeeded=true componentSpecified=true mActivityType=home
+        compat={311dpi always-compat} theme=0x7f15042a
+        mLastReportedConfigurations:
+          mGlobalConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=off} s.678 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+          mOverrideConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=home mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=off} s.9 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+        mLastReportedActivityWindowInfo=ActivityWindowInfo{isEmbedded=false, taskBounds=Rect(0, 0 - 2184, 1968), taskFragmentBounds=Rect(0, 0 - 2184, 1968)}
+        CurrentConfiguration={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=home mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=off} s.11 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+        RequestedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=home mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=undefined} ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+        ResolvedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=home mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=undefined} s.11 ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+        taskDescription: label="null" icon=null iconResource=/0 iconFilename=null primaryColor=ff22beb4
+          backgroundColor=ff1b1b1b statusBarColor=0 navigationBarColor=0
+         backgroundColorFloating=ff1b1b1b
+        launchFailed=false launchCount=0 lastLaunchTime=-3h13m40s693ms
+        mHaveState=true mIcicle=Bundle[mParcelledData.dataSize=2072]
+        state=STOPPED delayedResume=false finishing=false
+        keysPaused=false inHistory=true idle=true
+        occludesParent=true mNoDisplay=false immersive=false launchMode=2
+        mActivityType=home
+        windows=[Window{51e901f u0 com.sec.android.app.launcher/com.sec.android.app.launcher.activities.LauncherActivity}]
+        windowType=2
+        mOccludesParent=true
+        mStyleFillsParent=true
+        overrideOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+        requestedOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+        mVisibleRequested=false mVisible=false mClientVisible=false reportedDrawn=false reportedVisible=false
+        mAppStopped=true
+        mNumInterestingWindows=1 mNumDrawnWindows=1 allDrawn=false)
+        nowVisible=false lastVisibleTime=-51s427ms
+        connections={}
+        resizeMode=RESIZE_MODE_RESIZEABLE
+        mLastReportedMultiWindowMode=false mLastReportedPictureInPictureMode=false
+        supportsSizeChanges=SIZE_CHANGES_SUPPORTED_METADATA
+        configChanges=0x40001ff3
+        neverSandboxDisplayApis=false
+        alwaysSandboxDisplayApis=false
+        mUniversalResizeableOverride=false
+        activityMetaData=Bundle[{android.app.searchable=2132213789}]
+        isTransparentPolicyRunning=false
+        areBoundsLetterboxed=false
+        isLetterboxRunning=false
+        mLastSurfaceShowing=false
+
+  * Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+    mLastPausedActivity: ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473}
+    mCutoutPolicy=OverlapWithTheCameraCutout
+    mLastNonFullscreenBounds=Rect(601, 523 - 1584, 1409)
+    isSleeping=false
+    * Hist  #0: ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473}
+      packageName=com.sec.android.app.launcher processName=com.sec.android.app.launcher
+      launchedFromUid=10153 launchedFromPackage=com.sec.android.app.launcher launchedFromFeature=null userId=0
+      app=ProcessRecord{59a33c5 31521:com.sec.android.app.launcher/u0a153}
+      Intent { act=android.intent.action.MAIN cat=[android.intent.category.DEFAULT] flg=0x10800000 xflg=0x4 pkg=com.sec.android.app.launcher cmp=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity }
+      rootOfTask=true task=Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity}
+      taskAffinity=null
+      mActivityComponent=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity
+      baseDir=/system/priv-app/TouchWizHome_2017/TouchWizHome_2017.apk
+      dataDir=/data/user/0/com.sec.android.app.launcher
+      appMetaData=Bundle[{theming-meta=meta_033_recents, meta_008_1_homescreen, meta_008_3_homescreen_overlay, search_color_theme_meta, meta_044_4_appsedge, meta_044_edge, meta_004_1_panel_for_dex, com.samsung.android.sdk.bixby2.companionApp=true, SamsungBasicInteraction=SEP10, SPDE.env.version=8.7.3/G36.1.14/1.2.11, com.samsung.android.notification.logging=runestone, com.samsung.android.samsungaccount.receive_minor_info=true, com.samsung.android.multidisplay.keep_process_alive=true, android.content.APP_RESTRICTIONS=2132213761, theming-meta-define1=2132213796, theming-meta-define2=2132213794, theming-meta-define3=2132213795, theming-meta-define4=2132213803, theming-meta-define5=2132213797, theming-meta-define6=2132213798, theming-meta-define7=2132213793, SPDE.build.signature=8b707ceb83b47f132543a196afe14ce3eea8d466/179453024/release/TouchWizHome-1705013-17.0.07, com.samsung.android.gtscell.VERSION=2, backup_content_uri=content://com.sec.android.app.launcher.backup, android.supports_size_changes=true, android.max_aspect=5.0, com.samsung.android.keepalive.density=true, com.samsung.android.multidisplay.primarydisplay=default, com.samsung.android.sdk.bixby2.version=1.1.3, com.samsung.android.rubin.runestone_enabled=true, backup_name=2132213763, com.samsung.android.sdk.routines.v3.meta.ACTION=2132213802, com.samsung.android.dex.kill_process_timeout=5sec}]
+      stateNotNeeded=true componentSpecified=true mActivityType=recents
+      compat={311dpi always-compat} theme=0x7f15042a
+      mLastReportedConfigurations:
+        mGlobalConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=off} s.678 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+        mOverrideConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=recents mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=off} s.9 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+      mLastReportedActivityWindowInfo=ActivityWindowInfo{isEmbedded=false, taskBounds=Rect(0, 0 - 2184, 1968), taskFragmentBounds=Rect(0, 0 - 2184, 1968)}
+      CurrentConfiguration={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=recents mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=off} s.11 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+      RequestedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=recents mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=undefined} ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      ResolvedOverrideConfiguration={0.0 ?mcc0mnc ?localeList masculine ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=undefined mActivityType=recents mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=off mOverlappingWithCutout=true mFlexPanelMode=undefined} s.11 ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      taskDescription: label="null" icon=null iconResource=/0 iconFilename=null primaryColor=ff22beb4
+        backgroundColor=ff1b1b1b statusBarColor=0 navigationBarColor=0
+       backgroundColorFloating=ff1b1b1b
+      launchFailed=false launchCount=0 lastLaunchTime=-2h49m13s564ms
+      launchCookie=android.os.BinderProxy@68e4c44
+      mHaveState=true mIcicle=Bundle[mParcelledData.dataSize=1984]
+      state=STOPPED delayedResume=false finishing=false
+      keysPaused=false inHistory=true idle=true
+      occludesParent=true mNoDisplay=false immersive=false launchMode=2
+      mActivityType=recents
+      windows=[Window{c312368 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity}]
+      windowType=2
+      mOccludesParent=true
+      mStyleFillsParent=true
+      overrideOrientation=SCREEN_ORIENTATION_LOCKED
+      requestedOrientation=SCREEN_ORIENTATION_LOCKED
+      mVisibleRequested=false mVisible=false mClientVisible=false reportedDrawn=false reportedVisible=false
+      mAppStopped=true
+      mNumInterestingWindows=1 mNumDrawnWindows=1 allDrawn=false)
+      nowVisible=false lastVisibleTime=-9m41s607ms
+      resizeMode=RESIZE_MODE_RESIZEABLE
+      mLastReportedMultiWindowMode=false mLastReportedPictureInPictureMode=false
+      supportsSizeChanges=SIZE_CHANGES_SUPPORTED_METADATA
+      configChanges=0xf83
+      neverSandboxDisplayApis=false
+      alwaysSandboxDisplayApis=false
+      mUniversalResizeableOverride=true
+      isTransparentPolicyRunning=false
+      areBoundsLetterboxed=false
+      isLetterboxRunning=false
+      mLastSurfaceShowing=false
+
+  * Task{3d855b #2 type=undefined U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=3}
+    mCreatedByOrganizer=true
+    * Task{17bbf0d #5 type=undefined U=0 rootTaskId=2 visible=false visibleRequested=false mode=multi-window stage=cell/ translucent=true sz=0}
+      mCreatedByOrganizer=true
+      isSleeping=false
+    * Task{8e686d1 #4 type=undefined U=0 rootTaskId=2 visible=false visibleRequested=false mode=multi-window stage=side/bottom translucent=true sz=0}
+      mBounds=Rect(0, 1097 - 1968, 2091)
+      mCreatedByOrganizer=true
+      isSleeping=false
+    * Task{de14536 #3 type=undefined U=0 rootTaskId=2 visible=false visibleRequested=false mode=multi-window stage=main/top translucent=true sz=0}
+      mBounds=Rect(0, 0 - 1968, 1085)
+      mCreatedByOrganizer=true
+      isSleeping=false
+
+  * Task{3bd012a #6 type=undefined dw=activatable U=0 visible=false visibleRequested=false mode=freeform translucent=true sz=0}
+    mCreatedByOrganizer=true
+    isMinimized=false
+    mDeskRootTaskType=activatable
+    isSleeping=false
+
+  * Task{8df1a54 #7 type=undefined dw=minimized U=0 visible=false visibleRequested=false mode=freeform translucent=true sz=0}
+    mCreatedByOrganizer=true
+    isMinimized=false
+    mDeskRootTaskType=minimized
+    isForceHidden=true
+    isSleeping=false
+
+  Resumed activities in task display areas (from top to bottom):
+    Resumed: ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}
+
+Display #1 (activities from top to bottom):
+
+  ResumedActivity: ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}
+
+ActivityTaskSupervisor state:
+  topDisplayFocusedRootTask=Task{2753e32 #507 type=standard A=10366:com.spotify.music}
+  Display: mDisplayId=0 (organized)
+    init=1968x2184 420dpi mMinSizeOfResizeableTaskDp=220 base=1968x2184 311dpi cur=2184x1968 app=2184x1968 rng=1968x1968-2184x2184
+    deferred=false mLayoutNeeded=false
+    initCutout=null
+    baseCutout=null
+    udcCutout=DisplayCutout{insets=Rect(0, 88 - 0, 0) waterfall=Insets{left=0, top=0, right=0, bottom=0} boundingRect={Bounds=[Rect(0, 0 - 0, 0), Rect(1450, 0 - 1520, 88), Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0)]} cutoutPathParserInfo={CutoutPathParserInfo{displayWidth=1968 displayHeight=2184 physicalDisplayWidth=1968 physicalDisplayHeight=2184 density={2.625} cutoutSpec={M 190.8571428571429,0 M 190.8571428571429,6.857142857142857 a 13.33333333333333,13.33333333333333 0 1,0 0,26.66666666666667 a 13.33333333333333,13.33333333333333 0 1,0 0,-26.66666666666667 z @dp} rotation={0} scale={1.0} physicalPixelDisplaySizeRatio={1.0}}} sideOverrides={}}
+    udcConfig={0.0 ?mcc0mnc ?localeList ?layoutDir sw1012dp w1124dp h1012dp ?density xlrg ?ldr ?wideColorGamut land ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=undefined mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=undefined} ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+
+    initRoundedCorners=RoundedCorners{[RoundedCorner{position=TopLeft, radius=13, center=Point(13, 13)}, RoundedCorner{position=TopRight, radius=13, center=Point(1955, 13)}, RoundedCorner{position=BottomRight, radius=13, center=Point(1955, 2171)}, RoundedCorner{position=BottomLeft, radius=13, center=Point(13, 2171)}]}
+    baseRoundedCorners=RoundedCorners{[RoundedCorner{position=TopLeft, radius=10, center=Point(10, 10)}, RoundedCorner{position=TopRight, radius=10, center=Point(1958, 10)}, RoundedCorner{position=BottomRight, radius=10, center=Point(1958, 2174)}, RoundedCorner{position=BottomLeft, radius=10, center=Point(10, 2174)}]}
+
+  mLastOrientationSource=WindowedMagnification:0:31@175958465
+  deepestLastOrientationSource=ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}
+  overrideConfig={0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=off} s.1033 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+  ignoreOrientationRequest=true
+  mLayoutSeq=2719
+  mCurrentFocus=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+  mFocusedApp=ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}
+
+  mHoldScreenWindow=null
+  mObscuringWindow=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+  mLastWakeLockHoldingWindow=null
+  mLastWakeLockObscuringWindow=Window{e8f343f u0 com.powermediaplayer/com.powermediaplayer.MainActivity EXITING}
+
+  displayId=0
+  mWallpaperTarget=null
+  mLastWallpaperZoomOut=0.0
+  mFindResults
+    mTopHideWhenLockedWallpaper=null
+    mTopShowWhenLockedWallpaper=Window{ca7ae53 u0 com.livesolar.solarsystem.SolarSystemHomeWallpaperService}
+      mTopShowWhenLockedWallpaper.Token=WallpaperWindowToken{6e5606d showWhenLocked=true}_<lock|primary>
+  token WallpaperWindowToken{c8715c9 showWhenLocked=false}_<system|non-primary>:
+    isForPrimaryDevice=false
+    canShowInCurrentDevice=false
+    mWallpaperX=0.5
+    mWallpaperY=0.5
+    mWallpaperXStep=NA
+    mWallpaperYStep=NA
+    mWallpaperDisplayOffsetX=NA
+    mWallpaperDisplayOffsetY=NA
+  token WallpaperWindowToken{a7d9ab1 showWhenLocked=true}_<lock|non-primary>:
+    isForPrimaryDevice=false
+    canShowInCurrentDevice=false
+    mWallpaperX=NA
+    mWallpaperY=NA
+    mWallpaperXStep=NA
+    mWallpaperYStep=NA
+    mWallpaperDisplayOffsetX=NA
+    mWallpaperDisplayOffsetY=NA
+  token WallpaperWindowToken{6e5606d showWhenLocked=true}_<lock|primary>:
+    isForPrimaryDevice=true
+    canShowInCurrentDevice=true
+    mWallpaperX=0.5
+    mWallpaperY=0.5
+    mWallpaperXStep=NA
+    mWallpaperYStep=NA
+    mWallpaperDisplayOffsetX=NA
+    mWallpaperDisplayOffsetY=NA
+  token WallpaperWindowToken{d77ec02 showWhenLocked=true}_<lock|primary>:
+    isForPrimaryDevice=true
+    canShowInCurrentDevice=true
+    mWallpaperX=NA
+    mWallpaperY=NA
+    mWallpaperXStep=NA
+    mWallpaperYStep=NA
+    mWallpaperDisplayOffsetX=NA
+    mWallpaperDisplayOffsetY=NA
+
+  mSystemGestureExclusion=SkRegion()
+
+  Display areas in top down Z order:
+    * Leaf:36:36
+    * HideDisplayCutout:32:35
+      * OneHanded:34:35
+        * AppZoomOut:34:35
+          * Leaf:34:35
+      * AppZoomOut:33:33
+        * Leaf:33:33
+      * OneHanded:32:32
+        * AppZoomOut:32:32
+          * Leaf:32:32
+    * WindowedMagnification:0:31
+      * HideDisplayCutout:26:31
+        * OneHanded:26:31
+          * AppZoomOut:26:31
+            * Leaf:26:31
+      * Leaf:24:25
+      * HideDisplayCutout:18:23
+        * OneHanded:18:23
+          * AppZoomOut:23:23
+            * Leaf:23:23
+          * Leaf:22:22
+          * AppZoomOut:20:21
+            * Leaf:20:21
+          * Leaf:19:19
+          * AppZoomOut:18:18
+            * Leaf:18:18
+      * OneHanded:17:17
+        * Leaf:17:17
+      * HideDisplayCutout:16:16
+        * OneHanded:16:16
+          * AppZoomOut:16:16
+            * Leaf:16:16
+      * OneHanded:15:15
+        * Leaf:15:15
+      * HideDisplayCutout:0:14
+        * OneHanded:0:14
+          * AppZoomOut:2:14
+            * ImePlaceholder:13:14
+              * ImeContainer
+            * Leaf:3:12
+            * DefaultTaskDisplayArea_d0 (organized)
+          * RemoteWallpaperAnim:1:1
+            * Leaf:1:1
+          * AppZoomOut:0:0
+            * Leaf:0:0
+
+  Task display areas in top down Z order:
+    TaskDisplayArea DefaultTaskDisplayArea_d0
+      overrideConfig={0.0 ?mcc0mnc ?localeList ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=undefined} ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      mPreferredTopFocusableRootTask=Task{2753e32 #507 type=standard A=10366:com.spotify.music}
+      mLastFocusedRootTask=Task{2753e32 #507 type=standard A=10366:com.spotify.music}
+      Application tokens in top down Z order:
+      * Task{2753e32 #507 type=standard A=10366:com.spotify.music U=0 visible=true visibleRequested=true mode=fullscreen translucent=false sz=1}
+        bounds=[0,0][2184,1968]
+        * ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}
+      * Task{49b7e9f #506 type=standard A=10565:com.powermediaplayer U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+        bounds=[0,0][2184,1968]
+        * ActivityRecord{234065982 u0 com.powermediaplayer/.MainActivity t506}
+      * Task{ff2b1ea #1 type=home U=0 visible=false visibleRequested=false mode=fullscreen translucent=false sz=1}
+        bounds=[0,0][2184,1968]
+        * Task{b84e656 #466 type=home I=com.sec.android.app.launcher/.activities.LauncherActivity U=0 rootTaskId=1 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+          bounds=[0,0][2184,1968]
+          * ActivityRecord{5404155 u0 com.sec.android.app.launcher/.activities.LauncherActivity t466}
+      * Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=1}
+        bounds=[0,0][2184,1968]
+        * ActivityRecord{173265583 u0 com.sec.android.app.launcher/com.android.quickstep.RecentsActivity t473}
+      * Task{3d855b #2 type=undefined U=0 visible=false visibleRequested=false mode=fullscreen translucent=true sz=3}
+        bounds=[0,0][2184,1968]
+        * Task{17bbf0d #5 type=undefined U=0 rootTaskId=2 visible=false visibleRequested=false mode=multi-window stage=cell/ translucent=true sz=0}
+          bounds=[0,0][2184,1968]
+        * Task{8e686d1 #4 type=undefined U=0 rootTaskId=2 visible=false visibleRequested=false mode=multi-window stage=side/bottom translucent=true sz=0}
+          bounds=[0,1097][1968,2091]
+        * Task{de14536 #3 type=undefined U=0 rootTaskId=2 visible=false visibleRequested=false mode=multi-window stage=main/top translucent=true sz=0}
+          bounds=[0,0][1968,1085]
+      * Task{3bd012a #6 type=undefined dw=activatable U=0 visible=false visibleRequested=false mode=freeform translucent=true sz=0}
+        bounds=[0,0][2184,1968]
+      * Task{8df1a54 #7 type=undefined dw=minimized U=0 visible=false visibleRequested=false mode=freeform translucent=true sz=0}
+        bounds=[0,0][2184,1968]
+
+  rootHomeTask=Task=1
+  rootRecentsTask=Task=473
+
+  PinnedTaskController
+    mIsImeShowing=false
+    mImeHeight=0
+    mMinAspectRatio=0.41841003
+    mMaxAspectRatio=2.39
+  rootMainStageTask=Task=3
+  rootSideStageTask=Task=4
+  rootCellStageTask=Task=5
+
+  DisplayFrames w=2184 h=1968 r=3
+
+  DisplayPolicy
+    mCarDockEnablesAccelerometer=true mDeskDockEnablesAccelerometer=true
+    mDockMode=EXTRA_DOCK_STATE_UNDOCKED mLidState=LID_OPEN
+    mAwake=true mScreenOnEarly=true mScreenOnFully=true
+    mKeyguardDrawComplete=true mWindowManagerDrawComplete=true
+    mHdmiPlugged=false
+    mLastBehavior=DEFAULT
+    mShowingDream=false mDreamingLockscreen=false
+    mStatusBar=Window{7da719d u0 StatusBar}
+    mExpandedPanel=Window{22ad5e4 u0 NotificationShade}
+    isKeyguardShowing=false
+    mNavigationBar=Window{a12505f u0 NavigationBar0}
+    mNavBarOpacityMode=0
+    mNavigationBarCanMove=false
+    mHasBottomNavigationBar=true
+    mTopGestureHost=Window{7da719d u0 StatusBar}
+    mBottomGestureHost=Window{e9b7b11 u0 TaskbarWindow}
+    mFocusedWindow=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+    mTopFullscreenOpaqueWindowState=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+    mSystemBarColorApps={ActivityRecord{49485373 u0 com.spotify.music/.MainActivity t507}}
+    mNavBarColorWindowCandidate=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+    mNavBarBackgroundWindowCandidate=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+    mLastStatusBarAppearanceRegions=
+      AppearanceRegion{ bounds=[0,0][2184,1968]}
+    mLastLetterboxDetails=
+    mStatusBarBackgroundWindows=
+      Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+    mTopIsFullscreen=false
+    mImeInsetsConsumed=false
+    mForceShowNavigationBarEnabled=false mAllowLockscreenWhenOn=false
+    mRemoteInsetsControllerControlsSystemBars=false
+    mDecorInsetsInfo:
+      ROTATION_0={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,93], configInsets=[0,0][0,0], overrideConfigInsets=[0,89][0,93], nonDecorFrame=[0,0][1968,2184], overrideNonDecorFrame=[0,0][1968,2091], configFrame=[0,0][1968,2184], overrideConfigFrame=[0,89][1968,2091]}
+      ROTATION_90={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,93], configInsets=[0,0][0,0], overrideConfigInsets=[0,58][0,93], nonDecorFrame=[0,0][2184,1968], overrideNonDecorFrame=[0,0][2184,1875], configFrame=[0,0][2184,1968], overrideConfigFrame=[0,58][2184,1875]}
+      ROTATION_180={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,93], configInsets=[0,0][0,0], overrideConfigInsets=[0,89][0,93], nonDecorFrame=[0,0][1968,2184], overrideNonDecorFrame=[0,0][1968,2091], configFrame=[0,0][1968,2184], overrideConfigFrame=[0,89][1968,2091]}
+      ROTATION_270={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,93], configInsets=[0,0][0,0], overrideConfigInsets=[0,58][0,93], nonDecorFrame=[0,0][2184,1968], overrideNonDecorFrame=[0,0][2184,1875], configFrame=[0,0][2184,1968], overrideConfigFrame=[0,58][2184,1875]}
+    SystemGestures:
+      mDisplayCutoutTouchableRegionSize=23
+      mSwipeStartThreshold=Rect(47, 47 - 47, 47)
+      mSwipeDistanceThreshold=47
+    UiContextResourcesConfig=
+    {0.8 234mcc30mnc [en_GB] masculine ldltr sw1012dp w1124dp h1012dp 311dpi xlrg hdr widecg land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2184, 1968) mAppBounds=Rect(0, 0 - 2184, 1968) mMaxBounds=Rect(0, 0 - 2184, 1968) mDisplayRotation=ROTATION_270 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_270 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=off} as.1 s.678 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+    UiContextResourcesMetrics=
+    DisplayMetrics{density=1.94375, width=2184, height=1968, scaledDensity=1.5550001, xdpi=367.55295, ydpi=367.37482}
+
+    DisplayPolicyExt
+      mIsOneHandOpEnabled=false
+      mHasOneHandOpSpec=false
+      mReasonToStart=SYSTEM_BOOTED
+      mOneHandOpController=null
+      mOneHandOpHandler=null
+
+    RefreshRatePolicy
+      mLowRefreshRateMode={id=3, width=1968, height=2184, fps=60.000004, vsync=60.000004, synthetic=false, alternativeRefreshRates=[10.0, 24.000002, 30.000002, 48.000004, 80.0, 120.00001], supportedHdrTypes=[2, 3, 4]}
+      mNonHighRefreshRatePackages:
+      RefreshRatePolicy History
+<< PreferredModeHistory_ModeId >>
+<< PreferredModeHistory_Min >>
+<< PreferredModeHistory_Max >>
+
+  DisplayRotation
+    mCurrentAppOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+    mLastOrientation=-1
+    mRotation=3 mDeferredRotationPauseCount=0
+    mLandscapeRotation=ROTATION_90 mSeascapeRotation=ROTATION_270
+    mPortraitRotation=ROTATION_0 mUpsideDownRotation=ROTATION_180
+    mSupportAutoRotation=true
+    WindowOrientationListener
+      mEnabled=true
+      mCurrentRotation=ROTATION_270
+      mSensorType=null
+      mSensor={Sensor name="auto_rotation Screen Orientation Sensor Non-wakeup", vendor="Samsung", version=3088, type=27, maxRange=255.0, resolution=1.0, power=0.001, minDelay=0}
+      mRate=1
+      OrientationSensorJudge
+        mDesiredRotation=ROTATION_270
+        mProposedRotation=ROTATION_270
+        mTouching=false
+        mTouchEndedTimestampNanos=12825183831929
+        mLastRotationResolution=-1
+
+    mCarDockRotation=-1 mDeskDockRotation=-1
+    mUserRotationMode=USER_ROTATION_FREE mUserRotation=ROTATION_0 mCameraRotationMode=0 mAllowAllRotations=false
+    mDemoHdmiRotation=ROTATION_90 mDemoHdmiRotationLock=false mUndockedHdmiRotation=-1
+    mLidOpenRotation=-1
+    mFixedToUserRotation=false
+  FoldController
+    mPauseAutorotationDuringUnfolding=false
+    mShouldDisableRotationSensor=false
+    mShouldIgnoreSensorRotation=false
+    mLastDisplaySwitchTime=0
+    mLastHingeAngleEventTime=0
+    mDeviceState=OPEN
+
+    RotationHistory
+      05-05 20:11:37.803 ROTATION_0 to ROTATION_270
+        source=Window{22ad5e4 u0 NotificationShade} SCREEN_ORIENTATION_USER
+        mode=USER_ROTATION_LOCKED user=ROTATION_270 sensor=ROTATION_270
+        ignoreRequest=true
+       halfFoldSavedRotation=-1 mInHalfFoldTransition=false mFoldState=OPEN
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=true mLastReportedOrientation=SCREEN_ORIENTATION_UNSPECIFIED topActivity=null isTreatmentEnabledForActivity=falsemCameraStateMonitor= CameraIdPackageNameBiMapping={ mPackageToCameraIdMap={} } }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD false
+      05-05 22:22:07.244 ROTATION_270 to ROTATION_0
+        source=ActivityRecord{257344844 u0 com.powermediaplayer/.MainActivity t490} SCREEN_ORIENTATION_UNSPECIFIED
+        mode=USER_ROTATION_LOCKED user=ROTATION_0 sensor=ROTATION_270
+       halfFoldSavedRotation=3 mInHalfFoldTransition=true mFoldState=REAR
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=false }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD true
+      05-05 22:43:01.585 ROTATION_0 to ROTATION_270
+        source=ActivityRecord{246655825 u0 com.powermediaplayer/.MainActivity t495} SCREEN_ORIENTATION_UNSPECIFIED
+        mode=USER_ROTATION_LOCKED user=ROTATION_270 sensor=ROTATION_0
+        ignoreRequest=true
+       halfFoldSavedRotation=0 mInHalfFoldTransition=true mFoldState=OPEN
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=true mLastReportedOrientation=SCREEN_ORIENTATION_UNSPECIFIED topActivity=com.powermediaplayer/.MainActivity isTreatmentEnabledForActivity=falsemCameraStateMonitor= CameraIdPackageNameBiMapping={ mPackageToCameraIdMap={} } }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD true
+      05-05 23:09:37.576 ROTATION_270 to ROTATION_0
+        source=ActivityRecord{184709559 u0 com.powermediaplayer/.MainActivity t501} SCREEN_ORIENTATION_UNSPECIFIED
+        mode=USER_ROTATION_FREE user=ROTATION_0 sensor=ROTATION_270
+        ignoreRequest=true
+       halfFoldSavedRotation=0 mInHalfFoldTransition=true mFoldState=OPEN
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=true mLastReportedOrientation=SCREEN_ORIENTATION_UNSPECIFIED topActivity=com.powermediaplayer/.MainActivity isTreatmentEnabledForActivity=falsemCameraStateMonitor= CameraIdPackageNameBiMapping={ mPackageToCameraIdMap={} } }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD true
+      05-05 23:09:37.760 ROTATION_0 to ROTATION_270
+        source=ActivityRecord{184709559 u0 com.powermediaplayer/.MainActivity t501} SCREEN_ORIENTATION_UNSPECIFIED
+        mode=USER_ROTATION_FREE user=ROTATION_0 sensor=ROTATION_270
+        ignoreRequest=true
+       halfFoldSavedRotation=0 mInHalfFoldTransition=true mFoldState=OPEN
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=true mLastReportedOrientation=SCREEN_ORIENTATION_UNSPECIFIED topActivity=com.powermediaplayer/.MainActivity isTreatmentEnabledForActivity=falsemCameraStateMonitor= CameraIdPackageNameBiMapping={ mPackageToCameraIdMap={} } }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD true
+
+        RotationLockHistory
+          05-05 22:52:29.417: mode=USER_ROTATION_LOCKED, rotation=ROTATION_0, caller=MonkeyRotationEven#injectEvent
+          05-05 22:52:29.417: mode=USER_ROTATION_FREE, rotation=ROTATION_270, caller=MonkeyRotationEven#injectEvent
+          05-05 22:54:34.219: mode=USER_ROTATION_LOCKED, rotation=ROTATION_0, caller=MonkeyRotationEven#injectEvent
+          05-05 22:54:34.220: mode=USER_ROTATION_FREE, rotation=ROTATION_270, caller=MonkeyRotationEven#injectEvent
+          05-05 23:04:13.538: mode=USER_ROTATION_LOCKED, rotation=ROTATION_0, caller=MonkeyRotationEven#injectEvent
+          05-05 23:04:13.542: mode=USER_ROTATION_FREE, rotation=ROTATION_270, caller=MonkeyRotationEven#injectEvent
+          05-05 23:09:37.544: mode=USER_ROTATION_LOCKED, rotation=ROTATION_0, caller=MonkeyRotationEven#injectEvent
+          05-05 23:09:37.553: mode=USER_ROTATION_FREE, rotation=ROTATION_0, caller=MonkeyRotationEven#injectEvent
+
+  InputConsumers:
+    name=recents_animation_input_consumer pid=31521 user=UserHandle{0}
+
+  WindowInsetsStateController
+    InsetsState
+      mDisplayFrame=Rect(0, 0 - 2184, 1968)
+      mDisplayCutout=DisplayCutout{insets=Rect(0, 0 - 0, 0) waterfall=Insets{left=0, top=0, right=0, bottom=0} boundingRect={Bounds=[Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0)]} cutoutPathParserInfo={CutoutPathParserInfo{displayWidth=0 displayHeight=0 physicalDisplayWidth=0 physicalDisplayHeight=0 density={0.0} cutoutSpec={} rotation={0} scale={0.0} physicalPixelDisplaySizeRatio={0.0}}} sideOverrides=null}
+      mRoundedCorners=RoundedCorners{[RoundedCorner{position=TopLeft, radius=10, center=Point(10, 10)}, RoundedCorner{position=TopRight, radius=10, center=Point(2174, 10)}, RoundedCorner{position=BottomRight, radius=10, center=Point(2174, 1958)}, RoundedCorner{position=BottomLeft, radius=10, center=Point(10, 1958)}]}
+      mRoundedCornerFrame=Rect(0, 0 - 0, 0)
+      mPrivacyIndicatorBounds=PrivacyIndicatorBounds {static bounds=Rect(2098, 0 - 2184, 58) rotation=3}
+      mDisplayShape=DisplayShape{ spec=-311912193 displayWidth=1968 displayHeight=2184 physicalPixelDisplaySizeRatio=1.0 rotation=3 offsetX=0 offsetY=0 scale=1.0}
+        InsetsSource id=b6e60000 type=statusBars frame=[0,0][2184,58] visible=true flags= sideHint=TOP boundingRects=null
+        InsetsSource id=b6e60005 type=mandatorySystemGestures frame=[0,0][2184,58] visible=true flags= sideHint=TOP boundingRects=null
+        InsetsSource id=b6e60006 type=tappableElement frame=[0,0][2184,58] visible=true flags= sideHint=TOP boundingRects=null
+        InsetsSource id=fead0001 type=navigationBars frame=[0,1875][2184,1968] visible=true flags= sideHint=BOTTOM boundingRects=null
+        InsetsSource id=fead0004 type=systemGestures frame=[0,0][0,0] visible=true flags= sideHint=NONE boundingRects=null
+        InsetsSource id=fead0005 type=mandatorySystemGestures frame=[0,1875][2184,1968] visible=true flags= sideHint=BOTTOM boundingRects=null
+        InsetsSource id=fead0006 type=tappableElement frame=[0,1875][2184,1968] visible=true flags= sideHint=BOTTOM boundingRects=null
+        InsetsSource id=fead0024 type=systemGestures frame=[0,0][0,0] visible=true flags= sideHint=NONE boundingRects=null
+        InsetsSource id=3 type=ime frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        InsetsSource id=71200001 type=navigationBars frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        InsetsSource id=71200004 type=systemGestures frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        InsetsSource id=71200005 type=mandatorySystemGestures frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        InsetsSource id=71200006 type=tappableElement frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        InsetsSource id=71200024 type=systemGestures frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+    Control map:
+      Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}:
+        InsetsSourceControl: {3 mType=ime mSurfacePosition=Point(684, 1875) mInsetsHint=Insets{left=0, top=0, right=0, bottom=0}}
+        InsetsSourceControl: {b6e60000 mType=statusBars initiallyVisible mSurfacePosition=Point(0, 0) mInsetsHint=Insets{left=0, top=58, right=0, bottom=0}}
+        InsetsSourceControl: {fead0001 mType=navigationBars initiallyVisible mSurfacePosition=Point(0, 1875) mInsetsHint=Insets{left=0, top=0, right=0, bottom=93}}
+        InsetsSourceControl: {71200001 mType=navigationBars initiallyVisible mSurfacePosition=Point(0, 2445) mInsetsHint=Insets{left=0, top=0, right=0, bottom=75}}
+    InsetsSourceProviders:
+      InsetsSourceProvider
+        mSource=InsetsSource id=71200024 type=systemGestures frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 0 - 0, 0)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{a12505f u0 NavigationBar0}
+      InsetsSourceProvider
+        mSource=InsetsSource id=71200006 type=tappableElement frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 2445 - 1080, 2520)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{a12505f u0 NavigationBar0}
+      InsetsSourceProvider
+        mSource=InsetsSource id=71200005 type=mandatorySystemGestures frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 2445 - 1080, 2520)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{a12505f u0 NavigationBar0}
+      InsetsSourceProvider
+        mSource=InsetsSource id=71200004 type=systemGestures frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 0 - 0, 0)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{a12505f u0 NavigationBar0}
+      InsetsSourceProvider
+        mSource=InsetsSource id=71200001 type=navigationBars frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 2445 - 1080, 2520)
+        mOverrideFrames={2011=Rect(0, 2445 - 1080, 2520)}
+        mControl=InsetsSourceControl mId=71200001 mType=navigationBars mLeash=Surface(name=Surface(name=a12505f NavigationBar0)/@0xcf3b957 - animation-leash of insets_animation)/@0x4d97eb3 mInitiallyVisible=true mSurfacePosition=Point(0, 2445) mInsetsHint=Insets{left=0, top=0, right=0, bottom=75} mSkipAnimationOnce=false mImeStatsToken=null mControlledByPolicy=false
+        mInsetsHint=Insets{left=0, top=0, right=0, bottom=75} stale
+        mIsLeashInitialized=true mHasPendingPosition=false
+        mWindowContainer=Window{a12505f u0 NavigationBar0}
+        mAdapter=ControlAdapter mCapturedLeash=Surface(name=Surface(name=a12505f NavigationBar0)/@0xcf3b957 - animation-leash of insets_animation)/@0x4d97eb3
+        mControlTarget=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+      ImeInsetsSourceProvider
+        mSource=InsetsSource id=3 type=ime frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(684, 1968 - 1500, 1968)
+        mControl=InsetsSourceControl mId=3 mType=ime mLeash=Surface(name=Surface(name=532a156 InputMethod)/@0x5bf4a51 - animation-leash of insets_animation)/@0x3877be8 mInitiallyVisible=false mSurfacePosition=Point(684, 1875) mInsetsHint=Insets{left=0, top=0, right=0, bottom=0} mSkipAnimationOnce=false mImeStatsToken=null mControlledByPolicy=false
+        mInsetsHint=Insets{left=0, top=0, right=0, bottom=0} stale
+        mIsLeashInitialized=true mHasPendingPosition=false
+        mWindowContainer=Window{532a156 u0 InputMethod}
+        mAdapter=ControlAdapter mCapturedLeash=Surface(name=Surface(name=532a156 InputMethod)/@0x5bf4a51 - animation-leash of insets_animation)/@0x3877be8
+        mControlTarget=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+        mImeShowing=false mLastDrawn=false        showImePostLayout not scheduled, mImeRequester=null
+
+      InsetsSourceProvider
+        mSource=InsetsSource id=fead0024 type=systemGestures frame=[0,0][0,0] visible=true flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 0 - 0, 0)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{e9b7b11 u0 TaskbarWindow}
+      InsetsSourceProvider
+        mSource=InsetsSource id=fead0006 type=tappableElement frame=[0,1875][2184,1968] visible=true flags= sideHint=BOTTOM boundingRects=null
+        mSourceFrame=Rect(0, 1875 - 2184, 1968)
+        mOverrideFrames={2011=Rect(0, 1875 - 2184, 1968)}
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{e9b7b11 u0 TaskbarWindow}
+      InsetsSourceProvider
+        mSource=InsetsSource id=fead0005 type=mandatorySystemGestures frame=[0,1875][2184,1968] visible=true flags= sideHint=BOTTOM boundingRects=null
+        mSourceFrame=Rect(0, 1875 - 2184, 1968)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{e9b7b11 u0 TaskbarWindow}
+      InsetsSourceProvider
+        mSource=InsetsSource id=fead0004 type=systemGestures frame=[0,0][0,0] visible=true flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 0 - 0, 0)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{e9b7b11 u0 TaskbarWindow}
+      InsetsSourceProvider
+        mSource=InsetsSource id=fead0001 type=navigationBars frame=[0,1875][2184,1968] visible=true flags= sideHint=BOTTOM boundingRects=null
+        mSourceFrame=Rect(0, 1875 - 2184, 1968)
+        mOverrideFrames={2011=Rect(0, 1875 - 2184, 1968)}
+        mControl=InsetsSourceControl mId=fead0001 mType=navigationBars mLeash=Surface(name=Surface(name=e9b7b11 TaskbarWindow)/@0xa4fe238 - animation-leash of insets_animation)/@0xa8ebbe9 mInitiallyVisible=true mSurfacePosition=Point(0, 1875) mInsetsHint=Insets{left=0, top=0, right=0, bottom=93} mSkipAnimationOnce=false mImeStatsToken=null mControlledByPolicy=false
+        mInsetsHint=Insets{left=0, top=0, right=0, bottom=93}
+        mIsLeashInitialized=true mHasPendingPosition=false
+        mWindowContainer=Window{e9b7b11 u0 TaskbarWindow}
+        mAdapter=ControlAdapter mCapturedLeash=Surface(name=Surface(name=e9b7b11 TaskbarWindow)/@0xa4fe238 - animation-leash of insets_animation)/@0xa8ebbe9
+        mControlTarget=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+      InsetsSourceProvider
+        mSource=InsetsSource id=b6e60006 type=tappableElement frame=[0,0][2184,58] visible=true flags= sideHint=TOP boundingRects=null
+        mSourceFrame=Rect(0, 0 - 2184, 58)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{7da719d u0 StatusBar}
+      InsetsSourceProvider
+        mSource=InsetsSource id=b6e60005 type=mandatorySystemGestures frame=[0,0][2184,58] visible=true flags= sideHint=TOP boundingRects=null
+        mSourceFrame=Rect(0, 0 - 2184, 58)
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mWindowContainer=Window{7da719d u0 StatusBar}
+      InsetsSourceProvider
+        mSource=InsetsSource id=b6e60000 type=statusBars frame=[0,0][2184,58] visible=true flags= sideHint=TOP boundingRects=null
+        mSourceFrame=Rect(0, 0 - 2184, 58)
+        mControl=InsetsSourceControl mId=b6e60000 mType=statusBars mLeash=Surface(name=Surface(name=7da719d StatusBar)/@0x7ed9e74 - animation-leash of insets_animation)/@0xe3530f mInitiallyVisible=true mSurfacePosition=Point(0, 0) mInsetsHint=Insets{left=0, top=58, right=0, bottom=0} mSkipAnimationOnce=false mImeStatsToken=null mControlledByPolicy=false
+        mInsetsHint=Insets{left=0, top=58, right=0, bottom=0}
+        mIsLeashInitialized=true mHasPendingPosition=false
+        mWindowContainer=Window{7da719d u0 StatusBar}
+        mAdapter=ControlAdapter mCapturedLeash=Surface(name=Surface(name=7da719d StatusBar)/@0x7ed9e74 - animation-leash of insets_animation)/@0xe3530f
+        mControlTarget=Window{ba3241f u0 com.spotify.music/com.spotify.music.MainActivity}
+  InsetsPolicy
+    status: WINDOW_STATE_SHOWING
+    nav: WINDOW_STATE_SHOWING
+
+  Display: mDisplayId=1 (organized)
+    init=1080x2520 420dpi mMinSizeOfResizeableTaskDp=220 base=1080x2520 311dpi cur=2520x1080 app=2520x1080 rng=1080x1080-2520x2520
+    deferred=false mLayoutNeeded=false
+    initCutout=DisplayCutout{insets=Rect(0, 110 - 0, 0) waterfall=Insets{left=0, top=0, right=0, bottom=0} boundingRect={Bounds=[Rect(0, 0 - 0, 0), Rect(510, 0 - 570, 110), Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0)]} cutoutPathParserInfo={CutoutPathParserInfo{displayWidth=1080 displayHeight=2520 physicalDisplayWidth=1080 physicalDisplayHeight=2520 density={2.625} cutoutSpec={M 0,0 H -11.42857142857143 V 41.9047619047619 H 11.42857142857143 V 0 H 0 Z @dp} rotation={0} scale={1.0} physicalPixelDisplaySizeRatio={1.0}}} sideOverrides={}}
+    baseCutout=null
+
+    initRoundedCorners=RoundedCorners{[RoundedCorner{position=TopLeft, radius=13, center=Point(13, 13)}, RoundedCorner{position=TopRight, radius=13, center=Point(1067, 13)}, RoundedCorner{position=BottomRight, radius=13, center=Point(1067, 2507)}, RoundedCorner{position=BottomLeft, radius=13, center=Point(13, 2507)}]}
+    baseRoundedCorners=RoundedCorners{[RoundedCorner{position=TopLeft, radius=10, center=Point(10, 10)}, RoundedCorner{position=TopRight, radius=10, center=Point(1070, 10)}, RoundedCorner{position=BottomRight, radius=10, center=Point(1070, 2510)}, RoundedCorner{position=BottomLeft, radius=10, center=Point(10, 2510)}]}
+
+  overrideConfig={0.0 ?mcc0mnc ?localeList ?layoutDir sw556dp w1296dp h556dp 311dpi lrg long hdr widecg land ?uimode ?night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2520, 1080) mAppBounds=Rect(0, 0 - 2520, 1080) mMaxBounds=Rect(0, 0 - 2520, 1080) mDisplayRotation=ROTATION_90 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_90 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=off} ?fontWeightAdjustment ff=0 bf=-1 bts=0 cst=1.0 nightDim=-1 dt/? themeSeq=0}
+  ignoreOrientationRequest=false
+  mLayoutSeq=15
+  mCurrentFocus=null
+  mFocusedApp=null
+
+  mHoldScreenWindow=null
+  mObscuringWindow=null
+  mLastWakeLockHoldingWindow=null
+  mLastWakeLockObscuringWindow=null
+
+  displayId=1
+  mWallpaperTarget=null
+  mLastWallpaperZoomOut=0.0
+  mFindResults
+    mTopHideWhenLockedWallpaper=null
+    mTopShowWhenLockedWallpaper=null
+
+  mSystemGestureExclusion=SkRegion()
+
+  Display areas in top down Z order:
+    * Leaf:32:36
+    * WindowedMagnification:0:31
+      * Leaf:15:31
+      * ImePlaceholder:13:14
+        * ImeContainer
+      * Leaf:3:12
+      * DefaultTaskDisplayArea_d1 (organized)
+      * Leaf:0:1
+
+  Task display areas in top down Z order:
+    TaskDisplayArea DefaultTaskDisplayArea_d1
+      overrideConfig={0.0 ?mcc0mnc ?localeList ?layoutDir ?swdp ?wdp ?hdp ?density ?lsize ?long ?ldr ?wideColorGamut ?orien ?uimode ?night ?touch ?keyb/?/? ?nav/? winConfig={ mBounds=Rect(0, 0 - 0, 0) mAppBounds=null mMaxBounds=Rect(0, 0 - 0, 0) mDisplayRotation=undefined mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=undefined mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=undefined} ?fontWeightAdjustment ff=0 bf=-1 bts=-1 cst=0.0 nightDim=-1 dt/? themeSeq=0}
+      Application tokens in top down Z order:
+
+
+  PinnedTaskController
+    mIsImeShowing=false
+    mImeHeight=0
+    mMinAspectRatio=0.41841003
+    mMaxAspectRatio=2.39
+
+  DisplayFrames w=2520 h=1080 r=1
+
+  DisplayPolicy
+    mCarDockEnablesAccelerometer=true mDeskDockEnablesAccelerometer=true
+    mDockMode=EXTRA_DOCK_STATE_UNDOCKED mLidState=LID_ABSENT
+    mAwake=true mScreenOnEarly=false mScreenOnFully=false
+    mKeyguardDrawComplete=false mWindowManagerDrawComplete=false
+    mHdmiPlugged=false
+    mShowingDream=false mDreamingLockscreen=false
+    isKeyguardShowing=false
+    mTopIsFullscreen=false
+    mImeInsetsConsumed=false
+    mForceShowNavigationBarEnabled=false mAllowLockscreenWhenOn=false
+    mRemoteInsetsControllerControlsSystemBars=false
+    mDecorInsetsInfo:
+      ROTATION_0={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,0], configInsets=[0,0][0,0], overrideConfigInsets=[0,0][0,0], nonDecorFrame=[0,0][1080,2520], overrideNonDecorFrame=[0,0][1080,2520], configFrame=[0,0][1080,2520], overrideConfigFrame=[0,0][1080,2520]}
+      ROTATION_90={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,0], configInsets=[0,0][0,0], overrideConfigInsets=[0,0][0,0], nonDecorFrame=[0,0][2520,1080], overrideNonDecorFrame=[0,0][2520,1080], configFrame=[0,0][2520,1080], overrideConfigFrame=[0,0][2520,1080]}
+      ROTATION_180={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,0], configInsets=[0,0][0,0], overrideConfigInsets=[0,0][0,0], nonDecorFrame=[0,0][1080,2520], overrideNonDecorFrame=[0,0][1080,2520], configFrame=[0,0][1080,2520], overrideConfigFrame=[0,0][1080,2520]}
+      ROTATION_270={nonDecorInsets=[0,0][0,0], overrideNonDecorInsets=[0,0][0,0], configInsets=[0,0][0,0], overrideConfigInsets=[0,0][0,0], nonDecorFrame=[0,0][2520,1080], overrideNonDecorFrame=[0,0][2520,1080], configFrame=[0,0][2520,1080], overrideConfigFrame=[0,0][2520,1080]}
+    SystemGestures:
+      mDisplayCutoutTouchableRegionSize=23
+      mSwipeStartThreshold=Rect(47, 47 - 47, 47)
+      mSwipeDistanceThreshold=47
+    UiContextResourcesConfig=
+    {0.8 234mcc30mnc [en_GB] masculine ldltr sw556dp w556dp h1296dp 311dpi lrg long hdr widecg port night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 1080, 2520) mAppBounds=Rect(0, 0 - 1080, 2520) mMaxBounds=Rect(0, 0 - 1080, 2520) mDisplayRotation=ROTATION_0 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_0 mStageConfig=undefined mEmbedActivityMode=undefined mPopOver=undefined mOverlappingWithCutout=false mFlexPanelMode=off} as.1 s.10 fontWeightAdjustment=0 ff=0 bf=-1 bts=0 cst=1.0 nightDim=0 dt/m themeSeq=0}
+    UiContextResourcesMetrics=
+    DisplayMetrics{density=1.94375, width=1080, height=2520, scaledDensity=1.5550001, xdpi=422.03076, ydpi=421.10526}
+
+    DisplayPolicyExt
+
+    RefreshRatePolicy
+      mLowRefreshRateMode={id=10, width=1080, height=2520, fps=60.000004, vsync=60.000004, synthetic=false, alternativeRefreshRates=[10.0, 24.000002, 30.000002, 48.000004, 80.0, 120.00001], supportedHdrTypes=[2, 3, 4]}
+      mNonHighRefreshRatePackages:
+      RefreshRatePolicy History
+<< PreferredModeHistory_ModeId >>
+<< PreferredModeHistory_Min >>
+<< PreferredModeHistory_Max >>
+
+  DisplayRotation
+    mCurrentAppOrientation=SCREEN_ORIENTATION_UNSPECIFIED
+    mLastOrientation=-1
+    mRotation=1 mDeferredRotationPauseCount=0
+    mLandscapeRotation=ROTATION_90 mSeascapeRotation=ROTATION_270
+    mPortraitRotation=ROTATION_0 mUpsideDownRotation=ROTATION_180
+    mSupportAutoRotation=true
+
+    mCarDockRotation=-1 mDeskDockRotation=-1
+    mUserRotationMode=USER_ROTATION_FREE mUserRotation=ROTATION_0 mCameraRotationMode=0 mAllowAllRotations=unknown
+    mDemoHdmiRotation=ROTATION_90 mDemoHdmiRotationLock=false mUndockedHdmiRotation=-1
+    mLidOpenRotation=-1
+    mFixedToUserRotation=false
+
+    RotationHistory
+      05-05 20:11:37.776 ROTATION_0 to ROTATION_90
+        source=null SCREEN_ORIENTATION_UNSET
+        mode=USER_ROTATION_FREE user=ROTATION_0 sensor=-2
+        requestingTda=none
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=false }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD false
+      05-05 22:22:07.224 ROTATION_90 to ROTATION_0
+        source=null SCREEN_ORIENTATION_UNSET
+        mode=USER_ROTATION_FREE user=ROTATION_0 sensor=-2
+        ignoreRequest=true
+        requestingTda=none
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=true mLastReportedOrientation=SCREEN_ORIENTATION_UNSPECIFIED topActivity=null isTreatmentEnabledForActivity=falsemCameraStateMonitor= CameraIdPackageNameBiMapping={ mPackageToCameraIdMap={} } }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD false
+      05-05 22:43:01.572 ROTATION_0 to ROTATION_90
+        source=null SCREEN_ORIENTATION_UNSET
+        mode=USER_ROTATION_FREE user=ROTATION_0 sensor=-2
+        requestingTda=none
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=false }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD false
+      05-05 23:09:37.565 ROTATION_90 to ROTATION_0
+        source=null SCREEN_ORIENTATION_UNSET
+        mode=USER_ROTATION_FREE user=ROTATION_0 sensor=-2
+        requestingTda=none
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=false }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD false
+      05-05 23:09:37.747 ROTATION_0 to ROTATION_90
+        source=null SCREEN_ORIENTATION_UNSET
+        mode=USER_ROTATION_FREE user=ROTATION_0 sensor=-2
+        requestingTda=none
+      DisplayRotationCompatPolicy{ isTreatmentEnabledForDisplay=false }
+       reversionSlots= NOSENSOR false, CAMERA false HALF_FOLD false
+
+
+  WindowInsetsStateController
+    InsetsState
+      mDisplayFrame=Rect(0, 0 - 2520, 1080)
+      mDisplayCutout=DisplayCutout{insets=Rect(0, 0 - 0, 0) waterfall=Insets{left=0, top=0, right=0, bottom=0} boundingRect={Bounds=[Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0), Rect(0, 0 - 0, 0)]} cutoutPathParserInfo={CutoutPathParserInfo{displayWidth=0 displayHeight=0 physicalDisplayWidth=0 physicalDisplayHeight=0 density={0.0} cutoutSpec={} rotation={0} scale={0.0} physicalPixelDisplaySizeRatio={0.0}}} sideOverrides=null}
+      mRoundedCorners=RoundedCorners{[RoundedCorner{position=TopLeft, radius=10, center=Point(10, 10)}, RoundedCorner{position=TopRight, radius=10, center=Point(2510, 10)}, RoundedCorner{position=BottomRight, radius=10, center=Point(2510, 1070)}, RoundedCorner{position=BottomLeft, radius=10, center=Point(10, 1070)}]}
+      mRoundedCornerFrame=Rect(0, 0 - 0, 0)
+      mPrivacyIndicatorBounds=PrivacyIndicatorBounds {static bounds=null rotation=1}
+      mDisplayShape=DisplayShape{ spec=-311912193 displayWidth=1080 displayHeight=2520 physicalPixelDisplaySizeRatio=1.0 rotation=1 offsetX=0 offsetY=0 scale=1.0}
+        InsetsSource id=3 type=ime frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+    Control map:
+      none    InsetsSourceProviders:
+      ImeInsetsSourceProvider
+        mSource=InsetsSource id=3 type=ime frame=[0,0][0,0] visible=false flags= sideHint=NONE boundingRects=null
+        mSourceFrame=Rect(0, 0 - 0, 0)
+        mInsetsHint=Insets{left=0, top=0, right=0, bottom=0} stale
+        mIsLeashInitialized=false mHasPendingPosition=false
+        mImeShowing=false mLastDrawn=false        showImePostLayout not scheduled, mImeRequester=null
+
+  InsetsPolicy
+    status: WINDOW_STATE_SHOWING
+    nav: WINDOW_STATE_SHOWING
+
+  KeyguardController:
+    mKeyguardShowing=false
+    mAodShowing=false
+    mKeyguardGoingAway=false
+   KeyguardShowing=false AodShowing=false KeyguardGoingAway=false DismissalRequested=false  Occluded=false DismissingKeyguardActivity=null TurnScreenOnActivity=null at display=0
+   KeyguardShowing=false AodShowing=false KeyguardGoingAway=false DismissalRequested=false  Occluded=false DismissingKeyguardActivity=null TurnScreenOnActivity=null at display=1
+    mDismissalRequested=false
+
+  LockTaskController:
+    mLockTaskModeState=NONE
+    mLockTaskModeTasks=
+    mLockTaskPackages (userId:packages)=
+
+  mCurTaskIdForUser={0=507}
+  mUserRootTaskInFront={}
+  mVisibilityTransactionDepth=0
+  isHomeRecentsComponent=true
+  mNoHistoryActivities=[]
+
+  TaskOrganizerController:
+      android.window.ITaskOrganizer$Stub$Proxy@74af371 uid=10050 (active):
+        (fullscreen) Task{ff2b1ea #1 type=home}
+        (fullscreen) Task{3d855b #2 type=undefined}
+        (multi-window) Task{de14536 #3 type=undefined}
+        (multi-window) Task{8e686d1 #4 type=undefined}
+        (multi-window) Task{17bbf0d #5 type=undefined}
+        (freeform) Task{3bd012a #6 type=undefined dw=activatable}
+        (freeform) Task{8df1a54 #7 type=undefined dw=minimized}
+        (fullscreen) Task{23c36bc #473 type=recents I=com.sec.android.app.launcher/com.android.quickstep.RecentsActivity}
+        (fullscreen) Task{49b7e9f #506 type=standard A=10565:com.powermediaplayer}
+        (fullscreen) Task{2753e32 #507 type=standard A=10366:com.spotify.music}
+
+  VisibleActivityProcess:[ ProcessRecord{7c4a4d7 5552:com.spotify.music/u0a366}]
+  NumNonAppVisibleWindowUidMap:[ 10153:1 10050:1]
+  SleepTokens={1733265133={"Display-off", display 1, acquire at 48999 (12805504 ms ago)}}
+
+  PACKAGE SETTINGS MANAGER
+    AdaptiveAppByDefaultPolicy
+      PolicyEnabled=true
+    OrientationPolicy
+      mDefaultEnabled=false
+      mRotationCompatPolicy=AUTO
+    DisplayCutoutController
+      mCutoutInset=null
+      mNonDecorInsetsWithoutCutout=Rect(0, 0 - 0, 0)
+      mUserChange= (u0)
+        [com.netflix.mediaclient] OverlapWithTheCameraCutout
+    FoldAppContinuityController
+      mAllAppContinuityModeEnabled=false
+      mFrontScreenOnWhenAppContinuityMode=true
+    FlexPanelController
+    ActivityEmbeddedController
+    SplitActivityController
+  PACKAGE SETTINGS MANAGER - USER CHANGES
+    DisplayCutoutController (u0)
+      [com.netflix.mediaclient] OverlapWithTheCameraCutout
+    FlexPanelController (u0)
+      [com.sec.android.app.myfiles] true, get=0x9
+      [com.force.stop.apps] true, get=0x9
+      [com.ubercab] true, get=0x9
+      [co.uk.ringgo.android] true, get=0x9
+      [org.videolan.vlc] true, get=0x19
+      [com.nest.android] true, get=0x9
+      [com.nintendo.znba] true, get=0x9
+      [uk.co.ee.myee] true, get=0x9
+      [com.instagram.barcelona] true, get=0x9
+      [com.americanexpress.android.acctsvcs.uk] true, get=0x9
+      [com.google.android.apps.photos] true, get=0x9
+      [com.samsung.android.oneconnect] true, get=0x46
+      [com.samsung.android.app.tips] true, get=0x9
+      [com.ebay.mobile] true, get=0x9
+      [com.discord] true, get=0x9
+      [intl.costco.com.mobile.uk] true, get=0x9
+      [com.zombodroid.MemeGeneratorFullGplay] true, get=0x9
+      [com.Splitwise.SplitwiseMobile] true, get=0x9
+      [com.getsomeheadspace.android] true, get=0x9
+      [com.facebook.katana] true, get=0x19
+      [ai.perplexity.app.android] true, get=0x9
+      [com.samsung.android.calendar] true, get=0x46
+      [com.airbnb.android] true, get=0x9
+      [com.kraken.invest.app] true, get=0x9
+      [com.disney.disneyplus] true, get=0x19
+      [com.philips.lighting.hue2] true, get=0x9
+      [com.xe.currency] true, get=0x9
+      [com.deepseek.chat] true, get=0x46
+      [com.brave.browser] true, get=0x9
+      [bbc.iplayer.android] true, get=0x9
+      [com.google.android.apps.translate] true, get=0x9
+      [be.moulinsart.tintinbooks] true, get=0x9
+      [com.google.android.apps.youtube.music] true, get=0x9
+      [com.tplink.iot] true, get=0x9
+      [com.google.android.stardroid] true, get=0x9
+      [com.fitbit.FitbitMobile] true, get=0x9
+      [com.linkedin.android] true, get=0x9
+      [com.sec.android.app.camera] true, get=0x19
+      [uk.co.metrobankonline.mobile.android.production] true, get=0x9
+      [com.apple.atve.androidtv.appletv] true, get=0x9
+      [com.google.android.apps.docs.editors.docs] true, get=0x9
+      [com.deliveroo.orderapp] true, get=0x9
+      [com.microsoft.office.excel] true, get=0x9
+      [com.google.android.apps.paidtasks] true, get=0x9
+      [com.innovatise.bettergll] true, get=0x9
+      [ee.mtakso.client] true, get=0x9
+      [com.inrange.android.app] true, get=0x9
+      [com.openai.chatgpt] true, get=0x9
+      [com.google.android.apps.docs] true, get=0x9
+      [com.samsung.android.tvplus] true, get=0x19
+      [com.samsung.android.app.notes] true, get=0x46
+      [com.sec.android.app.popupcalculator] true, get=0x19
+      [com.chase.intl] true, get=0x9
+      [com.reddit.frontpage] true, get=0x9
+      [com.azure.authenticator] true, get=0x9
+      [com.spotify.music] true, get=0x9
+      [com.anonimno.dateonstatusbar] true, get=0x46
+      [com.google.android.videos] true, get=0x9
+      [com.microsoft.office.officehubrow] true, get=0x46
+      [com.sec.android.app.voicenote] true, get=0x9
+      [com.sec.android.app.sbrowser] true, get=0x46
+      [com.fuseenergy] true, get=0x9
+      [com.uefa.blockchain.android.ticket] true, get=0x46
+      [com.whatsapp] true, get=0x19
+      [com.eon.heat] true, get=0x9
+      [com.superthomaslab.hueessentials] true, get=0x9
+      [com.vitalsource.bookshelf] true, get=0x9
+      [Draziw.Button.Mines] true, get=0x9
+      [com.sec.android.app.samsungapps] true, get=0x9
+      [com.audible.application] true, get=0x9
+      [com.google.android.apps.docs.editors.sheets] true, get=0x9
+      [com.bricksearch.bricksearch] true, get=0x46
+      [com.samsung.android.voc] true, get=0x46
+      [com.google.android.keep] true, get=0x9
+      [com.mobilefootie.wc2010] true, get=0x9
+      [com.samsung.ecomm.global.gbr] true, get=0x46
+      [com.google.android.apps.walletnfcrel] true, get=0x9
+      [com.twitter.android] true, get=0x9
+      [com.surfshark.vpnclient.android] true, get=0x9
+      [com.nathnetwork.maximus] true, get=0x9
+      [com.google.android.apps.bard] true, get=0x9
+      [com.calm.android] true, get=0x9
+      [nandos.android.app] true, get=0x9
+      [com.sec.android.app.clockpackage] true, get=0x19
+      [com.bose.bosemusic] true, get=0x9
+      [jp.co.johospace.jorte] true, get=0x9
+      [com.google.android.apps.maps] true, get=0x9
+      [com.google.android.apps.tachyon] true, get=0x19
+      [uk.co.patient.patientaccess] true, get=0x9
+      [com.hcceg.veg.compassionfree] true, get=0x9
+      [com.amazon.avod.thirdpartyclient] true, get=0x9
+      [com.microsoft.office.word] true, get=0x9
+      [com.google.android.apps.messaging] true, get=0x9
+      [com.samsung.android.app.contacts] true, get=0x9
+      [com.google.android.googlequicksearchbox] true, get=0x9
+      [com.shazam.android] true, get=0x9
+      [com.zhiliaoapp.musically] true, get=0x9
+      [com.avast.android.cleaner] true, get=0x9
+      [com.samsung.sree] true, get=0x46
+      [com.avuscapital.trading212] true, get=0x9
+      [com.microsoft.skydrive] true, get=0x9
+      [cgeo.geocaching] true, get=0x9
+      [com.dwellant.residentapp.rendallandrittner] true, get=0x9
+      [com.morrisons.matchandmore.app] true, get=0x9
+      [com.sec.android.gallery3d] true, get=0x19
+      [all_apps] true, get=0x46
+      [com.withings.wiscale2] true, get=0x9
+      [com.lego.legobuildinginstructions] true, get=0x9
+      [com.instagram.android] true, get=0x9
+      [com.etsy.android] true, get=0x9
+      [com.transferwise.android] true, get=0x9
+      [com.paybyphone] true, get=0x9
+      [com.microsoft.office.outlook] true, get=0x9
+      [de.renewahl.all4hue] true, get=0x9
+      [com.sonos.acr2] true, get=0x9
+      [com.android.vending] true, get=0x9
+      [com.samsung.android.game.gamehome] true, get=0x46
+      [com.overdrive.mobile.android.libby] true, get=0x9
+      [com.android.chrome] true, get=0x9
+      [com.ocadoretail.mobile.android] true, get=0x9
+      [com.samsung.android.app.find] true, get=0x46
+      [com.microsoft.copilot] true, get=0x9
+      [com.ubercab.eats] true, get=0x9
+      [com.bupa.bupatouch] true, get=0x9
+      [com.google.android.apps.chromecast.app] true, get=0x9
+      [com.nhs.online.nhsonline] true, get=0x9
+      [com.skywatcher.synscanapppro] true, get=0x46
+      [com.google.android.youtube] true, get=0x19
+      [uk.co.spurs.official] true, get=0x9
+      [com.samsung.android.dialer] true, get=0x19
+      [com.google.android.contacts] true, get=0x9
+      [com.facebook.orca] true, get=0x19
+      [com.standardlife.myportfollio] true, get=0x9
+      [com.arashivision.insta360akiko] true, get=0x9
+      [com.intsig.camscanner] true, get=0x9
+      [com.amazon.mShop.android.shopping] true, get=0x9
+      [com.google.android.gm] true, get=0x9
+      [com.mubaloo.android.hargreaveslansdown] true, get=0x9
+      [com.google.android.calendar] true, get=0x9
+
