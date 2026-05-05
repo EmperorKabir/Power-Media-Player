@@ -220,23 +220,36 @@ class PlayerViewModel @Inject constructor(
                 )
             }
         }
-        // Replay gain: when enabled, read REPLAYGAIN_TRACK_GAIN tag on
-        // each new track and apply via LoudnessEnhancer (negative gains
-        // attenuate, positive boost). Cap to ±15 dB.
+        // ReplayGain: when enabled, read REPLAYGAIN_TRACK_GAIN on each
+        // new track and apply across the full ±15 dB range. Positive
+        // gains route via LoudnessEnhancer; negative gains route via
+        // ExoPlayer.volume (LoudnessEnhancer cannot attenuate).
+        // When the toggle is turned off OR a track has no tag we
+        // RESET both paths so a previous attenuation doesn't leak.
         viewModelScope.launch {
             kotlinx.coroutines.flow.combine(
                 settingsDataStore.replayGainEnabled,
                 playbackConnection.playerState.map { it.title }.distinctUntilChanged()
             ) { enabled, _ -> enabled }
                 .collectLatest { enabled ->
-                    if (!enabled) return@collectLatest
-                    // Read mediaUri on Main (MediaController access),
-                    // then hop to IO for the blocking MMR read.
+                    if (!enabled) {
+                        // Reset both paths so disabling the toggle
+                        // restores unmodified output.
+                        setVolumeBoost(0)
+                        com.powermediaplayer.service.PlaybackService
+                            .setReplayGainAttenuation(1.0f)
+                        return@collectLatest
+                    }
                     val mediaUri = withContext(Dispatchers.Main) {
                         playbackConnection.getPlayer()?.currentMediaItem?.mediaId
                     }
-                    if (mediaUri.isNullOrBlank()) return@collectLatest
-                    val mb = withContext(Dispatchers.IO) {
+                    if (mediaUri.isNullOrBlank()) {
+                        setVolumeBoost(0)
+                        com.powermediaplayer.service.PlaybackService
+                            .setReplayGainAttenuation(1.0f)
+                        return@collectLatest
+                    }
+                    val mbAndRaw = withContext(Dispatchers.IO) {
                         runCatching {
                             val mmr = android.media.MediaMetadataRetriever()
                             mmr.setDataSource(context, android.net.Uri.parse(mediaUri))
@@ -250,9 +263,26 @@ class PlayerViewModel @Inject constructor(
                             (gainDb * 100).toInt().coerceIn(-1500, 1500) to raw
                         }.getOrDefault(0 to null)
                     }
-                    if (mb.first != 0) {
-                        android.util.Log.i("PMP_DIAG", "ReplayGain mb=${mb.first} (from ${mb.second})")
-                        setVolumeBoost(mb.first.coerceAtLeast(0))
+                    val mb = mbAndRaw.first
+                    android.util.Log.i(
+                        "PMP_DIAG",
+                        "ReplayGain mb=$mb (raw='${mbAndRaw.second}')"
+                    )
+                    if (mb >= 0) {
+                        // Boost path. Reset attenuation first.
+                        com.powermediaplayer.service.PlaybackService
+                            .setReplayGainAttenuation(1.0f)
+                        setVolumeBoost(mb)
+                    } else {
+                        // Attenuation path. linearGain = 10^(dB/20)
+                        // = 10^(mb / 2000). Floor at 0.05 so the
+                        // signal doesn't go fully silent on a
+                        // pathological -∞ tag.
+                        setVolumeBoost(0)
+                        val factor = Math.pow(10.0, mb / 2000.0)
+                            .toFloat().coerceIn(0.05f, 1.0f)
+                        com.powermediaplayer.service.PlaybackService
+                            .setReplayGainAttenuation(factor)
                     }
                 }
         }

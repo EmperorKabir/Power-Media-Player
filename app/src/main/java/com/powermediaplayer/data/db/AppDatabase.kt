@@ -40,7 +40,11 @@ import com.powermediaplayer.data.db.entity.PlaybackStateEntity
     // added HistoryBookmark + FavouriteBookmark snapshot tables.
     // v6: BookmarkEntity gained an index on mediaUri (the only read
     // predicate) — bumped to force schema regeneration.
-    version = 6,
+    // v7: re-seed default Equalizer presets with audibility-tuned
+    // values (Classical + Acoustic boosted past JND on phone
+    // speakers). Destructive migration drops the table so the seed
+    // routine re-inserts the new values.
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

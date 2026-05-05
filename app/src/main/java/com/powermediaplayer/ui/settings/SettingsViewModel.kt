@@ -48,8 +48,17 @@ data class SettingsUiState(
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector
 ) : ViewModel() {
+
+    /**
+     * Mirrors [AudioOutputDetector.isTrueMonoOutput] so the
+     * AudioEffectsButton can disable Stereo flip / Mono mix toggles
+     * when the active output is a true mono speaker (the toggles
+     * have no audible effect there).
+     */
+    val isTrueMonoOutput: StateFlow<Boolean> = audioOutputDetector.isTrueMonoOutput
 
     val uiState: StateFlow<SettingsUiState> = combine(
         listOf<Flow<Any>>(

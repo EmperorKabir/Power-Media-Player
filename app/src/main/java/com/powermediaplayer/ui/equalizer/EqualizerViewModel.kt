@@ -177,9 +177,14 @@ class EqualizerViewModel @Inject constructor(
     private suspend fun seedDefaultPresetsIfNeeded() {
         if (presetDao.getPresetCount() > 0) return
 
+        // Levels are millibels (100 mB = 1 dB). Designed to clear the
+        // ~3–5 dB just-noticeable-difference threshold on phone
+        // speakers / earbuds and give each preset a distinct character.
         val defaults = listOf(
             "Flat" to listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-            "Classical" to listOf(0, 0, 0, 0, 0, 0, -500, -500, -500, -700),
+            // Classical: bass warmth + smooth treble roll-off (was
+            // treble-cut-only and too subtle to hear).
+            "Classical" to listOf(300, 400, 200, 0, 0, 0, -400, -600, -800, -1000),
             "Rock" to listOf(500, 300, 0, -200, -300, 0, 300, 500, 700, 700),
             "Pop" to listOf(-200, 200, 500, 500, 300, 0, -200, -300, -200, -200),
             "Jazz" to listOf(0, 0, 300, 500, 300, 0, 300, 300, 500, 500),
@@ -187,7 +192,10 @@ class EqualizerViewModel @Inject constructor(
             "Treble Boost" to listOf(0, 0, 0, 0, 0, 0, 200, 400, 600, 800),
             "Vocal" to listOf(-300, -200, 0, 400, 700, 700, 400, 0, -200, -300),
             "Electronic" to listOf(600, 400, 0, -200, -300, 0, 200, 400, 600, 600),
-            "Acoustic" to listOf(300, 200, 0, 200, 300, 200, 0, 200, 400, 300)
+            // Acoustic: peaks raised ~+50% so the warmth/air shape is
+            // audible on phone speakers (was peaks of 300–400 mB,
+            // borderline JND).
+            "Acoustic" to listOf(500, 400, 0, 300, 500, 300, 0, 300, 600, 500)
         )
 
         defaults.forEach { (name, levels) ->

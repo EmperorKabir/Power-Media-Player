@@ -37,6 +37,7 @@ fun AudioEffectsButton(
     settingsVm: SettingsViewModel = hiltViewModel()
 ) {
     val s by settingsVm.uiState.collectAsStateWithLifecycle()
+    val isTrueMonoOutput by settingsVm.isTrueMonoOutput.collectAsStateWithLifecycle()
     var showSheet by remember { mutableStateOf(false) }
     var lastInteract by remember { mutableStateOf(0L) }
     val anyOn = s.reverbPreset != 0 || s.stereoFlip || s.monoMix
@@ -112,16 +113,28 @@ fun AudioEffectsButton(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+                if (isTrueMonoOutput) {
+                    Text(
+                        "Stereo flip / Mono mix have no audible effect on a " +
+                            "mono speaker. Connect headphones or a stereo " +
+                            "output to use these.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                }
                 AudioEffectToggleRow(
                     icon = Icons.Filled.SwapHoriz,
                     label = "Stereo flip (L↔R)",
                     on = s.stereoFlip,
+                    enabled = !isTrueMonoOutput,
                     onChange = { settingsVm.setStereoFlip(it); touch() }
                 )
                 AudioEffectToggleRow(
                     icon = Icons.Filled.Adjust,
                     label = "Mono mix",
                     on = s.monoMix,
+                    enabled = !isTrueMonoOutput,
                     onChange = { settingsVm.setMonoMix(it); touch() }
                 )
                 AudioEffectToggleRow(
@@ -141,22 +154,27 @@ private fun AudioEffectToggleRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     on: Boolean,
-    onChange: (Boolean) -> Unit
+    onChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
+    val labelColor = if (enabled) TextPrimary else TextSecondary
+    val iconTint = if (enabled) TextSecondary
+        else TextSecondary.copy(alpha = 0.5f)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = TextSecondary,
+        Icon(icon, contentDescription = null, tint = iconTint,
             modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.titleSmall,
-            color = TextPrimary, modifier = Modifier.weight(1f))
+            color = labelColor, modifier = Modifier.weight(1f))
         Switch(
             checked = on,
             onCheckedChange = onChange,
+            enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = TealAccent,
                 checkedTrackColor = TealAccent.copy(alpha = 0.4f)

@@ -35,6 +35,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.powermediaplayer.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -65,13 +66,30 @@ class PlaybackService : MediaSessionService() {
             monoSupplier = { monoMixFlag }
         )
     }
+    /**
+     * Custom AudioProcessor that delays the audio path by N ms so the
+     * Settings → "Audio delay" slider is no longer cosmetic. Reads the
+     * delay value lazily per input buffer for live scrubbing.
+     */
+    private val audioDelayProcessor by lazy {
+        com.powermediaplayer.audio.AudioDelayProcessor(
+            delayMsSupplier = { audioDelayFlag }
+        )
+    }
     @Volatile
     private var stereoFlipFlag: Boolean = false
     @Volatile
     private var monoMixFlag: Boolean = false
+    @Volatile
+    private var audioDelayFlag: Int = 0
+    @Volatile
+    private var crossfadeMsFlag: Int = 0
 
     @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
+
+    @javax.inject.Inject
+    lateinit var audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector
 
 
     private var player: ExoPlayer? = null
@@ -131,6 +149,46 @@ class PlaybackService : MediaSessionService() {
         private var exoPlayerRef: java.lang.ref.WeakReference<ExoPlayer>? = null
 
         fun getExoPlayer(): ExoPlayer? = exoPlayerRef?.get()
+
+        // ── Volume mixer ────────────────────────────────────────────
+        // ExoPlayer.volume is multiplexed between two independent
+        // sources: ReplayGain attenuation (negative track-gain values)
+        // and the crossfade ramp during track transitions. Each
+        // source publishes a 0..1 factor; the actual volume applied
+        // to the player is replayGainFactor × crossfadeFactor. This
+        // avoids one source overwriting the other.
+        @Volatile private var replayGainFactor: Float = 1.0f
+        @Volatile private var crossfadeFactor: Float = 1.0f
+
+        /** ReplayGain attenuation for negative track-gain tags
+         *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
+        fun setReplayGainAttenuation(factor: Float) {
+            replayGainFactor = factor.coerceIn(0.0f, 1.0f)
+            applyMixedVolume()
+        }
+
+        /** Internal — set by the crossfade controller. */
+        internal fun setCrossfadeFactor(factor: Float) {
+            crossfadeFactor = factor.coerceIn(0.0f, 1.0f)
+            applyMixedVolume()
+        }
+
+        /** Internal — read by the crossfade tick to skip redundant
+         *  setVolume calls. */
+        internal fun crossfadeFactorRead(): Float = crossfadeFactor
+
+        private fun applyMixedVolume() {
+            val p = getExoPlayer() ?: return
+            val v = (replayGainFactor * crossfadeFactor).coerceIn(0.0f, 1.0f)
+            // ExoPlayer.volume is main-thread-only; post if needed.
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                runCatching { p.volume = v }
+            } else {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    runCatching { p.volume = v }
+                }
+            }
+        }
     }
 
     @OptIn(UnstableApi::class)
@@ -174,7 +232,10 @@ class PlaybackService : MediaSessionService() {
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessorChain(
                         androidx.media3.exoplayer.audio.DefaultAudioSink
-                            .DefaultAudioProcessorChain(stereoTransformProcessor)
+                            .DefaultAudioProcessorChain(
+                                stereoTransformProcessor,
+                                audioDelayProcessor
+                            )
                     )
                     .build()
             }
@@ -188,6 +249,16 @@ class PlaybackService : MediaSessionService() {
         }
         serviceScope.launch {
             settingsDataStore.monoMix.collect { monoMixFlag = it }
+        }
+        // Audio delay slider — lives in the AudioDelayProcessor's
+        // ring buffer; the supplier reads this @Volatile per buffer.
+        serviceScope.launch {
+            settingsDataStore.audioDelayMs.collect { audioDelayFlag = it }
+        }
+        // Crossfade slider — drives the volume-ramp coroutine
+        // started below in onCreate after the player is built.
+        serviceScope.launch {
+            settingsDataStore.crossfadeMs.collect { crossfadeMsFlag = it }
         }
 
         // Mp4 extractor with edit-list workaround — required for many M4B
@@ -277,6 +348,16 @@ class PlaybackService : MediaSessionService() {
         // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
         exoPlayerRef = java.lang.ref.WeakReference(player!!)
 
+        // Crossfade controller. Polls position and applies a linear
+        // volume ramp via [setCrossfadeFactor] in the final
+        // crossfadeMs window of each track, then ramps back up after
+        // the new track starts. ExoPlayer doesn't actually overlap
+        // tracks — what the listener perceives as a crossfade is
+        // really a fast fade-out followed by fade-in. crossfadeMs == 0
+        // forces the factor back to 1.0 immediately so the slider
+        // value is always honoured live.
+        startCrossfadeController()
+
         // Create session activity intent for notification tap
         val sessionActivityIntent = PendingIntent.getActivity(
             this,
@@ -341,6 +422,91 @@ class PlaybackService : MediaSessionService() {
             // No cast — phone has no Play Services or unsupported device.
         }
     }
+
+    // ── Crossfade controller ───────────────────────────────────────
+    // Tracks the elapsed-since-track-start time so the fade-in side
+    // can ramp up from 0 → 1 over the configured crossfadeMs, and
+    // tracks the remaining-until-track-end so the fade-out side can
+    // ramp down. State is recomputed every 100 ms (cheap; only one
+    // float multiply + a single setVolume() call when changing).
+    private var crossfadeJob: kotlinx.coroutines.Job? = null
+    @Volatile private var trackStartTimestampMs: Long = 0L
+
+    private fun startCrossfadeController() {
+        crossfadeJob?.cancel()
+        // Note new track starts so fade-in knows when to begin from
+        // zero. Also reset the crossfade factor on every transition
+        // so a previous fade-out doesn't carry over silently.
+        player?.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(
+                mediaItem: MediaItem?,
+                reason: Int
+            ) {
+                trackStartTimestampMs = android.os.SystemClock.elapsedRealtime()
+                // Force volume floor BEFORE the new track is audible
+                // so the fade-in starts cleanly even when crossfade
+                // is enabled.
+                if (crossfadeMsFlag > 0) setCrossfadeFactor(0.0f)
+                else setCrossfadeFactor(1.0f)
+            }
+        })
+
+        crossfadeJob = serviceScope.launch {
+            while (isActive) {
+                applyCrossfadeTick()
+                kotlinx.coroutines.delay(100)
+            }
+        }
+    }
+
+    private fun applyCrossfadeTick() {
+        val p = player ?: return
+        val ms = crossfadeMsFlag
+        if (ms <= 0) {
+            // Crossfade disabled — make sure the factor is at unity
+            // so a previous slider drag-down doesn't leave the
+            // player muted.
+            if (crossfadeFactor != 1.0f) setCrossfadeFactor(1.0f)
+            return
+        }
+        val duration = p.duration
+        val pos = p.currentPosition
+        val isLast = p.currentMediaItemIndex >= p.mediaItemCount - 1
+        val playing = p.isPlaying
+
+        // Fade-in window after the most recent track transition.
+        val sinceStart = (android.os.SystemClock.elapsedRealtime() - trackStartTimestampMs)
+            .coerceAtLeast(0L)
+        val fadeIn = if (sinceStart < ms) sinceStart.toFloat() / ms else 1.0f
+
+        // Fade-out window approaching the end of the current track.
+        // Skip on the last track of the queue so playback doesn't end
+        // muted (no next track to crossfade into).
+        val fadeOut = if (
+            !isLast && playing &&
+            duration > 0L && pos > 0L &&
+            duration - pos in 0..ms.toLong()
+        ) {
+            ((duration - pos).toFloat() / ms).coerceIn(0.0f, 1.0f)
+        } else 1.0f
+
+        // The active factor is the smaller (more attenuated) of the
+        // two so transitions sound continuous.
+        val factor = minOf(fadeIn, fadeOut).coerceIn(0.0f, 1.0f)
+        if (kotlin.math.abs(factor - crossfadeFactor) > 0.005f ||
+            (factor == 1.0f && crossfadeFactor != 1.0f) ||
+            (factor == 0.0f && crossfadeFactor != 0.0f)
+        ) {
+            setCrossfadeFactor(factor)
+        }
+    }
+
+    /** Forwards to the companion-object volume mixer. */
+    private fun setCrossfadeFactor(factor: Float) =
+        Companion.setCrossfadeFactor(factor)
+
+    private val crossfadeFactor: Float
+        get() = Companion.crossfadeFactorRead()
 
     /**
      * Migrate the current queue + position from the active player to [target]
