@@ -1,0 +1,74 @@
+ÿþ--------- beginning of main
+05-05 22:55:42.580 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:44.967 21503 21503 I PMP_DIAG: seekTo target=20690ms
+05-05 22:55:44.967 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:44.967 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:45.015 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:45.015 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:45.770 21503 21503 I PMP_DIAG: seekTo target=45670ms
+05-05 22:55:45.770 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:45.770 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:45.814 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:45.814 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:47.283 21503 21503 I PMP_DIAG: SkipBtn click fwd=true sec=10 enabled=true
+05-05 22:55:47.283 21503 21503 I PMP_DIAG: VM.skipForward(10s)
+05-05 22:55:47.283 21503 21503 I PMP_DIAG: Conn.skipForward(10s) action=ACTION_SKIP_FORWARD_10 ctrl=true
+05-05 22:55:47.283 21503 21503 I PMP_DIAG: skip delta=10000ms pos=46085ms base=46085ms target=56085ms pending=-1
+05-05 22:55:47.463 21503 21503 I PMP_DIAG: debounced seekTo target=56085ms
+05-05 22:55:47.468 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:47.468 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:47.515 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:47.515 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:47.843 21503 21503 I PMP_DIAG: SkipBtn click fwd=true sec=15 enabled=true
+05-05 22:55:47.843 21503 21503 I PMP_DIAG: VM.skipForward(15s)
+05-05 22:55:47.843 21503 21503 I PMP_DIAG: Conn.skipForward(15s) action=ACTION_SKIP_FORWARD_15 ctrl=true
+05-05 22:55:47.843 21503 21503 I PMP_DIAG: skip delta=15000ms pos=55863ms base=56085ms target=71085ms pending=56085
+05-05 22:55:48.023 21503 21503 I PMP_DIAG: debounced seekTo target=71085ms
+05-05 22:55:48.028 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:48.028 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:48.076 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:48.076 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:48.677 21503 21503 I PMP_DIAG: SkipBtn click fwd=false sec=10 enabled=true
+05-05 22:55:48.677 21503 21503 I PMP_DIAG: VM.skipBack(10s)
+05-05 22:55:48.677 21503 21503 I PMP_DIAG: Conn.skipBack(10s) action=ACTION_SKIP_BACK_10 ctrl=true
+05-05 22:55:48.677 21503 21503 I PMP_DIAG: skip delta=-10000ms pos=71051ms base=71085ms target=61085ms pending=71085
+05-05 22:55:48.857 21503 21503 I PMP_DIAG: debounced seekTo target=61085ms
+05-05 22:55:48.861 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:48.861 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:48.895 21503 21503 I PMP_DIAG: evt loadingChanged=true
+05-05 22:55:48.915 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:48.915 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:48.957 21503 21503 I PMP_DIAG: evt loadingChanged=false
+05-05 22:55:49.385 21503 21503 I PMP_DIAG: SkipBtn click fwd=false sec=10 enabled=true
+05-05 22:55:49.385 21503 21503 I PMP_DIAG: VM.skipBack(10s)
+05-05 22:55:49.385 21503 21503 I PMP_DIAG: Conn.skipBack(10s) action=ACTION_SKIP_BACK_10 ctrl=true
+05-05 22:55:49.385 21503 21503 I PMP_DIAG: skip delta=-10000ms pos=60984ms base=61085ms target=51085ms pending=61085
+05-05 22:55:49.566 21503 21503 I PMP_DIAG: debounced seekTo target=51085ms
+05-05 22:55:49.571 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:49.571 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:49.614 21503 21503 I PMP_DIAG: evt loadingChanged=true
+05-05 22:55:49.614 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:49.614 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:49.685 21503 21503 I PMP_DIAG: evt loadingChanged=false
+05-05 22:55:50.374 21503 21503 I PMP_DIAG: seekTo target=36296ms
+05-05 22:55:50.374 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:50.374 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:50.405 21503 21503 I PMP_DIAG: evt loadingChanged=true
+05-05 22:55:50.430 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:50.430 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:50.477 21503 21503 I PMP_DIAG: evt loadingChanged=false
+05-05 22:55:51.216 21503 21503 I PMP_DIAG: seekTo target=22744ms
+05-05 22:55:51.216 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:51.216 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:51.250 21503 21503 I PMP_DIAG: evt loadingChanged=true
+05-05 22:55:51.270 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:51.270 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:51.327 21503 21503 I PMP_DIAG: evt loadingChanged=false
+05-05 22:55:52.922 21503 21503 I PMP_DIAG: seekTo target=17400ms
+05-05 22:55:52.923 21503 21503 I PMP_DIAG: evt playbackState=2
+05-05 22:55:52.923 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
+05-05 22:55:52.953 21503 21503 I PMP_DIAG: evt loadingChanged=true
+05-05 22:55:52.979 21503 21503 I PMP_DIAG: evt playbackState=3
+05-05 22:55:52.979 21503 21503 I PMP_DIAG: evt isPlayingChanged=true
+05-05 22:55:53.034 21503 21503 I PMP_DIAG: evt loadingChanged=false
+05-05 22:55:53.949 21503 21503 I PMP_DIAG: evt isPlayingChanged=false
