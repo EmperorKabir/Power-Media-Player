@@ -359,12 +359,10 @@ private fun PlayerScreenCompact(
                     onShowChapterPicker = onShowChapterPicker
                 )
             }
-            AnimatedVisibility(
-                visible = controlsVisible,
-                enter = fadeIn(animationSpec = tween(durationMillis = 500)),
-                exit = fadeOut(animationSpec = tween(durationMillis = 1000)),
-                modifier = Modifier.align(Alignment.TopEnd).padding(top = 16.dp, end = 16.dp)
-            ) { CastButton(modifier = Modifier.size(40.dp)) }
+            // CastButton previously lived top-right of the video frame and
+            // top-right of the audio cover; both have moved into the
+            // bottom transport-control row inside OverlayContent so the
+            // Cast / Bluetooth / Audio-effects controls are grouped.
         } else {
             // Audio: render directly, no AnimatedVisibility — controls
             // can never disappear regardless of any state churn.
@@ -376,12 +374,6 @@ private fun PlayerScreenCompact(
                 viewModel = viewModel,
                 onShowSleepTimer = onShowSleepTimer,
                 onShowChapterPicker = onShowChapterPicker
-            )
-            CastButton(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 16.dp, end = 16.dp)
-                    .size(40.dp)
             )
         }
     }
@@ -463,7 +455,10 @@ private fun OverlayContent(
             playbackSpeed = uiState.playbackSpeed,
             onSpeedChange = { viewModel.setPlaybackSpeed(it) },
             modifier = Modifier.padding(horizontal = 16.dp),
-            enabled = uiState.controls.playbackSpeed
+            // CastPlayer (Media3 1.6.0) doesn't expose playback speed —
+            // grey out while casting so the user understands why
+            // toggling the speed has no audible effect on the receiver.
+            enabled = uiState.controls.playbackSpeed && !uiState.isCasting
         )
         Spacer(modifier = Modifier.height(4.dp))
         TertiaryControls(
@@ -485,9 +480,13 @@ private fun OverlayContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
-                    tint = TealAccent)
+            // Frame-step ± hidden during cast — receiver decides its own
+            // frame timing; sender-side step requests aren't supported.
+            if (!uiState.isCasting) {
+                IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
+                        tint = TealAccent)
+                }
             }
             FilledTonalButton(
                 onClick = { viewModel.toggleAbLoop() },
@@ -506,27 +505,36 @@ private fun OverlayContent(
                     style = MaterialTheme.typography.labelMedium
                 )
             }
-            IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
-                Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
-                    tint = TealAccent)
+            if (!uiState.isCasting) {
+                IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
+                        tint = TealAccent)
+                }
             }
             IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(40.dp)) {
                 Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
                     tint = TealAccent)
             }
             // Video effects (mirror H/V, B&W, rotation) — visible only
-            // when the current media is a video. Audio playback never
-            // sees this button.
-            if (uiState.isVideoContent) {
+            // when the current media is a video AND not casting (the
+            // receiver renders the actual stream; local-TextureView
+            // effects never reach it).
+            if (uiState.isVideoContent && !uiState.isCasting) {
                 VideoEffectsButton()
             }
             // Audio effects (reverb / stereo flip / mono mix /
-            // passthrough) — applies to ANY audio stream so it shows
-            // in both audio and video modes. Same SettingsViewModel
-            // backing as Settings → Audio effects, just exposed as
-            // a quick popup so the user doesn't leave the Player.
-            AudioEffectsButton()
+            // passthrough) — applies to local audio chain only, so
+            // greyed out when casting (audio is on the receiver).
+            AudioEffectsButton(enabled = !uiState.isCasting)
             BluetoothButton(modifier = Modifier.size(48.dp))
+            // Cast button — to the right of Bluetooth so the
+            // wireless-output controls are grouped. Hidden when
+            // Spotify is the active source because Cast has nothing
+            // to do with Spotify Connect (Spotify uses its own
+            // Connect-device picker in the cloud Spotify section).
+            if (!uiState.isSpotifyActive) {
+                CastButton(modifier = Modifier.size(48.dp))
+            }
         }
         // Bookmark chips for the currently playing item.
         val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
@@ -643,7 +651,7 @@ private fun PlayerScreenExpanded(
                 playbackSpeed = uiState.playbackSpeed,
                 onSpeedChange = { viewModel.setPlaybackSpeed(it) },
                 modifier = Modifier.padding(horizontal = 16.dp),
-                enabled = uiState.controls.playbackSpeed
+                enabled = uiState.controls.playbackSpeed && !uiState.isCasting
             )
             Spacer(modifier = Modifier.height(4.dp))
             TertiaryControls(
@@ -664,9 +672,11 @@ private fun PlayerScreenExpanded(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
-                        tint = TealAccent)
+                if (!uiState.isCasting) {
+                    IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
+                            tint = TealAccent)
+                    }
                 }
                 FilledTonalButton(
                     onClick = { viewModel.toggleAbLoop() },
@@ -685,9 +695,11 @@ private fun PlayerScreenExpanded(
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-                IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
-                        tint = TealAccent)
+                if (!uiState.isCasting) {
+                    IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
+                            tint = TealAccent)
+                    }
                 }
                 IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
@@ -695,9 +707,13 @@ private fun PlayerScreenExpanded(
                 }
                 // Audio effects (reverb / stereo flip / mono mix /
                 // passthrough) — applies to any audio track so it's
-                // present in both layouts.
-                AudioEffectsButton()
+                // present in both layouts. Greyed out while casting
+                // because the local audio chain is silent then.
+                AudioEffectsButton(enabled = !uiState.isCasting)
                 BluetoothButton(modifier = Modifier.size(48.dp))
+                if (!uiState.isSpotifyActive) {
+                    CastButton(modifier = Modifier.size(48.dp))
+                }
             }
             val bookmarksE by viewModel.bookmarks.collectAsStateWithLifecycle()
             if (bookmarksE.isNotEmpty()) {

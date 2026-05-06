@@ -97,7 +97,18 @@ data class PlayerUiState(
     // Content kind drives the dynamic label on Prev/Next buttons
     // (Track/Album/Chapter/Episode/etc.). Inferred in PlayerViewModel
     // from playerState fields; UNKNOWN falls back to File/Chapter.
-    val mediaKind: MediaKind = MediaKind.UNKNOWN
+    val mediaKind: MediaKind = MediaKind.UNKNOWN,
+
+    // True when Spotify Connect is the active source (the local
+    // ExoPlayer is silent; controls route to spotifyProvider).
+    // Drives Cast button visibility — Cast doesn't apply to Spotify.
+    val isSpotifyActive: Boolean = false,
+
+    // True when audio/video is being sent to a Cast receiver
+    // (CastPlayer is active, not the local ExoPlayer). Drives the
+    // grey-out of audio/video effect controls that have no audible
+    // / visible effect on the receiver.
+    val isCasting: Boolean = false
 )
 
 /**

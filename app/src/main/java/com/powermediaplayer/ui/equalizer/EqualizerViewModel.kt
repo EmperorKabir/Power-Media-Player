@@ -37,12 +37,27 @@ data class EqualizerUiState(
 class EqualizerViewModel @Inject constructor(
     private val presetDao: EqualizerPresetDao,
     private val settingsDataStore: SettingsDataStore,
-    private val eqEffect: com.powermediaplayer.audio.EqualizerEffectController
+    private val eqEffect: com.powermediaplayer.audio.EqualizerEffectController,
+    private val playbackConnection: com.powermediaplayer.service.PlaybackConnection
 ) : ViewModel() {
 
     private val gson = Gson()
     private val _uiState = MutableStateFlow(EqualizerUiState())
     val uiState: StateFlow<EqualizerUiState> = _uiState.asStateFlow()
+
+    /**
+     * True when the active player is CastPlayer — EQ is attached to the
+     * local ExoPlayer's audio session, so during cast the EQ has no
+     * audible effect on the receiver. Drives a banner + grey-out
+     * across the EQ tab.
+     */
+    val isCasting: StateFlow<Boolean> = playbackConnection.playerFlow
+        .map { it is androidx.media3.cast.CastPlayer }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = false
+        )
 
     /** Push current band levels through to the platform Equalizer. */
     private fun pushLevels(levels: List<Int>) {

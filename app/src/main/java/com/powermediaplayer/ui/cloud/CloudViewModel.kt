@@ -52,7 +52,16 @@ data class CloudUiState(
      * some Samsung / fold builds).
      */
     val pickerRoots: List<GoogleDriveProvider.CloudRoot> = emptyList(),
-    val pickerRootsVisible: Boolean = false
+    val pickerRootsVisible: Boolean = false,
+
+    /**
+     * Spotify Connect device picker — populated by [refreshSpotifyConnectDevices]
+     * when the user taps the "Spotify Connect" button. Each entry is
+     * (deviceId, deviceName) from /me/player/devices. Visible whenever the
+     * list is non-empty AND the picker bottom-sheet is open.
+     */
+    val spotifyConnectDevices: List<Pair<String, String>> = emptyList(),
+    val spotifyConnectPickerVisible: Boolean = false
 )
 
 @HiltViewModel
@@ -461,6 +470,48 @@ class CloudViewModel @Inject constructor(
             items = emptyList(),
             folderStack = listOf(null to "Spotify Library")
         )
+    }
+
+    /**
+     * Open the Spotify Connect device picker. Refreshes the list from
+     * /me/player/devices and shows the bottom sheet — every Connect-
+     * compatible target the user's Spotify account currently sees,
+     * including Google Home / Nest speakers when the user has linked
+     * their Google account to Spotify in the Google Home app.
+     */
+    fun openSpotifyConnectPicker() {
+        viewModelScope.launch {
+            val devices = spotifyProvider.listConnectDevices()
+            _uiState.update {
+                it.copy(
+                    spotifyConnectDevices = devices,
+                    spotifyConnectPickerVisible = true,
+                    errorMessage = if (devices.isEmpty())
+                        "No Spotify Connect devices found. Open Spotify on a phone or speaker first." else it.errorMessage
+                )
+            }
+        }
+    }
+
+    fun dismissSpotifyConnectPicker() {
+        _uiState.update { it.copy(spotifyConnectPickerVisible = false) }
+    }
+
+    /**
+     * Transfer Spotify playback to the chosen Connect device. The next
+     * playTrackOnConnectDevice call will land on this device.
+     */
+    fun selectSpotifyConnectDevice(deviceId: String, deviceName: String) {
+        viewModelScope.launch {
+            val result = spotifyProvider.transferPlaybackTo(deviceId)
+            _uiState.update { state ->
+                state.copy(
+                    spotifyConnectPickerVisible = false,
+                    errorMessage = result.exceptionOrNull()?.message
+                        ?: if (result.isSuccess) null else "Couldn't switch to $deviceName"
+                )
+            }
+        }
     }
 
     fun navigateUp() {

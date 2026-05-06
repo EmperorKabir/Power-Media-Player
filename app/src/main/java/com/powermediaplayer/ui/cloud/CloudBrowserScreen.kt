@@ -253,6 +253,45 @@ fun CloudBrowserScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
+                    item(key = "sp_connect_picker") {
+                        // Spotify Connect device picker. Spotify Connect is
+                        // its own protocol (not Cast). When the user has
+                        // linked Google account in the Google Home app,
+                        // their Google Home / Nest speakers appear here too.
+                        Surface(
+                            color = SpotifyGreen.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                .clickable { viewModel.openSpotifyConnectPicker() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Speaker,
+                                    contentDescription = null,
+                                    tint = SpotifyGreen,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Spotify Connect device",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = SpotifyGreen
+                                    )
+                                    Text(
+                                        text = "Pick a speaker or another device — Spotify, Google Home, etc.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextTertiary
+                                    )
+                                }
+                            }
+                        }
+                    }
                     val spotifyFavCount = uiState.spotifyFavTracks.size +
                         uiState.spotifyFavAlbums.size +
                         uiState.spotifyFavPodcasts.size
@@ -568,6 +607,80 @@ fun CloudBrowserScreen(
                     modifier = Modifier.padding(12.dp)
                 )
             }
+        }
+    }
+
+    // Spotify Connect device picker bottom-sheet
+    if (uiState.spotifyConnectPickerVisible) {
+        SpotifyConnectPickerSheet(
+            devices = uiState.spotifyConnectDevices,
+            onPick = { id, name -> viewModel.selectSpotifyConnectDevice(id, name) },
+            onDismiss = { viewModel.dismissSpotifyConnectPicker() }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SpotifyConnectPickerSheet(
+    devices: List<Pair<String, String>>,
+    onPick: (String, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = androidx.compose.ui.graphics.Color.Black
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "Pick a Spotify Connect device",
+                style = MaterialTheme.typography.titleMedium,
+                color = SpotifyGreen
+            )
+            Spacer(Modifier.height(8.dp))
+            if (devices.isEmpty()) {
+                Text(
+                    text = "No devices found. Open Spotify on a phone or speaker first, then try again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(vertical = 12.dp)
+                )
+            } else {
+                devices.forEach { (id, name) ->
+                    Surface(
+                        color = SurfaceElevated,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable { onPick(id, name) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Speaker,
+                                contentDescription = null,
+                                tint = SpotifyGreen,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                text = name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

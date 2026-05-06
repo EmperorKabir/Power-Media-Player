@@ -160,8 +160,8 @@ dependencies {
 
 
     // ── Hilt Dependency Injection ────────────────────────────────
-    implementation("com.google.dagger:hilt-android:2.59.2")
-    ksp("com.google.dagger:hilt-android-compiler:2.59.2")
+    implementation("com.google.dagger:hilt-android:2.51.1")
+    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // ── Room Database ────────────────────────────────────────────
@@ -207,6 +207,12 @@ dependencies {
     implementation("net.openid:appauth:0.11.1")
     // OkHttp: Spotify + Drive REST HTTP client.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // NanoHTTPD: tiny embedded HTTP server (~50KB) used to relay
+    // local / SAF / Drive content to Cast receivers. Receiver fetches
+    // http://<phone-LAN-IP>:<port>/<token> from the local network; the
+    // relay forwards Range requests with the appropriate auth back to
+    // the original source on the phone side.
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
     // Storage Access Framework — kept for OneDrive / Dropbox / USB /
     // local-storage flow on devices whose SAF picker exposes those
     // sources. (Drive uses its own JS Picker via WebView since the

@@ -536,7 +536,7 @@ class SpotifyProvider @Inject constructor(
             val first = devices.firstOrNull()
                 ?: return@withContext Result.failure(
                     IllegalStateException(
-                        "Spotify isn't installed or didn't start. Open Spotify on this " +
+                        "Spotify isn't installed or didn't start. Open/install Spotify on this " +
                             "phone or another device, then try again."
                     )
                 )
@@ -657,6 +657,31 @@ class SpotifyProvider @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Public wrapper for the device-picker UI in the cloud Spotify
+     * section. Returns id-name pairs of every Connect device the
+     * user's Spotify account currently sees, including Google Home /
+     * Nest speakers when the user has linked their Google account to
+     * Spotify in the Google Home app. Empty list when no device is
+     * registered or the request fails.
+     */
+    suspend fun listConnectDevices(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext emptyList()
+        listDevices(token)
+    }
+
+    /**
+     * Public wrapper to transfer Spotify playback to [deviceId].
+     * Used by the device-picker UI; the resulting Connect target then
+     * receives subsequent playTrackOnConnectDevice calls.
+     */
+    suspend fun transferPlaybackTo(deviceId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired — sign in again")
+        )
+        transferPlayback(token, deviceId)
     }
 
     private fun listDevices(token: String): List<Pair<String, String>> {

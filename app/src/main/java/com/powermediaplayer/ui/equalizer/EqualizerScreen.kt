@@ -48,6 +48,7 @@ fun EqualizerScreen(
     viewModel: EqualizerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isCasting by viewModel.isCasting.collectAsStateWithLifecycle()
     var showSaveDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var presetExpanded by remember { mutableStateOf(false) }
@@ -59,6 +60,21 @@ fun EqualizerScreen(
             .background(OledBlack)
             .verticalScroll(rememberScrollState())
     ) {
+        if (isCasting) {
+            Surface(
+                color = androidx.compose.ui.graphics.Color(0xFF1A2222),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "EQ applies to phone playback only — disabled while casting.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = com.powermediaplayer.ui.theme.DisabledGrey,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
         TopAppBar(
             title = {
                 Text(

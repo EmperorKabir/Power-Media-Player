@@ -34,6 +34,7 @@ import com.powermediaplayer.ui.theme.TextSecondary
 @Composable
 fun AudioEffectsButton(
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     settingsVm: SettingsViewModel = hiltViewModel()
 ) {
     val s by settingsVm.uiState.collectAsStateWithLifecycle()
@@ -51,15 +52,22 @@ fun AudioEffectsButton(
 
     IconButton(
         onClick = { showSheet = true; touch() },
+        enabled = enabled,
         modifier = modifier.size(40.dp)
     ) {
         Icon(
             imageVector = Icons.Filled.GraphicEq,
-            contentDescription = "Audio effects",
+            contentDescription = if (enabled) "Audio effects" else "Audio effects (disabled while casting)",
             // Always teal so the button matches the surrounding control
             // strip; "on" state stays at full opacity, "off" dims to
-            // 60 % so the user still sees a visual difference.
-            tint = if (anyOn) TealAccent else TealAccent.copy(alpha = 0.6f)
+            // 60 % so the user still sees a visual difference. When
+            // explicitly disabled (e.g. casting), use DisabledGrey so
+            // the affordance matches every other greyed control.
+            tint = when {
+                !enabled -> com.powermediaplayer.ui.theme.DisabledGrey
+                anyOn -> TealAccent
+                else -> TealAccent.copy(alpha = 0.6f)
+            }
         )
     }
 

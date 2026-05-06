@@ -36,9 +36,11 @@ object AppModule {
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
         )
-            // v2 → v3 added the `bookmarks` table. No need to keep
-            // schema-less migration; destroy on bump.
-            .fallbackToDestructiveMigration(true)
+            // No destructive fallback — every schema bump from v7 onwards
+            // MUST ship with a Migration object. See
+            // docs/MIGRATION_INSTRUCTIONS.md for the rule and template.
+            // Without this rule, every app update wipes user bookmarks /
+            // favourites / playback history.
             .build()
     }
 

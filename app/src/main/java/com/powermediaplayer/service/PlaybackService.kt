@@ -539,6 +539,13 @@ class PlaybackService : MediaSessionService() {
     /**
      * Migrate the current queue + position from the active player to [target]
      * so playback continues seamlessly when the user picks/leaves a cast device.
+     *
+     * When switching TO CastPlayer: every queued MediaItem is registered with
+     * [CastRelayServer] and rebuilt with a relay URL (`http://<lan-ip>:<port>/<token>`)
+     * so the receiver can fetch bytes that originally lived behind a
+     * `content://` / `file://` URI or an OAuth-protected googleapis.com URL.
+     * When switching back: original MediaItems are re-applied and the relay
+     * is stopped.
      */
     private fun switchPlayer(target: Player) {
         val ms = mediaSession ?: return
@@ -550,10 +557,18 @@ class PlaybackService : MediaSessionService() {
         val currentPosition = current.currentPosition
         val playWhenReady = current.playWhenReady
 
+        val transformed = if (target is CastPlayer) {
+            startCastRelayIfNeeded()?.let { server -> items.map { rebuildForCast(it, server) } }
+                ?: items
+        } else {
+            stopCastRelay()
+            items
+        }
+
         current.stop()
         ms.player = target
-        if (items.isNotEmpty()) {
-            target.setMediaItems(items, currentIndex, currentPosition)
+        if (transformed.isNotEmpty()) {
+            target.setMediaItems(transformed, currentIndex, currentPosition)
             target.playWhenReady = playWhenReady
             target.prepare()
         }
@@ -565,6 +580,103 @@ class PlaybackService : MediaSessionService() {
             exoPlayerRef = null
         }
     }
+
+    /**
+     * Cast relay (lazy-singleton). Started on first switch-to-CastPlayer,
+     * stopped on switch-back-to-local.
+     */
+    private var castRelayServer: CastRelayServer? = null
+    private var castRelayLanIp: String? = null
+
+    private fun startCastRelayIfNeeded(): CastRelayServer? {
+        val lanIp = com.powermediaplayer.util.LanIpDiscovery.firstWifiIpv4()
+        if (lanIp == null) {
+            com.powermediaplayer.util.Diag.w(
+                "PMP_DIAG",
+                "CastRelay: no Wi-Fi IPv4 — cannot relay to receiver"
+            )
+            return null
+        }
+        castRelayLanIp = lanIp
+        castRelayServer?.let { return it }
+        return try {
+            val s = CastRelayServer(applicationContext, driveOAuthProvider)
+            s.start(fi.iki.elonen.NanoHTTPD.SOCKET_READ_TIMEOUT, false)
+            castRelayServer = s
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "CastRelay started lanIp=$lanIp port=${s.listeningPort}"
+            )
+            s
+        } catch (t: Throwable) {
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "CastRelay start failed", t)
+            null
+        }
+    }
+
+    private fun stopCastRelay() {
+        castRelayServer?.let { s ->
+            runCatching { s.stop() }
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "CastRelay stopped")
+        }
+        castRelayServer = null
+        castRelayLanIp = null
+    }
+
+    /**
+     * Wraps an existing MediaItem so its URL points at our relay. The
+     * media-id is preserved (Media3 uses it for queue identity) but
+     * `localConfiguration.uri` and `requestMetadata.mediaUri` are
+     * rewritten so [DefaultMediaItemConverter] sends the relay URL to
+     * the receiver via `MediaInfo.contentUrl`.
+     */
+    private fun rebuildForCast(item: MediaItem, server: CastRelayServer): MediaItem {
+        val originalUri = item.localConfiguration?.uri
+            ?: item.requestMetadata.mediaUri
+            ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull()
+            ?: return item
+        val mime = item.localConfiguration?.mimeType ?: guessMimeFromUri(originalUri)
+        val relayItem: CastRelayServer.RelayItem = when {
+            originalUri.host?.contains("googleapis.com") == true -> {
+                // Drive OAuth: extract file id from /drive/v3/files/{id}
+                val fileId = originalUri.pathSegments?.getOrNull(
+                    originalUri.pathSegments.indexOf("files") + 1
+                ) ?: return item
+                CastRelayServer.RelayItem.DriveOAuth(fileId, mime)
+            }
+            else -> CastRelayServer.RelayItem.Local(originalUri, mime)
+        }
+        val token = server.register(relayItem)
+        val lanIp = castRelayLanIp ?: return item
+        val relayUrl = android.net.Uri.parse(
+            "http://$lanIp:${server.listeningPort}/$token"
+        )
+        return item.buildUpon()
+            .setUri(relayUrl)
+            .setMimeType(mime)
+            .setRequestMetadata(
+                MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(relayUrl)
+                    .build()
+            )
+            .build()
+    }
+
+    private fun guessMimeFromUri(uri: android.net.Uri): String {
+        val name = uri.lastPathSegment ?: return "*/*"
+        return when (name.substringAfterLast('.', "").lowercase()) {
+            "mp3" -> "audio/mpeg"
+            "m4a", "m4b", "aac" -> "audio/mp4"
+            "flac" -> "audio/flac"
+            "ogg", "opus" -> "audio/ogg"
+            "wav" -> "audio/wav"
+            "mp4", "m4v" -> "video/mp4"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            else -> "*/*"
+        }
+    }
+
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         return mediaSession
@@ -582,6 +694,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        stopCastRelay()
         exoPlayerRef = null          // clear before release so UI gets null not dead reference
         castPlayer?.run {
             setSessionAvailabilityListener(null)

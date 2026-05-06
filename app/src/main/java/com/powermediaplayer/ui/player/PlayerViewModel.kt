@@ -313,15 +313,25 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.playerState,
         _sleepTimerRemainingMs,
         spotifyProvider.spotifyState,
-        spotifyProvider.spotifyMetadataFetching
-    ) { playerState, sleepRemaining, spotify, spotifyFetching ->
+        spotifyProvider.spotifyMetadataFetching,
+        playbackConnection.playerFlow
+    ) { args ->
+        val playerState = args[0] as PlayerState
+        @Suppress("UNCHECKED_CAST")
+        val sleepRemaining = args[1] as Long
+        val spotify = args[2] as SpotifyPlaybackState?
+        val spotifyFetching = args[3] as Boolean
+        val activePlayer = args[4] as androidx.media3.common.Player?
+        val isCasting = activePlayer is androidx.media3.cast.CastPlayer
         val base = mapToUiState(playerState, sleepRemaining)
         val withSpotify = if (spotify != null) overlaySpotifyState(base, spotify) else base
-        // Banner is shared: either Drive's post-load extraction OR
-        // Spotify's first-resolved-state wait turns it on.
-        if (spotifyFetching && !withSpotify.cloudFetchInProgress) {
+        val withCloudBanner = if (spotifyFetching && !withSpotify.cloudFetchInProgress) {
             withSpotify.copy(cloudFetchInProgress = true)
         } else withSpotify
+        withCloudBanner.copy(
+            isSpotifyActive = spotify != null,
+            isCasting = isCasting
+        )
     }.stateIn(
         scope = viewModelScope,
         // Eagerly keeps the combiner running so navigation to the player
