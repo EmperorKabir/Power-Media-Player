@@ -1,9 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.PowerMediaPlayer" parent="android:Theme.Material.NoActionBar">
+    <!--
+      Parent is AppCompat (not android:Theme.Material) so AndroidX
+      MediaRouter's MediaRouterThemeHelper can resolve the
+      non-namespaced AppCompat attributes (colorPrimary, colorAccent,
+      android:colorBackground). With android:Theme.Material as parent
+      those attributes resolve to 0 / transparent, and
+      ColorUtils.calculateContrast throws
+      "background can not be translucent: #0", crashing the cast
+      chooser dialog the moment the user taps the Cast button.
+    -->
+    <style name="Theme.PowerMediaPlayer" parent="Theme.AppCompat.NoActionBar">
+        <!-- AppCompat-namespaced attributes (resolved by MediaRouter) -->
+        <item name="colorPrimary">@color/teal_accent</item>
+        <item name="colorPrimaryDark">@color/oled_black</item>
+        <item name="colorAccent">@color/teal_accent</item>
+        <!-- Mirrored android:-namespaced attributes (resolved by Compose / framework) -->
         <item name="android:colorPrimary">@color/teal_accent</item>
         <item name="android:colorPrimaryDark">@color/oled_black</item>
         <item name="android:colorAccent">@color/teal_accent</item>
+        <item name="android:colorBackground">@color/oled_black</item>
         <item name="android:windowBackground">@color/oled_black</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

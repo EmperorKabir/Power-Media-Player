@@ -36,11 +36,15 @@ object AppModule {
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
         )
-            // No destructive fallback — every schema bump from v7 onwards
-            // MUST ship with a Migration object. See
-            // docs/MIGRATION_INSTRUCTIONS.md for the rule and template.
-            // Without this rule, every app update wipes user bookmarks /
-            // favourites / playback history.
+            // Beta-tier users (v1.x .. v6.x) get a one-time destructive
+            // migration into v1.0's v7 schema — the master-plan policy
+            // ("v1.0 = fresh start; data does not migrate from beta")
+            // has to be explicitly authorised here, otherwise Room
+            // throws IllegalStateException on launch and the app
+            // force-closes for every beta tester upgrading to v1.0.
+            // Future schema bumps from v7 onwards MUST ship with a
+            // proper Migration object — see docs/MIGRATION_INSTRUCTIONS.md.
+            .fallbackToDestructiveMigrationFrom(false, 1, 2, 3, 4, 5, 6)
             .build()
     }
 

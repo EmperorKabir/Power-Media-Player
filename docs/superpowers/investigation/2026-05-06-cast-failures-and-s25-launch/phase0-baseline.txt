@@ -1,0 +1,8 @@
+﻿=== HEAD ===
+24378fdcf7308b845f453fca969753351dbea56a
+=== Z Fold 6 fingerprint ===
+samsung/q7qxeea/q7q:16/BP2A.250605.031.A3/F966BXXS9AZC8_OXM9AZC8:user/release-keys
+=== currently installed APK on Z Fold 6 ===
+    versionCode=2 minSdk=30 targetSdk=35
+    versionName=1.0.0-friends
+    lastUpdateTime=2026-05-06 02:09:11

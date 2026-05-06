@@ -140,6 +140,19 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) { bookmarkDao.delete(b.id) }
     }
 
+    // ── State backing fields referenced by init-block coroutines ──
+    // These MUST be declared BEFORE the `init {}` block, otherwise
+    // `setPitch` / `setVolumeBoost` race their backing MutableStateFlow
+    // initialisation: the init block launches DataStore collectors, the
+    // first emission can fire synchronously on Dispatchers.Main.immediate
+    // before constructor field initialisers further down the file run,
+    // and `_pitch.value =` / `_volumeBoostMb.value =` then NPE.
+    // (Discovered via Android 16 emulator launch crash on a fresh
+    // upgrade-from-beta install — see
+    // docs/superpowers/investigation/2026-05-06-cast-failures-and-s25-launch/.)
+    private val _pitch = MutableStateFlow(1.0f)
+    private val _volumeBoostMb = MutableStateFlow(0)
+
     init {
         // Settings → playback hot-wire: pitch and volume boost values
         // change in Settings; reflect them in the running player.
@@ -601,7 +614,9 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ── Pitch shift (independent of speed) ────────────────────────
-    private val _pitch = MutableStateFlow(1.0f)
+    // _pitch backing field is declared above the init block (see
+    // comment near `init {}`); only the public StateFlow façade lives
+    // here so caller-visible API stays in this section.
     val pitch: StateFlow<Float> = _pitch.asStateFlow()
     fun setPitch(value: Float) {
         val clamped = value.coerceIn(0.5f, 2.0f)
@@ -765,8 +780,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ── LoudnessEnhancer volume boost ─────────────────────────────
+    // _volumeBoostMb backing field is declared above the init block.
     private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
-    private val _volumeBoostMb = MutableStateFlow(0)
     val volumeBoostMb: StateFlow<Int> = _volumeBoostMb.asStateFlow()
 
     /** millibels of gain on top of normal volume. 0 = off; 2000 = +20 dB. */
