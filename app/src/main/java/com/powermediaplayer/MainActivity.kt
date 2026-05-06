@@ -1,7 +1,7 @@
 package com.powermediaplayer
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,7 +44,11 @@ object MainActivityHolder {
 
 @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+// FragmentActivity (rather than bare ComponentActivity) so AndroidX
+// MediaRouteButton's chooser DialogFragment can attach. FragmentActivity
+// extends ComponentActivity, so Compose's setContent + lifecycle hooks
+// all still work unchanged.
+class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var playbackConnection: PlaybackConnection

@@ -28,10 +28,29 @@ import com.google.android.gms.cast.framework.CastButtonFactory
 fun CastButton(modifier: Modifier = Modifier) {
     AndroidView(
         factory = { ctx ->
-            val themed = ContextThemeWrapper(ctx, AppcompatR.style.Theme_AppCompat_Light_NoActionBar)
+            // Theme_AppCompat (dark) gives the MediaRouteButton its
+            // white-on-dark icon variant — Theme_AppCompat_Light would
+            // pick the dark icon, which is invisible on our OLED
+            // surface. Solid-windowBackground requirement of
+            // MediaRouterThemeHelper is also satisfied either way.
+            val themed = ContextThemeWrapper(ctx, AppcompatR.style.Theme_AppCompat_NoActionBar)
             runCatching {
                 MediaRouteButton(themed).also { btn ->
                     runCatching { CastButtonFactory.setUpMediaRouteButton(themed, btn) }
+                    // Force a visible minimum size — the button's
+                    // default intrinsic size can collapse to 0 when
+                    // hosted inside a Compose AndroidView, hiding it
+                    // even when devices are present.
+                    val px = (40 * ctx.resources.displayMetrics.density).toInt()
+                    btn.minimumWidth = px
+                    btn.minimumHeight = px
+                    // Ensure the route picker considers Cast routes
+                    // (otherwise the button auto-hides until something
+                    // matches its selector). CastButtonFactory above
+                    // already wires the Cast selector, but defensively
+                    // unconditionally show so the button doesn't vanish
+                    // before Cast discovery completes the first scan.
+                    btn.visibility = View.VISIBLE
                 }
             }.getOrElse {
                 com.powermediaplayer.util.Diag.w("PowerMediaPlayer", "CastButton init failed", it)
