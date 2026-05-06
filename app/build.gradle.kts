@@ -3,6 +3,7 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
@@ -84,6 +85,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // kotlin-android plugin (required by AGP 8.x) defaults Kotlin's
+    // jvmTarget to whatever JDK runs Gradle (here: 21). AGP's Java
+    // compile task is locked to 17 above; mismatching them makes
+    // kspDebugKotlin fail with "Inconsistent JVM-target compatibility".
+    // Pinning to 17 here keeps both halves in lockstep.
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
 
 
     buildFeatures {
@@ -160,8 +170,8 @@ dependencies {
 
 
     // ── Hilt Dependency Injection ────────────────────────────────
-    implementation("com.google.dagger:hilt-android:2.51.1")
-    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
+    implementation("com.google.dagger:hilt-android:2.54")
+    ksp("com.google.dagger:hilt-android-compiler:2.54")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // ── Room Database ────────────────────────────────────────────
