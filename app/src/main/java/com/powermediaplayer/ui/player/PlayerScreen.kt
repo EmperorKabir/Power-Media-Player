@@ -533,7 +533,13 @@ private fun OverlayContent(
             // to do with Spotify Connect (Spotify uses its own
             // Connect-device picker in the cloud Spotify section).
             if (!uiState.isSpotifyActive) {
-                CastButton(modifier = Modifier.size(48.dp))
+                // Greyed out when the queued media is a video format
+                // the default Cast Media Receiver cannot decode (MKV /
+                // AVI / MOV etc). Audio is always castable.
+                CastButton(
+                    modifier = Modifier.size(48.dp),
+                    enabled = uiState.isCurrentMediaCastable
+                )
             }
         }
         // Bookmark chips for the currently playing item.

@@ -108,7 +108,16 @@ data class PlayerUiState(
     // (CastPlayer is active, not the local ExoPlayer). Drives the
     // grey-out of audio/video effect controls that have no audible
     // / visible effect on the receiver.
-    val isCasting: Boolean = false
+    val isCasting: Boolean = false,
+
+    // True when the current media item is in a format the default
+    // Cast Media Receiver (CC1AD845) can play. False when the current
+    // media is a video container the receiver cannot decode (MKV /
+    // AVI / MOV / FLV / WMV / TS / 3GP). Used to grey out the Cast
+    // button so the user doesn't tap, transfer, then watch the
+    // receiver bail. Audio is always castable; only video formats
+    // are gated.
+    val isCurrentMediaCastable: Boolean = true
 )
 
 /**

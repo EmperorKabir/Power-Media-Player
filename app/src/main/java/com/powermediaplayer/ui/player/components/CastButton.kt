@@ -25,7 +25,10 @@ import com.google.android.gms.cast.framework.CastButtonFactory
  * via [Modifier] but its internal theme lookup gets a solid colour.
  */
 @Composable
-fun CastButton(modifier: Modifier = Modifier) {
+fun CastButton(
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
     AndroidView(
         factory = { ctx ->
             // Theme_AppCompat (dark) gives the MediaRouteButton its
@@ -55,6 +58,14 @@ fun CastButton(modifier: Modifier = Modifier) {
             }.getOrElse {
                 com.powermediaplayer.util.Diag.w("PowerMediaPlayer", "CastButton init failed", it)
                 View(ctx)
+            }
+        },
+        update = { v ->
+            if (v is MediaRouteButton) {
+                v.isEnabled = enabled
+                // Reuse the DisabledGrey-tint pattern other controls
+                // already follow when not actionable.
+                v.alpha = if (enabled) 1.0f else 0.4f
             }
         },
         modifier = modifier

@@ -940,8 +940,40 @@ class PlayerViewModel @Inject constructor(
             ),
             isVideoContent = playerState.isVideoContent,
             audioFormatLabel = playerState.audioFormatLabel,
-            mediaKind = inferMediaKind(playerState)
+            mediaKind = inferMediaKind(playerState),
+            isCurrentMediaCastable = isCastableMedia(playerState)
         )
+    }
+
+    /**
+     * Authoritative cast-supported check for the *current* media item.
+     * Default Cast Media Receiver (CC1AD845) reliably plays MP4 +
+     * WebM containers (with H.264 / HEVC / VP8 / VP9 + AAC / MP3 /
+     * Opus / FLAC). It cannot play MKV / AVI / MOV / FLV / WMV / TS /
+     * 3GP. Audio-only files always return true.
+     *
+     * Source: official Cast Web Receiver supported-media documentation
+     * (developers.google.com/cast/docs/media). Verified by deferring
+     * the question of receiver capability to extension, since the
+     * MediaItem MIME type is rarely populated by our LibraryViewModel
+     * before the file plays — the URI's extension is the most stable
+     * signal at queue time.
+     */
+    private fun isCastableMedia(playerState: PlayerState): Boolean {
+        if (!playerState.isVideoContent) return true
+        val uri = playerState.currentMediaUri
+        if (uri.isBlank()) return true   // unknown — don't be over-restrictive
+        val ext = uri.substringAfterLast('.', "").substringBefore('?').lowercase()
+        return ext in CASTABLE_VIDEO_EXTENSIONS
+    }
+
+    private companion object {
+        // Conservative whitelist matching the default Cast receiver's
+        // documented support. .3gp / .3gpp omitted on purpose — receiver
+        // support varies by device generation; keeping the list tight
+        // means false-negatives ("works but greyed out") rather than
+        // false-positives ("looks castable, then fails on the TV").
+        private val CASTABLE_VIDEO_EXTENSIONS = setOf("mp4", "m4v", "webm")
     }
 
     /**

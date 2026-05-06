@@ -78,7 +78,13 @@ data class PlayerState(
      *  "E-AC-3 5.1 · 48 kHz" or "E-AC-3 JOC · Atmos · 48 kHz". Empty when
      *  no audio track is selected. Set on every state-update tick by
      *  reading [Tracks] from the active MediaController. */
-    val audioFormatLabel: String = ""
+    val audioFormatLabel: String = "",
+    /** mediaId of the current MediaItem (set to the original URI string by
+     *  every set-media-items call across LibraryViewModel / CloudViewModel /
+     *  LastPlayedViewModel). Used by PlayerViewModel to derive the file
+     *  extension and decide whether the current media is castable to the
+     *  default Cast Media Receiver (CC1AD845). Empty when no item loaded. */
+    val currentMediaUri: String = ""
 )
 
 /**
@@ -780,7 +786,8 @@ class PlaybackConnection @Inject constructor(
                 (overArtworkBytes ?: metadata.artworkData) != null,
             isVideoContent = hasVideoTrack,
             isSeekable = c.isCurrentMediaItemSeekable,
-            audioFormatLabel = cachedAudioFormatLabel
+            audioFormatLabel = cachedAudioFormatLabel,
+            currentMediaUri = c.currentMediaItem?.mediaId.orEmpty()
         )
     }
 
