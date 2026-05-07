@@ -99,7 +99,10 @@ open class CastRelayServer(
         }.getOrDefault(-1L)
         val (start, end) = parseRange(rangeHeader, totalLength)
         val input = resolver.openInputStream(item.uri)
-            ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "no stream")
+            ?: run {
+                Diag.w("PMP_DIAG", "CastRelay Local 404: openInputStream null uri=${item.uri}")
+                return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "no stream")
+            }
         if (start > 0) input.skipFully(start)
         val contentLength = if (end >= 0 && totalLength > 0) (end - start + 1) else -1L
         val status = if (rangeHeader != null && totalLength > 0)
@@ -113,6 +116,13 @@ open class CastRelayServer(
             resp.addHeader("Content-Range", "bytes $start-${if (end >= 0) end else totalLength - 1}/$totalLength")
             resp.addHeader("Accept-Ranges", "bytes")
         }
+        // §Phase 11 Task 11.1: log every Local response so the cast bug
+        // bisect can correlate sender outgoing → receiver loadMedia.
+        Diag.d(
+            "PMP_DIAG",
+            "CastRelay Local response status=$status mime=${item.mimeType} " +
+                "contentLength=$contentLength range=${start}-${end} total=$totalLength"
+        )
         return resp
     }
 
@@ -145,6 +155,14 @@ open class CastRelayServer(
         }
         resp.header("Content-Range")?.let { out.addHeader("Content-Range", it) }
         out.addHeader("Accept-Ranges", "bytes")
+        // §Phase 11 Task 11.1: log every Drive response so the cast bug
+        // bisect can correlate Drive 401/403/206/200 with receiver
+        // loadMedia outcomes.
+        Diag.d(
+            "PMP_DIAG",
+            "CastRelay Drive upstream=${resp.code} mime=$mimeType contentLength=$contentLength " +
+                "range=${resp.header("Content-Range")} fileId=${item.fileId}"
+        )
         return out
     }
 
