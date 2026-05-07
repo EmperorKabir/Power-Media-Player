@@ -151,6 +151,25 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.unhideUri(uri) }
     }
 
+    /**
+     * Delete a media file from the device. ONLY call after user has
+     * confirmed via a dialog — this is irreversible. Uses the
+     * ContentResolver delete API which requires the user to grant
+     * the deletion (system-managed picker on modern Android).
+     * Returns the request to caller via callback so the screen can
+     * launch any RecoverableSecurityException it throws.
+     */
+    fun deleteFile(uri: android.net.Uri, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = runCatching {
+                context.contentResolver.delete(uri, null, null) > 0
+            }.getOrElse { false }
+            // Refresh the library so the deleted row vanishes.
+            if (ok) scanMedia()
+            kotlinx.coroutines.withContext(Dispatchers.Main) { onResult(ok) }
+        }
+    }
+
     fun setSelectedTab(tab: Int) {
         _uiState.value = _uiState.value.copy(selectedTab = tab)
     }

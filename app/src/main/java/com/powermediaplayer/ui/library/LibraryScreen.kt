@@ -47,6 +47,7 @@ fun LibraryScreen(
     val context = LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<MediaFileInfo?>(null) }
+    var pendingDelete by remember { mutableStateOf<MediaFileInfo?>(null) }
     // Exit multi-select on system back if currently in it.
     androidx.activity.compose.BackHandler(enabled = multiSelectMode) {
         viewModel.exitMultiSelect()
@@ -81,9 +82,39 @@ fun LibraryScreen(
                     }
                     context.startActivity(android.content.Intent.createChooser(send, "Share"))
                     contextItem = null
+                },
+                onDelete = {
+                    // Defer to a confirmation dialog — irreversible.
+                    pendingDelete = item
+                    contextItem = null
                 }
             ),
             onDismiss = { contextItem = null }
+        )
+    }
+    pendingDelete?.let { file ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete this file?", color = ErrorRed) },
+            text = {
+                Text(
+                    "Permanently remove '${file.title}' from your phone. This can't be undone.",
+                    color = TextPrimary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val toDelete = file
+                    pendingDelete = null
+                    viewModel.deleteFile(toDelete.uri) { /* refreshed inside */ }
+                }) { Text("Delete", color = ErrorRed) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text("Cancel", color = TealAccent)
+                }
+            },
+            containerColor = OledBlack
         )
     }
 
