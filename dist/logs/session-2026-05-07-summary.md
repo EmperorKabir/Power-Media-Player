@@ -30,6 +30,11 @@
 | Skip-back-15 + Skip-forward-15 companion Quick Settings tiles (§C1 follow-up) | 9 | ✅ |
 | Tasker / external-intent control (§C3) — 8 documented intent actions, security-gated | 9 | ✅ |
 | Release APK builds clean — 54.87 MB (lintVitalAnalyzeRelease known-broken AGP issue, bypassed) | — | ✅ |
+| Crossfade — Manual fade-now button (§B2) — 1.5 s ramp + advance | 4 | ✅ |
+| Crossfade — Fade-out on pause / Fade-in on resume (§B2) — 400 ms ramps | 4 | ✅ |
+| Crossfade — Album mode short-circuit (§B2) — same-album consecutive tracks skip the fade | 4 | ✅ |
+| Per-file playback speed memory (§C7 slim) — speeds persist across track opens | 5 | ✅ partial |
+| Sleep timer custom-duration slider (1..240 min) | 9 | ✅ |
 
 ## Bug fixes shipped inline
 
