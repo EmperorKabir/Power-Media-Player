@@ -151,7 +151,57 @@ The latest debug APK is already installed on your phone (Z Fold 6, model SM_F966
 - Sleep timer dialog → drag the "Custom: X min" slider (1..240).
 - Tap "Set" → sleep timer fires at exactly that minute count.
 
-## 21. Cast bug investigation diagnostics
+## 21. Bookmark long-press → rename
+
+- Player → during playback, tap the bookmark icon to add a bookmark.
+- The bookmark chip appears above the bottom transport row.
+- Long-press the chip → AlertDialog opens with the current label in a TextField.
+- Type a new label, tap Save. **Expect:** chip shows the new label; Last Played dropdown for that listen reflects the new label too.
+
+## 22. Stop-on-swipe-away toggle
+
+- Settings → "Stop playback on swipe-away" → toggle ON.
+- Start playback. Swipe the app off the Recents list.
+- **Expect:** audio stops immediately. Notification dismisses.
+- Toggle OFF, repeat — audio continues playing in the background (default).
+
+## 23. Cold-start resume backoff
+
+- Settings → "Cold-start resume backoff" → drag slider (e.g. 10 s).
+- Play a track for 30 s.
+- Force-stop the app. Re-launch.
+- **Expect:** logcat: `Cold-start restored '...' @ 20000ms (saved=30000ms, backoff=10s, session N)`. Track resumes 10 s before where you stopped.
+
+## 24. Library long-press → Add to queue next
+
+- Play any track to start a queue.
+- Long-press a different Library row → "Add to queue next".
+- **Expect:** that file plays immediately after the current track ends, without disturbing the rest of the queue.
+
+## 25. Library long-press → Open in other app
+
+- Long-press a Library row → "Open in other app".
+- **Expect:** Android system "Open with" chooser shows installed video / audio players. Pick one to launch the file in that app.
+
+## 26. Library long-press → Delete
+
+- Long-press a Library row → "Delete".
+- **Expect:** AlertDialog with the file's title + irreversible warning + Cancel/Delete buttons.
+- Confirm → file is removed from device + Library list updates.
+
+## 27. Multi-select auto-exits after bulk action
+
+- Library → 3-dot menu → Select multiple → tick 3 rows.
+- Tap "Favourite all selected" or "Hide all selected".
+- **Expect:** selection bar closes automatically, list updates, no need to manually Cancel.
+
+## 28. Settings → 'Reset all settings'
+
+- Scroll to Settings → About section → "Reset all settings" red row.
+- Tap → AlertDialog with scope description.
+- Confirm → every preference reverts to default. Music files / playback history / bookmarks unaffected.
+
+## 29. Cast bug investigation diagnostics
 
 - If you cast and the bug recurs ("connects but nothing plays"), capture:
   ```
