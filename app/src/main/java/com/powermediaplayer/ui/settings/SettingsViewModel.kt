@@ -44,7 +44,16 @@ data class SettingsUiState(
     val videoControlsHideSec: Int = 4,
     val audioEffectsPopupHideSec: Int = 3,
     val videoEffectsPopupHideSec: Int = 3,
-    val hiddenUris: Set<String> = emptySet()
+    val hiddenUris: Set<String> = emptySet(),
+    // Crossfade (Phase 4 / §B2)
+    val crossfadeEnabled: Boolean = false,
+    val crossfadeCurve: String = "EQUAL_POWER",
+    val crossfadeAlbumMode: Boolean = true,
+    val crossfadeSkipSilence: Boolean = false,
+    val crossfadePreFadeTriggerS: Int = 5,
+    val crossfadeManualFadeNowEnabled: Boolean = false,
+    val crossfadeFadeOutOnPause: Boolean = false,
+    val crossfadeFadeInOnResume: Boolean = false
 )
 
 /**
@@ -98,7 +107,15 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.videoControlsHideSec,
             settingsDataStore.audioEffectsPopupHideSec,
             settingsDataStore.videoEffectsPopupHideSec,
-            settingsDataStore.hiddenUris
+            settingsDataStore.hiddenUris,
+            settingsDataStore.crossfadeEnabled,
+            settingsDataStore.crossfadeCurve,
+            settingsDataStore.crossfadeAlbumMode,
+            settingsDataStore.crossfadeSkipSilence,
+            settingsDataStore.crossfadePreFadeTriggerS,
+            settingsDataStore.crossfadeManualFadeNowEnabled,
+            settingsDataStore.crossfadeFadeOutOnPause,
+            settingsDataStore.crossfadeFadeInOnResume
         )
     ) { v ->
         SettingsUiState(
@@ -133,7 +150,15 @@ class SettingsViewModel @Inject constructor(
             videoControlsHideSec = v[28] as Int,
             audioEffectsPopupHideSec = v[29] as Int,
             videoEffectsPopupHideSec = v[30] as Int,
-            hiddenUris = @Suppress("UNCHECKED_CAST") (v[31] as Set<String>)
+            hiddenUris = @Suppress("UNCHECKED_CAST") (v[31] as Set<String>),
+            crossfadeEnabled = v[32] as Boolean,
+            crossfadeCurve = v[33] as String,
+            crossfadeAlbumMode = v[34] as Boolean,
+            crossfadeSkipSilence = v[35] as Boolean,
+            crossfadePreFadeTriggerS = v[36] as Int,
+            crossfadeManualFadeNowEnabled = v[37] as Boolean,
+            crossfadeFadeOutOnPause = v[38] as Boolean,
+            crossfadeFadeInOnResume = v[39] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -164,6 +189,26 @@ class SettingsViewModel @Inject constructor(
     fun unhideAll() {
         viewModelScope.launch { settingsDataStore.unhideAll() }
     }
+
+    // ── Crossfade setters (Phase 4) ─────────────────────────────────
+    fun setCrossfadeEnabled(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeEnabled(v) }.let { }
+    fun setCrossfadeMs(v: Int) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeMs(v) }.let { }
+    fun setCrossfadeCurve(v: String) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeCurve(v) }.let { }
+    fun setCrossfadeAlbumMode(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeAlbumMode(v) }.let { }
+    fun setCrossfadeSkipSilence(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeSkipSilence(v) }.let { }
+    fun setCrossfadePreFadeTriggerS(v: Int) =
+        viewModelScope.launch { settingsDataStore.setCrossfadePreFadeTriggerS(v) }.let { }
+    fun setCrossfadeManualFadeNowEnabled(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeManualFadeNowEnabled(v) }.let { }
+    fun setCrossfadeFadeOutOnPause(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeFadeOutOnPause(v) }.let { }
+    fun setCrossfadeFadeInOnResume(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setCrossfadeFadeInOnResume(v) }.let { }
 
     fun setSubtitleFormat(format: String) {
         viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }

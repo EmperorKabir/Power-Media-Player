@@ -566,6 +566,14 @@ private fun OverlayContent(
             // passthrough) — applies to local audio chain only, so
             // greyed out when casting (audio is on the receiver).
             AudioEffectsButton(enabled = !uiState.isCasting)
+            // Crossfade button (Phase 4) — right of Audio Effects per
+            // §B1. Greyed when video / cast / Spotify Connect — only
+            // audio queues benefit from a smooth transition.
+            CrossfadeButton(
+                enabled = !uiState.isVideoContent &&
+                    !uiState.isCasting &&
+                    !uiState.isSpotifyActive
+            )
             BluetoothButton(modifier = Modifier.size(48.dp))
             // Cast button — to the right of Bluetooth so the
             // wireless-output controls are grouped. Hidden when
@@ -763,6 +771,11 @@ private fun PlayerScreenExpanded(
                 // present in both layouts. Greyed out while casting
                 // because the local audio chain is silent then.
                 AudioEffectsButton(enabled = !uiState.isCasting)
+                CrossfadeButton(
+                    enabled = !uiState.isVideoContent &&
+                        !uiState.isCasting &&
+                        !uiState.isSpotifyActive
+                )
                 BluetoothButton(modifier = Modifier.size(48.dp))
                 if (!uiState.isSpotifyActive) {
                     CastButton(modifier = Modifier.size(48.dp))

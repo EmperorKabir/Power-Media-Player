@@ -93,6 +93,21 @@ class SettingsDataStore @Inject constructor(
         // via Auto Backup (manifest already has allowBackup="true").
         val HIDDEN_URIS = stringSetPreferencesKey("hidden_uris")
 
+        // Crossfade panel (Phase 4 / §B2). 9 sub-toggles + 1 master.
+        // Existing CROSSFADE_MS retained as the duration field; the
+        // master switch is a separate boolean so users can toggle off
+        // without losing their preferred duration. Defaults locked
+        // from §B2: master OFF, 5 s, equal-power, album-mode ON, all
+        // others OFF.
+        val CROSSFADE_ENABLED = booleanPreferencesKey("crossfade_enabled")
+        val CROSSFADE_CURVE = stringPreferencesKey("crossfade_curve")
+        val CROSSFADE_ALBUM_MODE = booleanPreferencesKey("crossfade_album_mode")
+        val CROSSFADE_SKIP_SILENCE = booleanPreferencesKey("crossfade_skip_silence")
+        val CROSSFADE_PRE_FADE_TRIGGER_S = intPreferencesKey("crossfade_pre_fade_trigger_s")
+        val CROSSFADE_MANUAL_FADE_NOW_ENABLED = booleanPreferencesKey("crossfade_manual_fade_now_enabled")
+        val CROSSFADE_FADE_OUT_ON_PAUSE = booleanPreferencesKey("crossfade_fade_out_on_pause")
+        val CROSSFADE_FADE_IN_ON_RESUME = booleanPreferencesKey("crossfade_fade_in_on_resume")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -241,6 +256,56 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun unhideAll() {
         context.dataStore.edit { it[Keys.HIDDEN_URIS] = emptySet() }
+    }
+
+    // ── Crossfade panel (Phase 4 / §B2) ───────────────────────────────
+    val crossfadeEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_ENABLED] ?: false
+    }
+    suspend fun setCrossfadeEnabled(v: Boolean) {
+        context.dataStore.edit { it[Keys.CROSSFADE_ENABLED] = v }
+    }
+    val crossfadeCurve: Flow<String> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_CURVE] ?: "EQUAL_POWER"
+    }
+    suspend fun setCrossfadeCurve(v: String) {
+        context.dataStore.edit { it[Keys.CROSSFADE_CURVE] = v }
+    }
+    val crossfadeAlbumMode: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_ALBUM_MODE] ?: true
+    }
+    suspend fun setCrossfadeAlbumMode(v: Boolean) {
+        context.dataStore.edit { it[Keys.CROSSFADE_ALBUM_MODE] = v }
+    }
+    val crossfadeSkipSilence: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_SKIP_SILENCE] ?: false
+    }
+    suspend fun setCrossfadeSkipSilence(v: Boolean) {
+        context.dataStore.edit { it[Keys.CROSSFADE_SKIP_SILENCE] = v }
+    }
+    val crossfadePreFadeTriggerS: Flow<Int> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_PRE_FADE_TRIGGER_S] ?: 5
+    }
+    suspend fun setCrossfadePreFadeTriggerS(v: Int) {
+        context.dataStore.edit { it[Keys.CROSSFADE_PRE_FADE_TRIGGER_S] = v }
+    }
+    val crossfadeManualFadeNowEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_MANUAL_FADE_NOW_ENABLED] ?: false
+    }
+    suspend fun setCrossfadeManualFadeNowEnabled(v: Boolean) {
+        context.dataStore.edit { it[Keys.CROSSFADE_MANUAL_FADE_NOW_ENABLED] = v }
+    }
+    val crossfadeFadeOutOnPause: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_FADE_OUT_ON_PAUSE] ?: false
+    }
+    suspend fun setCrossfadeFadeOutOnPause(v: Boolean) {
+        context.dataStore.edit { it[Keys.CROSSFADE_FADE_OUT_ON_PAUSE] = v }
+    }
+    val crossfadeFadeInOnResume: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.CROSSFADE_FADE_IN_ON_RESUME] ?: false
+    }
+    suspend fun setCrossfadeFadeInOnResume(v: Boolean) {
+        context.dataStore.edit { it[Keys.CROSSFADE_FADE_IN_ON_RESUME] = v }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
