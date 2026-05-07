@@ -1,6 +1,6 @@
 # Implementation session — 2026-05-07 — checkpoint summary
 
-**Total commits:** 45 (continued past power cut + extensive feature batch).
+**Total commits:** 50+ (continued past power cut + extensive feature batch).
 **Phases completed (or substantially advanced):** 1, 2, 3, 4 (partial), 9 (started), 11 (started).
 **Devices verified:** Z Fold 6 + Pixel_6_API_34 emulator. Both run all builds clean — 0 FATAL across every regression sweep.
 
@@ -44,6 +44,7 @@
 | Library long-press → Delete (with irreversible-action confirmation dialog) | 3 ext | ✅ |
 | Library long-press → Add to queue next (PlaybackConnection.addNext) | 3 ext | ✅ |
 | Library long-press → Open in other app (system Intent.ACTION_VIEW chooser) | 3 ext | ✅ |
+| Settings → About → 'Reset all settings' destructive action with confirmation | 9 | ✅ |
 
 ## Bug fixes shipped inline
 
