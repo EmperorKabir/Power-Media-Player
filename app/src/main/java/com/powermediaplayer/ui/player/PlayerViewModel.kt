@@ -173,64 +173,121 @@ class PlayerViewModel @Inject constructor(
         // MediaController access MUST happen on the application main
         // thread (Media3 verifyApplicationThread); the DB write hops
         // off main via viewModelScope.launch(Dispatchers.IO).
+        //
+        // Also acts as a safety-net for the bookmark→Last-Played mirror:
+        // if no session was wired up by either the cold-start adoptSession
+        // branch below OR a Library/Cloud/LastPlayed tap, synthesise one
+        // here from the current MediaItem so subsequent bookmarks mirror.
         viewModelScope.launch(Dispatchers.Main) {
             while (isActive) {
                 delay(5_000)
                 val player = playbackConnection.getPlayer() ?: continue
-                val mediaUri = player.currentMediaItem?.mediaId ?: continue
+                val item = player.currentMediaItem ?: continue
+                val mediaUri = item.mediaId.takeIf { it.isNotBlank() } ?: continue
                 val pos = player.currentPosition.coerceAtLeast(0L)
                 val playing = player.isPlaying
-                if (playing) {
-                    launch(Dispatchers.IO) {
-                        runCatching { lastPlayedRepo.updatePositionByUri(mediaUri, pos) }
+                if (!playing) continue
+                // Capture metadata on Main before hopping to IO.
+                val title = item.mediaMetadata.title?.toString()
+                val artist = item.mediaMetadata.artist?.toString()
+                val artwork = item.mediaMetadata.artworkUri?.toString()
+                val duration = player.duration.coerceAtLeast(0L)
+                launch(Dispatchers.IO) {
+                    runCatching { lastPlayedRepo.updatePositionByUri(mediaUri, pos) }
+                    if (lastPlayedRepo.currentSessionId.value == null) {
+                        runCatching {
+                            lastPlayedRepo.recordPlay(
+                                com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                                    mediaUri = mediaUri,
+                                    title = title?.takeIf { it.isNotBlank() }
+                                        ?: mediaUri.substringAfterLast('/'),
+                                    subtitle = artist ?: "",
+                                    artworkUri = artwork,
+                                    source = "LOCAL",
+                                    mediaKindOrdinal = 0,
+                                    lastPositionMs = pos,
+                                    durationMs = duration,
+                                    lastPlayedAt = System.currentTimeMillis()
+                                )
+                            )
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "5s-tick synthesised session for uri=$mediaUri " +
+                                    "(no cold-start adoptSession or tap-recordPlay fired)"
+                            )
+                        }
                     }
                 }
             }
         }
-        // Cold-start resume: load the most-recent LOCAL history item
-        // into the player paused at its saved position. Cloud items
-        // are skipped — Drive needs token refresh and Spotify needs
-        // Connect device, neither of which are guaranteed at cold
-        // start. Auto-play is off so audio doesn't surprise the user.
+        // Cold-start resume + notification-tap session adoption.
+        //
+        // Two distinct entry points share this block:
+        //  (1) Cold start with no MediaItem loaded — restore the most
+        //      recent LOCAL row paused at its saved position. Cloud
+        //      items skipped (Drive needs token refresh; Spotify needs
+        //      Connect device).
+        //  (2) Notification-tap resume after process kill — the service
+        //      has already loaded a MediaItem. We just need to adopt the
+        //      matching recent row's session id so subsequent bookmarks
+        //      mirror to its snapshot.
+        //
+        // Both paths call lastPlayedRepo.adoptSession(recent.id) so the
+        // bookmark→Last-Played mirror works without creating a duplicate
+        // Recents row.
         viewModelScope.launch(Dispatchers.Main) {
             kotlinx.coroutines.delay(800) // wait for service connection
-            // Don't clobber an active Spotify mirror — when the user
-            // switches tabs and comes back, the VM may be recreated
-            // and this block re-runs. Without the guard, the local
-            // resume overwrites the live Spotify state and the user
-            // sees a paused old local video where Spotify should be.
+            // Don't clobber an active Spotify mirror.
             if (spotifyProvider.spotifyState.value != null) return@launch
             val recent = withContext(Dispatchers.IO) {
                 runCatching { lastPlayedRepo.mostRecent() }.getOrNull()
             } ?: return@launch
-            if (recent.source != "LOCAL") return@launch
             val player = playbackConnection.getPlayer() ?: return@launch
-            // Only restore when nothing is loaded — never clobber an
-            // active session. (Now safely on Main.)
-            if (player.currentMediaItem != null) return@launch
-            runCatching {
-                val uri = android.net.Uri.parse(recent.mediaUri)
-                val item = androidx.media3.common.MediaItem.Builder()
-                    .setMediaId(recent.mediaUri)
-                    .setUri(uri)
-                    .setRequestMetadata(
-                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                            .setMediaUri(uri).build()
-                    )
-                    .setMediaMetadata(
-                        androidx.media3.common.MediaMetadata.Builder()
-                            .setTitle(recent.title)
-                            .setArtist(recent.subtitle)
+            val currentMediaUri = player.currentMediaItem?.mediaId
+            when {
+                // Notification-tap resume: player already has the
+                // matching item loaded. Adopt session, don't reload.
+                currentMediaUri != null && currentMediaUri == recent.mediaUri -> {
+                    if (lastPlayedRepo.currentSessionId.value == null) {
+                        lastPlayedRepo.adoptSession(recent.id)
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "Adopted session ${recent.id} for already-loaded MediaItem uri=$currentMediaUri"
+                        )
+                    }
+                }
+                // Cold start: nothing loaded. Restore the recent LOCAL
+                // item paused, then adopt its session.
+                currentMediaUri == null && recent.source == "LOCAL" -> {
+                    runCatching {
+                        val uri = android.net.Uri.parse(recent.mediaUri)
+                        val item = androidx.media3.common.MediaItem.Builder()
+                            .setMediaId(recent.mediaUri)
+                            .setUri(uri)
+                            .setRequestMetadata(
+                                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                                    .setMediaUri(uri).build()
+                            )
+                            .setMediaMetadata(
+                                androidx.media3.common.MediaMetadata.Builder()
+                                    .setTitle(recent.title)
+                                    .setArtist(recent.subtitle)
+                                    .build()
+                            )
                             .build()
-                    )
-                    .build()
-                playbackConnection.setMediaItems(listOf(item), 0)
-                playbackConnection.seekTo(recent.lastPositionMs)
-                player.playWhenReady = false
-                com.powermediaplayer.util.Diag.i(
-                    "PMP_DIAG",
-                    "Cold-start restored '${recent.title}' @ ${recent.lastPositionMs}ms"
-                )
+                        playbackConnection.setMediaItems(listOf(item), 0)
+                        playbackConnection.seekTo(recent.lastPositionMs)
+                        player.playWhenReady = false
+                        lastPlayedRepo.adoptSession(recent.id)
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "Cold-start restored '${recent.title}' @ ${recent.lastPositionMs}ms (session ${recent.id})"
+                        )
+                    }
+                }
+                // Player has a different media OR a cloud item is
+                // restored externally — leave session null; the 5s tick
+                // will synthesise one if playback continues.
             }
         }
         // ReplayGain: when enabled, read REPLAYGAIN_TRACK_GAIN on each

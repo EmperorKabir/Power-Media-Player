@@ -80,6 +80,21 @@ class LastPlayedRepository @Inject constructor(
         return id
     }
 
+    /**
+     * Adopt an existing history row as the current session so subsequent
+     * Player-tab bookmark adds mirror into ITS snapshot table — without
+     * creating a duplicate Recents row. Used by:
+     *  - Cold-start auto-resume: the most-recent row is restored into the
+     *    player; we want bookmarks added during that listen to attach to
+     *    that same row, not a new one.
+     *  - Notification-tap resume: the service has already loaded the
+     *    media item; we adopt the row whose mediaUri matches.
+     * Idempotent — safe to call multiple times with the same id.
+     */
+    fun adoptSession(id: Long) {
+        _currentSessionId.value = id
+    }
+
     /** Update the current row's resume position (5s tick from PlayerVM). */
     suspend fun updatePosition(id: Long, posMs: Long) {
         historyDao.updatePosition(id, posMs)
