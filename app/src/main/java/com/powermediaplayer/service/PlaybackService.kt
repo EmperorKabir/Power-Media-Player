@@ -752,8 +752,22 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Stop playback when user swipes away app from recents
+        // Default behaviour: stop the service ONLY when nothing is
+        // queued / not playing, so audio survives the user swiping
+        // the app from Recents (which is what most music players do).
+        // When the user has opted in to "Stop on swipe-away" via
+        // Settings, we stop unconditionally.
+        val stopUnconditionally = runCatching {
+            kotlinx.coroutines.runBlocking {
+                settingsDataStore.stopOnTaskRemoved.first()
+            }
+        }.getOrDefault(false)
         val player = mediaSession?.player
+        if (stopUnconditionally) {
+            player?.stop()
+            stopSelf()
+            return
+        }
         if (player != null) {
             if (!player.playWhenReady || player.mediaItemCount == 0) {
                 stopSelf()

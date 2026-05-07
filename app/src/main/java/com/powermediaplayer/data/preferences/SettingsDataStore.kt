@@ -143,6 +143,12 @@ class SettingsDataStore @Inject constructor(
         // marking "huh, what did they say?" moments.
         val BOOKMARK_REPLAY_CONTEXT_SEC = intPreferencesKey("bookmark_replay_context_sec")
 
+        // When the user swipes the app from Recents, should the
+        // PlaybackService stop playback (instead of continuing in the
+        // foreground)? Default false — most music apps keep playing.
+        // Some users prefer the swipe-to-stop semantic.
+        val STOP_ON_TASK_REMOVED = booleanPreferencesKey("stop_on_task_removed")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -424,6 +430,13 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setBookmarkReplayContextSec(sec: Int) {
         context.dataStore.edit { it[Keys.BOOKMARK_REPLAY_CONTEXT_SEC] = sec.coerceIn(0, 30) }
+    }
+
+    val stopOnTaskRemoved: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.STOP_ON_TASK_REMOVED] ?: false
+    }
+    suspend fun setStopOnTaskRemoved(v: Boolean) {
+        context.dataStore.edit { it[Keys.STOP_ON_TASK_REMOVED] = v }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────

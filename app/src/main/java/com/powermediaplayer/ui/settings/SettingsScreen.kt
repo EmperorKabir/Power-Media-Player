@@ -140,6 +140,16 @@ fun SettingsScreen(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
         )
 
+        SettingsToggleItem(
+            title = "Stop playback on swipe-away",
+            description = "When you swipe the app off the Recents list, stop the music. " +
+                "Off by default — most music apps keep playing in the background " +
+                "after a swipe-away, which is what you want for podcasts in the car.",
+            icon = Icons.Filled.Close,
+            checked = uiState.stopOnTaskRemoved,
+            onCheckedChange = { viewModel.setStopOnTaskRemoved(it) }
+        )
+
         // §C3 — external automation control. Default OFF for security
         // (no random app on your phone can drive playback unless you
         // opt in). Documented intent actions:
