@@ -94,6 +94,7 @@ class PlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
+    private var headphonePlugReceiver: android.content.BroadcastReceiver? = null
     private var mediaSession: MediaSession? = null
 
     // Cached Bluetooth mapping. The MediaSession callback fires on the
@@ -272,6 +273,38 @@ class PlaybackService : MediaSessionService() {
             ) { ms, enabled -> if (enabled) ms else 0 }
                 .collect { crossfadeMsFlag = it }
         }
+
+        // §C22 — auto-play on headphone plug-in. ACTION_HEADSET_PLUG
+        // is a runtime-only registration (cannot be declared in the
+        // manifest). State extra: 0 = unplugged, 1 = plugged. Fires
+        // play() when plug detected AND user toggled auto-resume on
+        // AND a MediaItem is loaded paused.
+        val headphoneReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context?, intent: android.content.Intent?) {
+                if (intent?.action != android.content.Intent.ACTION_HEADSET_PLUG) return
+                if (intent.getIntExtra("state", -1) != 1) return
+                serviceScope.launch {
+                    val enabled = settingsDataStore.headphonePlugAutoplay.first()
+                    if (!enabled) return@launch
+                    val p = exoPlayerRef?.get() ?: return@launch
+                    if (p.isPlaying) return@launch
+                    if (p.currentMediaItem == null) return@launch
+                    runCatching {
+                        p.play()
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "Headphone-plug auto-resume fired"
+                        )
+                    }
+                }
+            }
+        }
+        registerReceiver(
+            headphoneReceiver,
+            android.content.IntentFilter(android.content.Intent.ACTION_HEADSET_PLUG),
+            android.content.Context.RECEIVER_NOT_EXPORTED
+        )
+        this.headphonePlugReceiver = headphoneReceiver
 
         // Mp4 extractor with edit-list workaround — required for many M4B
         // audiobooks (especially Audible-converted) whose elst boxes confuse
@@ -707,6 +740,8 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         serviceScope.cancel()
         stopCastRelay()
+        headphonePlugReceiver?.let { runCatching { unregisterReceiver(it) } }
+        headphonePlugReceiver = null
         exoPlayerRef = null          // clear before release so UI gets null not dead reference
         castPlayer?.run {
             setSessionAvailabilityListener(null)

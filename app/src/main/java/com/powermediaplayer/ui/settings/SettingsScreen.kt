@@ -72,6 +72,20 @@ fun SettingsScreen(
             onCheckedChange = { viewModel.setDeepScan(it) }
         )
 
+        // §C22 — auto-play on headphone plug-in. Default OFF (opt-in)
+        // because surprise audio is annoying. Receiver registered at
+        // PlaybackService runtime; ACTION_HEADSET_PLUG cannot be
+        // declared in the manifest.
+        SettingsToggleItem(
+            title = "Auto-play on headphone connect",
+            description = "When you plug in headphones (or connect a Bluetooth audio device), " +
+                "automatically resume playback if a track is paused. Off by default to " +
+                "avoid surprise audio.",
+            icon = Icons.Filled.Headphones,
+            checked = uiState.headphonePlugAutoplay,
+            onCheckedChange = { viewModel.setHeadphonePlugAutoplay(it) }
+        )
+
         // Hidden files (§C27) — tap to open the sheet listing every
         // URI hidden via the Library long-press menu, with per-row
         // unhide + an "Unhide all" action.

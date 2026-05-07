@@ -108,6 +108,10 @@ class SettingsDataStore @Inject constructor(
         val CROSSFADE_FADE_OUT_ON_PAUSE = booleanPreferencesKey("crossfade_fade_out_on_pause")
         val CROSSFADE_FADE_IN_ON_RESUME = booleanPreferencesKey("crossfade_fade_in_on_resume")
 
+        // §C22 — auto-play when headphones plug in. Default OFF; opt-in
+        // because surprise audio is annoying.
+        val HEADPHONE_PLUG_AUTOPLAY = booleanPreferencesKey("headphone_plug_autoplay")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -306,6 +310,14 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setCrossfadeFadeInOnResume(v: Boolean) {
         context.dataStore.edit { it[Keys.CROSSFADE_FADE_IN_ON_RESUME] = v }
+    }
+
+    // ── §C22 Headphone plug-in resume ─────────────────────────────────
+    val headphonePlugAutoplay: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.HEADPHONE_PLUG_AUTOPLAY] ?: false
+    }
+    suspend fun setHeadphonePlugAutoplay(v: Boolean) {
+        context.dataStore.edit { it[Keys.HEADPHONE_PLUG_AUTOPLAY] = v }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
