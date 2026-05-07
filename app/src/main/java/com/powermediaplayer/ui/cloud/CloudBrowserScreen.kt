@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,10 +50,45 @@ fun CloudBrowserScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
+    var contextItem by remember { mutableStateOf<CloudMediaItem?>(null) }
     if (showInfoSheet) {
         com.powermediaplayer.ui.info.InfoSheet(
             data = com.powermediaplayer.ui.info.cloudInfo,
             onDismiss = { showInfoSheet = false }
+        )
+    }
+    contextItem?.let { item ->
+        val isSpotify = item.sourceProvider == CloudProviderType.SPOTIFY
+        val isDriveTrack = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
+        com.powermediaplayer.ui.player.components.TrackContextSheet(
+            title = item.name,
+            subtitle = if (isSpotify) "Spotify" else "Drive",
+            actions = com.powermediaplayer.ui.player.components.TrackContextActions(
+                // Drive and Spotify tracks both support favouriting via
+                // their respective viewmodel methods; folders skipped.
+                onFavourite = if (!item.isFolder) {
+                    {
+                        if (isSpotify) viewModel.toggleSpotifyFav(item)
+                        else if (isDriveTrack) viewModel.toggleDriveFavouriteTrack(item)
+                        contextItem = null
+                    }
+                } else null,
+                // Share opens system chooser with the canonical URL when
+                // available (Spotify open.spotify.com or Drive view URL).
+                onShare = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT,
+                            if (isSpotify) "https://open.spotify.com/track/${item.id.substringAfterLast(':')}"
+                            else item.id)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, "Share"))
+                    contextItem = null
+                }
+                // Hide / Delete / Override-* deferred — not applicable to
+                // streamed cloud items in Phase 3 scope.
+            ),
+            onDismiss = { contextItem = null }
         )
     }
 
@@ -423,7 +459,8 @@ fun CloudBrowserScreen(
                             item = item,
                             onClick = {
                                 viewModel.openItem(item, onPlaybackStarted = onNavigateToPlayer)
-                            }
+                            },
+                            onLongClick = { if (!item.isFolder) contextItem = item }
                         )
                     }
                     if (uiState.searchResults.isEmpty()) {
@@ -593,7 +630,8 @@ fun CloudBrowserScreen(
                                 } else {
                                     viewModel.openItem(item, onPlaybackStarted = onNavigateToPlayer)
                                 }
-                            }
+                            },
+                            onLongClick = { if (!item.isFolder) contextItem = item }
                         )
                     }
                     if (uiState.items.isEmpty() && uiState.driveFavourites.isEmpty()) {
@@ -954,6 +992,7 @@ private fun SourceChooserDialog(
     )
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun CloudItemRow(
     item: CloudMediaItem,
@@ -962,12 +1001,13 @@ private fun CloudItemRow(
     canFavourite: Boolean = false,
     onToggleFavourite: () -> Unit = {},
     canForget: Boolean = false,
-    onForget: () -> Unit = {}
+    onForget: () -> Unit = {},
+    onLongClick: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

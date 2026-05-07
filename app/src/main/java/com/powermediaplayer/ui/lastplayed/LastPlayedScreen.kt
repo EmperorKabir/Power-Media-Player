@@ -3,6 +3,7 @@ package com.powermediaplayer.ui.lastplayed
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -62,10 +63,45 @@ fun LastPlayedScreen(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showInfoSheet by remember { mutableStateOf(false) }
+    var contextItem by remember { mutableStateOf<HistoryItem?>(null) }
+    var contextFromRecents by remember { mutableStateOf(true) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     if (showInfoSheet) {
         com.powermediaplayer.ui.info.InfoSheet(
             data = com.powermediaplayer.ui.info.lastPlayedInfo,
             onDismiss = { showInfoSheet = false }
+        )
+    }
+    contextItem?.let { item ->
+        com.powermediaplayer.ui.player.components.TrackContextSheet(
+            title = item.title,
+            subtitle = item.subtitle,
+            actions = com.powermediaplayer.ui.player.components.TrackContextActions(
+                onFavourite = if (contextFromRecents && !item.isPinned) {
+                    {
+                        scope.launch {
+                            val ok = viewModel.pinSession(item.id)
+                            if (!ok) snackbar.showSnackbar("Favourites full (10/10) — unpin one first")
+                        }
+                        contextItem = null
+                    }
+                } else null,
+                onUnfavourite = if (!contextFromRecents) {
+                    { viewModel.unpin(item.id); contextItem = null }
+                } else null,
+                onShare = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "audio/*"
+                        putExtra(android.content.Intent.EXTRA_TEXT, item.mediaUri)
+                    }
+                    ctx.startActivity(android.content.Intent.createChooser(send, "Share"))
+                    contextItem = null
+                },
+                onDelete = if (contextFromRecents) {
+                    { viewModel.deleteRecentsRow(item.id); contextItem = null }
+                } else null
+            ),
+            onDismiss = { contextItem = null }
         )
     }
 
@@ -102,6 +138,10 @@ fun LastPlayedScreen(
                     onMove = { from, to ->
                         val movedFavId = pinned[from].id
                         viewModel.reorderPinned(movedFavId, to)
+                    },
+                    onLongClick = { item ->
+                        contextItem = item
+                        contextFromRecents = false
                     },
                     onTap = { item ->
                         viewModel.playLocalAt(item)
@@ -143,6 +183,10 @@ fun LastPlayedScreen(
                                 onNavigateToPlayer()
                             },
                             onDeleteBookmark = { id -> viewModel.deleteRecentsBookmark(id) },
+                            onLongClick = {
+                                contextItem = item
+                                contextFromRecents = true
+                            },
                             swipeBookmark = true,
                             trailing = {
                                 IconButton(onClick = {
@@ -272,7 +316,8 @@ private fun ReorderablePinnedList(
     onTapBookmark: (HistoryItem, LastPlayedViewModel.BookmarkRow) -> Unit,
     onDeleteBookmark: (Long) -> Unit,
     onUnpin: (Long) -> Unit,
-    bookmarkProvider: (Long) -> Flow<List<LastPlayedViewModel.BookmarkRow>>
+    bookmarkProvider: (Long) -> Flow<List<LastPlayedViewModel.BookmarkRow>>,
+    onLongClick: (HistoryItem) -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -293,6 +338,7 @@ private fun ReorderablePinnedList(
                     onTap = { onTap(item) },
                     onTapBookmark = { bookmark -> onTapBookmark(item, bookmark) },
                     onDeleteBookmark = onDeleteBookmark,
+                    onLongClick = { onLongClick(item) },
                     elevated = dragging,
                     trailing = {
                         IconButton(onClick = { onUnpin(item.id) }) {
@@ -330,6 +376,7 @@ private fun HistoryRowWithBookmarks(
     onTapBookmark: (LastPlayedViewModel.BookmarkRow) -> Unit,
     onDeleteBookmark: (Long) -> Unit,
     trailing: @Composable RowScope.() -> Unit,
+    onLongClick: () -> Unit = {},
     elevated: Boolean = false,
     /**
      * When true, each bookmark in the dropdown is swipe-to-dismiss
@@ -358,6 +405,7 @@ private fun HistoryRowWithBookmarks(
                 expanded = expanded,
                 onToggleExpanded = { expanded = !expanded },
                 onClick = onTap,
+                onLongClick = onLongClick,
                 trailing = trailing
             )
             AnimatedVisibility(visible = expanded && bookmarks.isNotEmpty()) {
@@ -399,6 +447,7 @@ private fun HistoryRowWithBookmarks(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryHeaderRow(
     item: HistoryItem,
@@ -407,6 +456,7 @@ private fun HistoryHeaderRow(
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     trailing: @Composable RowScope.() -> Unit
 ) {
     Row(
@@ -437,7 +487,7 @@ private fun HistoryHeaderRow(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .clickable { onClick() }
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
         ) {
             Text(item.title,
                 style = MaterialTheme.typography.labelLarge,
