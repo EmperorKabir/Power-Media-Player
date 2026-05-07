@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Frame-step BACK icon. Visual: thick vertical bar on the left + single
+  filled triangle pointing left. Distinct from `Icons.Filled.SkipPrevious`
+  used by the prev-chapter/track button (which is a thinner bar + double
+  triangle). Tinted by Compose's Icon(tint=...).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,4 L3,20 L7,20 L7,4 Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M21,5.5 L11,12 L21,18.5 Z" />
+</vector>

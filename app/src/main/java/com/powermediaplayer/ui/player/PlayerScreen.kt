@@ -16,8 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.ui.res.painterResource
+import com.powermediaplayer.R
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -480,11 +480,16 @@ private fun OverlayContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Frame-step ± hidden during cast — receiver decides its own
-            // frame timing; sender-side step requests aren't supported.
-            if (!uiState.isCasting) {
+            // Frame-step ± hidden during cast (receiver renders the
+            // stream itself) AND on audio (no visible frame to step).
+            // Bespoke ic_frame_step_back/forward drawables — the prior
+            // SkipPrevious/SkipNext icons collided visually with
+            // prev/next-chapter-or-track. ViewModel pauses internally
+            // before the seek so a quick tap on a playing video
+            // freezes + steps in one motion.
+            if (uiState.isVideoContent && !uiState.isCasting) {
                 IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
+                    Icon(painterResource(R.drawable.ic_frame_step_back), contentDescription = "Step one frame back",
                         tint = TealAccent)
                 }
             }
@@ -505,9 +510,9 @@ private fun OverlayContent(
                     style = MaterialTheme.typography.labelMedium
                 )
             }
-            if (!uiState.isCasting) {
+            if (uiState.isVideoContent && !uiState.isCasting) {
                 IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
+                    Icon(painterResource(R.drawable.ic_frame_step_forward), contentDescription = "Step one frame forward",
                         tint = TealAccent)
                 }
             }
@@ -678,9 +683,9 @@ private fun PlayerScreenExpanded(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!uiState.isCasting) {
+                if (uiState.isVideoContent && !uiState.isCasting) {
                     IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.SkipPrevious, contentDescription = "Frame back",
+                        Icon(painterResource(R.drawable.ic_frame_step_back), contentDescription = "Step one frame back",
                             tint = TealAccent)
                     }
                 }
@@ -701,9 +706,9 @@ private fun PlayerScreenExpanded(
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-                if (!uiState.isCasting) {
+                if (uiState.isVideoContent && !uiState.isCasting) {
                     IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.SkipNext, contentDescription = "Frame forward",
+                        Icon(painterResource(R.drawable.ic_frame_step_forward), contentDescription = "Step one frame forward",
                             tint = TealAccent)
                     }
                 }
