@@ -124,6 +124,21 @@ fun SettingsScreen(
             onCheckedChange = { viewModel.setHeadphonePlugAutoplay(it) }
         )
 
+        // §C3 — external automation control. Default OFF for security
+        // (no random app on your phone can drive playback unless you
+        // opt in). Documented intent actions:
+        // com.powermediaplayer.action.PLAY / PAUSE / PLAY_PAUSE / SKIP_NEXT
+        // / SKIP_PREV / SKIP_BACK_30 / SKIP_FORWARD_30 / SEEK_TO.
+        SettingsToggleItem(
+            title = "External app control (Tasker / Macrodroid)",
+            description = "Let other apps trigger play, pause, skip, and seek via Android " +
+                "intents. Useful for automation workflows. Off by default — turn on only " +
+                "if you trust the apps you're going to wire it up to.",
+            icon = Icons.Filled.Code,
+            checked = uiState.taskerIntentsEnabled,
+            onCheckedChange = { viewModel.setTaskerIntentsEnabled(it) }
+        )
+
         // Hidden files (§C27) — tap to open the sheet listing every
         // URI hidden via the Library long-press menu, with per-row
         // unhide + an "Unhide all" action.

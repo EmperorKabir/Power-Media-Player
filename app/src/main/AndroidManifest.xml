@@ -150,6 +150,25 @@
             </intent-filter>
         </service>
 
+        <!-- §C3 — Tasker / external-intent control. android:exported=true
+             so external automation (Tasker / Macrodroid / adb shell
+             am broadcast) can reach it. Internal toggle in Settings
+             gates whether the receiver acts on the incoming intent. -->
+        <receiver
+            android:name=".integration.TaskerReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.powermediaplayer.action.PLAY" />
+                <action android:name="com.powermediaplayer.action.PAUSE" />
+                <action android:name="com.powermediaplayer.action.PLAY_PAUSE" />
+                <action android:name="com.powermediaplayer.action.SKIP_NEXT" />
+                <action android:name="com.powermediaplayer.action.SKIP_PREV" />
+                <action android:name="com.powermediaplayer.action.SKIP_BACK_30" />
+                <action android:name="com.powermediaplayer.action.SKIP_FORWARD_30" />
+                <action android:name="com.powermediaplayer.action.SEEK_TO" />
+            </intent-filter>
+        </receiver>
+
         <!-- §C1 follow-up — companion skip tiles. -->
         <service
             android:name=".widget.SkipBack15Tile"

@@ -55,7 +55,8 @@ data class SettingsUiState(
     val crossfadeFadeOutOnPause: Boolean = false,
     val crossfadeFadeInOnResume: Boolean = false,
     val headphonePlugAutoplay: Boolean = false,
-    val sleepTimerFadeOut: Boolean = false
+    val sleepTimerFadeOut: Boolean = false,
+    val taskerIntentsEnabled: Boolean = false
 )
 
 /**
@@ -120,7 +121,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.crossfadeFadeOutOnPause,
             settingsDataStore.crossfadeFadeInOnResume,
             settingsDataStore.headphonePlugAutoplay,
-            settingsDataStore.sleepTimerFadeOut
+            settingsDataStore.sleepTimerFadeOut,
+            settingsDataStore.taskerIntentsEnabled
         )
     ) { v ->
         SettingsUiState(
@@ -165,7 +167,8 @@ class SettingsViewModel @Inject constructor(
             crossfadeFadeOutOnPause = v[38] as Boolean,
             crossfadeFadeInOnResume = v[39] as Boolean,
             headphonePlugAutoplay = v[40] as Boolean,
-            sleepTimerFadeOut = v[41] as Boolean
+            sleepTimerFadeOut = v[41] as Boolean,
+            taskerIntentsEnabled = v[42] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -222,6 +225,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setSleepTimerFadeOut(v: Boolean) =
         viewModelScope.launch { settingsDataStore.setSleepTimerFadeOut(v) }.let { }
+
+    fun setTaskerIntentsEnabled(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setTaskerIntentsEnabled(v) }.let { }
 
     fun setSubtitleFormat(format: String) {
         viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }

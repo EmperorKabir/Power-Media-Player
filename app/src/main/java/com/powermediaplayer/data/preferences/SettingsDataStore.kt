@@ -117,6 +117,12 @@ class SettingsDataStore @Inject constructor(
         // unchanged for users who haven't opted in.
         val SLEEP_TIMER_FADE_OUT = booleanPreferencesKey("sleep_timer_fade_out")
 
+        // §C3 — Tasker / external-intent control. Master switch. When
+        // OFF, the BroadcastReceiver short-circuits and ignores every
+        // action — protects against unwanted external automation.
+        // Default OFF; user must explicitly opt in.
+        val TASKER_INTENTS_ENABLED = booleanPreferencesKey("tasker_intents_enabled")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -331,6 +337,14 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setSleepTimerFadeOut(v: Boolean) {
         context.dataStore.edit { it[Keys.SLEEP_TIMER_FADE_OUT] = v }
+    }
+
+    // ── §C3 Tasker / external-intent control ──────────────────────────
+    val taskerIntentsEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.TASKER_INTENTS_ENABLED] ?: false
+    }
+    suspend fun setTaskerIntentsEnabled(v: Boolean) {
+        context.dataStore.edit { it[Keys.TASKER_INTENTS_ENABLED] = v }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
