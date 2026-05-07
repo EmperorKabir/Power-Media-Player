@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -142,6 +144,44 @@ class CloudViewModel @Inject constructor(
             settingsDataStore.spotifyFavouritePodcasts.collect { favs ->
                 _uiState.update { it.copy(spotifyFavPodcasts = favs) }
             }
+        }
+        // Spotify mirror auto-record: when the polled spotifyState
+        // reveals a track that wasn't initiated from our app (e.g. user
+        // started playback on a desktop / Google Home and we picked up
+        // the Connect mirror), synthesise a recordPlay so the bookmark→
+        // Last Played mirror works for that listen too. Triggered only
+        // when no session is active yet (currentSessionId == null) AND
+        // a non-blank trackUri appears — and re-fired on each fresh
+        // trackUri so consecutive mirrored tracks each get a Recents
+        // row matching the user's "every fresh play = new row" model.
+        viewModelScope.launch {
+            spotifyProvider.spotifyState
+                .map { it?.trackUri.orEmpty() }
+                .distinctUntilChanged()
+                .collect { trackUri ->
+                    if (trackUri.isBlank()) return@collect
+                    if (lastPlayedRepo.currentSessionId.value != null) return@collect
+                    val s = spotifyProvider.spotifyState.value ?: return@collect
+                    runCatching {
+                        lastPlayedRepo.recordPlay(
+                            com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                                mediaUri = s.trackUri,
+                                title = s.title.ifBlank { "Spotify" },
+                                subtitle = s.artist.ifBlank { s.album },
+                                artworkUri = s.artworkUrl,
+                                source = "SPOTIFY",
+                                mediaKindOrdinal = 0,
+                                lastPositionMs = s.positionMs.coerceAtLeast(0L),
+                                durationMs = s.durationMs.coerceAtLeast(0L),
+                                lastPlayedAt = System.currentTimeMillis()
+                            )
+                        )
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "Spotify mirror first-emit synthesised session uri=$trackUri title='${s.title}'"
+                        )
+                    }
+                }
         }
     }
 
