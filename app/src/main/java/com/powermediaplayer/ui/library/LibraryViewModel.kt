@@ -253,6 +253,13 @@ class LibraryViewModel @Inject constructor(
         _selectedUris.value = if (uri in cur) cur - uri else cur + uri
     }
 
+    /** §C26 — select-all from the current visible tab. */
+    fun selectAllVisible() {
+        val visible = if (_uiState.value.selectedTab == 0)
+            _uiState.value.audioFiles else _uiState.value.videoFiles
+        _selectedUris.value = visible.map { it.uri.toString() }.toSet()
+    }
+
     /** Bulk-favourite every currently-selected URI. Idempotent. */
     fun favouriteSelected() {
         val sel = _selectedUris.value

@@ -306,6 +306,10 @@ fun LibraryScreen(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f).padding(start = 8.dp)
                     )
+                    IconButton(onClick = { viewModel.selectAllVisible() }) {
+                        Icon(Icons.Filled.SelectAll, contentDescription = "Select all visible",
+                            tint = TealAccent)
+                    }
                     IconButton(
                         onClick = { viewModel.favouriteSelectedAndExit() },
                         enabled = selectedUris.isNotEmpty()
