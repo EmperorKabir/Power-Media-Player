@@ -58,7 +58,8 @@ data class SettingsUiState(
     val sleepTimerFadeOut: Boolean = false,
     val taskerIntentsEnabled: Boolean = false,
     val bookmarkReplayContextSec: Int = 10,
-    val stopOnTaskRemoved: Boolean = false
+    val stopOnTaskRemoved: Boolean = false,
+    val coldStartResumeBackoffSec: Int = 5
 )
 
 /**
@@ -126,7 +127,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.sleepTimerFadeOut,
             settingsDataStore.taskerIntentsEnabled,
             settingsDataStore.bookmarkReplayContextSec,
-            settingsDataStore.stopOnTaskRemoved
+            settingsDataStore.stopOnTaskRemoved,
+            settingsDataStore.coldStartResumeBackoffSec
         )
     ) { v ->
         SettingsUiState(
@@ -174,7 +176,8 @@ class SettingsViewModel @Inject constructor(
             sleepTimerFadeOut = v[41] as Boolean,
             taskerIntentsEnabled = v[42] as Boolean,
             bookmarkReplayContextSec = v[43] as Int,
-            stopOnTaskRemoved = v[44] as Boolean
+            stopOnTaskRemoved = v[44] as Boolean,
+            coldStartResumeBackoffSec = v[45] as Int
         )
     }.stateIn(
         scope = viewModelScope,
@@ -240,6 +243,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setStopOnTaskRemoved(v: Boolean) =
         viewModelScope.launch { settingsDataStore.setStopOnTaskRemoved(v) }.let { }
+
+    fun setColdStartResumeBackoffSec(v: Int) =
+        viewModelScope.launch { settingsDataStore.setColdStartResumeBackoffSec(v) }.let { }
 
     fun setSubtitleFormat(format: String) {
         viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }

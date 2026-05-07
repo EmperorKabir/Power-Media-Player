@@ -355,12 +355,18 @@ class PlayerViewModel @Inject constructor(
                             )
                             .build()
                         playbackConnection.setMediaItems(listOf(item), 0)
-                        playbackConnection.seekTo(recent.lastPositionMs)
+                        // Apply user-configured backoff so the user lands
+                        // a bit BEFORE the saved position for context.
+                        val backoffSec = runCatching {
+                            settingsDataStore.coldStartResumeBackoffSec.first()
+                        }.getOrNull() ?: 5
+                        val target = (recent.lastPositionMs - backoffSec * 1000L).coerceAtLeast(0L)
+                        playbackConnection.seekTo(target)
                         player.playWhenReady = false
                         lastPlayedRepo.adoptSession(recent.id)
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
-                            "Cold-start restored '${recent.title}' @ ${recent.lastPositionMs}ms (session ${recent.id})"
+                            "Cold-start restored '${recent.title}' @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id})"
                         )
                     }
                 }

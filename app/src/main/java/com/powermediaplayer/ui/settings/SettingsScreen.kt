@@ -133,6 +133,22 @@ fun SettingsScreen(
             uiState.bookmarkReplayContextSec.toFloat(),
             0f..30f
         ) { viewModel.setBookmarkReplayContextSec(it.toInt()) }
+
+        // Cold-start resume backoff — same idea but applied when
+        // re-launching the app: rewind the saved position by N s so
+        // listeners get a small lead-in.
+        SliderRow(
+            "Cold-start resume backoff",
+            "${uiState.coldStartResumeBackoffSec} s",
+            uiState.coldStartResumeBackoffSec.toFloat(),
+            0f..30f
+        ) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
+        Text(
+            text = "When re-opening the app after a force-stop, rewind by this many seconds before resuming. Helpful for re-finding context in podcasts and audiobooks.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
         Text(
             text = "Tap a bookmark and the seek lands a few seconds before the saved moment for context. 0 = exact.",
             style = MaterialTheme.typography.bodySmall,

@@ -149,6 +149,12 @@ class SettingsDataStore @Inject constructor(
         // Some users prefer the swipe-to-stop semantic.
         val STOP_ON_TASK_REMOVED = booleanPreferencesKey("stop_on_task_removed")
 
+        // Cold-start resume backoff — seek to (lastPositionMs - X*1000)
+        // when restoring on cold launch. Default 5 s; podcast / audiobook
+        // listeners benefit from a small lead-in to re-anchor where they
+        // were. Range 0..30 s.
+        val COLD_START_RESUME_BACKOFF_SEC = intPreferencesKey("cold_start_resume_backoff_sec")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -437,6 +443,13 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setStopOnTaskRemoved(v: Boolean) {
         context.dataStore.edit { it[Keys.STOP_ON_TASK_REMOVED] = v }
+    }
+
+    val coldStartResumeBackoffSec: Flow<Int> = context.dataStore.data.map {
+        it[Keys.COLD_START_RESUME_BACKOFF_SEC] ?: 5
+    }
+    suspend fun setColdStartResumeBackoffSec(sec: Int) {
+        context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
