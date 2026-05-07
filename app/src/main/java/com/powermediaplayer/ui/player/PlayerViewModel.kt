@@ -130,10 +130,19 @@ class PlayerViewModel @Inject constructor(
      * the user's remote device, not the silent local ExoPlayer.
      */
     fun seekToBookmark(b: com.powermediaplayer.data.db.entity.BookmarkEntity) {
-        if (isSpotifyActive) {
-            viewModelScope.launch { spotifyProvider.seekTo(b.positionMs) }
-        } else {
-            playbackConnection.seekTo(b.positionMs)
+        // Apply user-configured replay-context offset so the seek
+        // lands a few seconds BEFORE the saved moment — gives
+        // podcast / audiobook listeners context for the bookmark.
+        viewModelScope.launch {
+            val offsetSec = runCatching {
+                settingsDataStore.bookmarkReplayContextSec.first()
+            }.getOrNull() ?: 10
+            val target = (b.positionMs - offsetSec * 1000L).coerceAtLeast(0L)
+            if (isSpotifyActive) {
+                spotifyProvider.seekTo(target)
+            } else {
+                playbackConnection.seekTo(target)
+            }
         }
     }
     fun deleteBookmark(b: com.powermediaplayer.data.db.entity.BookmarkEntity) {

@@ -136,6 +136,13 @@ class SettingsDataStore @Inject constructor(
         // audiobook learners can repeat a section across opens.
         val AB_LOOP_OVERRIDES = stringSetPreferencesKey("ab_loop_overrides")
 
+        // Bookmark replay context — when tapping a bookmark chip, seek
+        // to (bookmark.positionMs - X*1000) so the user lands a bit
+        // BEFORE the saved moment for context. Default 10 s. Range 0
+        // (exact) to 30 s. Useful for podcast / audiobook listeners
+        // marking "huh, what did they say?" moments.
+        val BOOKMARK_REPLAY_CONTEXT_SEC = intPreferencesKey("bookmark_replay_context_sec")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -409,6 +416,14 @@ class SettingsDataStore @Inject constructor(
             val current = prefs[Keys.AB_LOOP_OVERRIDES] ?: emptySet()
             prefs[Keys.AB_LOOP_OVERRIDES] = current.filterNot { it.startsWith("$uri|") }.toSet()
         }
+    }
+
+    /** Bookmark replay-context offset in seconds. 0 = exact seek. */
+    val bookmarkReplayContextSec: Flow<Int> = context.dataStore.data.map {
+        it[Keys.BOOKMARK_REPLAY_CONTEXT_SEC] ?: 10
+    }
+    suspend fun setBookmarkReplayContextSec(sec: Int) {
+        context.dataStore.edit { it[Keys.BOOKMARK_REPLAY_CONTEXT_SEC] = sec.coerceIn(0, 30) }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────

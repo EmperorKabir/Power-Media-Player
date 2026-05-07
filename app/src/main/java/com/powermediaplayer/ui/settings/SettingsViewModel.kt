@@ -56,7 +56,8 @@ data class SettingsUiState(
     val crossfadeFadeInOnResume: Boolean = false,
     val headphonePlugAutoplay: Boolean = false,
     val sleepTimerFadeOut: Boolean = false,
-    val taskerIntentsEnabled: Boolean = false
+    val taskerIntentsEnabled: Boolean = false,
+    val bookmarkReplayContextSec: Int = 10
 )
 
 /**
@@ -122,7 +123,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.crossfadeFadeInOnResume,
             settingsDataStore.headphonePlugAutoplay,
             settingsDataStore.sleepTimerFadeOut,
-            settingsDataStore.taskerIntentsEnabled
+            settingsDataStore.taskerIntentsEnabled,
+            settingsDataStore.bookmarkReplayContextSec
         )
     ) { v ->
         SettingsUiState(
@@ -168,7 +170,8 @@ class SettingsViewModel @Inject constructor(
             crossfadeFadeInOnResume = v[39] as Boolean,
             headphonePlugAutoplay = v[40] as Boolean,
             sleepTimerFadeOut = v[41] as Boolean,
-            taskerIntentsEnabled = v[42] as Boolean
+            taskerIntentsEnabled = v[42] as Boolean,
+            bookmarkReplayContextSec = v[43] as Int
         )
     }.stateIn(
         scope = viewModelScope,
@@ -228,6 +231,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setTaskerIntentsEnabled(v: Boolean) =
         viewModelScope.launch { settingsDataStore.setTaskerIntentsEnabled(v) }.let { }
+
+    fun setBookmarkReplayContextSec(v: Int) =
+        viewModelScope.launch { settingsDataStore.setBookmarkReplayContextSec(v) }.let { }
 
     fun setSubtitleFormat(format: String) {
         viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }

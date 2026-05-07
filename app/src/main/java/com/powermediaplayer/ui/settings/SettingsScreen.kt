@@ -124,6 +124,22 @@ fun SettingsScreen(
             onCheckedChange = { viewModel.setHeadphonePlugAutoplay(it) }
         )
 
+        // Bookmark replay-context — when tapping a bookmark chip,
+        // seek a few seconds BEFORE the saved moment so the user
+        // gets context. 0 = exact seek; up to 30 s.
+        SliderRow(
+            "Bookmark replay context",
+            "${uiState.bookmarkReplayContextSec} s",
+            uiState.bookmarkReplayContextSec.toFloat(),
+            0f..30f
+        ) { viewModel.setBookmarkReplayContextSec(it.toInt()) }
+        Text(
+            text = "Tap a bookmark and the seek lands a few seconds before the saved moment for context. 0 = exact.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
+
         // §C3 — external automation control. Default OFF for security
         // (no random app on your phone can drive playback unless you
         // opt in). Documented intent actions:
