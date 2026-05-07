@@ -43,7 +43,8 @@ import com.powermediaplayer.ui.theme.TextTertiary
 fun CrossfadeButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    settingsVm: SettingsViewModel = hiltViewModel()
+    settingsVm: SettingsViewModel = hiltViewModel(),
+    onFadeNow: () -> Unit = {}
 ) {
     val s by settingsVm.uiState.collectAsStateWithLifecycle()
     var showSheet by remember { mutableStateOf(false) }
@@ -146,11 +147,21 @@ fun CrossfadeButton(
 
                 ToggleRow(
                     label = "Manual fade-now",
-                    description = "Fast-skip with a fade rather than a hard cut. Useful when you're done with the current track.",
+                    description = "Enables a 'Fade now' button below — fast-skip with a 1.5 s fade rather than a hard cut.",
                     checked = s.crossfadeManualFadeNowEnabled,
                     onChange = { settingsVm.setCrossfadeManualFadeNowEnabled(it); touch() },
                     enabled = s.crossfadeEnabled
                 )
+                if (s.crossfadeManualFadeNowEnabled && s.crossfadeEnabled) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = { onFadeNow(); touch() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Text("Fade now", color = TealAccent)
+                    }
+                }
 
                 ToggleRow(
                     label = "Fade-out on pause",

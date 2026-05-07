@@ -603,6 +603,37 @@ class PlayerViewModel @Inject constructor(
     }
 
     /**
+     * §B2 Manual fade-now: ramps crossfadeFactor 1.0 → 0.0 over 1.5 s
+     * then advances to the next track and resets the factor. If there
+     * is no next track, falls back to a fade-to-pause. Triggered by
+     * the "Fade now" button inside the Crossfade panel (visible only
+     * when crossfadeManualFadeNowEnabled is ON in DataStore).
+     */
+    fun fadeNow() {
+        viewModelScope.launch(Dispatchers.Main) {
+            val rampMs = 1_500L
+            val steps = 30
+            val stepMs = rampMs / steps
+            for (i in 0 until steps) {
+                val factor = 1.0f - (i + 1) / steps.toFloat()
+                com.powermediaplayer.service.PlaybackService
+                    .setCrossfadeFactor(factor.coerceIn(0.0f, 1.0f))
+                kotlinx.coroutines.delay(stepMs)
+            }
+            val player = playbackConnection.getPlayer()
+            if (player?.hasNextMediaItem() == true) {
+                player.seekToNextMediaItem()
+            } else {
+                playbackConnection.pause()
+            }
+            // Restore full volume so the next track resumes at audible
+            // level (or, if pause path, the next manual play does).
+            com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "fadeNow advanced to next track / paused")
+        }
+    }
+
+    /**
      * Sleep timer that pauses at the end of the CURRENT chapter (or
      * track if the file has no chapters). Power-user feature: lets the
      * listener fall asleep without losing their place mid-chapter.

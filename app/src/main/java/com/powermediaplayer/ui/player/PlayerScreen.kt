@@ -572,7 +572,8 @@ private fun OverlayContent(
             CrossfadeButton(
                 enabled = !uiState.isVideoContent &&
                     !uiState.isCasting &&
-                    !uiState.isSpotifyActive
+                    !uiState.isSpotifyActive,
+                onFadeNow = { viewModel.fadeNow() }
             )
             BluetoothButton(modifier = Modifier.size(48.dp))
             // Cast button — to the right of Bluetooth so the
@@ -774,7 +775,8 @@ private fun PlayerScreenExpanded(
                 CrossfadeButton(
                     enabled = !uiState.isVideoContent &&
                         !uiState.isCasting &&
-                        !uiState.isSpotifyActive
+                        !uiState.isSpotifyActive,
+                    onFadeNow = { viewModel.fadeNow() }
                 )
                 BluetoothButton(modifier = Modifier.size(48.dp))
                 if (!uiState.isSpotifyActive) {
