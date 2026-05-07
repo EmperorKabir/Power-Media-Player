@@ -17,4 +17,8 @@ interface BookmarkDao {
 
     @Query("DELETE FROM bookmarks WHERE id = :id")
     suspend fun delete(id: Long)
+
+    /** Rename a bookmark's label without touching position/timestamp. */
+    @Query("UPDATE bookmarks SET label = :label WHERE id = :id")
+    suspend fun updateLabel(id: Long, label: String)
 }

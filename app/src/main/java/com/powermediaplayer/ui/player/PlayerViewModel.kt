@@ -149,6 +149,14 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) { bookmarkDao.delete(b.id) }
     }
 
+    /** Rename a bookmark's label. Used by the chip long-press dialog. */
+    fun renameBookmark(b: com.powermediaplayer.data.db.entity.BookmarkEntity, label: String) {
+        val safe = label.trim().take(80).ifBlank { return }
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { bookmarkDao.updateLabel(b.id, safe) }
+        }
+    }
+
     // ── Auto-hide timers (Phase 2) — exposed for PlayerScreen ─────
     // Seconds. 0 = Never. Read by the controls auto-hide LaunchedEffect
     // and by the audio/video effects sub-popups.
