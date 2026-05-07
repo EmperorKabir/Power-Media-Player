@@ -477,8 +477,51 @@ class PlayerViewModel @Inject constructor(
     fun playPause() {
         if (isSpotifyActive) {
             viewModelScope.launch { spotifyProvider.togglePlayPause() }
-        } else {
-            playbackConnection.playPause()
+            return
+        }
+        val player = playbackConnection.getPlayer()
+        val isPlayingNow = player?.isPlaying == true
+        viewModelScope.launch(Dispatchers.Main) {
+            if (isPlayingNow) {
+                // Fade-out on pause (§B2): ramp crossfadeFactor 1→0
+                // over 400 ms before issuing pause, when the toggle is
+                // ON. ReplayGain attenuator stays composable.
+                val fadeOnPause = runCatching {
+                    settingsDataStore.crossfadeFadeOutOnPause.first()
+                }.getOrNull() == true
+                if (fadeOnPause) {
+                    rampCrossfadeFactor(from = 1.0f, to = 0.0f, durMs = 400L)
+                }
+                playbackConnection.pause()
+                // Reset for the next play so we don't start silent.
+                com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
+            } else {
+                // Fade-in on resume (§B2): set factor to 0, play, then
+                // ramp 0→1 over 400 ms. Background music users get a
+                // gentle re-entry instead of instant full volume.
+                val fadeOnResume = runCatching {
+                    settingsDataStore.crossfadeFadeInOnResume.first()
+                }.getOrNull() == true
+                if (fadeOnResume) {
+                    com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(0.0f)
+                    playbackConnection.play()
+                    rampCrossfadeFactor(from = 0.0f, to = 1.0f, durMs = 400L)
+                } else {
+                    playbackConnection.play()
+                }
+            }
+        }
+    }
+
+    /** Linear volume-factor ramp over [durMs] in ~30 steps. */
+    private suspend fun rampCrossfadeFactor(from: Float, to: Float, durMs: Long) {
+        val steps = 30
+        val stepMs = durMs / steps
+        val delta = to - from
+        for (i in 1..steps) {
+            val factor = (from + delta * (i.toFloat() / steps)).coerceIn(0.0f, 1.0f)
+            com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+            kotlinx.coroutines.delay(stepMs)
         }
     }
     fun seekTo(positionMs: Long) {
