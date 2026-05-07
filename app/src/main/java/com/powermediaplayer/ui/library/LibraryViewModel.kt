@@ -159,7 +159,25 @@ class LibraryViewModel @Inject constructor(
 
     fun refreshMedia() {
         scanMedia()
+        lastRefreshMs = System.currentTimeMillis()
     }
+
+    /**
+     * Phase 3 / §C16: stale-aware refresh used by `LibraryScreen`'s
+     * `LaunchedEffect(Unit)`. Re-scans MediaStore only if the last
+     * refresh was more than 30 s ago — so tab-switch + immediate
+     * return doesn't double-scan. New files added on the device are
+     * picked up within one tab-switch with no battery cost (no
+     * continuous FileObserver).
+     */
+    fun refreshIfStale(thresholdMs: Long = 30_000L) {
+        val now = System.currentTimeMillis()
+        if (now - lastRefreshMs < thresholdMs) return
+        scanMedia()
+        lastRefreshMs = now
+    }
+
+    @Volatile private var lastRefreshMs: Long = 0L
 
     private fun observeFavorites() {
         viewModelScope.launch {

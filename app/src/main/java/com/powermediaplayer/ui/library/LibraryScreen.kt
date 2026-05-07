@@ -100,6 +100,13 @@ fun LibraryScreen(
         }
     }
 
+    // §C16: refresh on tab-open if stale (>30 s since last scan).
+    // Cost is one MediaStore round-trip; previous list stays visible
+    // while the new one loads in. Zero battery vs continuous watcher.
+    LaunchedEffect(Unit) {
+        viewModel.refreshIfStale()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
