@@ -18,6 +18,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.ui.res.painterResource
 import com.powermediaplayer.R
+import com.powermediaplayer.ui.info.InfoIcon
+import com.powermediaplayer.ui.info.InfoSheet
+import com.powermediaplayer.ui.info.playerInfo
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -65,6 +68,7 @@ fun PlayerScreen(
     var coverColors by remember { mutableStateOf<CoverArtColors?>(null) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showChapterPicker by remember { mutableStateOf(false) }
+    var showInfoSheet by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Video ALWAYS uses the Compact layout regardless of screen size,
@@ -80,6 +84,7 @@ fun PlayerScreen(
                 onColorsExtracted = { coverColors = it },
                 onShowSleepTimer = { showSleepTimerDialog = true },
                 onShowChapterPicker = { showChapterPicker = true },
+                onShowInfo = { showInfoSheet = true },
                 horizontalPadding = 0
             )
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded -> PlayerScreenExpanded(
@@ -90,7 +95,8 @@ fun PlayerScreen(
                 coverColors = coverColors,
                 onColorsExtracted = { coverColors = it },
                 onShowSleepTimer = { showSleepTimerDialog = true },
-                onShowChapterPicker = { showChapterPicker = true }
+                onShowChapterPicker = { showChapterPicker = true },
+                onShowInfo = { showInfoSheet = true }
             )
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium -> PlayerScreenCompact(
                 uiState = uiState,
@@ -101,6 +107,7 @@ fun PlayerScreen(
                 onColorsExtracted = { coverColors = it },
                 onShowSleepTimer = { showSleepTimerDialog = true },
                 onShowChapterPicker = { showChapterPicker = true },
+                onShowInfo = { showInfoSheet = true },
                 horizontalPadding = 32
             )
             else -> PlayerScreenCompact(
@@ -112,6 +119,7 @@ fun PlayerScreen(
                 onColorsExtracted = { coverColors = it },
                 onShowSleepTimer = { showSleepTimerDialog = true },
                 onShowChapterPicker = { showChapterPicker = true },
+                onShowInfo = { showInfoSheet = true },
                 horizontalPadding = 0
             )
         }
@@ -238,6 +246,14 @@ fun PlayerScreen(
             onDismiss = { showChapterPicker = false }
         )
     }
+
+    // ── Info sheet ────────────────────────────────────────────────
+    if (showInfoSheet) {
+        InfoSheet(
+            data = playerInfo,
+            onDismiss = { showInfoSheet = false }
+        )
+    }
 }
 
 // ── Compact Layout (Phone / Small Tablet) ─────────────────────────
@@ -252,6 +268,7 @@ private fun PlayerScreenCompact(
     onColorsExtracted: (CoverArtColors?) -> Unit,
     onShowSleepTimer: () -> Unit,
     onShowChapterPicker: () -> Unit,
+    onShowInfo: () -> Unit,
     horizontalPadding: Int = 0
 ) {
     // Video mode: tap to toggle controls; auto-hide after 32 s.
@@ -356,7 +373,8 @@ private fun PlayerScreenCompact(
                     horizontalPadding = horizontalPadding,
                     viewModel = viewModel,
                     onShowSleepTimer = onShowSleepTimer,
-                    onShowChapterPicker = onShowChapterPicker
+                    onShowChapterPicker = onShowChapterPicker,
+                    onShowInfo = onShowInfo
                 )
             }
             // CastButton previously lived top-right of the video frame and
@@ -373,7 +391,8 @@ private fun PlayerScreenCompact(
                 horizontalPadding = horizontalPadding,
                 viewModel = viewModel,
                 onShowSleepTimer = onShowSleepTimer,
-                onShowChapterPicker = onShowChapterPicker
+                onShowChapterPicker = onShowChapterPicker,
+                onShowInfo = onShowInfo
             )
         }
     }
@@ -394,13 +413,27 @@ private fun OverlayContent(
     horizontalPadding: Int,
     viewModel: PlayerViewModel,
     onShowSleepTimer: () -> Unit,
-    onShowChapterPicker: () -> Unit
+    onShowChapterPicker: () -> Unit,
+    onShowInfo: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(scrim)
     )
+    // Info icon top-right. Inside this OverlayContent (which is wrapped
+    // in AnimatedVisibility for video) the icon hides with controls per
+    // Q1 LOCKED. For audio mode (no AnimatedVisibility wrapper) the
+    // icon stays visible. Q2 LOCKED Option A: scrim hides with controls,
+    // independent layer not required — current arch already correct.
+    Box(modifier = Modifier.fillMaxSize()) {
+        InfoIcon(
+            onClick = onShowInfo,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 8.dp, end = 8.dp)
+        )
+    }
     val scrollMod = if (uiState.isVideoContent) {
         Modifier
     } else {
@@ -589,7 +622,8 @@ private fun PlayerScreenExpanded(
     coverColors: CoverArtColors?,
     onColorsExtracted: (CoverArtColors?) -> Unit,
     onShowSleepTimer: () -> Unit,
-    onShowChapterPicker: () -> Unit
+    onShowChapterPicker: () -> Unit,
+    onShowInfo: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -612,10 +646,16 @@ private fun PlayerScreenExpanded(
             )
         }
 
-        // Right panel: all controls
-        Column(
+        // Right panel: all controls. Wrapped in Box so the InfoIcon
+        // can anchor top-right of the panel without disturbing the
+        // centred control column.
+        Box(
             modifier = Modifier
                 .weight(1f)
+                .fillMaxHeight()
+        ) {
+        Column(
+            modifier = Modifier
                 .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp, vertical = 32.dp),
@@ -752,6 +792,16 @@ private fun PlayerScreenExpanded(
                     }
                 }
             }
+        }
+            // Info icon — top-right of the right control panel
+            // (anchored on the wrapping Box). Always visible in
+            // Expanded mode (audio-only layout, no controls hide).
+            InfoIcon(
+                onClick = onShowInfo,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 8.dp, end = 8.dp)
+            )
         }
     }
 }
