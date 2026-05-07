@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
@@ -58,6 +59,7 @@ data class TrackContextActions(
     val onOverrideAudio: (() -> Unit)? = null,
     val onOverrideVideo: (() -> Unit)? = null,
     val onShare: (() -> Unit)? = null,
+    val onOpenInOtherApp: (() -> Unit)? = null,
     val onDelete: (() -> Unit)? = null,
 )
 
@@ -140,6 +142,9 @@ fun TrackContextSheet(
             }
             actions.onShare?.let {
                 Item(Icons.Filled.Share, "Share", onClick = it)
+            }
+            actions.onOpenInOtherApp?.let {
+                Item(Icons.Filled.OpenInNew, "Open in other app", onClick = it)
             }
             actions.onDelete?.let {
                 Item(Icons.Filled.Delete, "Delete", onClick = it, tint = ErrorRed)

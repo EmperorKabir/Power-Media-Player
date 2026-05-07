@@ -87,6 +87,16 @@ fun LibraryScreen(
                     context.startActivity(android.content.Intent.createChooser(send, "Share"))
                     contextItem = null
                 },
+                onOpenInOtherApp = {
+                    val view = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                        setDataAndType(item.uri, if (item.isVideo) "video/*" else "audio/*")
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    runCatching {
+                        context.startActivity(android.content.Intent.createChooser(view, "Open with"))
+                    }
+                    contextItem = null
+                },
                 onDelete = {
                     // Defer to a confirmation dialog — irreversible.
                     pendingDelete = item
