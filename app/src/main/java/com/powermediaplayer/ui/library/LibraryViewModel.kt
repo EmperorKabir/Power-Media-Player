@@ -229,14 +229,26 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    /** Bulk-hide every currently-selected URI. */
+    /** Bulk-hide every currently-selected URI. Also exits multi-select. */
     fun hideSelected() {
         val sel = _selectedUris.value
         viewModelScope.launch {
             sel.forEach { uri -> settingsDataStore.hideUri(uri) }
-            // Stay in multi-select mode but clear ticks so the list
-            // refresh removes the now-hidden items cleanly.
+            // Hidden rows vanish from the visible list via
+            // recomputeDisplayed; exit multi-select since the user is
+            // visibly done with this batch.
             _selectedUris.value = emptySet()
+            _multiSelectMode.value = false
+        }
+    }
+
+    /** Exit multi-select mode after a successful bulk operation. */
+    fun favouriteSelectedAndExit() {
+        favouriteSelected()
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(120) // let the IO writes settle
+            _selectedUris.value = emptySet()
+            _multiSelectMode.value = false
         }
     }
 

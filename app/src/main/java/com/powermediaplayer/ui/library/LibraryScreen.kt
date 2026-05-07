@@ -262,7 +262,7 @@ fun LibraryScreen(
                         modifier = Modifier.weight(1f).padding(start = 8.dp)
                     )
                     IconButton(
-                        onClick = { viewModel.favouriteSelected() },
+                        onClick = { viewModel.favouriteSelectedAndExit() },
                         enabled = selectedUris.isNotEmpty()
                     ) {
                         Icon(Icons.Filled.Star, contentDescription = "Favourite all selected",
