@@ -146,6 +146,21 @@ class LibraryViewModel @Inject constructor(
     fun hideUri(uri: String) {
         viewModelScope.launch { settingsDataStore.hideUri(uri) }
     }
+
+    /** Long-press 'Add to queue next' — insert as next track. */
+    fun addToQueueNext(file: MediaFileInfo) {
+        val item = androidx.media3.common.MediaItem.Builder()
+            .setMediaId(file.uri.toString())
+            .setUri(file.uri)
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(file.title)
+                    .setArtist(file.artist)
+                    .build()
+            )
+            .build()
+        playbackConnection.addNext(item)
+    }
     /** §C27: undo a hide. */
     fun unhideUri(uri: String) {
         viewModelScope.launch { settingsDataStore.unhideUri(uri) }

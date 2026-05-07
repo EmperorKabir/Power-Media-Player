@@ -74,6 +74,10 @@ fun LibraryScreen(
                     viewModel.hideUri(item.uri.toString())
                     contextItem = null
                 },
+                onAddToQueueNext = {
+                    viewModel.addToQueueNext(item)
+                    contextItem = null
+                },
                 onShare = {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                         type = if (item.isVideo) "video/*" else "audio/*"

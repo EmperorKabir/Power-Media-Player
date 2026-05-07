@@ -336,6 +336,21 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
+     * Insert a single MediaItem immediately AFTER the currently
+     * playing one, so it plays as the very next track. Used by the
+     * library long-press 'Add to queue next' action — quick
+     * one-tap queue manipulation without disturbing the rest of
+     * the user's queued items.
+     */
+    fun addNext(item: MediaItem) {
+        controller?.let { c ->
+            val cur = c.currentMediaItemIndex
+            val target = (cur + 1).coerceAtLeast(0)
+            c.addMediaItem(target, item)
+        }
+    }
+
+    /**
      * Caller-supplied authoritative video flag. Call BEFORE [setMediaItems]
      * to keep the flag through the queue swap, or AFTER to flip an in-flight
      * track's layout. Either way it persists until the next [setMediaItems].
