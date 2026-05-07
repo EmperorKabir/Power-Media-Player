@@ -679,8 +679,18 @@ class PlayerViewModel @Inject constructor(
         val clamped = value.coerceIn(0.5f, 2.0f)
         _pitch.value = clamped
         // Re-apply current speed with new pitch (Media3 takes both in
-        // PlaybackParameters).
-        val speed = uiState.value.playbackSpeed
+        // PlaybackParameters). Read speed directly from the Player —
+        // NOT from `uiState.value.playbackSpeed`. uiState is declared
+        // AFTER the init block that launches the pitchIndependent
+        // collector, and that collector's first emit can fire
+        // synchronously on Dispatchers.Main.immediate before the
+        // uiState property initialiser runs. Touching uiState there
+        // NPEs on a fresh launch (same field-init-order race class
+        // that previously hit _pitch / _volumeBoostMb).
+        // See docs/superpowers/plans/2026-05-07-info-icons-...md §A3.
+        val speed = runCatching {
+            playbackConnection.getPlayer()?.playbackParameters?.speed
+        }.getOrNull() ?: 1.0f
         playbackConnection.setPlaybackParametersWithPitch(speed, clamped)
     }
 
