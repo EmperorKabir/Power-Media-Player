@@ -54,7 +54,8 @@ data class SettingsUiState(
     val crossfadeManualFadeNowEnabled: Boolean = false,
     val crossfadeFadeOutOnPause: Boolean = false,
     val crossfadeFadeInOnResume: Boolean = false,
-    val headphonePlugAutoplay: Boolean = false
+    val headphonePlugAutoplay: Boolean = false,
+    val sleepTimerFadeOut: Boolean = false
 )
 
 /**
@@ -117,7 +118,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.crossfadeManualFadeNowEnabled,
             settingsDataStore.crossfadeFadeOutOnPause,
             settingsDataStore.crossfadeFadeInOnResume,
-            settingsDataStore.headphonePlugAutoplay
+            settingsDataStore.headphonePlugAutoplay,
+            settingsDataStore.sleepTimerFadeOut
         )
     ) { v ->
         SettingsUiState(
@@ -161,7 +163,8 @@ class SettingsViewModel @Inject constructor(
             crossfadeManualFadeNowEnabled = v[37] as Boolean,
             crossfadeFadeOutOnPause = v[38] as Boolean,
             crossfadeFadeInOnResume = v[39] as Boolean,
-            headphonePlugAutoplay = v[40] as Boolean
+            headphonePlugAutoplay = v[40] as Boolean,
+            sleepTimerFadeOut = v[41] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -215,6 +218,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setHeadphonePlugAutoplay(v: Boolean) =
         viewModelScope.launch { settingsDataStore.setHeadphonePlugAutoplay(v) }.let { }
+
+    fun setSleepTimerFadeOut(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setSleepTimerFadeOut(v) }.let { }
 
     fun setSubtitleFormat(format: String) {
         viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }

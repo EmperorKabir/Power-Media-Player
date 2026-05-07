@@ -112,6 +112,11 @@ class SettingsDataStore @Inject constructor(
         // because surprise audio is annoying.
         val HEADPHONE_PLUG_AUTOPLAY = booleanPreferencesKey("headphone_plug_autoplay")
 
+        // §C11 — fade volume over the last 30 s of a sleep timer instead
+        // of an abrupt pause. Off by default so existing behaviour is
+        // unchanged for users who haven't opted in.
+        val SLEEP_TIMER_FADE_OUT = booleanPreferencesKey("sleep_timer_fade_out")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -318,6 +323,14 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setHeadphonePlugAutoplay(v: Boolean) {
         context.dataStore.edit { it[Keys.HEADPHONE_PLUG_AUTOPLAY] = v }
+    }
+
+    // ── §C11 Sleep timer fade-out ─────────────────────────────────────
+    val sleepTimerFadeOut: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.SLEEP_TIMER_FADE_OUT] ?: false
+    }
+    suspend fun setSleepTimerFadeOut(v: Boolean) {
+        context.dataStore.edit { it[Keys.SLEEP_TIMER_FADE_OUT] = v }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────

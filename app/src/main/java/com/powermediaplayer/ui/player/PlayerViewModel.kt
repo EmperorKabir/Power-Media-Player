@@ -558,18 +558,42 @@ class PlayerViewModel @Inject constructor(
         _sleepTimerRemainingMs.value = totalMs
 
         sleepTimerJob = viewModelScope.launch {
+            // §C11: optional fade-out over the last 30 s. Read setting
+            // once at start; toggling mid-timer doesn't retroactively
+            // re-apply (would require re-pumping volume).
+            val fadeOutEnabled = runCatching {
+                settingsDataStore.sleepTimerFadeOut.first()
+            }.getOrNull() == true
+            val fadeWindowMs = 30_000L
             var remaining = totalMs
             while (remaining > 0) {
                 delay(1000)
                 remaining -= 1000
                 _sleepTimerRemainingMs.value = remaining.coerceAtLeast(0)
+                if (fadeOutEnabled && remaining in 1..fadeWindowMs) {
+                    // Linear ramp from 1.0 at remaining=fadeWindowMs to
+                    // 0.0 at remaining=0. Routed through the same
+                    // crossfade-factor channel so it composes with the
+                    // existing ReplayGain attenuator without fighting
+                    // for volume control.
+                    val factor = (remaining.toFloat() / fadeWindowMs)
+                        .coerceIn(0.0f, 1.0f)
+                    com.powermediaplayer.service.PlaybackService
+                        .setCrossfadeFactor(factor)
+                }
             }
             // Timer expired — pause playback (no alarm sound) and raise
             // a dismissible "Sleep timer finished" flag the UI shows.
             playbackConnection.pause()
+            // Reset the crossfade factor so the next play resumes at
+            // full volume. ReplayGain attenuator stays as-is.
+            com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
             _sleepTimerRemainingMs.value = 0
             _sleepTimerExpired.value = true
-            com.powermediaplayer.util.Diag.i("PMP_DIAG", "SleepTimer expired — paused playback")
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "SleepTimer expired — paused playback (fadeOut=$fadeOutEnabled)"
+            )
         }
     }
 

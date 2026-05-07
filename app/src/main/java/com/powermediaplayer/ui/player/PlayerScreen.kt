@@ -1057,8 +1057,10 @@ private fun SleepTimerDialog(
     onDismiss: () -> Unit,
     onSetTimer: (Int) -> Unit,
     onCancel: () -> Unit,
-    onSleepAtEndOfChapter: () -> Unit = {}
+    onSleepAtEndOfChapter: () -> Unit = {},
+    settingsVm: com.powermediaplayer.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
+    val sState by settingsVm.uiState.collectAsStateWithLifecycle()
     val presets = listOf(
         15 to "15 minutes",
         30 to "30 minutes",
@@ -1135,6 +1137,34 @@ private fun SleepTimerDialog(
                         style = MaterialTheme.typography.bodyLarge,
                         color = TealAccent,
                         modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // §C11 fade-out toggle. Volume ramps over the last 30 s
+                // before the timer pauses, so users wake up to silence
+                // instead of an abrupt cut. Persisted across sessions.
+                HorizontalDivider(color = DisabledContent, modifier = Modifier.padding(vertical = 4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Linear fade-out",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextPrimary
+                        )
+                        Text(
+                            "Ramp volume to silence over the last 30 seconds.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary
+                        )
+                    }
+                    Switch(
+                        checked = sState.sleepTimerFadeOut,
+                        onCheckedChange = { settingsVm.setSleepTimerFadeOut(it) }
                     )
                 }
 
