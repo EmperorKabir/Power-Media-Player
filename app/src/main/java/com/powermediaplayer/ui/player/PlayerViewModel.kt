@@ -226,6 +226,31 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         }
+        // §C7 slim — apply saved per-file speed override on track-load.
+        // Listens for currentMediaItem.mediaId changes and, if the
+        // saved overrides Map contains this uri, calls setPlaybackSpeed
+        // (without re-saving the same value via setPlaybackSpeed loop).
+        viewModelScope.launch(Dispatchers.Main) {
+            playbackConnection.playerState
+                .map { it.title to (playbackConnection.getPlayer()?.currentMediaItem?.mediaId ?: "") }
+                .distinctUntilChanged()
+                .collect { (_, uri) ->
+                    if (uri.isBlank()) return@collect
+                    val overrides = runCatching {
+                        settingsDataStore.speedOverrides.first()
+                    }.getOrNull() ?: return@collect
+                    val saved = overrides[uri] ?: return@collect
+                    val current = playbackConnection.getPlayer()?.playbackParameters?.speed ?: 1.0f
+                    if (kotlin.math.abs(saved - current) > 0.01f) {
+                        playbackConnection.setPlaybackSpeed(saved)
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "Applied saved speed override $saved× for uri=$uri"
+                        )
+                    }
+                }
+        }
+
         // Cold-start resume + notification-tap session adoption.
         //
         // Two distinct entry points share this block:
@@ -578,7 +603,22 @@ class PlayerViewModel @Inject constructor(
     }
     fun seekToChapter(index: Int) = playbackConnection.seekToChapterIndex(index)
 
-    fun setPlaybackSpeed(speed: Float) = playbackConnection.setPlaybackSpeed(speed)
+    fun setPlaybackSpeed(speed: Float) {
+        playbackConnection.setPlaybackSpeed(speed)
+        // §C7 slim — persist per-file speed override so the next time
+        // the user opens this track it resumes at the chosen speed.
+        // Speed 1.0 (default) clears any existing override.
+        val uri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
+        if (!uri.isNullOrBlank()) {
+            viewModelScope.launch {
+                if (kotlin.math.abs(speed - 1.0f) < 0.01f) {
+                    settingsDataStore.clearSpeedOverride(uri)
+                } else {
+                    settingsDataStore.setSpeedOverride(uri, speed)
+                }
+            }
+        }
+    }
 
     // ── Volume (mapped to AudioManager system volume) ────────────
 

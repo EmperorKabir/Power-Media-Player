@@ -123,6 +123,14 @@ class SettingsDataStore @Inject constructor(
         // Default OFF; user must explicitly opt in.
         val TASKER_INTENTS_ENABLED = booleanPreferencesKey("tasker_intents_enabled")
 
+        // §C7 (slim) — per-file playback speed overrides. Each entry
+        // is "mediaUri|speedFloat" e.g. "file:///foo.mp3|1.50". Auto
+        // applied on track load; updated whenever the user adjusts
+        // speed on a track. Persists across sessions. Phase 5's full
+        // per-file override system (audio + video effects + speed +
+        // pitch via Room) will replace this with a richer model.
+        val SPEED_OVERRIDES = stringSetPreferencesKey("speed_overrides")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -345,6 +353,32 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setTaskerIntentsEnabled(v: Boolean) {
         context.dataStore.edit { it[Keys.TASKER_INTENTS_ENABLED] = v }
+    }
+
+    // ── §C7 (slim) — per-file playback speed overrides ────────────────
+    val speedOverrides: Flow<Map<String, Float>> = context.dataStore.data.map { prefs ->
+        (prefs[Keys.SPEED_OVERRIDES] ?: emptySet()).mapNotNull { entry ->
+            val parts = entry.split('|', limit = 2)
+            if (parts.size == 2) {
+                val speed = parts[1].toFloatOrNull() ?: return@mapNotNull null
+                parts[0] to speed
+            } else null
+        }.toMap()
+    }
+    suspend fun setSpeedOverride(uri: String, speed: Float) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.SPEED_OVERRIDES] ?: emptySet()
+            // Drop any existing entry for this uri before adding the
+            // new one so each uri has at most one stored speed.
+            val pruned = current.filterNot { it.startsWith("$uri|") }.toSet()
+            prefs[Keys.SPEED_OVERRIDES] = pruned + "$uri|${"%.3f".format(speed)}"
+        }
+    }
+    suspend fun clearSpeedOverride(uri: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.SPEED_OVERRIDES] ?: emptySet()
+            prefs[Keys.SPEED_OVERRIDES] = current.filterNot { it.startsWith("$uri|") }.toSet()
+        }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
