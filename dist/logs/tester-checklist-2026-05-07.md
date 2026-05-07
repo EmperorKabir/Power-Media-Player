@@ -105,7 +105,53 @@ The latest debug APK is already installed on your phone (Z Fold 6, model SM_F966
 - Toggle OFF → repeat command → logcat shows `TaskerReceiver ignored '...PLAY_PAUSE' — toggle is OFF`. Playback unaffected.
 - Other documented actions: PLAY, PAUSE, SKIP_NEXT, SKIP_PREV, SKIP_BACK_30, SKIP_FORWARD_30, SEEK_TO (`--el position_ms <value>`).
 
-## 14. Cast bug investigation diagnostics
+## 14. Crossfade — Manual fade-now button
+
+- Player → Crossfade icon → toggle "Master crossfade" ON.
+- Toggle "Manual fade-now" ON.
+- **Expect:** A "Fade now" button appears below the toggle.
+- Tap it during a track → audio fades over 1.5 s then advances to the next queued track at full volume.
+
+## 15. Crossfade — Fade on pause / resume
+
+- Crossfade panel → toggle "Fade-out on pause" ON.
+- During playback, tap pause.
+- **Expect:** audio fades over 400 ms before going silent.
+- Toggle "Fade-in on resume" ON. Tap play → audio ramps up over 400 ms.
+
+## 16. Crossfade — Album mode
+
+- Crossfade panel → "Master crossfade" ON, set duration to 5 s, "Album mode" ON (default).
+- Play 2 consecutive tracks of the same album from your Library.
+- **Expect:** no fade between them — the artist's gap is preserved.
+- Play 2 tracks from different albums in sequence → audible 5 s fade.
+
+## 17. Crossfade — at-a-glance summary
+
+- Open the Crossfade panel.
+- **Expect:** under "Crossfade" title, a summary line: "5 s · Equal-power · Album mode · Fade pause" reflecting your current config.
+
+## 18. Per-file playback speed memory
+
+- Library → play any track.
+- Adjust speed (e.g. 1.5×) using the player Speed control.
+- Switch to a different track → that one plays at 1× (no override).
+- Re-open the original track → it auto-resumes at 1.5×. Logcat: `Applied saved speed override 1.5× for uri=...`
+
+## 19. Per-file A-B loop persistence
+
+- Library → play any track, ideally a podcast / audiobook.
+- Tap A-B Loop → mark A. Wait a few seconds. Tap A-B Loop → mark B. Track loops between A and B.
+- Switch to a different track. Re-open the original.
+- **Expect:** logcat: `Restored saved A-B loop <a>..<b>ms for uri=...` and the loop is active again.
+- Tap A-B Loop a third time to clear → both the active loop and the saved override are wiped.
+
+## 20. Sleep timer custom duration
+
+- Sleep timer dialog → drag the "Custom: X min" slider (1..240).
+- Tap "Set" → sleep timer fires at exactly that minute count.
+
+## 21. Cast bug investigation diagnostics
 
 - If you cast and the bug recurs ("connects but nothing plays"), capture:
   ```
