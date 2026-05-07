@@ -6,6 +6,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -258,6 +260,7 @@ fun PlayerScreen(
 
 // ── Compact Layout (Phone / Small Tablet) ─────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlayerScreenCompact(
     uiState: PlayerUiState,
@@ -407,6 +410,7 @@ private fun PlayerScreenCompact(
  * artworkBytes lifted out, Compose's smart-recomposition will skip
  * this composable when only the position-poll tick changes.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OverlayContent(
     uiState: PlayerUiState,
@@ -593,6 +597,7 @@ private fun OverlayContent(
         }
         // Bookmark chips for the currently playing item.
         val bookmarks by viewModel.bookmarks.collectAsStateWithLifecycle()
+        var renamingBookmark by remember { mutableStateOf<com.powermediaplayer.data.db.entity.BookmarkEntity?>(null) }
         if (bookmarks.isNotEmpty()) {
             Row(
                 modifier = Modifier
@@ -602,21 +607,55 @@ private fun OverlayContent(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 bookmarks.forEach { b ->
-                    AssistChip(
-                        onClick = { viewModel.seekToBookmark(b) },
-                        label = { Text(b.label, style = MaterialTheme.typography.labelSmall) },
-                        trailingIcon = {
-                            IconButton(
-                                onClick = { viewModel.deleteBookmark(b) },
-                                modifier = Modifier.size(18.dp)
-                            ) {
-                                Icon(Icons.Filled.Close, contentDescription = "Remove",
-                                    tint = ErrorRed, modifier = Modifier.size(14.dp))
+                    Box(
+                        modifier = Modifier.combinedClickable(
+                            onClick = { viewModel.seekToBookmark(b) },
+                            onLongClick = { renamingBookmark = b }
+                        )
+                    ) {
+                        AssistChip(
+                            onClick = { viewModel.seekToBookmark(b) },
+                            label = { Text(b.label, style = MaterialTheme.typography.labelSmall) },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { viewModel.deleteBookmark(b) },
+                                    modifier = Modifier.size(18.dp)
+                                ) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Remove",
+                                        tint = ErrorRed, modifier = Modifier.size(14.dp))
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
+        }
+        renamingBookmark?.let { bookmark ->
+            var label by remember(bookmark.id) { mutableStateOf(bookmark.label) }
+            AlertDialog(
+                onDismissRequest = { renamingBookmark = null },
+                title = { Text("Rename bookmark", color = TealAccent) },
+                text = {
+                    OutlinedTextField(
+                        value = label,
+                        onValueChange = { label = it },
+                        singleLine = true,
+                        label = { Text("Label") }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.renameBookmark(bookmark, label)
+                        renamingBookmark = null
+                    }) { Text("Save", color = TealAccent) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { renamingBookmark = null }) {
+                        Text("Cancel", color = TextSecondary)
+                    }
+                },
+                containerColor = OledBlack
+            )
         }
         Spacer(modifier = Modifier.height(16.dp))
     }
