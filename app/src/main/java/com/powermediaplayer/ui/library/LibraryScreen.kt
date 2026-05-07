@@ -42,9 +42,15 @@ fun LibraryScreen(
     onNavigateToPlayer: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val multiSelectMode by viewModel.multiSelectMode.collectAsStateWithLifecycle()
+    val selectedUris by viewModel.selectedUris.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<MediaFileInfo?>(null) }
+    // Exit multi-select on system back if currently in it.
+    androidx.activity.compose.BackHandler(enabled = multiSelectMode) {
+        viewModel.exitMultiSelect()
+    }
     if (showInfoSheet) {
         com.powermediaplayer.ui.info.InfoSheet(
             data = com.powermediaplayer.ui.info.libraryInfo,
@@ -203,6 +209,30 @@ fun LibraryScreen(
                         tint = TealAccent
                     )
                 }
+                // 3-dot menu — currently exposes only "Select multiple"
+                // (§C26). Future additions: "Sort by …", "Group by …".
+                var moreMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { moreMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "More options",
+                            tint = TealAccent
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = moreMenuExpanded,
+                        onDismissRequest = { moreMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Select multiple", color = TextPrimary) },
+                            onClick = {
+                                viewModel.enterMultiSelect()
+                                moreMenuExpanded = false
+                            }
+                        )
+                    }
+                }
                 // Per-tab info icon (Q1 LOCKED — rounded-square blue box).
                 com.powermediaplayer.ui.info.InfoIcon(
                     onClick = { showInfoSheet = true }
@@ -212,6 +242,42 @@ fun LibraryScreen(
                 containerColor = OledBlack
             )
         )
+
+        // Multi-select action bar overlay (§C26). Replaces visual focus
+        // of the regular top bar. Renders BELOW the standard TopAppBar
+        // so the user retains access to refresh / info while selecting.
+        if (multiSelectMode) {
+            Surface(color = TealAccent.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { viewModel.exitMultiSelect() }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Cancel", tint = TealAccent)
+                    }
+                    Text(
+                        text = "${selectedUris.size} selected",
+                        color = TealAccent,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f).padding(start = 8.dp)
+                    )
+                    IconButton(
+                        onClick = { viewModel.favouriteSelected() },
+                        enabled = selectedUris.isNotEmpty()
+                    ) {
+                        Icon(Icons.Filled.Star, contentDescription = "Favourite all selected",
+                            tint = if (selectedUris.isNotEmpty()) TealAccent else DisabledGrey)
+                    }
+                    IconButton(
+                        onClick = { viewModel.hideSelected() },
+                        enabled = selectedUris.isNotEmpty()
+                    ) {
+                        Icon(Icons.Filled.VisibilityOff, contentDescription = "Hide all selected",
+                            tint = if (selectedUris.isNotEmpty()) TealAccent else DisabledGrey)
+                    }
+                }
+            }
+        }
 
         // ── Search Bar ───────────────────────────────────────────
         OutlinedTextField(
@@ -388,15 +454,23 @@ fun LibraryScreen(
                             MediaFileItem(
                                 file = file,
                                 isFavorite = true,
+                                isSelected = file.uri.toString() in selectedUris,
+                                multiSelectMode = multiSelectMode,
                                 onClick = {
-                                    if (file.isVideo) {
-                                        viewModel.playSingle(file)
+                                    if (multiSelectMode) {
+                                        viewModel.toggleSelection(file.uri.toString())
                                     } else {
-                                        viewModel.playFiles(files, originalIndex)
+                                        if (file.isVideo) {
+                                            viewModel.playSingle(file)
+                                        } else {
+                                            viewModel.playFiles(files, originalIndex)
+                                        }
+                                        onNavigateToPlayer()
                                     }
-                                    onNavigateToPlayer()
                                 },
-                                onLongClick = { contextItem = file },
+                                onLongClick = {
+                                    if (!multiSelectMode) contextItem = file
+                                },
                                 onToggleFavorite = { viewModel.toggleFavorite(file.uri) }
                             )
                         }
@@ -411,18 +485,26 @@ fun LibraryScreen(
                         MediaFileItem(
                             file = file,
                             isFavorite = file.uri.toString() in uiState.favorites,
+                            isSelected = file.uri.toString() in selectedUris,
+                            multiSelectMode = multiSelectMode,
                             onClick = {
-                                // Videos play single; audio queues the
-                                // visible list as an album/audiobook so
-                                // chapter / track navigation makes sense.
-                                if (file.isVideo) {
-                                    viewModel.playSingle(file)
+                                if (multiSelectMode) {
+                                    viewModel.toggleSelection(file.uri.toString())
                                 } else {
-                                    viewModel.playFiles(files, index)
+                                    // Videos play single; audio queues the
+                                    // visible list as an album/audiobook so
+                                    // chapter / track navigation makes sense.
+                                    if (file.isVideo) {
+                                        viewModel.playSingle(file)
+                                    } else {
+                                        viewModel.playFiles(files, index)
+                                    }
+                                    onNavigateToPlayer()
                                 }
-                                onNavigateToPlayer()
                             },
-                            onLongClick = { contextItem = file },
+                            onLongClick = {
+                                if (!multiSelectMode) contextItem = file
+                            },
                             onToggleFavorite = { viewModel.toggleFavorite(file.uri) }
                         )
                     }
@@ -440,6 +522,8 @@ fun LibraryScreen(
 private fun MediaFileItem(
     file: MediaFileInfo,
     isFavorite: Boolean,
+    isSelected: Boolean = false,
+    multiSelectMode: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onToggleFavorite: () -> Unit
@@ -447,10 +531,19 @@ private fun MediaFileItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .background(if (isSelected) TealAccent.copy(alpha = 0.10f) else androidx.compose.ui.graphics.Color.Transparent)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (multiSelectMode) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onClick() },
+                colors = CheckboxDefaults.colors(checkedColor = TealAccent)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+        }
         // Icon
         Box(
             modifier = Modifier

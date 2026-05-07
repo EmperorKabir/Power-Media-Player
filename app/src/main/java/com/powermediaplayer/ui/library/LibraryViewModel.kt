@@ -199,6 +199,47 @@ class LibraryViewModel @Inject constructor(
 
     @Volatile private var lastRefreshMs: Long = 0L
 
+    // ── Multi-select mode (§C26) ──────────────────────────────────
+    private val _multiSelectMode = MutableStateFlow(false)
+    val multiSelectMode: StateFlow<Boolean> = _multiSelectMode.asStateFlow()
+    private val _selectedUris = MutableStateFlow<Set<String>>(emptySet())
+    val selectedUris: StateFlow<Set<String>> = _selectedUris.asStateFlow()
+
+    fun enterMultiSelect() {
+        _multiSelectMode.value = true
+    }
+
+    fun exitMultiSelect() {
+        _multiSelectMode.value = false
+        _selectedUris.value = emptySet()
+    }
+
+    fun toggleSelection(uri: String) {
+        val cur = _selectedUris.value
+        _selectedUris.value = if (uri in cur) cur - uri else cur + uri
+    }
+
+    /** Bulk-favourite every currently-selected URI. Idempotent. */
+    fun favouriteSelected() {
+        val sel = _selectedUris.value
+        viewModelScope.launch(Dispatchers.IO) {
+            sel.forEach { uri ->
+                runCatching { favoriteDao.insert(FavoriteEntity(uri = uri)) }
+            }
+        }
+    }
+
+    /** Bulk-hide every currently-selected URI. */
+    fun hideSelected() {
+        val sel = _selectedUris.value
+        viewModelScope.launch {
+            sel.forEach { uri -> settingsDataStore.hideUri(uri) }
+            // Stay in multi-select mode but clear ticks so the list
+            // refresh removes the now-hidden items cleanly.
+            _selectedUris.value = emptySet()
+        }
+    }
+
     private fun observeFavorites() {
         viewModelScope.launch {
             favoriteDao.observeAllUris().collect { uris ->
