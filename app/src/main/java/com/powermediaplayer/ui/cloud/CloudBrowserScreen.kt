@@ -48,6 +48,13 @@ fun CloudBrowserScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var showInfoSheet by remember { mutableStateOf(false) }
+    if (showInfoSheet) {
+        com.powermediaplayer.ui.info.InfoSheet(
+            data = com.powermediaplayer.ui.info.cloudInfo,
+            onDismiss = { showInfoSheet = false }
+        )
+    }
 
     // System back: walk back up the cloud directory stack one level at a
     // time (delegate to viewModel.navigateUp which already encodes the
@@ -183,6 +190,11 @@ fun CloudBrowserScreen(
                         )
                     }
                 }
+            },
+            actions = {
+                com.powermediaplayer.ui.info.InfoIcon(
+                    onClick = { showInfoSheet = true }
+                )
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )

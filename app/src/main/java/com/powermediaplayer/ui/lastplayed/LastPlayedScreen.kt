@@ -61,6 +61,13 @@ fun LastPlayedScreen(
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showInfoSheet by remember { mutableStateOf(false) }
+    if (showInfoSheet) {
+        com.powermediaplayer.ui.info.InfoSheet(
+            data = com.powermediaplayer.ui.info.lastPlayedInfo,
+            onDismiss = { showInfoSheet = false }
+        )
+    }
 
     Scaffold(
         containerColor = OledBlack,
@@ -81,6 +88,10 @@ fun LastPlayedScreen(
                 Text("Last Played",
                     style = MaterialTheme.typography.headlineSmall,
                     color = TealAccent, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                com.powermediaplayer.ui.info.InfoIcon(
+                    onClick = { showInfoSheet = true }
+                )
             }
 
             // Pinned section — drag-to-reorder.

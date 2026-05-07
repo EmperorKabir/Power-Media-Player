@@ -52,7 +52,14 @@ fun EqualizerScreen(
     var showSaveDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var presetExpanded by remember { mutableStateOf(false) }
+    var showInfoSheet by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    if (showInfoSheet) {
+        com.powermediaplayer.ui.info.InfoSheet(
+            data = com.powermediaplayer.ui.info.equalizerInfo,
+            onDismiss = { showInfoSheet = false }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -90,6 +97,9 @@ fun EqualizerScreen(
                 }) {
                     Icon(Icons.Filled.RestartAlt, contentDescription = "Reset to flat", tint = TextSecondary)
                 }
+                com.powermediaplayer.ui.info.InfoIcon(
+                    onClick = { showInfoSheet = true }
+                )
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
