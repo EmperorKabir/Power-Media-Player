@@ -92,6 +92,30 @@ fun CrossfadeButton(
                     style = MaterialTheme.typography.titleMedium,
                     color = TealAccent
                 )
+                // At-a-glance summary of the active config so users can
+                // see at the top of the sheet whether the panel is on,
+                // for how long, with which curve, and which behaviour
+                // toggles are active.
+                val curveLabel = when (s.crossfadeCurve) {
+                    "EQUAL_POWER" -> "Equal-power"
+                    "LINEAR" -> "Linear"
+                    "EXPONENTIAL" -> "Exponential"
+                    "S_CURVE" -> "S-curve"
+                    else -> s.crossfadeCurve
+                }
+                val flagsActive = listOfNotNull(
+                    if (s.crossfadeAlbumMode) "Album mode" else null,
+                    if (s.crossfadeSkipSilence) "Skip silence" else null,
+                    if (s.crossfadeFadeOutOnPause) "Fade pause" else null,
+                    if (s.crossfadeFadeInOnResume) "Fade resume" else null
+                ).joinToString(" · ").ifBlank { "no extras" }
+                Text(
+                    text = if (s.crossfadeEnabled)
+                        "${s.crossfadeMs / 1000} s · $curveLabel · $flagsActive"
+                    else "Off — toggle Master crossfade to enable",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (s.crossfadeEnabled) TextSecondary else TextTertiary
+                )
                 Spacer(Modifier.height(12.dp))
 
                 ToggleRow(
