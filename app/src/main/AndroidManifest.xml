@@ -138,6 +138,18 @@
             </intent-filter>
         </service>
 
+        <!-- §C1 — Quick Settings tile for play/pause without unlock. -->
+        <service
+            android:name=".widget.PlaybackQuickSettingsTile"
+            android:exported="true"
+            android:icon="@android:drawable/ic_media_play"
+            android:label="Power Media Player"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>
