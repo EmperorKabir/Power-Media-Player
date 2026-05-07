@@ -1,6 +1,6 @@
 # Implementation session — 2026-05-07 — checkpoint summary
 
-**Total commits:** 24.
+**Total commits:** 28 (continued past power cut + recovered).
 **Phases completed (or substantially advanced):** 1, 2, 3, 4 (partial), 9 (started), 11 (started).
 **Devices verified:** Z Fold 6 + Pixel_6_API_34 emulator. Both run all builds clean — 0 FATAL across every regression sweep.
 
@@ -25,6 +25,9 @@
 | Quick Settings play/pause tile (§C1) | 9 | ✅ |
 | Plug-in resume — auto-play on headphone connect (§C22) | 9 | ✅ |
 | VERBOSE diagnostic logging in CastRelayServer for the user-reported cast bug | 11 | ✅ partial |
+| Sleep timer linear fade-out switch (§C11) — ramps volume to silence over last 30 s | 9 | ✅ |
+| Listening stats dashboard (§C2) — total plays / time / longest track / top-5 titles + artists | 9 | ✅ |
+| Skip-back-15 + Skip-forward-15 companion Quick Settings tiles (§C1 follow-up) | 9 | ✅ |
 
 ## Bug fixes shipped inline
 
