@@ -1129,6 +1129,33 @@ private fun SleepTimerDialog(
                         )
                     }
                 }
+
+                // Custom-duration slider — for users who want a value
+                // outside the preset set (e.g. 7 min nap, 75 min car
+                // commute). 1..240 min covers everything reasonable.
+                var customMin by remember { mutableStateOf(20f) }
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Custom: ${customMin.toInt()} min",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { onSetTimer(customMin.toInt()) }) {
+                        Text("Set", color = TealAccent)
+                    }
+                }
+                Slider(
+                    value = customMin,
+                    onValueChange = { customMin = it },
+                    valueRange = 1f..240f,
+                    steps = 0,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
                 HorizontalDivider(color = DisabledContent, modifier = Modifier.padding(vertical = 4.dp))
                 TextButton(
                     onClick = onSleepAtEndOfChapter,
