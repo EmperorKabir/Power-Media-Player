@@ -257,8 +257,20 @@ class PlaybackService : MediaSessionService() {
         }
         // Crossfade slider — drives the volume-ramp coroutine
         // started below in onCreate after the player is built.
+        // Phase 4: master `crossfadeEnabled` toggle gates the slider —
+        // when OFF we force-zero the effective duration so the existing
+        // ramp path is a no-op without losing the user's preferred
+        // duration. The 8 sub-toggles (curve / album mode / skip
+        // silence / pre-fade trigger / manual fade-now / fade-out-on-
+        // pause / fade-in-on-resume) plus true 2-player overlap are
+        // separate engine work scheduled for a follow-up commit; the
+        // panel surface ships now so users can preview their config.
         serviceScope.launch {
-            settingsDataStore.crossfadeMs.collect { crossfadeMsFlag = it }
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.crossfadeMs,
+                settingsDataStore.crossfadeEnabled
+            ) { ms, enabled -> if (enabled) ms else 0 }
+                .collect { crossfadeMsFlag = it }
         }
 
         // Mp4 extractor with edit-list workaround — required for many M4B
