@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -43,10 +44,40 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
+    var contextItem by remember { mutableStateOf<MediaFileInfo?>(null) }
     if (showInfoSheet) {
         com.powermediaplayer.ui.info.InfoSheet(
             data = com.powermediaplayer.ui.info.libraryInfo,
             onDismiss = { showInfoSheet = false }
+        )
+    }
+    contextItem?.let { item ->
+        val isFav = item.uri.toString() in uiState.favorites
+        com.powermediaplayer.ui.player.components.TrackContextSheet(
+            title = item.title,
+            subtitle = item.artist.takeIf { it.isNotBlank() && it != "Unknown Artist" } ?: "",
+            actions = com.powermediaplayer.ui.player.components.TrackContextActions(
+                onFavourite = if (!isFav) {
+                    { viewModel.toggleFavorite(item.uri); contextItem = null }
+                } else null,
+                onUnfavourite = if (isFav) {
+                    { viewModel.toggleFavorite(item.uri); contextItem = null }
+                } else null,
+                onHide = {
+                    viewModel.hideUri(item.uri.toString())
+                    contextItem = null
+                },
+                onShare = {
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = if (item.isVideo) "video/*" else "audio/*"
+                        putExtra(android.content.Intent.EXTRA_STREAM, item.uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, "Share"))
+                    contextItem = null
+                }
+            ),
+            onDismiss = { contextItem = null }
         )
     }
 
@@ -365,6 +396,7 @@ fun LibraryScreen(
                                     }
                                     onNavigateToPlayer()
                                 },
+                                onLongClick = { contextItem = file },
                                 onToggleFavorite = { viewModel.toggleFavorite(file.uri) }
                             )
                         }
@@ -390,6 +422,7 @@ fun LibraryScreen(
                                 }
                                 onNavigateToPlayer()
                             },
+                            onLongClick = { contextItem = file },
                             onToggleFavorite = { viewModel.toggleFavorite(file.uri) }
                         )
                     }
@@ -402,17 +435,19 @@ fun LibraryScreen(
 /**
  * Single media file list item with favorite toggle.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun MediaFileItem(
     file: MediaFileInfo,
     isFavorite: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

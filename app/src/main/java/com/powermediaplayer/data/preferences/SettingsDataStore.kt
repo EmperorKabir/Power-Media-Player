@@ -87,6 +87,12 @@ class SettingsDataStore @Inject constructor(
         val AUDIO_EFFECTS_POPUP_HIDE_SEC = intPreferencesKey("audio_effects_popup_hide_sec")
         val VIDEO_EFFECTS_POPUP_HIDE_SEC = intPreferencesKey("video_effects_popup_hide_sec")
 
+        // Hidden files (§C27) — set of URIs (toString()) the user has
+        // chosen to hide from Library / Cloud lists. Files stay on the
+        // device; only the in-app filter is affected. Survives reinstall
+        // via Auto Backup (manifest already has allowBackup="true").
+        val HIDDEN_URIS = stringSetPreferencesKey("hidden_uris")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -215,6 +221,26 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setVideoEffectsPopupHideSec(seconds: Int) {
         context.dataStore.edit { it[Keys.VIDEO_EFFECTS_POPUP_HIDE_SEC] = seconds }
+    }
+
+    // ── Hidden files (§C27) ───────────────────────────────────────────
+    val hiddenUris: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[Keys.HIDDEN_URIS] ?: emptySet()
+    }
+    suspend fun hideUri(uri: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.HIDDEN_URIS] ?: emptySet()
+            prefs[Keys.HIDDEN_URIS] = current + uri
+        }
+    }
+    suspend fun unhideUri(uri: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.HIDDEN_URIS] ?: emptySet()
+            prefs[Keys.HIDDEN_URIS] = current - uri
+        }
+    }
+    suspend fun unhideAll() {
+        context.dataStore.edit { it[Keys.HIDDEN_URIS] = emptySet() }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────

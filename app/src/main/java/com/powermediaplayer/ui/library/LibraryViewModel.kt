@@ -129,6 +129,26 @@ class LibraryViewModel @Inject constructor(
         }
         scanMedia()
         observeFavorites()
+        observeHiddenUris()
+    }
+
+    private var hiddenUris: Set<String> = emptySet()
+    private fun observeHiddenUris() {
+        viewModelScope.launch {
+            settingsDataStore.hiddenUris.collect { hidden ->
+                hiddenUris = hidden
+                recomputeDisplayed()
+            }
+        }
+    }
+
+    /** §C27: hide a file from Library lists without deleting it. */
+    fun hideUri(uri: String) {
+        viewModelScope.launch { settingsDataStore.hideUri(uri) }
+    }
+    /** §C27: undo a hide. */
+    fun unhideUri(uri: String) {
+        viewModelScope.launch { settingsDataStore.unhideUri(uri) }
     }
 
     fun setSelectedTab(tab: Int) {
@@ -194,9 +214,14 @@ class LibraryViewModel @Inject constructor(
         // its emission to this rewrite.
         _uiState.update { state ->
             val q = TextNormalizer.normalize(state.searchQuery).lowercase()
-            val filterFn: (MediaFileInfo) -> Boolean = if (q.isBlank()) { _ -> true } else { f ->
-                val hay = TextNormalizer.normalize("${f.title} ${f.artist} ${f.album}").lowercase()
-                hay.contains(q)
+            val hidden = hiddenUris
+            val filterFn: (MediaFileInfo) -> Boolean = { f ->
+                val notHidden = f.uri.toString() !in hidden
+                val matchesQuery = if (q.isBlank()) true else {
+                    val hay = TextNormalizer.normalize("${f.title} ${f.artist} ${f.album}").lowercase()
+                    hay.contains(q)
+                }
+                notHidden && matchesQuery
             }
             state.copy(
                 audioFiles = applySort(rawAudio.filter(filterFn), state.sortMode, state.favorites),
