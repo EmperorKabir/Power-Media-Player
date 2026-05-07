@@ -30,6 +30,15 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showHiddenSheet by remember { mutableStateOf(false) }
+    if (showHiddenSheet) {
+        com.powermediaplayer.ui.library.HiddenFilesSheet(
+            hiddenUris = uiState.hiddenUris,
+            onUnhide = { viewModel.unhideUri(it) },
+            onUnhideAll = { viewModel.unhideAll() },
+            onDismiss = { showHiddenSheet = false }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -62,6 +71,37 @@ fun SettingsScreen(
             checked = uiState.useDeepScan,
             onCheckedChange = { viewModel.setDeepScan(it) }
         )
+
+        // Hidden files (§C27) — tap to open the sheet listing every
+        // URI hidden via the Library long-press menu, with per-row
+        // unhide + an "Unhide all" action.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showHiddenSheet = true }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.VisibilityOff,
+                contentDescription = null,
+                tint = TealAccent,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Hidden files (${uiState.hiddenUris.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Files hidden from the Library list. Tap to view and unhide.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
+                )
+            }
+        }
 
         SettingsDivider()
 

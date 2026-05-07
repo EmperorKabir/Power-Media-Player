@@ -43,7 +43,8 @@ data class SettingsUiState(
     val artworkScaleMode: String = "fit",
     val videoControlsHideSec: Int = 4,
     val audioEffectsPopupHideSec: Int = 3,
-    val videoEffectsPopupHideSec: Int = 3
+    val videoEffectsPopupHideSec: Int = 3,
+    val hiddenUris: Set<String> = emptySet()
 )
 
 /**
@@ -96,7 +97,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.artworkScaleMode,
             settingsDataStore.videoControlsHideSec,
             settingsDataStore.audioEffectsPopupHideSec,
-            settingsDataStore.videoEffectsPopupHideSec
+            settingsDataStore.videoEffectsPopupHideSec,
+            settingsDataStore.hiddenUris
         )
     ) { v ->
         SettingsUiState(
@@ -130,7 +132,8 @@ class SettingsViewModel @Inject constructor(
             artworkScaleMode = v[27] as String,
             videoControlsHideSec = v[28] as Int,
             audioEffectsPopupHideSec = v[29] as Int,
-            videoEffectsPopupHideSec = v[30] as Int
+            videoEffectsPopupHideSec = v[30] as Int,
+            hiddenUris = @Suppress("UNCHECKED_CAST") (v[31] as Set<String>)
         )
     }.stateIn(
         scope = viewModelScope,
@@ -152,6 +155,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setVideoEffectsPopupHideSec(seconds: Int) {
         viewModelScope.launch { settingsDataStore.setVideoEffectsPopupHideSec(seconds) }
+    }
+
+    fun unhideUri(uri: String) {
+        viewModelScope.launch { settingsDataStore.unhideUri(uri) }
+    }
+
+    fun unhideAll() {
+        viewModelScope.launch { settingsDataStore.unhideAll() }
     }
 
     fun setSubtitleFormat(format: String) {
