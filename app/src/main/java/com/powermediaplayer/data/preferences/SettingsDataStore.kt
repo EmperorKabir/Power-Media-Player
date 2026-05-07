@@ -131,6 +131,11 @@ class SettingsDataStore @Inject constructor(
         // pitch via Room) will replace this with a richer model.
         val SPEED_OVERRIDES = stringSetPreferencesKey("speed_overrides")
 
+        // §C7 (slim) — per-file A-B loop markers. Each entry is
+        // "mediaUri|startMs|endMs". Auto-restored on track load so
+        // audiobook learners can repeat a section across opens.
+        val AB_LOOP_OVERRIDES = stringSetPreferencesKey("ab_loop_overrides")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -378,6 +383,31 @@ class SettingsDataStore @Inject constructor(
         context.dataStore.edit { prefs ->
             val current = prefs[Keys.SPEED_OVERRIDES] ?: emptySet()
             prefs[Keys.SPEED_OVERRIDES] = current.filterNot { it.startsWith("$uri|") }.toSet()
+        }
+    }
+
+    /** Per-file A-B loop start/end markers. */
+    val abLoopOverrides: Flow<Map<String, Pair<Long, Long>>> = context.dataStore.data.map { prefs ->
+        (prefs[Keys.AB_LOOP_OVERRIDES] ?: emptySet()).mapNotNull { entry ->
+            val parts = entry.split('|', limit = 3)
+            if (parts.size == 3) {
+                val a = parts[1].toLongOrNull() ?: return@mapNotNull null
+                val b = parts[2].toLongOrNull() ?: return@mapNotNull null
+                parts[0] to (a to b)
+            } else null
+        }.toMap()
+    }
+    suspend fun setAbLoopOverride(uri: String, startMs: Long, endMs: Long) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.AB_LOOP_OVERRIDES] ?: emptySet()
+            val pruned = current.filterNot { it.startsWith("$uri|") }.toSet()
+            prefs[Keys.AB_LOOP_OVERRIDES] = pruned + "$uri|$startMs|$endMs"
+        }
+    }
+    suspend fun clearAbLoopOverride(uri: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.AB_LOOP_OVERRIDES] ?: emptySet()
+            prefs[Keys.AB_LOOP_OVERRIDES] = current.filterNot { it.startsWith("$uri|") }.toSet()
         }
     }
 

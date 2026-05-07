@@ -226,27 +226,58 @@ class PlayerViewModel @Inject constructor(
                 }
             }
         }
-        // §C7 slim — apply saved per-file speed override on track-load.
-        // Listens for currentMediaItem.mediaId changes and, if the
-        // saved overrides Map contains this uri, calls setPlaybackSpeed
-        // (without re-saving the same value via setPlaybackSpeed loop).
+        // §C7 slim — apply saved per-file overrides on track-load.
+        // Distinct-until-changed on (title, uri) so we apply once per
+        // fresh track without spamming on every position tick. Speed
+        // override → setPlaybackSpeed; A-B loop override → restore the
+        // start/end markers + start the loop poll. Only applies when
+        // not Spotify-active (Connect-side playback handles its own).
         viewModelScope.launch(Dispatchers.Main) {
             playbackConnection.playerState
                 .map { it.title to (playbackConnection.getPlayer()?.currentMediaItem?.mediaId ?: "") }
                 .distinctUntilChanged()
                 .collect { (_, uri) ->
                     if (uri.isBlank()) return@collect
-                    val overrides = runCatching {
+                    // Speed
+                    val speedOverrides = runCatching {
                         settingsDataStore.speedOverrides.first()
-                    }.getOrNull() ?: return@collect
-                    val saved = overrides[uri] ?: return@collect
-                    val current = playbackConnection.getPlayer()?.playbackParameters?.speed ?: 1.0f
-                    if (kotlin.math.abs(saved - current) > 0.01f) {
-                        playbackConnection.setPlaybackSpeed(saved)
-                        com.powermediaplayer.util.Diag.i(
-                            "PMP_DIAG",
-                            "Applied saved speed override $saved× for uri=$uri"
-                        )
+                    }.getOrNull().orEmpty()
+                    speedOverrides[uri]?.let { saved ->
+                        val current = playbackConnection.getPlayer()?.playbackParameters?.speed ?: 1.0f
+                        if (kotlin.math.abs(saved - current) > 0.01f) {
+                            playbackConnection.setPlaybackSpeed(saved)
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Applied saved speed override $saved× for uri=$uri"
+                            )
+                        }
+                    }
+                    // A-B loop
+                    if (!isSpotifyActive) {
+                        val abOverrides = runCatching {
+                            settingsDataStore.abLoopOverrides.first()
+                        }.getOrNull().orEmpty()
+                        abOverrides[uri]?.let { (a, b) ->
+                            if (_abLoopStart.value != a || _abLoopEnd.value != b) {
+                                _abLoopStart.value = a
+                                _abLoopEnd.value = b
+                                abLoopJob?.cancel()
+                                abLoopJob = launch {
+                                    while (isActive) {
+                                        delay(250L)
+                                        val sa = _abLoopStart.value ?: break
+                                        val sb = _abLoopEnd.value ?: break
+                                        if (currentPositionMsAnySource() >= sb) {
+                                            seekToAnySource(sa)
+                                        }
+                                    }
+                                }
+                                com.powermediaplayer.util.Diag.i(
+                                    "PMP_DIAG",
+                                    "Restored saved A-B loop $a..${b}ms for uri=$uri"
+                                )
+                            }
+                        }
                     }
                 }
         }
@@ -774,6 +805,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggleAbLoop() {
+        val mediaUri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
         when {
             _abLoopStart.value == null -> {
                 _abLoopStart.value = currentPositionMsAnySource()
@@ -789,6 +821,17 @@ class PlayerViewModel @Inject constructor(
                 }
                 _abLoopEnd.value = end
                 abLoopJob?.cancel()
+                // Persist for next open of this track (§C7 slim). Only
+                // for non-Spotify (local + Drive) — Spotify track URIs
+                // are stable but the experience is "Connect"-side, so
+                // restoring on Connect first-emit could surprise users.
+                if (!mediaUri.isNullOrBlank() && !isSpotifyActive) {
+                    viewModelScope.launch {
+                        runCatching {
+                            settingsDataStore.setAbLoopOverride(mediaUri, start, end)
+                        }
+                    }
+                }
                 // Spotify Connect /seek IPC is round-trip ~300-500ms;
                 // poll less aggressively when remote and add a small
                 // dwell guard so we don't spam-seek.
@@ -809,6 +852,11 @@ class PlayerViewModel @Inject constructor(
                 _abLoopStart.value = null
                 _abLoopEnd.value = null
                 abLoopJob?.cancel()
+                if (!mediaUri.isNullOrBlank()) {
+                    viewModelScope.launch {
+                        runCatching { settingsDataStore.clearAbLoopOverride(mediaUri) }
+                    }
+                }
                 com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop cleared")
             }
         }
