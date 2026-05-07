@@ -84,6 +84,7 @@ class PlaybackService : MediaSessionService() {
     private var audioDelayFlag: Int = 0
     @Volatile
     private var crossfadeMsFlag: Int = 0
+    @Volatile private var crossfadeAlbumModeFlag: Boolean = true
 
     @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
@@ -272,6 +273,14 @@ class PlaybackService : MediaSessionService() {
                 settingsDataStore.crossfadeEnabled
             ) { ms, enabled -> if (enabled) ms else 0 }
                 .collect { crossfadeMsFlag = it }
+        }
+
+        // §B2 Album mode — when ON, skip the fade between two
+        // consecutive tracks with the same album metadata so the
+        // listener keeps the artist's intended gap. Read by
+        // applyCrossfadeTick to short-circuit the fade-out window.
+        serviceScope.launch {
+            settingsDataStore.crossfadeAlbumMode.collect { crossfadeAlbumModeFlag = it }
         }
 
         // §C22 — auto-play on headphone plug-in. ACTION_HEADSET_PLUG
@@ -552,11 +561,26 @@ class PlaybackService : MediaSessionService() {
             .coerceAtLeast(0L)
         val fadeIn = if (sinceStart < ms) sinceStart.toFloat() / ms else 1.0f
 
+        // §B2 Album mode — when the next queued track is from the
+        // same album as the current one, skip the fade entirely so
+        // the artist's intended gap is preserved. Determined by
+        // comparing mediaMetadata.albumTitle of currentMediaItem and
+        // the queued next item.
+        val sameAlbumAsNext = if (crossfadeAlbumModeFlag && !isLast) {
+            val cur = p.currentMediaItem?.mediaMetadata?.albumTitle?.toString().orEmpty()
+            val nextIdx = p.currentMediaItemIndex + 1
+            val next = if (nextIdx < p.mediaItemCount)
+                p.getMediaItemAt(nextIdx).mediaMetadata.albumTitle?.toString().orEmpty()
+            else ""
+            cur.isNotBlank() && cur == next
+        } else false
+
         // Fade-out window approaching the end of the current track.
         // Skip on the last track of the queue so playback doesn't end
-        // muted (no next track to crossfade into).
+        // muted (no next track to crossfade into). Also skip when
+        // album-mode applies (same-album consecutive tracks).
         val fadeOut = if (
-            !isLast && playing &&
+            !isLast && playing && !sameAlbumAsNext &&
             duration > 0L && pos > 0L &&
             duration - pos in 0..ms.toLong()
         ) {
