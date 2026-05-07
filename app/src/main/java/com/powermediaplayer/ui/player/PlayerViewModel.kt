@@ -140,6 +140,12 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) { bookmarkDao.delete(b.id) }
     }
 
+    // ── Auto-hide timers (Phase 2) — exposed for PlayerScreen ─────
+    // Seconds. 0 = Never. Read by the controls auto-hide LaunchedEffect
+    // and by the audio/video effects sub-popups.
+    val videoControlsHideSec: StateFlow<Int> = settingsDataStore.videoControlsHideSec
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 4)
+
     // ── State backing fields referenced by init-block coroutines ──
     // These MUST be declared BEFORE the `init {}` block, otherwise
     // `setPitch` / `setVolumeBoost` race their backing MutableStateFlow

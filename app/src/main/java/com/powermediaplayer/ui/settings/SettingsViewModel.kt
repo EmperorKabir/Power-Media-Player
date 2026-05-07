@@ -40,7 +40,10 @@ data class SettingsUiState(
     val stereoFlip: Boolean = false,
     val monoMix: Boolean = false,
     val passthroughAudio: Boolean = true,
-    val artworkScaleMode: String = "fit"
+    val artworkScaleMode: String = "fit",
+    val videoControlsHideSec: Int = 4,
+    val audioEffectsPopupHideSec: Int = 3,
+    val videoEffectsPopupHideSec: Int = 3
 )
 
 /**
@@ -90,7 +93,10 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.passthroughAudio,
             settingsDataStore.videoSepia,
             settingsDataStore.videoInvert,
-            settingsDataStore.artworkScaleMode
+            settingsDataStore.artworkScaleMode,
+            settingsDataStore.videoControlsHideSec,
+            settingsDataStore.audioEffectsPopupHideSec,
+            settingsDataStore.videoEffectsPopupHideSec
         )
     ) { v ->
         SettingsUiState(
@@ -121,7 +127,10 @@ class SettingsViewModel @Inject constructor(
             passthroughAudio = v[24] as Boolean,
             videoSepia = v[25] as Boolean,
             videoInvert = v[26] as Boolean,
-            artworkScaleMode = v[27] as String
+            artworkScaleMode = v[27] as String,
+            videoControlsHideSec = v[28] as Int,
+            audioEffectsPopupHideSec = v[29] as Int,
+            videoEffectsPopupHideSec = v[30] as Int
         )
     }.stateIn(
         scope = viewModelScope,
@@ -131,6 +140,18 @@ class SettingsViewModel @Inject constructor(
 
     fun setDeepScan(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setDeepScan(enabled) }
+    }
+
+    fun setVideoControlsHideSec(seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setVideoControlsHideSec(seconds) }
+    }
+
+    fun setAudioEffectsPopupHideSec(seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setAudioEffectsPopupHideSec(seconds) }
+    }
+
+    fun setVideoEffectsPopupHideSec(seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setVideoEffectsPopupHideSec(seconds) }
     }
 
     fun setSubtitleFormat(format: String) {

@@ -159,6 +159,40 @@ fun SettingsScreen(
         SettingsDivider()
 
         // ══════════════════════════════════════════════════════════
+        // AUTO-HIDE CONTROLS (Phase 2 — §D2)
+        // ══════════════════════════════════════════════════════════
+        SettingsSectionHeader("Auto-hide controls")
+        Text(
+            text = "How long the on-screen controls stay visible after you " +
+                "stop touching the screen. 'Never' keeps them until you tap.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
+        AutoHideRow(
+            label = "Video controls",
+            description = "Player buttons + slider while watching video.",
+            currentSeconds = uiState.videoControlsHideSec,
+            onChange = { viewModel.setVideoControlsHideSec(it) },
+            allowNever = true
+        )
+        AutoHideRow(
+            label = "Audio effects popup",
+            description = "Reverb / stereo flip / mono mix sub-popup.",
+            currentSeconds = uiState.audioEffectsPopupHideSec,
+            onChange = { viewModel.setAudioEffectsPopupHideSec(it) },
+            allowNever = true
+        )
+        AutoHideRow(
+            label = "Video effects popup",
+            description = "Mirror / B&W / sepia / rotation sub-popup.",
+            currentSeconds = uiState.videoEffectsPopupHideSec,
+            onChange = { viewModel.setVideoEffectsPopupHideSec(it) },
+            allowNever = true
+        )
+        SettingsDivider()
+
+        // ══════════════════════════════════════════════════════════
         // BLUETOOTH — car media-button remapping
         // ══════════════════════════════════════════════════════════
         SettingsSectionHeader("Bluetooth Car Controls")
@@ -613,6 +647,91 @@ private fun SubtitleFormatOption(
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )
+        }
+    }
+}
+
+/**
+ * One-row dropdown for an auto-hide timer: "Never" + seconds.
+ * Stores 0 = Never; positive int = seconds. Default range is the
+ * superset of the spec — Never / 1 / 2 / 3 / 4 / 6 / 8 — so all three
+ * call sites share the same option list.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AutoHideRow(
+    label: String,
+    description: String,
+    currentSeconds: Int,
+    onChange: (Int) -> Unit,
+    allowNever: Boolean
+) {
+    val options: List<Pair<Int, String>> = buildList {
+        if (allowNever) add(0 to "Never")
+        addAll(listOf(1 to "1 s", 2 to "2 s", 3 to "3 s", 4 to "4 s", 6 to "6 s", 8 to "8 s"))
+    }
+    val selected = options.firstOrNull { it.first == currentSeconds } ?: options.last()
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary
+        )
+        Spacer(Modifier.height(6.dp))
+
+        ExposedDropdownMenuBox(
+            expanded = menuExpanded,
+            onExpandedChange = { menuExpanded = it },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = selected.second,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealAccent,
+                    unfocusedBorderColor = DisabledContent,
+                    focusedTextColor = TealAccent,
+                    unfocusedTextColor = TextPrimary,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated
+                )
+            )
+            ExposedDropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier.background(SurfaceElevated)
+            ) {
+                options.forEach { (sec, lbl) ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = lbl,
+                                color = if (sec == currentSeconds) TealAccent else TextPrimary
+                            )
+                        },
+                        onClick = {
+                            onChange(sec)
+                            menuExpanded = false
+                        }
+                    )
+                }
+            }
         }
     }
 }

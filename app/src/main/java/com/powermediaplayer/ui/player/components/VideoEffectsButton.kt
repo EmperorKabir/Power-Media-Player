@@ -40,11 +40,12 @@ fun VideoEffectsButton(
     val anyOn = s.videoFlipH || s.videoFlipV || s.videoBw ||
         s.videoSepia || s.videoInvert || s.videoRotation != 0
     fun touch() { lastInteract = System.currentTimeMillis() }
-    // 3-second auto-dismiss; the timer restarts whenever the user
-    // interacts with any control inside the sheet (lastInteract bump).
-    LaunchedEffect(showSheet, lastInteract) {
-        if (showSheet) {
-            kotlinx.coroutines.delay(3000)
+    // Auto-dismiss timer — user-configurable in Settings → Auto-hide
+    // controls. Timer restarts whenever the user interacts with any
+    // control inside the sheet (lastInteract bump). 0 seconds = Never.
+    LaunchedEffect(showSheet, lastInteract, s.videoEffectsPopupHideSec) {
+        if (showSheet && s.videoEffectsPopupHideSec > 0) {
+            kotlinx.coroutines.delay(s.videoEffectsPopupHideSec * 1000L)
             showSheet = false
         }
     }

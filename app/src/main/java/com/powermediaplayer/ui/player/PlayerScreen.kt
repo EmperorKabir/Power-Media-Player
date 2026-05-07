@@ -271,14 +271,16 @@ private fun PlayerScreenCompact(
     onShowInfo: () -> Unit,
     horizontalPadding: Int = 0
 ) {
-    // Video mode: tap to toggle controls; auto-hide after 32 s.
+    // Video mode: tap to toggle controls; auto-hide per user setting.
     // Audio: controls always visible — never auto-hide.
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
-    LaunchedEffect(uiState.isVideoContent, controlsVisible) {
-        if (uiState.isVideoContent && controlsVisible) {
-            delay(4_000)            // 4 s — short, per user spec
+    val videoHideSec by viewModel.videoControlsHideSec.collectAsStateWithLifecycle()
+    LaunchedEffect(uiState.isVideoContent, controlsVisible, videoHideSec) {
+        // 0 seconds = "Never" — controls stay visible indefinitely.
+        if (uiState.isVideoContent && controlsVisible && videoHideSec > 0) {
+            delay(videoHideSec * 1000L)
             controlsVisible = false
         }
     }

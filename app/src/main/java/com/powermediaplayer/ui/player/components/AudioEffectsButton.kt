@@ -43,9 +43,10 @@ fun AudioEffectsButton(
     var lastInteract by remember { mutableStateOf(0L) }
     val anyOn = s.reverbPreset != 0 || s.stereoFlip || s.monoMix
     fun touch() { lastInteract = System.currentTimeMillis() }
-    LaunchedEffect(showSheet, lastInteract) {
-        if (showSheet) {
-            kotlinx.coroutines.delay(3000)
+    LaunchedEffect(showSheet, lastInteract, s.audioEffectsPopupHideSec) {
+        // 0 seconds = "Never" — popup stays open until user dismisses.
+        if (showSheet && s.audioEffectsPopupHideSec > 0) {
+            kotlinx.coroutines.delay(s.audioEffectsPopupHideSec * 1000L)
             showSheet = false
         }
     }

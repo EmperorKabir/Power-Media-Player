@@ -81,6 +81,12 @@ class SettingsDataStore @Inject constructor(
 
         val LIBRARY_SORT_MODE = stringPreferencesKey("library_sort_mode")
 
+        // Auto-hide control timers — seconds. 0 means "Never auto-hide".
+        // Defaults locked from plan §D2 + current PlayerScreen behaviour.
+        val VIDEO_CONTROLS_HIDE_SEC = intPreferencesKey("video_controls_hide_sec")
+        val AUDIO_EFFECTS_POPUP_HIDE_SEC = intPreferencesKey("audio_effects_popup_hide_sec")
+        val VIDEO_EFFECTS_POPUP_HIDE_SEC = intPreferencesKey("video_effects_popup_hide_sec")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -186,6 +192,29 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setLibrarySortMode(mode: String) {
         context.dataStore.edit { it[Keys.LIBRARY_SORT_MODE] = mode }
+    }
+
+    // ── Auto-hide control timers (Phase 2) ────────────────────────────
+    // Seconds. 0 = Never auto-hide (controls stay visible). Defaults
+    // preserve current behaviour: video controls hide after 4 s; popups
+    // after 3 s. Audio-mode auto-hide deferred to a later phase.
+    val videoControlsHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.VIDEO_CONTROLS_HIDE_SEC] ?: 4
+    }
+    suspend fun setVideoControlsHideSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.VIDEO_CONTROLS_HIDE_SEC] = seconds }
+    }
+    val audioEffectsPopupHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.AUDIO_EFFECTS_POPUP_HIDE_SEC] ?: 3
+    }
+    suspend fun setAudioEffectsPopupHideSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.AUDIO_EFFECTS_POPUP_HIDE_SEC] = seconds }
+    }
+    val videoEffectsPopupHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.VIDEO_EFFECTS_POPUP_HIDE_SEC] ?: 3
+    }
+    suspend fun setVideoEffectsPopupHideSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.VIDEO_EFFECTS_POPUP_HIDE_SEC] = seconds }
     }
 
     // ── Metadata Extraction Mode ─────────────────────────────────
