@@ -31,12 +31,19 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
+    var showStatsSheet by remember { mutableStateOf(false) }
     if (showHiddenSheet) {
         com.powermediaplayer.ui.library.HiddenFilesSheet(
             hiddenUris = uiState.hiddenUris,
             onUnhide = { viewModel.unhideUri(it) },
             onUnhideAll = { viewModel.unhideAll() },
             onDismiss = { showHiddenSheet = false }
+        )
+    }
+    if (showStatsSheet) {
+        com.powermediaplayer.ui.stats.StatsSheet(
+            dao = viewModel.playbackHistoryDao,
+            onDismiss = { showStatsSheet = false }
         )
     }
 
@@ -71,6 +78,37 @@ fun SettingsScreen(
             checked = uiState.useDeepScan,
             onCheckedChange = { viewModel.setDeepScan(it) }
         )
+
+        // §C2 — listening stats dashboard. Tap → ModalBottomSheet
+        // aggregating playback_history into total plays, total listen
+        // time (rough), longest track, top-5 titles, top-5 artists.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showStatsSheet = true }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.QueryStats,
+                contentDescription = null,
+                tint = TealAccent,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Listening stats",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Total plays, time listened, top titles + artists.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
+                )
+            }
+        }
 
         // §C22 — auto-play on headphone plug-in. Default OFF (opt-in)
         // because surprise audio is annoying. Receiver registered at

@@ -65,7 +65,8 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
-    private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector
+    private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector,
+    val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao
 ) : ViewModel() {
 
     /**

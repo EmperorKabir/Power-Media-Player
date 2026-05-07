@@ -54,4 +54,38 @@ interface PlaybackHistoryDao {
 
     @Query("DELETE FROM playback_history")
     suspend fun deleteAll()
+
+    // ── Stats queries (§C2) ────────────────────────────────────────
+    /** Aggregate (label, count) row used by top-N stats queries. */
+    data class CountRow(val label: String, val plays: Int)
+    /** Aggregate (label, totalMs) row used by listen-time queries. */
+    data class DurationRow(val label: String, val totalMs: Long)
+
+    @Query("SELECT COUNT(*) FROM playback_history")
+    suspend fun totalPlays(): Int
+
+    /**
+     * Sum of lastPositionMs across every history row — a proxy for
+     * "total time listened" (it's the saved resume position, not a
+     * cumulative listen counter, but for "rough lifetime stats" it's
+     * the closest available without a per-row listen log).
+     */
+    @Query("SELECT IFNULL(SUM(lastPositionMs), 0) FROM playback_history")
+    suspend fun totalListenedMs(): Long
+
+    @Query(
+        "SELECT title AS label, COUNT(*) AS plays " +
+            "FROM playback_history GROUP BY title ORDER BY plays DESC LIMIT 5"
+    )
+    suspend fun topTitles(): List<CountRow>
+
+    @Query(
+        "SELECT subtitle AS label, COUNT(*) AS plays " +
+            "FROM playback_history WHERE subtitle != '' " +
+            "GROUP BY subtitle ORDER BY plays DESC LIMIT 5"
+    )
+    suspend fun topSubtitles(): List<CountRow>
+
+    @Query("SELECT MAX(durationMs) FROM playback_history")
+    suspend fun longestTrackDurationMs(): Long?
 }
