@@ -35,6 +35,8 @@
 | Crossfade — Album mode short-circuit (§B2) — same-album consecutive tracks skip the fade | 4 | ✅ |
 | Per-file playback speed memory (§C7 slim) — speeds persist across track opens | 5 | ✅ partial |
 | Sleep timer custom-duration slider (1..240 min) | 9 | ✅ |
+| Crossfade panel header — at-a-glance config summary line | 4 | ✅ |
+| Per-file A-B loop persistence (audiobook / language-learning re-open) | 5 | ✅ partial |
 
 ## Bug fixes shipped inline
 
