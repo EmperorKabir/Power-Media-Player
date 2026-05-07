@@ -452,6 +452,19 @@ class SettingsDataStore @Inject constructor(
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }
 
+    /**
+     * One-tap "Reset to defaults" — clears every preference so the
+     * next read returns the in-code default. Triggered from Settings →
+     * About → "Reset all settings". Library favourites + Drive picked
+     * folders + Spotify favourites stay untouched (those are stored
+     * separately in Room / DataStore set keys that ARE wiped here too,
+     * which IS the user's intent for a "fresh start"). User confirmed
+     * via the destructive-action AlertDialog before this fires.
+     */
+    suspend fun resetAllSettings() {
+        context.dataStore.edit { it.clear() }
+    }
+
     // ── Metadata Extraction Mode ─────────────────────────────────
     val useDeepScan: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[Keys.METADATA_DEEP_SCAN] ?: false

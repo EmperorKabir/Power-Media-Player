@@ -496,6 +496,67 @@ fun SettingsScreen(
             )
         }
 
+        // Reset all settings to defaults — irreversible. Confirmation
+        // dialog. Library favourites + Drive favourites + hidden files
+        // are settings too and get wiped, but the underlying media
+        // files / playback history Room rows are NOT touched.
+        var showResetConfirm by remember { mutableStateOf(false) }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showResetConfirm = true }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.RestartAlt,
+                contentDescription = null,
+                tint = ErrorRed,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Reset all settings",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = ErrorRed
+                )
+                Text(
+                    text = "Restore every preference to its default. Playback history, bookmarks, and downloaded files are NOT touched.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
+                )
+            }
+        }
+        if (showResetConfirm) {
+            AlertDialog(
+                onDismissRequest = { showResetConfirm = false },
+                title = { Text("Reset all settings?", color = ErrorRed) },
+                text = {
+                    Text(
+                        "Every preference will be restored to its default value. " +
+                            "This includes: theme, auto-hide timers, crossfade settings, " +
+                            "alarm preferences, and per-file overrides like saved speed " +
+                            "and A-B loop markers. Your music files, playback history, " +
+                            "and bookmarks (Recents) are NOT affected.",
+                        color = TextPrimary
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.resetAllSettings()
+                        showResetConfirm = false
+                    }) { Text("Reset", color = ErrorRed) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetConfirm = false }) {
+                        Text("Cancel", color = TealAccent)
+                    }
+                },
+                containerColor = OledBlack
+            )
+        }
+
         Spacer(modifier = Modifier.height(80.dp))
     }
 }

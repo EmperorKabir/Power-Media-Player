@@ -247,6 +247,9 @@ class SettingsViewModel @Inject constructor(
     fun setColdStartResumeBackoffSec(v: Int) =
         viewModelScope.launch { settingsDataStore.setColdStartResumeBackoffSec(v) }.let { }
 
+    fun resetAllSettings() =
+        viewModelScope.launch { settingsDataStore.resetAllSettings() }.let { }
+
     fun setSubtitleFormat(format: String) {
         viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }
     }
