@@ -42,6 +42,13 @@ fun LibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showInfoSheet by remember { mutableStateOf(false) }
+    if (showInfoSheet) {
+        com.powermediaplayer.ui.info.InfoSheet(
+            data = com.powermediaplayer.ui.info.libraryInfo,
+            onDismiss = { showInfoSheet = false }
+        )
+    }
 
     // Permission handling
     var hasPermission by remember {
@@ -158,6 +165,10 @@ fun LibraryScreen(
                         tint = TealAccent
                     )
                 }
+                // Per-tab info icon (Q1 LOCKED — rounded-square blue box).
+                com.powermediaplayer.ui.info.InfoIcon(
+                    onClick = { showInfoSheet = true }
+                )
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = OledBlack
