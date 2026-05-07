@@ -1,6 +1,6 @@
 # Implementation session — 2026-05-07 — checkpoint summary
 
-**Total commits:** 28 (continued past power cut + recovered).
+**Total commits:** 45 (continued past power cut + extensive feature batch).
 **Phases completed (or substantially advanced):** 1, 2, 3, 4 (partial), 9 (started), 11 (started).
 **Devices verified:** Z Fold 6 + Pixel_6_API_34 emulator. Both run all builds clean — 0 FATAL across every regression sweep.
 
@@ -37,6 +37,13 @@
 | Sleep timer custom-duration slider (1..240 min) | 9 | ✅ |
 | Crossfade panel header — at-a-glance config summary line | 4 | ✅ |
 | Per-file A-B loop persistence (audiobook / language-learning re-open) | 5 | ✅ partial |
+| Bookmark long-press → rename dialog (BookmarkDao.updateLabel) | 1 ext | ✅ |
+| Stop-on-swipe-away toggle (Settings → Playback) | 9 | ✅ |
+| Cold-start resume backoff slider (0..30 s, default 5 s) | 1 ext | ✅ |
+| Library multi-select auto-exits after bulk Hide / Favourite | 3 polish | ✅ |
+| Library long-press → Delete (with irreversible-action confirmation dialog) | 3 ext | ✅ |
+| Library long-press → Add to queue next (PlaybackConnection.addNext) | 3 ext | ✅ |
+| Library long-press → Open in other app (system Intent.ACTION_VIEW chooser) | 3 ext | ✅ |
 
 ## Bug fixes shipped inline
 
