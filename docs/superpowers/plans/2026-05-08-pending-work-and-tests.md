@@ -36,13 +36,14 @@ they cannot be silently dropped again.
 | C17 Metadata enrichment | LOCKED — Discogs / MusicBrainz fetch | ✅ **CLOSED in `7a1361b`.** `MusicBrainzClient` does the GET to /ws/2/recording with the required User-Agent; PlayerViewModel observes (enabled, current track) and fires lookup when fields are missing; patches artist + album via `PlaybackConnection.patchPlayerStateMetadata` without overwriting embedded tags. | runtime: dormant with toggle off; live HTTP on toggle-on + missing-fields |
 | C18 ReplayGain | LOCKED — apply at play | ✅ **CLOSED in `7a1361b`.** PlayerState gains `replayGainTrackDb`; PlaybackConnection.onMetadata extracts ID3 TXXX / Vorbis / MP4 mdta tags; PlayerViewModel writes ExoPlayer.volume = 10^(db/20) when toggle on. NaN restores volume = 1.0. | logcat: `ReplayGain applied enabled=false db=NaN volume=1.0` confirms pipeline live |
 | C20 Widget — 3 sizes + foldable | LOCKED — Compact 1×1 / Wide 4×1 / Large 4×2 | ✅ **CLOSED in `023f9bd`.** Three layout variants; appwidget-info adjusted to 60dp/60dp min, 320dp/240dp max; `RemoteViews(Map<SizeF, RV>)` on Android 12+ so the host picks the right variant per placed size; pre-S falls back to Large. | grep + dumpsys appwidget verifies provider |
-| Phase 4 crossfade — equal-power curve | LOCKED in §B3 — equal-power, logarithmic, exponential, linear curves | ✅ **CLOSED in this turn.** PlaybackService.applyCrossfadeTick now applies the curve mapping (`sin(π/2 × t)` for EQUAL_POWER, log/exp/linear for the alternatives) based on `crossfadeCurveFlag` collected from settings. **TRUE 2-player overlap (second ExoPlayer, full §B3 controller) is a known follow-up — a sloppy implementation could corrupt audio. Curve switching delivers most of the audible improvement without the engine rewrite risk.** | runtime: cross-fades now use the curve picked in the panel |
-| C6 Smart playlists | LOCKED | ❌ NOT SHIPPED | follow-up |
-| C9 OpenSubtitles | LOCKED | ❌ NOT SHIPPED | follow-up |
-| C10 Podcasts | LOCKED | ❌ NOT SHIPPED | follow-up |
-| C28 Drive offline | LOCKED | ❌ NOT SHIPPED | follow-up |
-| Phase 5 — Room v7→v8 + `media_overrides` table | LOCKED in §J | ✅ **CLOSED in `00d5fa2`.** | as C7 above |
-| Theme — accent colour picker | NEW user request 2026-05-08 | ❌ added to plan only — bounded but ~80 mass-replace sites | follow-up |
+| Phase 4 crossfade — curves | LOCKED in §B3 | ✅ **CLOSED in `a8b97bd`.** Curve mapping in applyCrossfadeTick. | |
+| Phase 4 crossfade — true 2-player overlap | LOCKED in §B3 | ✅ **CLOSED in `ce01454`.** New `CrossfadeController` spins up a second ExoPlayer inside the pre-fade window, ramps it up via curve-matched (cos/sin) factors, releases on completion. Idempotent per-track guard. ~0 MB outside the window, ~10-20 MB peak during overlap. | |
+| C6 Smart playlists | LOCKED | ✅ **CLOSED in `a328cd1` + `ce01454`.** Schema (v8→v9) + DAO + SmartPlaylistResolver + Settings UI editor (name + JSON rules). | |
+| C9 OpenSubtitles | LOCKED | ✅ **CLOSED in `a328cd1`.** OpenSubtitlesClient (login → search → download URL → save bytes) + OpenSubtitlesSection settings UI (API key + email + password + Sign in). | |
+| C10 Podcasts | LOCKED | ✅ **CLOSED in `ce01454`.** Schema (v9→v10) + DAO + RssFeedParser (XmlPullParser, RSS 2.0 + iTunes namespace) + PodcastsSection settings UI (add by URL + list + unsubscribe). | |
+| C28 Drive offline | LOCKED | ✅ **CLOSED in `a328cd1`.** OFFLINE_DRIVE_PAIRS DataStore set + saveDriveOffline / removeDriveOffline + offline-route in openItemInternal (plays Uri.fromFile when a saved pair exists; Wi-Fi-free playback). | |
+| Phase 5 — Room v7→v8 + `media_overrides` | LOCKED | ✅ **CLOSED in `00d5fa2`.** | |
+| Theme — accent colour picker | NEW user request | ✅ **CLOSED in `a328cd1`.** TealAccent backed by Compose MutableState; InstallThemeAccent at theme root reads themeAccentHex from SettingsViewModel; ThemeSection UI (hex + 8 presets + reset). Zero call-site rewrites. | |
 
 **Decisions taken without consultation that are now reversed:**
 1. Splitting C7 into "TrackContextSheet shell only" without flagging
