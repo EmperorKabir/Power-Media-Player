@@ -601,6 +601,36 @@ class PlaybackService : MediaSessionService() {
                 }
             })
             castPlayer = cp
+
+            // Bug fix (user-reported "I cast to A, then to B; A keeps
+            // playing"): SessionAvailabilityListener only fires on
+            // cast<->no-cast transitions. When the user switches devices
+            // inside the picker, the SDK ends session A and starts B
+            // without notifying the listener, leaving device A with the
+            // last loaded URL — Google Home / Nest receivers happily
+            // keep playing it. Hook SessionManagerListener so we can
+            // explicitly clearMediaItems() before the channel closes.
+            castContext.sessionManager.addSessionManagerListener(
+                object : com.google.android.gms.cast.framework.SessionManagerListener<com.google.android.gms.cast.framework.CastSession> {
+                    override fun onSessionEnding(session: com.google.android.gms.cast.framework.CastSession) {
+                        runCatching {
+                            cp.clearMediaItems()
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG", "Cast onSessionEnding -> clearMediaItems"
+                            )
+                        }
+                    }
+                    override fun onSessionEnded(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+                    override fun onSessionStarted(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
+                    override fun onSessionStarting(s: com.google.android.gms.cast.framework.CastSession) {}
+                    override fun onSessionResumed(s: com.google.android.gms.cast.framework.CastSession, w: Boolean) {}
+                    override fun onSessionResuming(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
+                    override fun onSessionResumeFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+                    override fun onSessionStartFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+                    override fun onSessionSuspended(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+                },
+                com.google.android.gms.cast.framework.CastSession::class.java
+            )
         } catch (_: Exception) {
             // No cast — phone has no Play Services or unsupported device.
         }

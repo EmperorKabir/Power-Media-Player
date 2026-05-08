@@ -867,11 +867,20 @@ class PlaybackConnection @Inject constructor(
             currentPosition = c.currentPosition.coerceAtLeast(0L),
             duration = c.duration.let { if (it == C.TIME_UNSET) 0L else it },
             bufferedPercentage = c.bufferedPercentage,
-            title = overTitle ?: metadata.title?.toString() ?: "",
-            artist = overArtist ?: metadata.artist?.toString() ?: "",
-            album = overAlbum ?: metadata.albumTitle?.toString() ?: "",
-            artworkUri = overArtwork ?: metadata.artworkUri,
-            artworkBytes = overArtworkBytes ?: metadata.artworkData,
+            // Cast bug fix (user-reported "metadata disappears once
+            // casting starts"): when the active player is CastPlayer
+            // and the receiver doesn't echo metadata back through the
+            // Cast channel, c.mediaMetadata fields come back blank.
+            // Fall back to the raw MediaItem.mediaMetadata which was
+            // populated locally in rebuildForCast / Library load.
+            title = overTitle ?: metadata.title?.toString().orEmpty()
+                .ifBlank { itemMetadata?.title?.toString() ?: "" },
+            artist = overArtist ?: metadata.artist?.toString().orEmpty()
+                .ifBlank { itemMetadata?.artist?.toString() ?: "" },
+            album = overAlbum ?: metadata.albumTitle?.toString().orEmpty()
+                .ifBlank { itemMetadata?.albumTitle?.toString() ?: "" },
+            artworkUri = overArtwork ?: metadata.artworkUri ?: itemMetadata?.artworkUri,
+            artworkBytes = overArtworkBytes ?: metadata.artworkData ?: itemMetadata?.artworkData,
             playbackSpeed = c.playbackParameters.speed,
             currentMediaItemIndex = c.currentMediaItemIndex,
             mediaItemCount = c.mediaItemCount,
