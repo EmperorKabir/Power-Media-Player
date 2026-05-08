@@ -189,6 +189,42 @@ fun LibraryScreen(
         viewModel.refreshIfStale()
     }
 
+    // §F — first-run deep-scan opt-in dialog. Shows once on the first
+    // Library-tab open after fresh install (after media permissions
+    // granted, since refreshIfStale's MediaStore query already
+    // requested perms by this point).
+    val firstRunSeen by viewModel.firstRunSeen.collectAsStateWithLifecycle()
+    if (!firstRunSeen && hasPermission) {
+        AlertDialog(
+            onDismissRequest = { viewModel.skipFirstRunDeepScan() },
+            title = {
+                Text("Find more accurate album art and metadata?",
+                    color = TealAccent,
+                    style = MaterialTheme.typography.titleMedium)
+            },
+            text = {
+                Text(
+                    "We can re-read every track's full header for richer titles, " +
+                        "artists, and artwork. Takes a few seconds the first time. " +
+                        "You can change this anytime in Settings → Deep Scan.",
+                    color = TextPrimary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.acceptFirstRunDeepScan() }) {
+                    Text("Yes, deep-scan", color = TealAccent)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.skipFirstRunDeepScan() }) {
+                    Text("Skip", color = TextSecondary)
+                }
+            },
+            containerColor = OledBlack
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()

@@ -184,6 +184,11 @@ class SettingsDataStore @Inject constructor(
         // Default OFF. Scan logic stubbed pending BS.1770 implementation.
         val REPLAYGAIN_AUTO_SCAN = booleanPreferencesKey("replaygain_auto_scan")
 
+        // §F — first-run deep-scan opt-in seen flag. Set true after the
+        // user has answered the one-time prompt (either accept or
+        // skip). Never reset.
+        val FIRST_RUN_SEEN = booleanPreferencesKey("first_run_seen")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -551,6 +556,13 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setReplayGainAutoScan(v: Boolean) {
         context.dataStore.edit { it[Keys.REPLAYGAIN_AUTO_SCAN] = v }
+    }
+
+    val firstRunSeen: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.FIRST_RUN_SEEN] ?: false
+    }
+    suspend fun setFirstRunSeen() {
+        context.dataStore.edit { it[Keys.FIRST_RUN_SEEN] = true }
     }
 
     /**

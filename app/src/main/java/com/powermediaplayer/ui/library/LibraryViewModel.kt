@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -251,6 +252,22 @@ class LibraryViewModel @Inject constructor(
     fun toggleSelection(uri: String) {
         val cur = _selectedUris.value
         _selectedUris.value = if (uri in cur) cur - uri else cur + uri
+    }
+
+    /** §F — first-run deep-scan prompt should show? */
+    val firstRunSeen: kotlinx.coroutines.flow.StateFlow<Boolean> = settingsDataStore.firstRunSeen
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+    /** §F — user picked Yes to deep-scan: enable + scan + mark seen. */
+    fun acceptFirstRunDeepScan() {
+        viewModelScope.launch {
+            settingsDataStore.setDeepScan(true)
+            settingsDataStore.setFirstRunSeen()
+            scanMedia()
+        }
+    }
+    /** §F — user picked Skip: just mark seen so the prompt doesn't reappear. */
+    fun skipFirstRunDeepScan() {
+        viewModelScope.launch { settingsDataStore.setFirstRunSeen() }
     }
 
     /** §C26 — select-all from the current visible tab. */
