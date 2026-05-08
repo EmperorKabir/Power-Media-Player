@@ -7,18 +7,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.isActive
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,25 +41,13 @@ class MediaOverrideRepository @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /**
-     * Current track's `mediaId`, polled every 750 ms on Main. We poll
-     * instead of subscribing to the player's listener because the
-     * listener lives on the service side and is shared with several
-     * existing subsystems; an extra poll keeps this repo decoupled.
+     * D10 fix — subscribe to PlaybackService's listener-driven
+     * StateFlow instead of polling currentMediaItem on Main every
+     * 750 ms. Zero work when no track is playing and zero work when
+     * the user is idle on a track.
      */
-    private val currentUri: Flow<String> = flow {
-        var last = ""
-        while (currentCoroutineContextActive()) {
-            val uri = PlaybackService.getExoPlayer()
-                ?.currentMediaItem?.mediaId.orEmpty()
-            if (uri != last) {
-                last = uri
-                emit(uri)
-            }
-            delay(750)
-        }
-    }
-        .flowOn(Dispatchers.Main.immediate)
-        .distinctUntilChanged()
+    private val currentUri: Flow<String> =
+        PlaybackService.currentMediaIdFlow
 
     val activeOverride: StateFlow<MediaOverrideEntity?> = currentUri
         .flatMapLatest { uri ->
@@ -93,12 +77,4 @@ class MediaOverrideRepository @Inject constructor(
         o?.let(pick) ?: g
     }.distinctUntilChanged()
 
-    private fun currentCoroutineContextActive(): Boolean {
-        // CoroutineScope.isActive isn't directly callable from inside a
-        // flow {} builder without bringing in extra context; using the
-        // backing scope here is sufficient because we cancel this scope
-        // never (singleton lives for the app's lifetime). The poll
-        // self-terminates if the SharingStarted policy stops sharing.
-        return scope.isActive
-    }
 }

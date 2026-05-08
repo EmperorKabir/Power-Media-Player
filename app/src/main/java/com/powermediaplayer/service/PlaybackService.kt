@@ -178,6 +178,15 @@ class PlaybackService : MediaSessionService() {
         /** §B5 — last auto-revert reason (null when not active). */
         @Volatile var crossfadeAutoRevertReason: String? = null
 
+        /**
+         * D10 fix — pushed by the Player.Listener.onMediaItemTransition
+         * inside [installCrossfadeListener]. Replaces a per-750ms
+         * polling loop in MediaOverrideRepository. Empty string until
+         * the first track is set.
+         */
+        val currentMediaIdFlow: kotlinx.coroutines.flow.MutableStateFlow<String> =
+            kotlinx.coroutines.flow.MutableStateFlow("")
+
         /** ReplayGain attenuation for negative track-gain tags
          *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
         fun setReplayGainAttenuation(factor: Float) {
@@ -742,6 +751,9 @@ class PlaybackService : MediaSessionService() {
                 // is enabled.
                 if (crossfadeMsFlag > 0) setCrossfadeFactor(0.0f)
                 else setCrossfadeFactor(1.0f)
+                // D10 fix — publish the new mediaId so
+                // MediaOverrideRepository can replace its 750ms poll.
+                currentMediaIdFlow.value = mediaItem?.mediaId.orEmpty()
                 // Phase 8 — refresh home-screen widget on track change.
                 com.powermediaplayer.widget.NowPlayingWidgetProvider
                     .refresh(applicationContext)
