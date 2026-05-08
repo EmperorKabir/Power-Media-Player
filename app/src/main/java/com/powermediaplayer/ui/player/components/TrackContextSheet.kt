@@ -48,8 +48,10 @@ import com.powermediaplayer.ui.theme.TextSecondary
  * Caller decides item visibility — typically:
  *  - Favourite/Unfavourite: pass exactly ONE based on current state.
  *  - Override*: pass non-null only when track is starred or pinned
- *    (per Q10 LOCKED — manually starred/pinned only).
- *  - Edit tags / Override*: leave null until later phases land them.
+ *    (per Q10 LOCKED — manually starred/pinned only). Wired in Library
+ *    + LastPlayed; partially wired in Cloud (SAF-content:// only).
+ *  - Edit tags: not wired anywhere yet — tag-editor screen is on the
+ *    deferred list. Leave null at every call site for now.
  */
 data class TrackContextActions(
     val onFavourite: (() -> Unit)? = null,

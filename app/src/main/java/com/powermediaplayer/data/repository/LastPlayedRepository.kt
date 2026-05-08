@@ -225,6 +225,9 @@ class LastPlayedRepository @Inject constructor(
         compactPinOrders()
     }
 
+    /** §C7 — exposed for callers that need the row's mediaUri. */
+    suspend fun snapshotFavourites() = favDao.snapshot()
+
     /**
      * Reorder a pin to position [newOrder] (0-based). Other pins are
      * shifted to maintain a contiguous 0..n-1 ordering.

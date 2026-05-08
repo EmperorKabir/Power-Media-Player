@@ -67,6 +67,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // §C20 — first-launch deep-link extra (the widget tap path).
+        intent.getStringExtra(
+            com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB
+        )?.let { pendingOpenTab.value = it }
         enableEdgeToEdge()
         MainActivityHolder.set(this)
         playbackConnection.connect()
@@ -124,11 +128,29 @@ class MainActivity : FragmentActivity() {
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        AppNavigation(windowSizeClass = windowSizeClass)
+                        AppNavigation(
+                            windowSizeClass = windowSizeClass,
+                            initialOpenTab = pendingOpenTab.value
+                        )
                     }
                 }
             }
         }
+    }
+
+    /**
+     * §C20 — widget tap deep-link target. Read at composition time and
+     * cleared after consumption so a second taps-on-launcher doesn't
+     * re-navigate. onNewIntent re-populates when the activity is
+     * already in the foreground.
+     */
+    private val pendingOpenTab = androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(
+            com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB
+        )?.let { pendingOpenTab.value = it }
     }
 
     override fun onPictureInPictureModeChanged(

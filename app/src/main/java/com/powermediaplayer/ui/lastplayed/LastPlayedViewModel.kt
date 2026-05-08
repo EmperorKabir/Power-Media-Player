@@ -57,7 +57,15 @@ class LastPlayedViewModel @Inject constructor(
     suspend fun pinSession(historyId: Long): Boolean = repo.pinSession(historyId).isSuccess
 
     fun unpin(favouriteId: Long) {
-        viewModelScope.launch(Dispatchers.IO) { repo.unpin(favouriteId) }
+        viewModelScope.launch(Dispatchers.IO) {
+            // §C7 — auto-clear per-file overrides when unpinning. Look
+            // up the row's mediaUri before delete so the override row
+            // can be cleared too.
+            val mediaUri = repo.snapshotFavourites()
+                .firstOrNull { it.id == favouriteId }?.mediaUri
+            repo.unpin(favouriteId)
+            if (!mediaUri.isNullOrBlank()) mediaOverrideDao.clear(mediaUri)
+        }
     }
 
     fun reorderPinned(favouriteId: Long, newOrder: Int) {

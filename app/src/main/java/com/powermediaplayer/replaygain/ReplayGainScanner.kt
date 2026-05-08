@@ -94,7 +94,10 @@ class ReplayGainScanner @Inject constructor(
                         .getInt(null)
                     mmr.extractMetadata(key)
                 }.getOrNull() else null
-            val gain = loudnessStr?.toDoubleOrNull()?.let { lufs -> -18.0 - lufs }
+            // Locked spec target: -14 LUFS (matches the standard ReplayGain
+            // 2.0 reference point). Earlier code targeted -18 LUFS which
+            // was an unilateral choice; corrected to spec.
+            val gain = loudnessStr?.toDoubleOrNull()?.let { lufs -> -14.0 - lufs }
                 ?: ReplayGainEntity.ABSENT
             gain to albumKey
         }.getOrDefault(Double.MAX_VALUE to "").also {

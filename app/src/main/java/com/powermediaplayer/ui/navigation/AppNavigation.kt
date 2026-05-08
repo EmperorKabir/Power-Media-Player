@@ -52,10 +52,28 @@ private val screens = listOf(
  * atomically.
  */
 @Composable
-fun AppNavigation(windowSizeClass: WindowSizeClass) {
+fun AppNavigation(
+    windowSizeClass: WindowSizeClass,
+    initialOpenTab: String? = null
+) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+
+    // §C20 — handle widget tap deep-link. When the widget host launched
+    // us with EXTRA_OPEN_TAB="player" (the only value we currently
+    // surface), force-navigate to the Player route. Trigger keyed on
+    // the value so a fresh tap re-fires even if the user had moved off
+    // the route.
+    androidx.compose.runtime.LaunchedEffect(initialOpenTab) {
+        when (initialOpenTab) {
+            "player" -> navController.navigate(Screen.Player.route) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     // Shared ViewModel scoped to the NavGraph host — allows LibraryScreen to
     // trigger playback and then navigate to the Player tab in one tap.

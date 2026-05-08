@@ -101,10 +101,23 @@ class PlayerViewModel @Inject constructor(
                     if (mediaId.isBlank() || title.isBlank()) return@collect
                     val isVideo = playbackConnection.playerState.value.videoWidth > 0
                     if (!isVideo) return@collect
-                    withContext(Dispatchers.IO) {
+                    val srt = withContext(Dispatchers.IO) {
                         runCatching {
                             subtitleAutoFetcher.fetchIfNeeded(mediaId, title)
-                        }
+                        }.getOrNull()
+                    }
+                    // §C9 — once the SRT lands on disk, attach it as a
+                    // subtitle configuration on the live player. Without
+                    // this the file would persist forever as inert.
+                    // setSubtitleConfigurations rebuilds only the track
+                    // surfaces, NOT the queue, so playback continues
+                    // uninterrupted.
+                    if (srt != null && srt.exists()) {
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "C9 SRT auto-attaching ${srt.absolutePath}"
+                        )
+                        attachSubtitle(srt)
                     }
                 }
         }
@@ -148,6 +161,36 @@ class PlayerViewModel @Inject constructor(
                             "effective=$effectiveDb volume=$target"
                     )
                 }
+        }
+    }
+
+    /**
+     * §C9 — attach an SRT file to the currently-playing MediaItem so
+     * the standard Track Selection menu surfaces it. Implementation
+     * note: Media3's MediaItem is immutable, so we rebuild the current
+     * item with the additional [SubtitleConfiguration] and call
+     * [setMediaItems] preserving position + queue index.
+     */
+    private fun attachSubtitle(srt: java.io.File) {
+        val player = com.powermediaplayer.service.PlaybackService.getExoPlayer() ?: return
+        val current = player.currentMediaItem ?: return
+        val pos = player.currentPosition.coerceAtLeast(0L)
+        val idx = player.currentMediaItemIndex
+        val sub = androidx.media3.common.MediaItem.SubtitleConfiguration.Builder(
+            android.net.Uri.fromFile(srt)
+        )
+            .setMimeType(androidx.media3.common.MimeTypes.APPLICATION_SUBRIP)
+            .setLanguage("en")
+            .setLabel("OpenSubtitles (auto)")
+            .setSelectionFlags(androidx.media3.common.C.SELECTION_FLAG_DEFAULT)
+            .build()
+        val rebuilt = current.buildUpon()
+            .setSubtitleConfigurations(listOf(sub))
+            .build()
+        runCatching {
+            player.setMediaItem(rebuilt, pos)
+            // Re-prepare so the new track surface registers.
+            player.prepare()
         }
     }
 
@@ -943,11 +986,21 @@ class PlayerViewModel @Inject constructor(
             val player = playbackConnection.getPlayer() ?: return@launch
             val initialPos = player.currentPosition.coerceAtLeast(0L)
             // Try local file chapters first (M4B / MP4 chap atom).
+            // The actual key written by M4bChapterParser is `chapter_count`
+            // + per-index scalar `chapter_start_<i>` longs (millis). The
+            // earlier `chapter_starts_ms` long-array key wasn't written
+            // by anything → END_OF_CHAPTER silently fell through to
+            // END_OF_TRACK on every M4B. Read the parser's actual key
+            // shape now.
             val chapters: List<Long> = run {
                 val item = player.currentMediaItem ?: return@run emptyList()
-                val extras = item.mediaMetadata.extras
-                val starts = extras?.getLongArray("chapter_starts_ms")
-                starts?.toList() ?: emptyList()
+                val extras = item.mediaMetadata.extras ?: return@run emptyList()
+                val count = extras.getInt("chapter_count", 0)
+                if (count <= 0) return@run emptyList()
+                (0 until count)
+                    .map { i -> extras.getLong("chapter_start_$i", -1L) }
+                    .filter { it >= 0L }
+                    .sorted()
             }
             val nextBoundary: Long = chapters
                 .firstOrNull { it > initialPos }

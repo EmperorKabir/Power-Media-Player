@@ -220,6 +220,10 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             if (favoriteDao.isFavorite(key)) {
                 favoriteDao.deleteByUri(key)
+                // §C7 — auto-clear per-file overrides when the gating
+                // signal disappears. Locked spec: "Override values clear
+                // when the file is unstarred / unpinned."
+                mediaOverrideDao.clear(key)
             } else {
                 favoriteDao.insert(FavoriteEntity(uri = key))
             }

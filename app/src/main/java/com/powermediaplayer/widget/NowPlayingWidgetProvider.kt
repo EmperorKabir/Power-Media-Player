@@ -143,19 +143,26 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
     }
 
     private fun openMainActivity(context: Context) {
-        val open = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val open = openPlayerIntent(context)
         runCatching { context.startActivity(open) }
     }
 
     private fun piActivity(context: Context, code: Int): PendingIntent {
-        val open = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         return PendingIntent.getActivity(
-            context, code, open,
+            context, code, openPlayerIntent(context),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
     }
+
+    /**
+     * §C20 — widget tap deep-links to the Player tab. MainActivity
+     * reads [EXTRA_OPEN_TAB] in onNewIntent and routes the NavHost
+     * accordingly; without the extra it lands on the user's last tab.
+     */
+    private fun openPlayerIntent(context: Context): Intent =
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(EXTRA_OPEN_TAB, TAB_PLAYER)
 
     private fun piSelf(context: Context, code: Int, action: String): PendingIntent {
         val intent = Intent(context, NowPlayingWidgetProvider::class.java)
@@ -171,6 +178,8 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
         const val ACTION_PLAY_PAUSE = "com.powermediaplayer.widget.PLAY_PAUSE"
         const val ACTION_PREV = "com.powermediaplayer.widget.PREV"
         const val ACTION_NEXT = "com.powermediaplayer.widget.NEXT"
+        const val EXTRA_OPEN_TAB = "com.powermediaplayer.widget.OPEN_TAB"
+        const val TAB_PLAYER = "player"
 
         /** Fired by the playback layer when state changes. */
         fun refresh(context: Context) {
