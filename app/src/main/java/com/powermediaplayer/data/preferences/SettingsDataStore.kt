@@ -162,6 +162,28 @@ class SettingsDataStore @Inject constructor(
         // were. Range 0..30 s.
         val COLD_START_RESUME_BACKOFF_SEC = intPreferencesKey("cold_start_resume_backoff_sec")
 
+        // §C14 — audio focus policy. Three independent settings for the
+        // common interruption types. Defaults at first install:
+        //  - Phone calls → Pause (always; can't safely play during call)
+        //  - Notifications → Duck (lower volume, keep playing)
+        //  - Other media → Pause (yields to the new audio)
+        // Token values: "pause" | "duck" | "ignore".
+        val AUDIO_FOCUS_ON_CALL = stringPreferencesKey("audio_focus_on_call")
+        val AUDIO_FOCUS_ON_NOTIFICATION = stringPreferencesKey("audio_focus_on_notification")
+        val AUDIO_FOCUS_ON_OTHER_MEDIA = stringPreferencesKey("audio_focus_on_other_media")
+
+        // §C17 — online metadata enrichment via Discogs + MusicBrainz.
+        // Stub: just the toggle for now; the actual API integrations
+        // are heavy and ship in a follow-up. Default OFF.
+        val METADATA_ENRICHMENT_ENABLED = booleanPreferencesKey("metadata_enrichment_enabled")
+        val METADATA_ENRICHMENT_PROVIDER = stringPreferencesKey("metadata_enrichment_provider")
+
+        // §C18 — auto-scan ReplayGain on import. When ON, every new
+        // MediaStore-discovered audio file gets a loudness scan + the
+        // result written to the bookmarks Room table as a sidecar.
+        // Default OFF. Scan logic stubbed pending BS.1770 implementation.
+        val REPLAYGAIN_AUTO_SCAN = booleanPreferencesKey("replaygain_auto_scan")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -487,6 +509,48 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setColdStartResumeBackoffSec(sec: Int) {
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
+    }
+
+    // ── §C14 Audio focus policy ───────────────────────────────────────
+    val audioFocusOnCall: Flow<String> = context.dataStore.data.map {
+        it[Keys.AUDIO_FOCUS_ON_CALL] ?: "pause"
+    }
+    val audioFocusOnNotification: Flow<String> = context.dataStore.data.map {
+        it[Keys.AUDIO_FOCUS_ON_NOTIFICATION] ?: "duck"
+    }
+    val audioFocusOnOtherMedia: Flow<String> = context.dataStore.data.map {
+        it[Keys.AUDIO_FOCUS_ON_OTHER_MEDIA] ?: "pause"
+    }
+    suspend fun setAudioFocusOnCall(token: String) {
+        context.dataStore.edit { it[Keys.AUDIO_FOCUS_ON_CALL] = token }
+    }
+    suspend fun setAudioFocusOnNotification(token: String) {
+        context.dataStore.edit { it[Keys.AUDIO_FOCUS_ON_NOTIFICATION] = token }
+    }
+    suspend fun setAudioFocusOnOtherMedia(token: String) {
+        context.dataStore.edit { it[Keys.AUDIO_FOCUS_ON_OTHER_MEDIA] = token }
+    }
+
+    // ── §C17 Online metadata enrichment ───────────────────────────────
+    val metadataEnrichmentEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.METADATA_ENRICHMENT_ENABLED] ?: false
+    }
+    val metadataEnrichmentProvider: Flow<String> = context.dataStore.data.map {
+        it[Keys.METADATA_ENRICHMENT_PROVIDER] ?: "musicbrainz"  // free, no key
+    }
+    suspend fun setMetadataEnrichmentEnabled(v: Boolean) {
+        context.dataStore.edit { it[Keys.METADATA_ENRICHMENT_ENABLED] = v }
+    }
+    suspend fun setMetadataEnrichmentProvider(v: String) {
+        context.dataStore.edit { it[Keys.METADATA_ENRICHMENT_PROVIDER] = v }
+    }
+
+    // ── §C18 ReplayGain auto-scan ─────────────────────────────────────
+    val replayGainAutoScan: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.REPLAYGAIN_AUTO_SCAN] ?: false
+    }
+    suspend fun setReplayGainAutoScan(v: Boolean) {
+        context.dataStore.edit { it[Keys.REPLAYGAIN_AUTO_SCAN] = v }
     }
 
     /**

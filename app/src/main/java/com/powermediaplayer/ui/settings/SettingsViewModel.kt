@@ -49,6 +49,12 @@ data class SettingsUiState(
     val trackContextSheetHideSec: Int = 0,
     val audioControlsHideFoldedSec: Int = 0,
     val audioControlsHideTabletSec: Int = 0,
+    val audioFocusOnCall: String = "pause",
+    val audioFocusOnNotification: String = "duck",
+    val audioFocusOnOtherMedia: String = "pause",
+    val metadataEnrichmentEnabled: Boolean = false,
+    val metadataEnrichmentProvider: String = "musicbrainz",
+    val replayGainAutoScan: Boolean = false,
     val hiddenUris: Set<String> = emptySet(),
     // Crossfade (Phase 4 / §B2)
     val crossfadeEnabled: Boolean = false,
@@ -138,7 +144,13 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.infoSheetHideSec,
             settingsDataStore.trackContextSheetHideSec,
             settingsDataStore.audioControlsHideFoldedSec,
-            settingsDataStore.audioControlsHideTabletSec
+            settingsDataStore.audioControlsHideTabletSec,
+            settingsDataStore.audioFocusOnCall,
+            settingsDataStore.audioFocusOnNotification,
+            settingsDataStore.audioFocusOnOtherMedia,
+            settingsDataStore.metadataEnrichmentEnabled,
+            settingsDataStore.metadataEnrichmentProvider,
+            settingsDataStore.replayGainAutoScan
         )
     ) { v ->
         SettingsUiState(
@@ -192,7 +204,13 @@ class SettingsViewModel @Inject constructor(
             infoSheetHideSec = v[47] as Int,
             trackContextSheetHideSec = v[48] as Int,
             audioControlsHideFoldedSec = v[49] as Int,
-            audioControlsHideTabletSec = v[50] as Int
+            audioControlsHideTabletSec = v[50] as Int,
+            audioFocusOnCall = v[51] as String,
+            audioFocusOnNotification = v[52] as String,
+            audioFocusOnOtherMedia = v[53] as String,
+            metadataEnrichmentEnabled = v[54] as Boolean,
+            metadataEnrichmentProvider = v[55] as String,
+            replayGainAutoScan = v[56] as Boolean
         )
     }.stateIn(
         scope = viewModelScope,
@@ -276,6 +294,21 @@ class SettingsViewModel @Inject constructor(
 
     fun setAudioControlsHideTabletSec(v: Int) =
         viewModelScope.launch { settingsDataStore.setAudioControlsHideTabletSec(v) }.let { }
+
+    fun setAudioFocusOnCall(token: String) =
+        viewModelScope.launch { settingsDataStore.setAudioFocusOnCall(token) }.let { }
+    fun setAudioFocusOnNotification(token: String) =
+        viewModelScope.launch { settingsDataStore.setAudioFocusOnNotification(token) }.let { }
+    fun setAudioFocusOnOtherMedia(token: String) =
+        viewModelScope.launch { settingsDataStore.setAudioFocusOnOtherMedia(token) }.let { }
+
+    fun setMetadataEnrichmentEnabled(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setMetadataEnrichmentEnabled(v) }.let { }
+    fun setMetadataEnrichmentProvider(v: String) =
+        viewModelScope.launch { settingsDataStore.setMetadataEnrichmentProvider(v) }.let { }
+
+    fun setReplayGainAutoScan(v: Boolean) =
+        viewModelScope.launch { settingsDataStore.setReplayGainAutoScan(v) }.let { }
 
     fun resetAllSettings() =
         viewModelScope.launch { settingsDataStore.resetAllSettings() }.let { }

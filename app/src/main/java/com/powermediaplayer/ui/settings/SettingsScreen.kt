@@ -166,6 +166,54 @@ fun SettingsScreen(
             onCheckedChange = { viewModel.setStopOnTaskRemoved(it) }
         )
 
+        // §C14 — Audio focus policy. Three independent radios for the
+        // common interruption types. Sensible defaults at first install.
+        SettingsSectionHeader("Audio focus")
+        Text(
+            text = "What this app does when something else needs the speakers — phone calls, alarms, navigation, or another music app.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
+        AudioFocusRow(
+            label = "Phone call",
+            current = uiState.audioFocusOnCall,
+            onChange = { viewModel.setAudioFocusOnCall(it) }
+        )
+        AudioFocusRow(
+            label = "Other notification",
+            current = uiState.audioFocusOnNotification,
+            onChange = { viewModel.setAudioFocusOnNotification(it) }
+        )
+        AudioFocusRow(
+            label = "Other media app",
+            current = uiState.audioFocusOnOtherMedia,
+            onChange = { viewModel.setAudioFocusOnOtherMedia(it) }
+        )
+        SettingsDivider()
+
+        // §C17 — Online metadata enrichment toggle.
+        SettingsToggleItem(
+            title = "Online metadata enrichment",
+            description = "When a track has missing info (artist, album, year, genre, " +
+                "cover art), look it up on MusicBrainz / Discogs and fill in the blanks. " +
+                "Off by default to avoid network requests on poorly-tagged libraries.",
+            icon = Icons.Filled.CloudDownload,
+            checked = uiState.metadataEnrichmentEnabled,
+            onCheckedChange = { viewModel.setMetadataEnrichmentEnabled(it) }
+        )
+
+        // §C18 — Auto-scan ReplayGain on import toggle.
+        SettingsToggleItem(
+            title = "Auto-scan ReplayGain on new files",
+            description = "Calculate loudness for every newly-discovered audio file so " +
+                "tracks at different volumes play at consistent loudness. Off by default " +
+                "(scan can be slow on first import).",
+            icon = Icons.Filled.GraphicEq,
+            checked = uiState.replayGainAutoScan,
+            onCheckedChange = { viewModel.setReplayGainAutoScan(it) }
+        )
+
         // §C3 — external automation control. Default OFF for security
         // (no random app on your phone can drive playback unless you
         // opt in). Documented intent actions:
@@ -878,6 +926,39 @@ private fun SubtitleFormatOption(
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )
+        }
+    }
+}
+
+/**
+ * §C14 — single-row policy picker for Audio Focus. Three options:
+ * Pause / Duck / Ignore. Tap chip to apply. Persisted by caller.
+ */
+@Composable
+private fun AudioFocusRow(
+    label: String,
+    current: String,
+    onChange: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Spacer(Modifier.height(2.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("pause" to "Pause", "duck" to "Duck", "ignore" to "Ignore").forEach { (token, name) ->
+                FilterChip(
+                    selected = current == token,
+                    onClick = { onChange(token) },
+                    label = { Text(name) }
+                )
+            }
         }
     }
 }

@@ -275,13 +275,13 @@ private fun PlayerScreenCompact(
     horizontalPadding: Int = 0
 ) {
     // Video mode: tap to toggle controls; auto-hide per user setting.
-    // Audio: controls always visible — never auto-hide.
+    // Audio: controls always visible — hiding cover + transport in
+    // audio mode would defeat the purpose of the now-playing surface.
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
     val videoHideSec by viewModel.videoControlsHideSec.collectAsStateWithLifecycle()
     LaunchedEffect(uiState.isVideoContent, controlsVisible, videoHideSec) {
-        // 0 seconds = "Never" — controls stay visible indefinitely.
         if (uiState.isVideoContent && controlsVisible && videoHideSec > 0) {
             delay(videoHideSec * 1000L)
             controlsVisible = false
