@@ -1090,22 +1090,27 @@ class PlayerViewModel @Inject constructor(
     fun setVolumeBoost(milliBels: Int) {
         val clamped = milliBels.coerceIn(0, 2000)
         _volumeBoostMb.value = clamped
+        // Boost is off — never attach an effect. (Earlier versions
+        // attached LoudnessEnhancer eagerly even at gain=0; on some
+        // Samsung devices setTargetGain(0) returns INVALID_OPERATION
+        // until the effect is fully primed, spamming the log on every
+        // mediaItemTransition. Lazy-attach only when the user actually
+        // wants boost.)
+        if (clamped == 0) {
+            disposeLoudnessEnhancer()
+            return
+        }
         // playbackConnection.getPlayer() returns a MediaController IPC
         // proxy — `as? ExoPlayer` always yields null. Reach the real
         // ExoPlayer via the same static accessor used by VideoSurface.
         val sessionId = com.powermediaplayer.service.PlaybackService
             .getExoPlayer()?.audioSessionId ?: 0
         if (sessionId == 0) {
-            // No live audio session yet — release any stale LE and bail.
-            // mediaItemTransition without a valid session was the source
-            // of the "AudioEffect: invalid parameter operation" warning.
             disposeLoudnessEnhancer()
             return
         }
-        // The audio session id can change across track transitions (Media3
-        // swaps the underlying AudioTrack on some transitions). A cached
-        // LoudnessEnhancer is bound to its original session; calling
-        // setTargetGain on a dead session throws. Rebuild on session change.
+        // Audio session id can change across track transitions (Media3
+        // swaps the AudioTrack on some transitions). Rebuild on change.
         if (loudnessEnhancerSessionId != sessionId) {
             disposeLoudnessEnhancer()
         }

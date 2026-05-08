@@ -219,12 +219,24 @@ private fun AlarmEditor(
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
+                Text(
+                    "Sound",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.labelMedium
+                )
                 OutlinedTextField(
                     value = mediaUri,
                     onValueChange = { mediaUri = it },
-                    label = { Text("Media URI (blank = resume)") },
+                    label = { Text("Track to play") },
+                    placeholder = { Text("Leave blank to resume last track") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Tip: leave blank and the alarm will play whatever you " +
+                        "had playing last. Picker UI is on the roadmap.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary
                 )
             }
         },

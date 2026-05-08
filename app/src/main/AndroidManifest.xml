@@ -209,6 +209,9 @@
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.powermediaplayer.widget.REFRESH" />
+                <action android:name="com.powermediaplayer.widget.PLAY_PAUSE" />
+                <action android:name="com.powermediaplayer.widget.PREV" />
+                <action android:name="com.powermediaplayer.widget.NEXT" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
