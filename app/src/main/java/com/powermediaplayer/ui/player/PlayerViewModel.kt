@@ -1083,6 +1083,7 @@ class PlayerViewModel @Inject constructor(
     // ── LoudnessEnhancer volume boost ─────────────────────────────
     // _volumeBoostMb backing field is declared above the init block.
     private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
+    private var loudnessEnhancerSessionId: Int = 0
     val volumeBoostMb: StateFlow<Int> = _volumeBoostMb.asStateFlow()
 
     /** millibels of gain on top of normal volume. 0 = off; 2000 = +20 dB. */
@@ -1094,16 +1095,38 @@ class PlayerViewModel @Inject constructor(
         // ExoPlayer via the same static accessor used by VideoSurface.
         val sessionId = com.powermediaplayer.service.PlaybackService
             .getExoPlayer()?.audioSessionId ?: 0
-        if (sessionId == 0) return
+        if (sessionId == 0) {
+            // No live audio session yet — release any stale LE and bail.
+            // mediaItemTransition without a valid session was the source
+            // of the "AudioEffect: invalid parameter operation" warning.
+            disposeLoudnessEnhancer()
+            return
+        }
+        // The audio session id can change across track transitions (Media3
+        // swaps the underlying AudioTrack on some transitions). A cached
+        // LoudnessEnhancer is bound to its original session; calling
+        // setTargetGain on a dead session throws. Rebuild on session change.
+        if (loudnessEnhancerSessionId != sessionId) {
+            disposeLoudnessEnhancer()
+        }
         try {
-            val le = loudnessEnhancer ?: android.media.audiofx.LoudnessEnhancer(sessionId).also {
-                loudnessEnhancer = it
-                it.enabled = true
-            }
+            val le = loudnessEnhancer
+                ?: android.media.audiofx.LoudnessEnhancer(sessionId).also {
+                    loudnessEnhancer = it
+                    loudnessEnhancerSessionId = sessionId
+                    it.enabled = true
+                }
             le.setTargetGain(clamped)
         } catch (t: Throwable) {
             com.powermediaplayer.util.Diag.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
+            disposeLoudnessEnhancer()
         }
+    }
+
+    private fun disposeLoudnessEnhancer() {
+        runCatching { loudnessEnhancer?.release() }
+        loudnessEnhancer = null
+        loudnessEnhancerSessionId = 0
     }
 
     // ── Frame step + screenshot helpers ───────────────────────────
