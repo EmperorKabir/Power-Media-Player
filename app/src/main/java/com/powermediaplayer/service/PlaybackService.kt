@@ -627,8 +627,35 @@ class PlaybackService : MediaSessionService() {
         val playWhenReady = current.playWhenReady
 
         val transformed = if (target is CastPlayer) {
-            startCastRelayIfNeeded()?.let { server -> items.map { rebuildForCast(it, server) } }
-                ?: items
+            val server = startCastRelayIfNeeded()
+            if (server == null && items.isNotEmpty()) {
+                // BUG FIX (user-reported "cast connects but nothing plays,
+                // player wipes all tracks"): if the relay can't start,
+                // we used to silently fall through to the original
+                // content:// / file:// URIs which the receiver cannot
+                // fetch — CastPlayer.setMediaItems then loaded
+                // unreachable URLs, the receiver bailed, currentMediaItem
+                // went null, and the UI rendered as an empty player.
+                // Now we abort the takeover entirely: keep playing
+                // locally + post a toast so the user knows.
+                com.powermediaplayer.util.Diag.w(
+                    "PMP_DIAG",
+                    "Cast aborted — relay unavailable (no Wi-Fi LAN IP or " +
+                        "NanoHTTPD failed). Receiver cannot fetch content:// " +
+                        "URIs without the relay. Keeping local playback."
+                )
+                kotlinx.coroutines.MainScope().launch {
+                    runCatching {
+                        android.widget.Toast.makeText(
+                            applicationContext,
+                            "Cast unavailable — connect to Wi-Fi and retry",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+                return  // stay with local player; user can retry
+            }
+            server?.let { items.map { rebuildForCast(it, server) } } ?: items
         } else {
             stopCastRelay()
             items
