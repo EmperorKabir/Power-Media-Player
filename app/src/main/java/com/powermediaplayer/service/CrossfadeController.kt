@@ -12,9 +12,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * §B3 — true 2-player crossfade engine.
@@ -141,18 +138,21 @@ class CrossfadeController(
             "Crossfade overlap started ms=$crossfadeMs curve=$curve")
 
         overlapJob = scope.launch {
+            // §B3 D9 fix — derive volB directly from the primary's
+            // crossfadeFactor so the two ramps share a single time
+            // base and we can guarantee energy coherence per curve
+            // (no double application of the curve in two different
+            // time bases).
             val tickMs = 50L
             val totalSteps = (crossfadeMs / tickMs).coerceAtLeast(1)
             for (i in 0..totalSteps) {
-                val t = i.toFloat() / totalSteps
-                val (volA, volB) = curveFactors(t, curve)
+                val volA = com.powermediaplayer.service.PlaybackService
+                    .crossfadeFactorRead().coerceIn(0f, 1f)
+                val volB = when (curve) {
+                    "EQUAL_POWER" -> kotlin.math.sqrt(1f - volA * volA).coerceIn(0f, 1f)
+                    else -> (1f - volA).coerceIn(0f, 1f)
+                }
                 runCatching { sec.volume = volB * primaryFinalVolume }
-                // Primary attenuation is published via the existing
-                // mixer in PlaybackService.Companion — we DON'T touch
-                // primary's volume directly to avoid fighting the
-                // ReplayGain × crossfade multiplier already applied
-                // there. Instead we let PlaybackService.setCrossfadeFactor
-                // do its thing and ride the secondary on top.
                 delay(tickMs)
             }
             // Crossfade complete — advance the primary, release secondary.
@@ -162,25 +162,6 @@ class CrossfadeController(
             com.powermediaplayer.util.Diag.i("PMP_DIAG",
                 "Crossfade overlap completed")
         }
-    }
-
-    /**
-     * Map normalised progress `t ∈ [0,1]` through the chosen curve to
-     * (primaryAttenuation, secondaryGain). Equal-power keeps the
-     * combined energy constant.
-     */
-    private fun curveFactors(t: Float, curve: String): Pair<Float, Float> = when (curve) {
-        "EQUAL_POWER" -> {
-            val angle = (t * PI / 2f).toFloat()
-            cos(angle) to sin(angle)
-        }
-        "EXPONENTIAL" -> (1f - t * t) to (t * t)
-        "LOGARITHMIC" -> {
-            val log = if (t <= 0f) 0f
-            else (kotlin.math.log10(1f + 9f * t)).coerceIn(0f, 1f)
-            (1f - log) to log
-        }
-        else -> (1f - t) to t // linear
     }
 
     /**
