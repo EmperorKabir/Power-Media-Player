@@ -49,6 +49,29 @@ class PlayerViewModel @Inject constructor(
     private val musicBrainzClient =
         com.powermediaplayer.enrichment.MusicBrainzClient()
 
+    /**
+     * §B5 LOCKED — auto-revert reason exposed via a Flow so the player
+     * UI can show a Snackbar. Polls the companion-object holder set by
+     * PlaybackService whenever it zeros the effective crossfade ms.
+     */
+    val crossfadeAutoRevertReason: kotlinx.coroutines.flow.StateFlow<String?> =
+        kotlinx.coroutines.flow.flow {
+            var last: String? = null
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                val r = com.powermediaplayer.service.PlaybackService.crossfadeAutoRevertReason
+                if (r != last) { last = r; emit(r) }
+                kotlinx.coroutines.delay(750)
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
+    fun clearCrossfadeAutoRevertReason() {
+        com.powermediaplayer.service.PlaybackService.crossfadeAutoRevertReason = null
+    }
+
     init {
         // §C7 — speed / pitch / volume-boost are direct calls into the
         // live ExoPlayer; audio + video effect axes flow through

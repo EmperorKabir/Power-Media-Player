@@ -175,6 +175,9 @@ class PlaybackService : MediaSessionService() {
         @Volatile private var replayGainFactor: Float = 1.0f
         @Volatile private var crossfadeFactor: Float = 1.0f
 
+        /** §B5 — last auto-revert reason (null when not active). */
+        @Volatile var crossfadeAutoRevertReason: String? = null
+
         /** ReplayGain attenuation for negative track-gain tags
          *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
         fun setReplayGainAttenuation(factor: Float) {
@@ -298,15 +301,29 @@ class PlaybackService : MediaSessionService() {
                 settingsDataStore.crossfadeEnabled
             ) { ms, enabled -> if (enabled) ms else 0 }
                 .collect { incoming ->
-                    val effective = if (canCrossfadeNow()) incoming else 0
+                    val canX = canCrossfadeNow()
+                    val effective = if (canX) incoming else 0
                     if (effective != crossfadeMsFlag) {
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
                             "Crossfade ms=$effective " +
-                                "(persisted=$incoming, canCrossfade=${canCrossfadeNow()})"
+                                "(persisted=$incoming, canCrossfade=$canX)"
                         )
                     }
                     crossfadeMsFlag = effective
+                    // §B5 — record the auto-revert reason on the
+                    // companion-object holder so PlayerViewModel can
+                    // surface a Snackbar without us needing the
+                    // PlaybackConnection here.
+                    crossfadeAutoRevertReason = if (incoming > 0 && !canX) {
+                        val active = mediaSession?.player
+                        when {
+                            active is androidx.media3.cast.CastPlayer ->
+                                "Crossfade paused — Cast manages its own playback."
+                            else ->
+                                "Crossfade paused — current source can't crossfade."
+                        }
+                    } else null
                 }
         }
         serviceScope.launch {

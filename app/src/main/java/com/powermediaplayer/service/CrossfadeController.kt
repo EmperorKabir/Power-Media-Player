@@ -98,7 +98,18 @@ class CrossfadeController(
         curve: String,
         primaryFinalVolume: Float
     ) {
-        val sec = ExoPlayer.Builder(context).build()
+        // §B3 LOCKED — secondary shares AudioAttributes with primary
+        // (USAGE_MEDIA + CONTENT_TYPE_MUSIC). handleAudioFocus = false
+        // because the primary already owns the focus request via
+        // PlaybackService.installAudioFocusPolicy; OS mixes the two
+        // AudioTracks into the same session.
+        val attrs = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+            .build()
+        val sec = ExoPlayer.Builder(context)
+            .setAudioAttributes(attrs, /* handleAudioFocus */ false)
+            .build()
         secondary = sec
         runCatching {
             sec.setMediaItem(nextItem)

@@ -68,6 +68,11 @@ data class PlayerState(
     // the file's embedded tags don't carry them.
     val year: Int = 0,
     val genre: String = "",
+    // §B5 — set when the engine zeroes the effective crossfade ms
+    // because canCrossfadeNow() returned false despite the user's
+    // persisted preference being on. Driven by the snackbar in
+    // PlayerScreen; cleared on user dismissal.
+    val crossfadeAutoRevertReason: String? = null,
     // Last playback error (network 401, codec failure, etc.) — null when ok.
     val playerError: String? = null,
     // True while a cloud cache download (chapters/metadata extraction)
@@ -688,6 +693,13 @@ class PlaybackConnection @Inject constructor(
                 artist = newArtist, album = newAlbum,
                 year = newYear, genre = newGenre
             )
+        }
+    }
+
+    /** §B5 — set the auto-revert reason from PlaybackService. */
+    fun setCrossfadeAutoRevertReason(reason: String?) {
+        if (_playerState.value.crossfadeAutoRevertReason != reason) {
+            _playerState.value = _playerState.value.copy(crossfadeAutoRevertReason = reason)
         }
     }
 

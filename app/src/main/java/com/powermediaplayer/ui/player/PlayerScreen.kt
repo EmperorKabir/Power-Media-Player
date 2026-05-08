@@ -72,6 +72,21 @@ fun PlayerScreen(
     var showChapterPicker by remember { mutableStateOf(false) }
     var showInfoSheet by remember { mutableStateOf(false) }
 
+    // §B5 LOCKED — auto-revert snackbar. Triggered by PlaybackService
+    // when the active source can't crossfade (Cast / video / M4B);
+    // displayed as a Toast for parity with the rest of the player UI
+    // (no SnackbarHost anchor in this screen).
+    val crossfadeRevertReason by viewModel.crossfadeAutoRevertReason.collectAsStateWithLifecycle()
+    val toastCtx = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(crossfadeRevertReason) {
+        crossfadeRevertReason?.let { reason ->
+            android.widget.Toast.makeText(
+                toastCtx, reason, android.widget.Toast.LENGTH_SHORT
+            ).show()
+            viewModel.clearCrossfadeAutoRevertReason()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Video ALWAYS uses the Compact layout regardless of screen size,
         // so the picture fills the whole screen on phones, tablets, and
