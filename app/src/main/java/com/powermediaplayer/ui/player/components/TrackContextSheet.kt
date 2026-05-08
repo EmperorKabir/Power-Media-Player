@@ -62,6 +62,8 @@ data class TrackContextActions(
     val onOverrideVideo: (() -> Unit)? = null,
     val onShare: (() -> Unit)? = null,
     val onOpenInOtherApp: (() -> Unit)? = null,
+    val onSaveOffline: (() -> Unit)? = null,
+    val onRemoveOffline: (() -> Unit)? = null,
     val onDelete: (() -> Unit)? = null,
 )
 
@@ -158,6 +160,12 @@ fun TrackContextSheet(
             }
             actions.onOpenInOtherApp?.let {
                 Item(Icons.Filled.OpenInNew, "Open in other app", onClick = it)
+            }
+            actions.onSaveOffline?.let {
+                Item(Icons.Filled.Headset, "Save offline copy", onClick = it)
+            }
+            actions.onRemoveOffline?.let {
+                Item(Icons.Filled.Headset, "Remove offline copy", onClick = it, tint = ErrorRed)
             }
             actions.onDelete?.let {
                 Item(Icons.Filled.Delete, "Delete", onClick = it, tint = ErrorRed)

@@ -27,6 +27,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -76,6 +78,56 @@ class CloudViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
 ) : ViewModel() {
+
+    /**
+     * §C28 — current snapshot of {driveFileId → cachedAbsolutePath} for
+     * offline Drive copies. Compose-friendly StateFlow so row chips +
+     * long-press menu visibility can react instantly.
+     */
+    val offlineDrivePairs: kotlinx.coroutines.flow.StateFlow<Map<String, String>> =
+        settingsDataStore.offlineDrivePairs
+            .stateIn(
+                viewModelScope,
+                kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                emptyMap()
+            )
+
+    fun hasOfflineCopy(driveId: String): Boolean = offlineDrivePairs.value.containsKey(driveId)
+
+    fun saveDriveOffline(item: CloudMediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val file: java.io.File? = runCatching {
+                if (item.id.startsWith("content://"))
+                    driveProvider.downloadFullToCache(item)
+                else driveOAuthProvider.downloadFullToCache(item)
+            }.getOrNull()
+            if (file != null && file.exists()) {
+                settingsDataStore.upsertOfflineDrive(item.id, file.absolutePath)
+                _uiState.update {
+                    it.copy(errorMessage = "Saved offline: ${item.name}")
+                }
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "C28 saved offline id=${item.id} path=${file.absolutePath} size=${file.length()}"
+                )
+            } else {
+                _uiState.update {
+                    it.copy(errorMessage = "Couldn't save offline — try again on Wi-Fi.")
+                }
+            }
+        }
+    }
+
+    fun removeDriveOffline(driveId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val path = offlineDrivePairs.value[driveId]
+            if (path != null) {
+                runCatching { java.io.File(path).delete() }
+            }
+            settingsDataStore.removeOfflineDrive(driveId)
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "C28 removed offline id=$driveId")
+        }
+    }
 
     private fun recordCloudPlay(item: CloudMediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -703,11 +755,28 @@ class CloudViewModel @Inject constructor(
             spotifyProvider.stopPlaybackPolling()
             runCatching { spotifyProvider.togglePlayPause() }
         }
+        // §C28 — if a Drive item has an offline copy on disk, route to
+        // the local file URI immediately. Skips the bearer-token /
+        // network-fetch path entirely and works without Internet.
+        val offlinePath = if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE) {
+            offlineDrivePairs.value[item.id]
+        } else null
+
         // Build a MediaItem and hand it to the playback connection. The
         // PlaybackService DataSource pipeline injects the Drive bearer
         // token automatically for googleapis.com URLs.
         run {
-            val streamResult = when (item.sourceProvider) {
+            val streamResult: kotlin.Result<android.net.Uri> = if (offlinePath != null) {
+                val f = java.io.File(offlinePath)
+                if (f.exists()) kotlin.Result.success(android.net.Uri.fromFile(f))
+                else when (item.sourceProvider) {
+                    CloudProviderType.GOOGLE_DRIVE ->
+                        if (item.id.startsWith("content://")) driveProvider.getMediaStreamUri(item)
+                        else driveOAuthProvider.getMediaStreamUri(item)
+                    CloudProviderType.SPOTIFY -> spotifyProvider.getMediaStreamUri(item)
+                    else -> return false
+                }
+            } else when (item.sourceProvider) {
                 CloudProviderType.GOOGLE_DRIVE ->
                     if (item.id.startsWith("content://")) driveProvider.getMediaStreamUri(item)
                     else driveOAuthProvider.getMediaStreamUri(item)

@@ -13,7 +13,19 @@ val Teal600 = Color(0xFF00897B)
 val Teal700 = Color(0xFF00796B)
 val Teal800 = Color(0xFF00695C)
 val Teal900 = Color(0xFF004D40)
-val TealAccent = Color(0xFF00BFA5)
+// §11.5 — TealAccent is the user-configurable accent. Backed by a
+// Compose MutableState so every composable that reads it recomposes
+// when the user changes the accent in Settings → Theme. ThemeAccent
+// (in ThemeAccent.kt) hooks the DataStore key into the holder at app
+// start. The default value preserves the original Material teal so
+// fresh installs look identical to v1.
+private val _tealAccentState =
+    androidx.compose.runtime.mutableStateOf(Color(0xFF00BFA5))
+val TealAccent: Color
+    get() = _tealAccentState.value
+internal fun setTealAccentColor(c: Color) {
+    _tealAccentState.value = c
+}
 val TealBright = Color(0xFF1DE9B6)
 
 // ── OLED Black & Surfaces ────────────────────────────────────

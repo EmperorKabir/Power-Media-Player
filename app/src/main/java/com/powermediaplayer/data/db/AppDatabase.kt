@@ -15,6 +15,7 @@ import com.powermediaplayer.data.db.dao.HistoryFavouriteDao
 import com.powermediaplayer.data.db.dao.MediaOverrideDao
 import com.powermediaplayer.data.db.dao.PlaybackHistoryDao
 import com.powermediaplayer.data.db.dao.PlaybackStateDao
+import com.powermediaplayer.data.db.dao.SmartPlaylistDao
 import com.powermediaplayer.data.db.entity.BookmarkEntity
 import com.powermediaplayer.data.db.entity.EqualizerPresetEntity
 import com.powermediaplayer.data.db.entity.FavoriteEntity
@@ -24,6 +25,7 @@ import com.powermediaplayer.data.db.entity.HistoryFavouriteEntity
 import com.powermediaplayer.data.db.entity.MediaOverrideEntity
 import com.powermediaplayer.data.db.entity.PlaybackHistoryEntity
 import com.powermediaplayer.data.db.entity.PlaybackStateEntity
+import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
 
 /**
  * Main Room database for Power Media Player.
@@ -39,7 +41,8 @@ import com.powermediaplayer.data.db.entity.PlaybackStateEntity
         HistoryFavouriteEntity::class,
         HistoryBookmarkEntity::class,
         FavouriteBookmarkEntity::class,
-        MediaOverrideEntity::class
+        MediaOverrideEntity::class,
+        SmartPlaylistEntity::class
     ],
     // v5: PlaybackHistory + HistoryFavourite switched to autogen IDs;
     // added HistoryBookmark + FavouriteBookmark snapshot tables.
@@ -52,7 +55,8 @@ import com.powermediaplayer.data.db.entity.PlaybackStateEntity
     // v8: §C7 per-file playback overrides — adds `media_overrides`
     // table. First non-destructive migration; existing data
     // preserved.
-    version = 8,
+    // v9: §C6 smart playlists — adds `smart_playlists` table.
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -66,6 +70,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun historyBookmarkDao(): HistoryBookmarkDao
     abstract fun favouriteBookmarkDao(): FavouriteBookmarkDao
     abstract fun mediaOverrideDao(): MediaOverrideDao
+    abstract fun smartPlaylistDao(): SmartPlaylistDao
 
     companion object {
         const val DATABASE_NAME = "power_media_player.db"
@@ -95,6 +100,25 @@ abstract class AppDatabase : RoomDatabase() {
                         videoRotation INTEGER,
                         playbackSpeed REAL,
                         pitch REAL,
+                        updatedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * §C6 v8→v9 — adds the `smart_playlists` table.
+         */
+        val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS smart_playlists (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        rulesJson TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL,
                         updatedAt INTEGER NOT NULL
                     )
                     """.trimIndent()

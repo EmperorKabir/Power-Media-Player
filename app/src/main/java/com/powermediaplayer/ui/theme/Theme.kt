@@ -44,6 +44,11 @@ private val PowerDarkColorScheme = darkColorScheme(
 fun PowerMediaPlayerTheme(
     content: @Composable () -> Unit
 ) {
+    // §11.5 — installs the user's chosen accent into TealAccent's
+    // MutableState holder so every composable that reads TealAccent
+    // recomposes when the user changes it in Settings → Theme. No
+    // per-call-site rewrite required.
+    InstallThemeAccent()
     MaterialTheme(
         colorScheme = PowerDarkColorScheme,
         typography = PowerTypography,

@@ -29,6 +29,13 @@ class SettingsDataStore @Inject constructor(
         val SLEEP_TIMER_MINUTES = intPreferencesKey("sleep_timer_minutes")
         val LAST_EQ_PRESET_ID = longPreferencesKey("last_eq_preset_id")
         val HEADPHONE_EQ_PRESET_ID = longPreferencesKey("headphone_eq_preset_id")
+        val THEME_ACCENT_HEX = stringPreferencesKey("theme_accent_hex")
+        // §C28 — Drive offline copy registry. Set of "id|absolutePath".
+        val OFFLINE_DRIVE_PAIRS = stringSetPreferencesKey("offline_drive_pairs")
+        // §C9 — OpenSubtitles credentials.
+        val OPENSUBS_TOKEN = stringPreferencesKey("opensubs_token")
+        val OPENSUBS_EMAIL = stringPreferencesKey("opensubs_email")
+        val OPENSUBS_API_KEY = stringPreferencesKey("opensubs_api_key")
         val BRIGHTNESS_OVERRIDE = floatPreferencesKey("brightness_override")
 
         // Bluetooth media-button remapping. Stored as the action token
@@ -679,6 +686,66 @@ class SettingsDataStore @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[Keys.HEADPHONE_EQ_PRESET_ID] = id
         }
+    }
+
+    // §11.5 — user-selectable accent colour. Default "" → falls back
+    // to the hard-coded teal in TealAccent's holder.
+    val themeAccentHex: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.THEME_ACCENT_HEX] ?: ""
+    }
+
+    suspend fun setThemeAccentHex(hex: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.THEME_ACCENT_HEX] = hex
+        }
+    }
+
+    // §C28 — Drive offline copies registry.
+    val offlineDrivePairs: Flow<Map<String, String>> = context.dataStore.data
+        .map { prefs ->
+            (prefs[Keys.OFFLINE_DRIVE_PAIRS] ?: emptySet())
+                .mapNotNull {
+                    val sep = it.indexOf('|')
+                    if (sep <= 0) null
+                    else it.substring(0, sep) to it.substring(sep + 1)
+                }
+                .toMap()
+        }
+
+    suspend fun upsertOfflineDrive(id: String, absolutePath: String) {
+        context.dataStore.edit { prefs ->
+            val cur = prefs[Keys.OFFLINE_DRIVE_PAIRS] ?: emptySet()
+            // Drop any prior pair for this id, then add the new one.
+            val pruned = cur.filterNot { it.startsWith("$id|") }.toSet()
+            prefs[Keys.OFFLINE_DRIVE_PAIRS] = pruned + "$id|$absolutePath"
+        }
+    }
+
+    suspend fun removeOfflineDrive(id: String) {
+        context.dataStore.edit { prefs ->
+            val cur = prefs[Keys.OFFLINE_DRIVE_PAIRS] ?: emptySet()
+            prefs[Keys.OFFLINE_DRIVE_PAIRS] =
+                cur.filterNot { it.startsWith("$id|") }.toSet()
+        }
+    }
+
+    val openSubsToken: Flow<String> = context.dataStore.data.map {
+        it[Keys.OPENSUBS_TOKEN] ?: ""
+    }
+    val openSubsEmail: Flow<String> = context.dataStore.data.map {
+        it[Keys.OPENSUBS_EMAIL] ?: ""
+    }
+    val openSubsApiKey: Flow<String> = context.dataStore.data.map {
+        it[Keys.OPENSUBS_API_KEY] ?: ""
+    }
+    suspend fun setOpenSubsToken(t: String) {
+        context.dataStore.edit { prefs -> prefs[Keys.OPENSUBS_TOKEN] = t }
+    }
+    suspend fun setOpenSubsEmail(e: String) {
+        context.dataStore.edit { prefs -> prefs[Keys.OPENSUBS_EMAIL] = e }
+    }
+    suspend fun setOpenSubsApiKey(k: String) {
+        context.dataStore.edit { prefs -> prefs[Keys.OPENSUBS_API_KEY] = k }
     }
 
     // ── Brightness Override ──────────────────────────────────────

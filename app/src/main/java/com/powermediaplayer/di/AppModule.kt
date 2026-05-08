@@ -45,7 +45,8 @@ object AppModule {
             .fallbackToDestructiveMigrationFrom(false, 1, 2, 3, 4, 5, 6)
             // v7 → v8 (§C7): adds media_overrides table without
             // touching existing data. First non-destructive migration.
-            .addMigrations(AppDatabase.MIGRATION_7_8)
+            // v8 → v9 (§C6): adds smart_playlists table.
+            .addMigrations(AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
             .build()
     }
 
@@ -109,6 +110,12 @@ object AppModule {
         dao: com.powermediaplayer.data.db.dao.MediaOverrideDao
     ): com.powermediaplayer.data.repository.MediaOverrideRepository =
         com.powermediaplayer.data.repository.MediaOverrideRepository(dao)
+
+    @Provides
+    @Singleton
+    fun provideSmartPlaylistDao(database: AppDatabase): com.powermediaplayer.data.db.dao.SmartPlaylistDao {
+        return database.smartPlaylistDao()
+    }
 
     @Provides
     @Singleton

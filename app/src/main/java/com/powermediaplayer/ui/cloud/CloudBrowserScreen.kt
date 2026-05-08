@@ -84,7 +84,16 @@ fun CloudBrowserScreen(
                     }
                     context.startActivity(android.content.Intent.createChooser(send, "Share"))
                     contextItem = null
-                }
+                },
+                // §C28 — Drive offline copy. Spotify rows skip this
+                // (DRM TOS); Drive rows surface Save / Remove based on
+                // whether an offline pair exists.
+                onSaveOffline = if (isDriveTrack && !viewModel.hasOfflineCopy(item.id)) {
+                    { viewModel.saveDriveOffline(item); contextItem = null }
+                } else null,
+                onRemoveOffline = if (isDriveTrack && viewModel.hasOfflineCopy(item.id)) {
+                    { viewModel.removeDriveOffline(item.id); contextItem = null }
+                } else null
                 // Hide / Delete / Override-* deferred — not applicable to
                 // streamed cloud items in Phase 3 scope.
             ),

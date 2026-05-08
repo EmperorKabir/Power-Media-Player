@@ -71,7 +71,8 @@ data class SettingsUiState(
     val bookmarkReplayContextSec: Int = 10,
     val stopOnTaskRemoved: Boolean = false,
     val coldStartResumeBackoffSec: Int = 5,
-    val scheduledAlarms: List<com.powermediaplayer.alarm.AlarmRecord> = emptyList()
+    val scheduledAlarms: List<com.powermediaplayer.alarm.AlarmRecord> = emptyList(),
+    val themeAccentHex: String = ""
 )
 
 /**
@@ -152,7 +153,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.metadataEnrichmentEnabled,
             settingsDataStore.metadataEnrichmentProvider,
             settingsDataStore.replayGainAutoScan,
-            settingsDataStore.scheduledAlarms
+            settingsDataStore.scheduledAlarms,
+            settingsDataStore.themeAccentHex
         )
     ) { v ->
         SettingsUiState(
@@ -213,7 +215,8 @@ class SettingsViewModel @Inject constructor(
             metadataEnrichmentEnabled = v[54] as Boolean,
             metadataEnrichmentProvider = v[55] as String,
             replayGainAutoScan = v[56] as Boolean,
-            scheduledAlarms = @Suppress("UNCHECKED_CAST") (v[57] as List<com.powermediaplayer.alarm.AlarmRecord>)
+            scheduledAlarms = @Suppress("UNCHECKED_CAST") (v[57] as List<com.powermediaplayer.alarm.AlarmRecord>),
+            themeAccentHex = v[58] as String
         )
     }.stateIn(
         scope = viewModelScope,
@@ -279,6 +282,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setStopOnTaskRemoved(v: Boolean) =
         viewModelScope.launch { settingsDataStore.setStopOnTaskRemoved(v) }.let { }
+
+    fun setThemeAccentHex(hex: String) =
+        viewModelScope.launch { settingsDataStore.setThemeAccentHex(hex) }.let { }
 
     fun setColdStartResumeBackoffSec(v: Int) =
         viewModelScope.launch { settingsDataStore.setColdStartResumeBackoffSec(v) }.let { }

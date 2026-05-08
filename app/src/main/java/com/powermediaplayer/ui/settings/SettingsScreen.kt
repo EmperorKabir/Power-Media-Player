@@ -207,6 +207,16 @@ fun SettingsScreen(
         com.powermediaplayer.ui.settings.HeadphoneEqSection()
         SettingsDivider()
 
+        // §11.5 — user-selectable accent colour.
+        SettingsSectionHeader("Theme")
+        com.powermediaplayer.ui.settings.ThemeSection()
+        SettingsDivider()
+
+        // §C9 — OpenSubtitles account.
+        SettingsSectionHeader("Subtitles")
+        com.powermediaplayer.ui.settings.OpenSubtitlesSection()
+        SettingsDivider()
+
         // §C17 — Online metadata enrichment toggle.
         SettingsToggleItem(
             title = "Online metadata enrichment",
