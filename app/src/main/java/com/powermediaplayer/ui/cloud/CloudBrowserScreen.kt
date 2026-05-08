@@ -352,6 +352,39 @@ fun CloudBrowserScreen(
                     CircularProgressIndicator(color = TealAccent)
                 }
             } else if (uiState.activeProvider == CloudProviderType.SPOTIFY &&
+                       uiState.spotifySection == null &&
+                       !uiState.spotifyLoggedIn) {
+                // Bug fix (silent-sign-out): when the Spotify refresh
+                // token fails, _isLoggedIn flips to false and the user
+                // would otherwise see the cached category list which
+                // 401s as soon as they tap one. Surface a clear "sign
+                // in again" prompt instead.
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = SpotifyGreen,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "Spotify session expired",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Re-sign in from the tab bar above to keep browsing your library.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary
+                        )
+                    }
+                }
+            } else if (uiState.activeProvider == CloudProviderType.SPOTIFY &&
                        uiState.spotifySection == null) {
                 // Spotify section picker — landing screen when entering
                 // Spotify. Each card opens a single Web API endpoint.
