@@ -28,8 +28,16 @@ import javax.inject.Inject
 class LastPlayedViewModel @Inject constructor(
     private val repo: LastPlayedRepository,
     private val playbackConnection: PlaybackConnection,
-    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
+    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
 ) : ViewModel() {
+
+    /**
+     * §C7 — drop overrides when a row stops being pinned.
+     */
+    fun clearOverridesForUri(uri: String) {
+        viewModelScope.launch(Dispatchers.IO) { mediaOverrideDao.clear(uri) }
+    }
 
     val dynamic: StateFlow<List<LastPlayedRepository.HistoryItem>> =
         repo.observeDynamic().stateIn(

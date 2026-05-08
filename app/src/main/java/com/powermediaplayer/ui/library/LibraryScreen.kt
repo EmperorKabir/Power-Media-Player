@@ -48,6 +48,15 @@ fun LibraryScreen(
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<MediaFileInfo?>(null) }
     var pendingDelete by remember { mutableStateOf<MediaFileInfo?>(null) }
+    var overrideTarget by remember { mutableStateOf<MediaFileInfo?>(null) }
+    overrideTarget?.let { item ->
+        com.powermediaplayer.ui.overrides.MediaOverridesPopup(
+            mediaUri = item.uri.toString(),
+            title = item.title,
+            dao = viewModel.mediaOverrideDao,
+            onDismiss = { overrideTarget = null }
+        )
+    }
     // Exit multi-select on system back if currently in it.
     androidx.activity.compose.BackHandler(enabled = multiSelectMode) {
         viewModel.exitMultiSelect()
@@ -78,6 +87,18 @@ fun LibraryScreen(
                     viewModel.addToQueueNext(item)
                     contextItem = null
                 },
+                // §C7 / §C25 — override-* items only when the row is
+                // favourited (the Library equivalent of "starred"). For
+                // pinned files, the same gate fires from LastPlayedScreen.
+                onOverrideSpeed = if (isFav) {
+                    { overrideTarget = item; contextItem = null }
+                } else null,
+                onOverrideAudio = if (isFav) {
+                    { overrideTarget = item; contextItem = null }
+                } else null,
+                onOverrideVideo = if (isFav && item.isVideo) {
+                    { overrideTarget = item; contextItem = null }
+                } else null,
                 onShare = {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                         type = if (item.isVideo) "video/*" else "audio/*"

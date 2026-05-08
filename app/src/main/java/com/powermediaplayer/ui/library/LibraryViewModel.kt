@@ -87,8 +87,22 @@ class LibraryViewModel @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
-    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
+    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
 ) : ViewModel() {
+
+    /**
+     * §C7 — when the user unfavourites a row, drop any per-file
+     * overrides we'd kept for it. The override-popup is starred-or-
+     * pinned-only; once that gating disappears, the data should too.
+     */
+    fun clearOverridesIfUnfavourited(uri: String, willBeFavourite: Boolean) {
+        if (!willBeFavourite) {
+            viewModelScope.launch(Dispatchers.IO) {
+                mediaOverrideDao.clear(uri)
+            }
+        }
+    }
 
     /**
      * Stop any active Spotify Connect mirror when starting local

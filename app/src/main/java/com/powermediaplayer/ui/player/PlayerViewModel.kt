@@ -22,6 +22,7 @@ import javax.inject.Inject
  * Manages sleep timer countdown. All state updates flow via StateFlow to prevent
  * frame drops from the 12+ simultaneous on-screen buttons.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
 
@@ -30,8 +31,85 @@ class PlayerViewModel @Inject constructor(
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
+    private val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    /**
+     * §C7 — currently-active per-file override row, derived from the
+     * current track's `mediaUri`. Null when no row exists; non-null with
+     * `isEmpty()` when the user toggled all axes off (treated as "no
+     * override" by [applyOverridesToLivePlayer] but kept as a row so the
+     * popup can resurface their previous values).
+     *
+     * The indicator chip in the player UI binds to this so users see
+     * "Custom audio/video/speed for this file" the moment a track with
+     * overrides starts.
+     */
+    val currentOverride: kotlinx.coroutines.flow.StateFlow<
+        com.powermediaplayer.data.db.entity.MediaOverrideEntity?> =
+        kotlinx.coroutines.flow.flow {
+            // Re-evaluate on every transition. Polls the player's
+            // currentMediaItem via the same listener used by other
+            // axes — Media3 already pumps onMediaItemTransition.
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                val uri = playbackConnection.getPlayer()
+                    ?.currentMediaItem?.mediaId.orEmpty()
+                emit(uri)
+                kotlinx.coroutines.delay(750)
+            }
+        }
+            .distinctUntilChanged()
+            .flatMapLatest { uri ->
+                if (uri.isBlank()) kotlinx.coroutines.flow.flowOf(null)
+                else mediaOverrideDao.getByUri(uri)
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = kotlinx.coroutines.flow.SharingStarted
+                    .WhileSubscribed(5000),
+                initialValue = null
+            )
+
+    init {
+        // §C7 — apply overrides to the live player on every track change.
+        viewModelScope.launch {
+            currentOverride.collect { row ->
+                applyOverridesToLivePlayer(row)
+            }
+        }
+    }
+
+    private fun applyOverridesToLivePlayer(
+        row: com.powermediaplayer.data.db.entity.MediaOverrideEntity?
+    ) {
+        if (row == null || row.isEmpty()) return
+        val player = playbackConnection.getPlayer() ?: return
+        // Speed + pitch: use Media3 PlaybackParameters. Pitch is
+        // overridden alongside speed in a single set so they stay
+        // coherent.
+        val speed = row.playbackSpeed ?: player.playbackParameters.speed
+        val pitch = row.pitch ?: player.playbackParameters.pitch
+        if (row.playbackSpeed != null || row.pitch != null) {
+            runCatching {
+                player.playbackParameters =
+                    androidx.media3.common.PlaybackParameters(speed, pitch)
+            }
+        }
+        // Volume boost: lazy-attach via existing setter (§audio fix).
+        row.volumeBoostMb?.let { setVolumeBoost(it) }
+        // Audio effect axes flow through SettingsDataStore? — these are
+        // global toggles read by PlaybackService. For per-file we'd need
+        // a parallel "transient" channel; deferred to a follow-up. Log
+        // so the user sees we read the override but didn't fully apply
+        // every audio axis yet.
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "Override applied: speed=${row.playbackSpeed} " +
+                "pitch=${row.pitch} volumeBoost=${row.volumeBoostMb} " +
+                "(audio-effect + video-effect axes pending engine wiring)"
+        )
+    }
 
     /**
      * Most recent play session id, observed from the repository. Used

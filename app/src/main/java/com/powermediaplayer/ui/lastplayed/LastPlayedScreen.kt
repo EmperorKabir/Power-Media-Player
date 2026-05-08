@@ -65,6 +65,15 @@ fun LastPlayedScreen(
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<HistoryItem?>(null) }
     var contextFromRecents by remember { mutableStateOf(true) }
+    var overrideTarget by remember { mutableStateOf<HistoryItem?>(null) }
+    overrideTarget?.let { item ->
+        com.powermediaplayer.ui.overrides.MediaOverridesPopup(
+            mediaUri = item.mediaUri,
+            title = item.title,
+            dao = viewModel.mediaOverrideDao,
+            onDismiss = { overrideTarget = null }
+        )
+    }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     if (showInfoSheet) {
         com.powermediaplayer.ui.info.InfoSheet(
@@ -88,6 +97,17 @@ fun LastPlayedScreen(
                 } else null,
                 onUnfavourite = if (!contextFromRecents) {
                     { viewModel.unpin(item.id); contextItem = null }
+                } else null,
+                // §C7 / §C25 — override-* items only when the row is
+                // pinned (the Last-Played equivalent of "starred").
+                onOverrideSpeed = if (item.isPinned) {
+                    { overrideTarget = item; contextItem = null }
+                } else null,
+                onOverrideAudio = if (item.isPinned) {
+                    { overrideTarget = item; contextItem = null }
+                } else null,
+                onOverrideVideo = if (item.isPinned) {
+                    { overrideTarget = item; contextItem = null }
                 } else null,
                 onShare = {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {

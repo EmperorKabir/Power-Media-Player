@@ -42,9 +42,10 @@ object AppModule {
             // has to be explicitly authorised here, otherwise Room
             // throws IllegalStateException on launch and the app
             // force-closes for every beta tester upgrading to v1.0.
-            // Future schema bumps from v7 onwards MUST ship with a
-            // proper Migration object — see docs/MIGRATION_INSTRUCTIONS.md.
             .fallbackToDestructiveMigrationFrom(false, 1, 2, 3, 4, 5, 6)
+            // v7 → v8 (§C7): adds media_overrides table without
+            // touching existing data. First non-destructive migration.
+            .addMigrations(AppDatabase.MIGRATION_7_8)
             .build()
     }
 
@@ -94,6 +95,12 @@ object AppModule {
     @Singleton
     fun provideFavouriteBookmarkDao(database: AppDatabase): com.powermediaplayer.data.db.dao.FavouriteBookmarkDao {
         return database.favouriteBookmarkDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideMediaOverrideDao(database: AppDatabase): com.powermediaplayer.data.db.dao.MediaOverrideDao {
+        return database.mediaOverrideDao()
     }
 
     @Provides
