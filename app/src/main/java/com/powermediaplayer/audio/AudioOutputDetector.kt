@@ -48,6 +48,14 @@ class AudioOutputDetector @Inject constructor(
     private val _isTrueMonoOutput = MutableStateFlow(false)
     val isTrueMonoOutput: StateFlow<Boolean> = _isTrueMonoOutput.asStateFlow()
 
+    /**
+     * §C13 — true when wired or A2DP/Bluetooth headphones / earbuds
+     * are the active output route. Used by `PlaybackService` to swap
+     * EQ presets on plug-in / restore on unplug.
+     */
+    private val _isHeadphonesConnected = MutableStateFlow(false)
+    val isHeadphonesConnected: StateFlow<Boolean> = _isHeadphonesConnected.asStateFlow()
+
     init {
         recompute()
         audioManager.registerAudioDeviceCallback(
@@ -68,6 +76,21 @@ class AudioOutputDetector @Inject constructor(
         val outputs = runCatching {
             audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
         }.getOrDefault(emptyList())
+
+        // §C13 — wired/BT headphones detection. AudioDeviceInfo types
+        // that count as "headphones" for the auto-EQ-swap path:
+        //   WIRED_HEADSET / WIRED_HEADPHONES — 3.5mm jack
+        //   BLUETOOTH_A2DP — A2DP audio profile (typical wireless)
+        //   BLE_HEADSET — LE Audio (Android 12+)
+        //   USB_HEADSET — USB-C wired
+        _isHeadphonesConnected.value = outputs.any { d ->
+            d.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                d.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                d.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                (android.os.Build.VERSION.SDK_INT >= 31 &&
+                    d.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+        }
 
         // Prefer non-builtin sinks if connected — once headphones /
         // BT / cast is plugged the speaker isn't the listening path.

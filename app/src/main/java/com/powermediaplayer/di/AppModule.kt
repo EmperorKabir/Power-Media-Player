@@ -105,6 +105,13 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideMediaOverrideRepository(
+        dao: com.powermediaplayer.data.db.dao.MediaOverrideDao
+    ): com.powermediaplayer.data.repository.MediaOverrideRepository =
+        com.powermediaplayer.data.repository.MediaOverrideRepository(dao)
+
+    @Provides
+    @Singleton
     fun provideSettingsDataStore(
         @ApplicationContext context: Context
     ): SettingsDataStore {

@@ -38,8 +38,16 @@ class EqualizerViewModel @Inject constructor(
     private val presetDao: EqualizerPresetDao,
     private val settingsDataStore: SettingsDataStore,
     private val eqEffect: com.powermediaplayer.audio.EqualizerEffectController,
-    private val playbackConnection: com.powermediaplayer.service.PlaybackConnection
+    private val playbackConnection: com.powermediaplayer.service.PlaybackConnection,
+    private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector
 ) : ViewModel() {
+
+    /**
+     * §C13 — last "manually selected" preset, used to restore when
+     * headphones disconnect. Updated only by [selectPreset] (user
+     * action), not by the auto-swap path so the auto-swap can revert.
+     */
+    @Volatile private var manuallySelectedPresetId: Long = -1L
 
     private val gson = Gson()
     private val _uiState = MutableStateFlow(EqualizerUiState())
@@ -74,7 +82,66 @@ class EqualizerViewModel @Inject constructor(
             restoreLastPreset()
         }
         viewModelScope.launch { loadPresets() }
+        // §C13 — auto-swap on headphone plug-in / restore on unplug.
+        // We deliberately observe the boolean transition (not the
+        // current value alone) so a stale "true" at boot doesn't fire
+        // a swap before the user has set anything up.
+        viewModelScope.launch {
+            audioOutputDetector.isHeadphonesConnected
+                .combine(settingsDataStore.headphoneEqPresetId) { hp, id -> hp to id }
+                .distinctUntilChanged()
+                .collect { (connected, headphonePresetId) ->
+                    if (headphonePresetId <= 0L) return@collect
+                    if (connected) {
+                        val preset = presetDao.getPresetById(headphonePresetId)
+                        if (preset != null) {
+                            applyPresetSilently(preset)
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "C13 headphone EQ swap: '${preset.name}' " +
+                                    "(saved manual=$manuallySelectedPresetId)"
+                            )
+                        }
+                    } else {
+                        if (manuallySelectedPresetId > 0L) {
+                            val preset = presetDao.getPresetById(manuallySelectedPresetId)
+                            if (preset != null) {
+                                applyPresetSilently(preset)
+                                com.powermediaplayer.util.Diag.i(
+                                    "PMP_DIAG",
+                                    "C13 headphone EQ restore: '${preset.name}'"
+                                )
+                            }
+                        }
+                    }
+                }
+        }
     }
+
+    /**
+     * §C13 — apply a preset to the live EQ + UI state WITHOUT touching
+     * [manuallySelectedPresetId] or the persisted "last preset" key. Used
+     * by the headphone-aware auto-swap path so the user's manual choice
+     * is preserved across plug events.
+     */
+    private fun applyPresetSilently(preset: EqualizerPresetEntity) {
+        val levels = parseBandLevels(preset.bandLevels)
+        _uiState.value = _uiState.value.copy(
+            bandLevels = levels,
+            selectedPresetId = preset.id,
+            selectedPresetName = preset.name,
+            isCustomModified = false
+        )
+        pushLevels(levels)
+    }
+
+    fun setHeadphoneEqPreset(presetId: Long) {
+        viewModelScope.launch { settingsDataStore.setHeadphoneEqPresetId(presetId) }
+    }
+
+    /** §C13 — exposed for the settings entry. */
+    val headphoneEqPresetId: kotlinx.coroutines.flow.Flow<Long> =
+        settingsDataStore.headphoneEqPresetId
 
     /**
      * Set a single band level.
@@ -102,6 +169,10 @@ class EqualizerViewModel @Inject constructor(
             isCustomModified = false
         )
         pushLevels(levels)
+        // §C13 — manual selections are the "restore target" when
+        // headphones disconnect; auto-swaps go through applyPresetSilently
+        // which does NOT update this field.
+        manuallySelectedPresetId = preset.id
         viewModelScope.launch {
             settingsDataStore.setLastEqPresetId(preset.id)
         }

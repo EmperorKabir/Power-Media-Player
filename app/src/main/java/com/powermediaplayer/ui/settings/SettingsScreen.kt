@@ -199,6 +199,14 @@ fun SettingsScreen(
         )
         SettingsDivider()
 
+        // §C13 — Headphone-aware EQ. The actual swap-on-plug runs in
+        // EqualizerViewModel; here we expose a single entry that opens
+        // a sheet to pick the preset. Picker UI lives in EQ tab; this
+        // section just surfaces the user's current choice and a way to
+        // clear it.
+        com.powermediaplayer.ui.settings.HeadphoneEqSection()
+        SettingsDivider()
+
         // §C17 — Online metadata enrichment toggle.
         SettingsToggleItem(
             title = "Online metadata enrichment",

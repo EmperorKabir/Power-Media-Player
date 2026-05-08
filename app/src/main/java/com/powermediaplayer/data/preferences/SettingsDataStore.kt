@@ -28,6 +28,7 @@ class SettingsDataStore @Inject constructor(
         val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
         val SLEEP_TIMER_MINUTES = intPreferencesKey("sleep_timer_minutes")
         val LAST_EQ_PRESET_ID = longPreferencesKey("last_eq_preset_id")
+        val HEADPHONE_EQ_PRESET_ID = longPreferencesKey("headphone_eq_preset_id")
         val BRIGHTNESS_OVERRIDE = floatPreferencesKey("brightness_override")
 
         // Bluetooth media-button remapping. Stored as the action token
@@ -666,6 +667,17 @@ class SettingsDataStore @Inject constructor(
     suspend fun setLastEqPresetId(id: Long) {
         context.dataStore.edit { prefs ->
             prefs[Keys.LAST_EQ_PRESET_ID] = id
+        }
+    }
+
+    // §C13 — preset to swap to when headphones connect. -1 = off.
+    val headphoneEqPresetId: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[Keys.HEADPHONE_EQ_PRESET_ID] ?: -1L
+    }
+
+    suspend fun setHeadphoneEqPresetId(id: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.HEADPHONE_EQ_PRESET_ID] = id
         }
     }
 

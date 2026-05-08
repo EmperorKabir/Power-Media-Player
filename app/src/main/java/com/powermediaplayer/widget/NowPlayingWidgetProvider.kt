@@ -76,34 +76,69 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
     }
 
     private fun build(context: Context): RemoteViews {
-        val views = RemoteViews(context.packageName, R.layout.widget_now_playing)
+        // §C20 — three layout variants chosen by widget host based on
+        // physical size (Android 12+: RemoteViews(Map<SizeF, RV>);
+        // older: single Large layout). Compact = 1×1, Wide = 4×1,
+        // Large = 4×2.
+        return if (android.os.Build.VERSION.SDK_INT >= 31) {
+            android.widget.RemoteViews(
+                mapOf(
+                    android.util.SizeF(60f, 60f) to buildVariant(
+                        context, R.layout.widget_now_playing_compact, hasText = false, hasTransport = false
+                    ),
+                    android.util.SizeF(180f, 60f) to buildVariant(
+                        context, R.layout.widget_now_playing_wide, hasText = true, hasTransport = true
+                    ),
+                    android.util.SizeF(180f, 120f) to buildVariant(
+                        context, R.layout.widget_now_playing, hasText = true, hasTransport = true
+                    )
+                )
+            )
+        } else {
+            buildVariant(context, R.layout.widget_now_playing, hasText = true, hasTransport = true)
+        }
+    }
 
+    private fun buildVariant(
+        context: Context,
+        layoutId: Int,
+        hasText: Boolean,
+        hasTransport: Boolean
+    ): RemoteViews {
+        val views = RemoteViews(context.packageName, layoutId)
         val player = PlaybackService.getExoPlayer()
         val item = player?.currentMediaItem
-        val title = item?.mediaMetadata?.title?.toString()?.ifBlank { null }
-            ?: "Power Media Player"
-        val artist = item?.mediaMetadata?.artist?.toString()?.ifBlank { null }
-            ?: "Tap to open"
-        views.setTextViewText(R.id.widget_title, title)
-        views.setTextViewText(R.id.widget_artist, artist)
-
+        if (hasText) {
+            val title = item?.mediaMetadata?.title?.toString()?.ifBlank { null }
+                ?: "Power Media Player"
+            val artist = item?.mediaMetadata?.artist?.toString()?.ifBlank { null }
+                ?: "Tap to open"
+            views.setTextViewText(R.id.widget_title, title)
+            views.setTextViewText(R.id.widget_artist, artist)
+        }
         val isPlaying = player?.isPlaying == true
         views.setImageViewResource(
             R.id.widget_play_pause,
             if (isPlaying) android.R.drawable.ic_media_pause
             else android.R.drawable.ic_media_play
         )
-
-        views.setOnClickPendingIntent(R.id.widget_top, piActivity(context, 0))
+        // Click intents — every variant exposes play_pause; only
+        // wide / large get prev / next; large additionally has the
+        // top-row tap-to-open.
         views.setOnClickPendingIntent(
             R.id.widget_play_pause, piSelf(context, 1, ACTION_PLAY_PAUSE)
         )
-        views.setOnClickPendingIntent(
-            R.id.widget_prev, piSelf(context, 2, ACTION_PREV)
-        )
-        views.setOnClickPendingIntent(
-            R.id.widget_next, piSelf(context, 3, ACTION_NEXT)
-        )
+        if (hasTransport) {
+            views.setOnClickPendingIntent(
+                R.id.widget_prev, piSelf(context, 2, ACTION_PREV)
+            )
+            views.setOnClickPendingIntent(
+                R.id.widget_next, piSelf(context, 3, ACTION_NEXT)
+            )
+        }
+        if (layoutId == R.layout.widget_now_playing) {
+            views.setOnClickPendingIntent(R.id.widget_top, piActivity(context, 0))
+        }
         return views
     }
 

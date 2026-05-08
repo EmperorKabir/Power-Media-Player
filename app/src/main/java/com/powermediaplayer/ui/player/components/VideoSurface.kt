@@ -72,8 +72,16 @@ fun VideoSurface(
     videoHeight: Int,
     modifier: Modifier = Modifier
 ) {
-    val settingsVm: SettingsViewModel = hiltViewModel()
-    val s by settingsVm.uiState.collectAsStateWithLifecycle()
+    // §C7 — read effective video values from PlayerViewModel so per-
+    // file overrides win over global settings without polluting the
+    // user's preferences.
+    val playerVm: com.powermediaplayer.ui.player.PlayerViewModel = hiltViewModel()
+    val flipH by playerVm.effectiveVideoFlipH.collectAsStateWithLifecycle(initialValue = false)
+    val flipV by playerVm.effectiveVideoFlipV.collectAsStateWithLifecycle(initialValue = false)
+    val bw by playerVm.effectiveVideoBw.collectAsStateWithLifecycle(initialValue = false)
+    val sepia by playerVm.effectiveVideoSepia.collectAsStateWithLifecycle(initialValue = false)
+    val invert by playerVm.effectiveVideoInvert.collectAsStateWithLifecycle(initialValue = false)
+    val rotation by playerVm.effectiveVideoRotation.collectAsStateWithLifecycle(initialValue = 0)
 
     Box(
         modifier = modifier.fillMaxSize().background(OledBlack),
@@ -92,9 +100,9 @@ fun VideoSurface(
         // composable's own size. No race with view.post or
         // view.width / view.height fallbacks.
         val transformMod = Modifier.graphicsLayer(
-            scaleX = if (s.videoFlipH) -1f else 1f,
-            scaleY = if (s.videoFlipV) -1f else 1f,
-            rotationZ = s.videoRotation.toFloat(),
+            scaleX = if (flipH) -1f else 1f,
+            scaleY = if (flipV) -1f else 1f,
+            rotationZ = rotation.toFloat(),
             transformOrigin = TransformOrigin.Center
         )
 
@@ -110,9 +118,9 @@ fun VideoSurface(
                 // Flip / rotation are now handled by graphicsLayer
                 // above so we don't touch view.setTransform any more.
                 val cm = buildColorMatrix(
-                    bw = s.videoBw,
-                    sepia = s.videoSepia,
-                    invert = s.videoInvert
+                    bw = bw,
+                    sepia = sepia,
+                    invert = invert
                 )
                 if (cm != null) {
                     view.setLayerType(

@@ -33,6 +33,7 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
@@ -91,6 +92,9 @@ class PlaybackService : MediaSessionService() {
 
     @javax.inject.Inject
     lateinit var audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector
+
+    @javax.inject.Inject
+    lateinit var mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository
 
 
     private var player: ExoPlayer? = null
@@ -245,12 +249,19 @@ class PlaybackService : MediaSessionService() {
 
         // Watch the stereo flip / mono mix prefs from DataStore and
         // mirror into the @Volatile flags the processor reads on every
-        // input buffer. No restart of playback required to toggle.
+        // input buffer. §C7: per-file override wins when present;
+        // global setting otherwise. No restart of playback required.
         serviceScope.launch {
-            settingsDataStore.stereoFlip.collect { stereoFlipFlag = it }
+            mediaOverrideRepo.withOverrideBool(
+                settingsDataStore.stereoFlip,
+                pick = { it.stereoFlip }
+            ).collect { stereoFlipFlag = it }
         }
         serviceScope.launch {
-            settingsDataStore.monoMix.collect { monoMixFlag = it }
+            mediaOverrideRepo.withOverrideBool(
+                settingsDataStore.monoMix,
+                pick = { it.monoMix }
+            ).collect { monoMixFlag = it }
         }
         // Audio delay slider — lives in the AudioDelayProcessor's
         // ring buffer; the supplier reads this @Volatile per buffer.
@@ -399,7 +410,11 @@ class PlaybackService : MediaSessionService() {
                     .setUsage(C.USAGE_MEDIA)
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                     .build(),
-                /* handleAudioFocus */ true
+                // §C14 — disable ExoPlayer's built-in handler; the
+                // installAudioFocusPolicy() call below registers our
+                // own AudioFocusRequest with per-scenario semantics
+                // (pause / duck / continue) read from SettingsDataStore.
+                /* handleAudioFocus */ false
             )
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
@@ -422,6 +437,9 @@ class PlaybackService : MediaSessionService() {
         // Frame-rate strategy left at default. Forcing OFF on a Z Fold
         // 6 (1-120Hz adaptive panel) made things worse — the panel
         // can match content rate which is usually best.
+
+        // §C14 — install per-scenario audio-focus policy.
+        installAudioFocusPolicy()
 
         // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
         exoPlayerRef = java.lang.ref.WeakReference(player!!)
@@ -513,6 +531,115 @@ class PlaybackService : MediaSessionService() {
     // float multiply + a single setVolume() call when changing).
     private var crossfadeJob: kotlinx.coroutines.Job? = null
     @Volatile private var trackStartTimestampMs: Long = 0L
+
+    // ── §C14 audio-focus policy ─────────────────────────────────
+    //
+    // ExoPlayer's built-in handler is disabled (handleAudioFocus =
+    // false above) because Media3 has no concept of per-scenario
+    // pause / duck / continue choice. We register our own
+    // [AudioFocusRequest] and route LOSS variants through the user's
+    // settings:
+    //   LOSS_TRANSIENT          → onCall setting
+    //   LOSS_TRANSIENT_CAN_DUCK → onNotification setting
+    //   LOSS                    → onOtherMedia setting
+    //
+    // Pre-O devices fall back to the deprecated requestAudioFocus()
+    // shape; we use AudioManagerCompat for source-compat across both.
+    private var audioFocusRequest: android.media.AudioFocusRequest? = null
+    @Volatile private var pausedDueToFocus: Boolean = false
+    @Volatile private var duckedDueToFocus: Boolean = false
+
+    private fun installAudioFocusPolicy() {
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val attrs = android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+        val listener = android.media.AudioManager.OnAudioFocusChangeListener { focusChange ->
+            handleAudioFocusChange(focusChange)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            audioFocusRequest = android.media.AudioFocusRequest.Builder(
+                android.media.AudioManager.AUDIOFOCUS_GAIN
+            ).setAudioAttributes(attrs)
+                .setOnAudioFocusChangeListener(listener)
+                .setAcceptsDelayedFocusGain(true)
+                .build()
+        }
+        // Request focus immediately so subsequent transient/duck/loss
+        // events flow into our listener. Failure here is non-fatal —
+        // some emulator images return AUDIOFOCUS_REQUEST_FAILED on the
+        // first attempt before AudioFlinger is fully initialised.
+        runCatching {
+            val req = audioFocusRequest
+            if (android.os.Build.VERSION.SDK_INT >= 26 && req != null) {
+                am.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                am.requestAudioFocus(
+                    listener,
+                    android.media.AudioManager.STREAM_MUSIC,
+                    android.media.AudioManager.AUDIOFOCUS_GAIN
+                )
+            }
+        }.onFailure {
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "AudioFocus request failed", it)
+        }
+    }
+
+    private fun handleAudioFocusChange(change: Int) {
+        val p = player ?: return
+        val policy = serviceScope.async {
+            when (change) {
+                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ->
+                    settingsDataStore.audioFocusOnCall.first()
+                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
+                    settingsDataStore.audioFocusOnNotification.first()
+                android.media.AudioManager.AUDIOFOCUS_LOSS ->
+                    settingsDataStore.audioFocusOnOtherMedia.first()
+                else -> "gain"
+            }
+        }
+        serviceScope.launch {
+            val choice = policy.await()
+            when (change) {
+                android.media.AudioManager.AUDIOFOCUS_GAIN -> {
+                    if (duckedDueToFocus) {
+                        runCatching { p.volume = 1.0f }
+                        duckedDueToFocus = false
+                    }
+                    if (pausedDueToFocus) {
+                        runCatching { p.play() }
+                        pausedDueToFocus = false
+                    }
+                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN applied")
+                }
+                android.media.AudioManager.AUDIOFOCUS_LOSS,
+                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                    when (choice) {
+                        "pause" -> {
+                            if (p.isPlaying) {
+                                pausedDueToFocus = true
+                                runCatching { p.pause() }
+                            }
+                        }
+                        "duck" -> {
+                            duckedDueToFocus = true
+                            runCatching { p.volume = 0.3f }
+                        }
+                        // "continue" / "ignore" → do nothing.
+                        else -> {}
+                    }
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "AudioFocus loss=$change choice=$choice " +
+                            "paused=$pausedDueToFocus ducked=$duckedDueToFocus"
+                    )
+                }
+            }
+        }
+    }
 
     private fun startCrossfadeController() {
         crossfadeJob?.cancel()

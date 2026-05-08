@@ -31,63 +31,39 @@ class PlayerViewModel @Inject constructor(
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
-    private val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
+    private val mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     /**
-     * §C7 — currently-active per-file override row, derived from the
-     * current track's `mediaUri`. Null when no row exists; non-null with
-     * `isEmpty()` when the user toggled all axes off (treated as "no
-     * override" by [applyOverridesToLivePlayer] but kept as a row so the
-     * popup can resurface their previous values).
-     *
-     * The indicator chip in the player UI binds to this so users see
-     * "Custom audio/video/speed for this file" the moment a track with
-     * overrides starts.
+     * §C7 — currently-active per-file override row, sourced from the
+     * shared [MediaOverrideRepository] so `PlaybackService` (audio
+     * chain) and this view-model (video / speed / chip) stay coherent.
      */
-    val currentOverride: kotlinx.coroutines.flow.StateFlow<
-        com.powermediaplayer.data.db.entity.MediaOverrideEntity?> =
-        kotlinx.coroutines.flow.flow {
-            // Re-evaluate on every transition. Polls the player's
-            // currentMediaItem via the same listener used by other
-            // axes — Media3 already pumps onMediaItemTransition.
-            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-                val uri = playbackConnection.getPlayer()
-                    ?.currentMediaItem?.mediaId.orEmpty()
-                emit(uri)
-                kotlinx.coroutines.delay(750)
-            }
-        }
-            .distinctUntilChanged()
-            .flatMapLatest { uri ->
-                if (uri.isBlank()) kotlinx.coroutines.flow.flowOf(null)
-                else mediaOverrideDao.getByUri(uri)
-            }
-            .stateIn(
-                scope = viewModelScope,
-                started = kotlinx.coroutines.flow.SharingStarted
-                    .WhileSubscribed(5000),
-                initialValue = null
-            )
+    val currentOverride =
+        mediaOverrideRepo.activeOverride
 
     init {
-        // §C7 — apply overrides to the live player on every track change.
+        // §C7 — speed / pitch / volume-boost are direct calls into the
+        // live ExoPlayer; audio + video effect axes flow through
+        // dedicated combined flows via [MediaOverrideRepository] so
+        // they don't pollute global settings.
         viewModelScope.launch {
             currentOverride.collect { row ->
-                applyOverridesToLivePlayer(row)
+                applyDirectAxes(row)
             }
         }
     }
 
-    private fun applyOverridesToLivePlayer(
+    private fun applyDirectAxes(
         row: com.powermediaplayer.data.db.entity.MediaOverrideEntity?
     ) {
-        if (row == null || row.isEmpty()) return
         val player = playbackConnection.getPlayer() ?: return
-        // Speed + pitch: use Media3 PlaybackParameters. Pitch is
-        // overridden alongside speed in a single set so they stay
-        // coherent.
+        // No row, or all-null row → leave the live player alone. The
+        // user's manual speed / pitch / volume-boost slider edits flow
+        // through the existing setters and we'd clobber them by
+        // restoring "global" values here.
+        if (row == null || row.isEmpty()) return
         val speed = row.playbackSpeed ?: player.playbackParameters.speed
         val pitch = row.pitch ?: player.playbackParameters.pitch
         if (row.playbackSpeed != null || row.pitch != null) {
@@ -96,20 +72,31 @@ class PlayerViewModel @Inject constructor(
                     androidx.media3.common.PlaybackParameters(speed, pitch)
             }
         }
-        // Volume boost: lazy-attach via existing setter (§audio fix).
         row.volumeBoostMb?.let { setVolumeBoost(it) }
-        // Audio effect axes flow through SettingsDataStore? — these are
-        // global toggles read by PlaybackService. For per-file we'd need
-        // a parallel "transient" channel; deferred to a follow-up. Log
-        // so the user sees we read the override but didn't fully apply
-        // every audio axis yet.
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
-            "Override applied: speed=${row.playbackSpeed} " +
-                "pitch=${row.pitch} volumeBoost=${row.volumeBoostMb} " +
-                "(audio-effect + video-effect axes pending engine wiring)"
+            "Override direct axes: speed=${row.playbackSpeed} " +
+                "pitch=${row.pitch} volumeBoost=${row.volumeBoostMb}"
         )
     }
+
+    /**
+     * §C7 — effective video-effect flows. VideoSurface composables
+     * read these instead of [SettingsViewModel] so per-file overrides
+     * affect the live shader without polluting global settings.
+     */
+    val effectiveVideoFlipH =
+        mediaOverrideRepo.withOverrideBool(settingsDataStore.videoFlipH) { it.videoFlipH }
+    val effectiveVideoFlipV =
+        mediaOverrideRepo.withOverrideBool(settingsDataStore.videoFlipV) { it.videoFlipV }
+    val effectiveVideoBw =
+        mediaOverrideRepo.withOverrideBool(settingsDataStore.videoBw) { it.videoBw }
+    val effectiveVideoSepia =
+        mediaOverrideRepo.withOverrideBool(settingsDataStore.videoSepia) { it.videoSepia }
+    val effectiveVideoInvert =
+        mediaOverrideRepo.withOverrideBool(settingsDataStore.videoInvert) { it.videoInvert }
+    val effectiveVideoRotation =
+        mediaOverrideRepo.withOverrideInt(settingsDataStore.videoRotation) { it.videoRotation }
 
     /**
      * Most recent play session id, observed from the repository. Used
@@ -785,6 +772,146 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ── Sleep Timer ──────────────────────────────────────────────
+    //
+    // §C11 — four sleep-timer modes:
+    //   TIME_BASED    — fixed minutes countdown (legacy [startSleepTimer]).
+    //   END_OF_TRACK  — pause at the next mediaItemTransition.
+    //   END_OF_CHAPTER — pause at the next chapter boundary (Media3
+    //                    folder-chapter aggregator + per-file MediaMetadata).
+    //   END_OF_QUEUE  — pause once the queue's last MediaItem ends.
+    //
+    // Each mode also honours the "Linear fade-out over last 5 minutes"
+    // switch where time can be predicted; modes whose end-time isn't
+    // known until just-before-fire (END_OF_TRACK / END_OF_CHAPTER /
+    // END_OF_QUEUE) only fade if the remaining duration is known and
+    // exceeds the fade window.
+
+    enum class SleepTimerMode { TIME_BASED, END_OF_TRACK, END_OF_CHAPTER, END_OF_QUEUE }
+
+    private val _sleepTimerMode = MutableStateFlow(SleepTimerMode.TIME_BASED)
+    val sleepTimerMode: StateFlow<SleepTimerMode> = _sleepTimerMode.asStateFlow()
+
+    fun startSleepTimerMode(mode: SleepTimerMode, minutes: Int = 0) {
+        sleepTimerJob?.cancel()
+        _sleepTimerMode.value = mode
+        when (mode) {
+            SleepTimerMode.TIME_BASED -> startSleepTimer(minutes)
+            SleepTimerMode.END_OF_TRACK -> startEndOfTrackTimer()
+            SleepTimerMode.END_OF_CHAPTER -> startEndOfChapterTimer()
+            SleepTimerMode.END_OF_QUEUE -> startEndOfQueueTimer()
+        }
+    }
+
+    private fun startEndOfTrackTimer() {
+        val player = playbackConnection.getPlayer() ?: return
+        val durMs = player.duration.coerceAtLeast(0L)
+        val posMs = player.currentPosition.coerceAtLeast(0L)
+        val remaining = (durMs - posMs).coerceAtLeast(0L)
+        _sleepTimerRemainingMs.value = remaining
+        sleepTimerJob = viewModelScope.launch {
+            val fadeOutEnabled = runCatching {
+                settingsDataStore.sleepTimerFadeOut.first()
+            }.getOrNull() == true
+            val fadeWindowMs = 5 * 60_000L
+            var rem = remaining
+            while (rem > 0) {
+                delay(500)
+                val p = playbackConnection.getPlayer() ?: break
+                val newDur = p.duration.coerceAtLeast(0L)
+                val newPos = p.currentPosition.coerceAtLeast(0L)
+                rem = (newDur - newPos).coerceAtLeast(0L)
+                _sleepTimerRemainingMs.value = rem
+                if (fadeOutEnabled && rem in 1..fadeWindowMs) {
+                    val factor = (rem.toFloat() / fadeWindowMs).coerceIn(0f, 1f)
+                    com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+                }
+            }
+            firePauseAndExpire("END_OF_TRACK")
+        }
+    }
+
+    private fun startEndOfChapterTimer() {
+        // Use existing folder-chapter aggregator + per-file chapters
+        // (M4B). Poll position; pause when we cross the next chapter
+        // boundary. If no chapters are known, fall back to END_OF_TRACK.
+        sleepTimerJob = viewModelScope.launch {
+            val player = playbackConnection.getPlayer() ?: return@launch
+            val initialPos = player.currentPosition.coerceAtLeast(0L)
+            // Try local file chapters first (M4B / MP4 chap atom).
+            val chapters: List<Long> = run {
+                val item = player.currentMediaItem ?: return@run emptyList()
+                val extras = item.mediaMetadata.extras
+                val starts = extras?.getLongArray("chapter_starts_ms")
+                starts?.toList() ?: emptyList()
+            }
+            val nextBoundary: Long = chapters
+                .firstOrNull { it > initialPos }
+                ?: run {
+                    // No chapters → fall through to end-of-track behaviour.
+                    val dur = player.duration.coerceAtLeast(0L)
+                    if (dur > initialPos) dur else 0L
+                }
+            if (nextBoundary <= 0) {
+                firePauseAndExpire("END_OF_CHAPTER (no boundary)")
+                return@launch
+            }
+            val fadeOutEnabled = runCatching {
+                settingsDataStore.sleepTimerFadeOut.first()
+            }.getOrNull() == true
+            val fadeWindowMs = 5 * 60_000L
+            while (true) {
+                delay(500)
+                val p = playbackConnection.getPlayer() ?: break
+                val cur = p.currentPosition.coerceAtLeast(0L)
+                val rem = (nextBoundary - cur).coerceAtLeast(0L)
+                _sleepTimerRemainingMs.value = rem
+                if (fadeOutEnabled && rem in 1..fadeWindowMs) {
+                    val factor = (rem.toFloat() / fadeWindowMs).coerceIn(0f, 1f)
+                    com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+                }
+                if (cur >= nextBoundary) break
+            }
+            firePauseAndExpire("END_OF_CHAPTER")
+        }
+    }
+
+    private fun startEndOfQueueTimer() {
+        sleepTimerJob = viewModelScope.launch {
+            val fadeOutEnabled = runCatching {
+                settingsDataStore.sleepTimerFadeOut.first()
+            }.getOrNull() == true
+            val fadeWindowMs = 5 * 60_000L
+            while (true) {
+                delay(500)
+                val p = playbackConnection.getPlayer() ?: break
+                val isLastItem = p.currentMediaItemIndex >= p.mediaItemCount - 1
+                if (!isLastItem) {
+                    _sleepTimerRemainingMs.value = -1L
+                    continue
+                }
+                val rem = (p.duration.coerceAtLeast(0L) - p.currentPosition.coerceAtLeast(0L))
+                    .coerceAtLeast(0L)
+                _sleepTimerRemainingMs.value = rem
+                if (fadeOutEnabled && rem in 1..fadeWindowMs) {
+                    val factor = (rem.toFloat() / fadeWindowMs).coerceIn(0f, 1f)
+                    com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+                }
+                if (rem == 0L) break
+            }
+            firePauseAndExpire("END_OF_QUEUE")
+        }
+    }
+
+    private fun firePauseAndExpire(label: String) {
+        playbackConnection.pause()
+        com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
+        _sleepTimerRemainingMs.value = 0
+        _sleepTimerExpired.value = true
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "SleepTimer expired — mode=$label"
+        )
+    }
 
     fun startSleepTimer(minutes: Int) {
         sleepTimerJob?.cancel()
@@ -1022,7 +1149,10 @@ class PlayerViewModel @Inject constructor(
         // Settings, attach / detach / reconfigure the effect on the
         // current ExoPlayer audio session.
         viewModelScope.launch {
-            settingsDataStore.reverbPreset.collect { preset ->
+            // §C7 — combined flow: per-file override wins over global.
+            mediaOverrideRepo.withOverrideInt(
+                settingsDataStore.reverbPreset
+            ) { it.reverbPreset }.collect { preset ->
                 pendingReverbPreset = preset
                 applyReverbPreset(preset)
             }

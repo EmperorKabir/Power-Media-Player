@@ -230,7 +230,15 @@ fun PlayerScreen(
                 showSleepTimerDialog = false
             },
             onSleepAtEndOfChapter = {
-                viewModel.startSleepAtEndOfChapter()
+                viewModel.startSleepTimerMode(PlayerViewModel.SleepTimerMode.END_OF_CHAPTER)
+                showSleepTimerDialog = false
+            },
+            onSleepAtEndOfTrack = {
+                viewModel.startSleepTimerMode(PlayerViewModel.SleepTimerMode.END_OF_TRACK)
+                showSleepTimerDialog = false
+            },
+            onSleepAtEndOfQueue = {
+                viewModel.startSleepTimerMode(PlayerViewModel.SleepTimerMode.END_OF_QUEUE)
                 showSleepTimerDialog = false
             }
         )
@@ -865,7 +873,11 @@ private fun PlayerScreenExpanded(
 // ── Shared Sub-Composables ─────────────────────────────────────────
 
 @Composable
-private fun TrackInfoSection(uiState: PlayerUiState, coverColors: CoverArtColors?) {
+private fun TrackInfoSection(
+    uiState: PlayerUiState,
+    coverColors: CoverArtColors?,
+    viewModel: PlayerViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -901,6 +913,31 @@ private fun TrackInfoSection(uiState: PlayerUiState, coverColors: CoverArtColors
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+
+        // §C7 — indicator chip when this file has saved overrides.
+        // Tells the user "what they're hearing differs from defaults."
+        val overrideRow: com.powermediaplayer.data.db.entity.MediaOverrideEntity? by
+            viewModel.currentOverride.collectAsStateWithLifecycle()
+        val activeRow = overrideRow?.takeIf { !it.isEmpty() }
+        if (activeRow != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            val parts = buildList {
+                if (activeRow.hasAnyAudio()) add("audio")
+                if (activeRow.hasAnyVideo()) add("video")
+                if (activeRow.hasAnySpeed()) add("speed")
+            }
+            Surface(
+                color = TealAccent.copy(alpha = 0.18f),
+                contentColor = TealAccent,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "Custom ${parts.joinToString(" + ")} for this file",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
         }
         // Audio format indicator — codec + channel layout + sample rate.
         // Visible for both audio and video tracks (most films have a
@@ -1099,6 +1136,8 @@ private fun SleepTimerDialog(
     onSetTimer: (Int) -> Unit,
     onCancel: () -> Unit,
     onSleepAtEndOfChapter: () -> Unit = {},
+    onSleepAtEndOfTrack: () -> Unit = {},
+    onSleepAtEndOfQueue: () -> Unit = {},
     settingsVm: com.powermediaplayer.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
     val sState by settingsVm.uiState.collectAsStateWithLifecycle()
@@ -1196,12 +1235,40 @@ private fun SleepTimerDialog(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
                 HorizontalDivider(color = DisabledContent, modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    "Or sleep at:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+                )
+                TextButton(
+                    onClick = onSleepAtEndOfTrack,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "End of current track",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TealAccent,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
                 TextButton(
                     onClick = onSleepAtEndOfChapter,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        "Sleep at end of current chapter / track",
+                        "End of current chapter",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TealAccent,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                TextButton(
+                    onClick = onSleepAtEndOfQueue,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "End of queue / album",
                         style = MaterialTheme.typography.bodyLarge,
                         color = TealAccent,
                         modifier = Modifier.fillMaxWidth()
