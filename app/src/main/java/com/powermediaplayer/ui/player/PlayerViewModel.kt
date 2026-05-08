@@ -43,6 +43,9 @@ class PlayerViewModel @Inject constructor(
     val currentOverride =
         mediaOverrideRepo.activeOverride
 
+    private val musicBrainzClient =
+        com.powermediaplayer.enrichment.MusicBrainzClient()
+
     init {
         // §C7 — speed / pitch / volume-boost are direct calls into the
         // live ExoPlayer; audio + video effect axes flow through
@@ -53,6 +56,65 @@ class PlayerViewModel @Inject constructor(
                 applyDirectAxes(row)
             }
         }
+        // §C17 — online metadata enrichment. When enabled, on every
+        // track change with at least one missing field, query the
+        // configured provider and fill in the blanks. Throttled to a
+        // single in-flight fetch via the flow's flatMapLatest.
+        viewModelScope.launch {
+            settingsDataStore.metadataEnrichmentEnabled
+                .combine(playbackConnection.playerState) { enabled, ps -> enabled to ps }
+                .filter { (enabled, ps) ->
+                    enabled && ps.title.isNotBlank() && (
+                        ps.artist.isBlank() || ps.album.isBlank()
+                    )
+                }
+                .map { (_, ps) -> ps.title to ps.artist }
+                .distinctUntilChanged()
+                .collect { (title, artistHint) ->
+                    val res = withContext(Dispatchers.IO) {
+                        musicBrainzClient.lookupRecording(title, artistHint.takeIf { it.isNotBlank() })
+                    } ?: return@collect
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "MusicBrainz hit title=$title artist=${res.artist} " +
+                            "album=${res.album} year=${res.year} genre=${res.genre}"
+                    )
+                    // Patch the live player's MediaItem metadata with
+                    // any non-null returned field. The lookup runs
+                    // off-main; metadata mutation must hop back.
+                    withContext(Dispatchers.Main) {
+                        applyEnrichment(res)
+                    }
+                }
+        }
+        // §C18 — apply embedded ReplayGain track gain to the live
+        // ExoPlayer.volume when the user has the RG toggle on. A NaN
+        // gain (file with no RG metadata) restores volume = 1.0; on
+        // toggle-off the volume returns to 1.0 as well.
+        viewModelScope.launch {
+            settingsDataStore.replayGainEnabled.combine(
+                playbackConnection.playerState.map { it.replayGainTrackDb }.distinctUntilChanged()
+            ) { enabled, db -> enabled to db }
+                .collect { (enabled, db) ->
+                    val player = com.powermediaplayer.service.PlaybackService
+                        .getExoPlayer() ?: return@collect
+                    val target = if (!enabled || db.isNaN()) 1.0f
+                    else (Math.pow(10.0, db / 20.0).coerceIn(0.05, 4.0)).toFloat()
+                    runCatching { player.volume = target }
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "ReplayGain applied enabled=$enabled db=$db volume=$target"
+                    )
+                }
+        }
+    }
+
+    private fun applyEnrichment(res: com.powermediaplayer.enrichment.EnrichmentResult) {
+        val cur = playbackConnection.playerState.value
+        playbackConnection.patchPlayerStateMetadata(
+            artist = if (cur.artist.isBlank()) res.artist.orEmpty() else cur.artist,
+            album = if (cur.album.isBlank()) res.album.orEmpty() else cur.album
+        )
     }
 
     private fun applyDirectAxes(

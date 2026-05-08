@@ -61,6 +61,9 @@ data class PlayerState(
     val hasChapters: Boolean = false,
     // Long-form description extracted from ID3/Vorbis/MP4 metadata at runtime
     val description: String = "",
+    // §C18 — embedded ReplayGain track gain (dB). NaN when this file
+    // ships with no RG metadata; consumers fall back to volume = 1.0.
+    val replayGainTrackDb: Double = Double.NaN,
     // Last playback error (network 401, codec failure, etc.) — null when ok.
     val playerError: String? = null,
     // True while a cloud cache download (chapters/metadata extraction)
@@ -636,6 +639,13 @@ class PlaybackConnection @Inject constructor(
                 if (desc.isNotEmpty() && desc != _playerState.value.description) {
                     _playerState.value = _playerState.value.copy(description = desc)
                 }
+                // §C18 — extract embedded ReplayGain track gain (dB).
+                // Surfaces NaN when a file ships with no RG metadata so
+                // downstream consumers can fall back to volume = 1.0.
+                val rgDb = extractReplayGainTrackDb(metadata)
+                if (!rgDb.isNaN() && rgDb != _playerState.value.replayGainTrackDb) {
+                    _playerState.value = _playerState.value.copy(replayGainTrackDb = rgDb)
+                }
             }
             override fun onPlayerError(error: PlaybackException) {
                 _playerState.value = _playerState.value.copy(
@@ -651,11 +661,65 @@ class PlaybackConnection @Inject constructor(
         })
     }
 
+    /**
+     * §C17 — patch artist / album fields with values fetched from the
+     * online metadata provider. Only fills blank fields; never
+     * overwrites embedded tags the user already has.
+     */
+    fun patchPlayerStateMetadata(artist: String, album: String) {
+        val cur = _playerState.value
+        val newArtist = if (cur.artist.isBlank() && artist.isNotBlank()) artist else cur.artist
+        val newAlbum = if (cur.album.isBlank() && album.isNotBlank()) album else cur.album
+        if (newArtist != cur.artist || newAlbum != cur.album) {
+            _playerState.value = cur.copy(artist = newArtist, album = newAlbum)
+        }
+    }
+
     /** Clear any displayed error — typically called when the user dismisses it. */
     fun clearError() {
         if (_playerState.value.playerError != null) {
             _playerState.value = _playerState.value.copy(playerError = null)
         }
+    }
+
+    /**
+     * §C18 — walks ExoPlayer Metadata entries looking for embedded
+     * ReplayGain track gain. Returns the gain in dB (e.g. -6.34 → -6.34)
+     * or [Double.NaN] when no RG metadata is present in this file.
+     *
+     * Covers the three common containers:
+     *  - ID3v2 TXXX with description "replaygain_track_gain"
+     *  - Vorbis comment "REPLAYGAIN_TRACK_GAIN"
+     *  - MP4 mdta key "----:com.apple.iTunes:replaygain_track_gain"
+     */
+    @OptIn(UnstableApi::class)
+    private fun extractReplayGainTrackDb(metadata: Metadata): Double {
+        for (i in 0 until metadata.length()) {
+            val entry = metadata.get(i)
+            val candidateText: String? = when (entry) {
+                is androidx.media3.extractor.metadata.id3.TextInformationFrame -> {
+                    if (entry.id == "TXXX" &&
+                        entry.description?.equals("replaygain_track_gain", true) == true
+                    ) entry.values.firstOrNull() else null
+                }
+                is VorbisComment ->
+                    if (entry.key.equals("REPLAYGAIN_TRACK_GAIN", true)) entry.value else null
+                is MdtaMetadataEntry -> {
+                    if (entry.key.contains("replaygain_track_gain", ignoreCase = true)) {
+                        runCatching { String(entry.value, Charsets.UTF_8) }.getOrNull()
+                    } else null
+                }
+                else -> null
+            }
+            if (candidateText.isNullOrBlank()) continue
+            // Format examples: "-6.34 dB", "-6.34dB", "+1.2 dB", "0".
+            val cleaned = candidateText.trim()
+                .removeSuffix("dB").removeSuffix("DB").removeSuffix("db")
+                .trim()
+            val parsed = cleaned.toDoubleOrNull()
+            if (parsed != null && parsed.isFinite()) return parsed
+        }
+        return Double.NaN
     }
 
     /**
