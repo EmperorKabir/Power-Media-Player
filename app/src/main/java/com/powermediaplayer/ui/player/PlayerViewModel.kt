@@ -24,6 +24,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
+
     private val playbackConnection: PlaybackConnection,
     private val spotifyProvider: SpotifyProvider,
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
@@ -315,9 +316,23 @@ class PlayerViewModel @Inject constructor(
         // bookmark→Last-Played mirror works without creating a duplicate
         // Recents row.
         viewModelScope.launch(Dispatchers.Main) {
+            // Single-fire guard — multiple PlayerViewModel instances
+            // (PlayerScreen + MiniPlayerBar) each call this init block
+            // and were both running the cold-start `when {}`. The
+            // second instance saw `currentMediaUri == null` due to a
+            // service-connect race AND ran the cold-start branch with
+            // `playWhenReady = false`, pausing whatever the FIRST
+            // instance's adopt-session branch had already accepted as
+            // playing — bug: videos opened via auto-resume immediately
+            // paused on launch. compareAndSet is atomic + thread-safe
+            // and shared across every VM instance in the same process.
+            if (!coldStartGuard.compareAndSet(false, true)) return@launch
             kotlinx.coroutines.delay(800) // wait for service connection
             // Don't clobber an active Spotify mirror.
             if (spotifyProvider.spotifyState.value != null) return@launch
+            // Defensive: if a session is already adopted (e.g. user
+            // tapped a Library row in the 800 ms grace window) skip.
+            if (lastPlayedRepo.currentSessionId.value != null) return@launch
             val recent = withContext(Dispatchers.IO) {
                 runCatching { lastPlayedRepo.mostRecent() }.getOrNull()
             } ?: return@launch
@@ -1256,6 +1271,18 @@ class PlayerViewModel @Inject constructor(
         // means false-negatives ("works but greyed out") rather than
         // false-positives ("looks castable, then fails on the TV").
         private val CASTABLE_VIDEO_EXTENSIONS = setOf("mp4", "m4v", "webm")
+
+        /**
+         * Process-global single-fire guard for the cold-start resume
+         * coroutine. Multiple PlayerViewModel instances (PlayerScreen
+         * + MiniPlayerBar) each run the init block; without this,
+         * the second instance can race the service-connect and run
+         * the cold-start `when {}` 's "nothing-loaded" branch which
+         * sets playWhenReady=false on a track the first instance
+         * already adopted as playing — videos paused immediately
+         * after auto-resume.
+         */
+        val coldStartGuard = java.util.concurrent.atomic.AtomicBoolean(false)
     }
 
     /**
