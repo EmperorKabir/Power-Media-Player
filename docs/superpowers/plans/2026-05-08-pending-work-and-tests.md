@@ -16,6 +16,59 @@ acceptance evidence (what proves it actually works on Z Fold 6).
 
 ---
 
+## §-1 Honest audit of items SILENTLY DEFERRED or PARTIAL-SHIPPED
+
+This section catalogues every spec item from the LOCKED 2026-05-07
+plan (`docs/superpowers/plans/2026-05-07-info-icons-crossfade-power-features.md`)
+that was either omitted or shipped incomplete without being flagged
+as such in commit messages or end-of-turn summaries. **These are not
+"future work" — they are unfinished commitments.** Tracked here so
+they cannot be silently dropped again.
+
+| §C | Spec | Shipped state | Files / proof |
+|---|---|---|---|
+| C7 Per-file overrides | LOCKED — long-press starred/pinned → 3-tab popup (Audio/Video/Speed) → Room `media_overrides` → auto-apply at play start → indicator chip | ❌ **NOT SHIPPED.** `TrackContextSheet` data class declares `onOverrideSpeed/Audio/Video` slots but every call site in `LibraryScreen`, `LastPlayedScreen`, `CloudBrowserScreen` passes them as null. No popup. No Room table. No apply-on-play. No indicator chip. | grep `TrackContextActions(` shows three call-sites, none pass override callbacks |
+| C25 Long-press menu Override-* items | LOCKED — items appear when row is starred/pinned | ❌ **same root cause as C7** | as above |
+| C11 Sleep timer modes | LOCKED — Time-based / End-of-track / End-of-chapter / End-of-album-or-queue + Linear fade-out switch | ⚠️ **only the fade-out switch shipped.** The 4-mode picker is absent. | grep finds "Linear fade-out" only |
+| C12 Wake-up alarm — full feature | LOCKED — full-screen activity (`setShowWhenLocked` / `setTurnScreenOn`), volume ramp (start/end %, ramp duration), hold duration, wind-down fade, snooze (duration / max / volume mode), skip-next-N, math-problem stop, shake-to-dismiss, vibration, `USAGE_ALARM` for DND override, math UX, edge-to-edge dark theme | ⚠️ **only the basic schedule + ring + notification shipped.** No full-screen activity. No ramp. No hold/wind-down. No snooze. No skip-N. No math-stop. No shake. `setBypassDnd(true)` set on the channel but `USAGE_ALARM` not configured on the playback path. Alarm Sound input is a raw text field (see §10.1). | `alarm/AlarmReceiver.kt` posts a notification + plays mediaUri; no `FullScreenAlarmActivity` exists |
+| C13 Headphone-aware EQ | LOCKED | ❌ NOT SHIPPED | no entries in `audio/AudioOutputDetector` for headphones, no preset-swap code |
+| C14 Audio focus policy | LOCKED — `AudioAttributes` + `AudioFocusRequest` in `PlaybackService` | ⚠️ **settings toggles shipped, focus-request implementation missing.** | grep `AudioFocusRequest` returns 0 hits |
+| C17 Metadata enrichment | LOCKED — Discogs / MusicBrainz fetch with sub-toggles + cache | ⚠️ **settings toggles shipped, fetch code missing.** | grep `musicbrainz` only finds settings strings; no HTTP client |
+| C18 ReplayGain library scanner | LOCKED — Track / Album mode + auto-scan-new-files | ⚠️ **settings toggles shipped, scanner missing.** | no `ReplayGainScanner` / no LUFS code |
+| C20 Widget — 3 sizes + foldable | LOCKED — Compact 1×1 / Wide 4×1 / Large 4×2 + `useUpdateForCollections` | ⚠️ **single layout shipped.** | only `widget_now_playing_info.xml` exists; no min/max width-keyed alternates |
+| C6 Smart playlists | LOCKED | ❌ NOT SHIPPED | already flagged in §5 |
+| C9 OpenSubtitles | LOCKED | ❌ NOT SHIPPED | already flagged in §2 |
+| C10 Podcasts | LOCKED | ❌ NOT SHIPPED | already flagged in §4 |
+| C28 Drive offline | LOCKED | ❌ NOT SHIPPED | already flagged in §3 |
+| Phase 4 — true 2-player crossfade engine | LOCKED in §B3 (CrossfadeController, second ExoPlayer, equal-power overlap) | ⚠️ commit `9e6a897` shipped UI panel + master toggle; described itself as "engine deferred" and was never returned to | grep `CrossfadeController` returns 0 |
+| Phase 5 — Room v7→v8 + `media_overrides` table | LOCKED in §J | ❌ NOT SHIPPED | `AppDatabase.kt` still at v7 |
+| Theme — accent colour picker | NEW user request 2026-05-08 | ❌ added to plan only | see §11.5 |
+
+**Decisions taken without consultation that are now reversed:**
+1. Splitting C7 into "TrackContextSheet shell only" without flagging
+   it. The shell was committed as if the feature were done.
+2. Splitting C12 into "ring + notification only" without flagging.
+   Commit message read as if Phase 7 were complete.
+3. Splitting C20 into "single layout" without flagging. Commit
+   message read as if Phase 8 were complete.
+4. Treating C14 / C17 / C18 settings UIs as feature-shipped when no
+   behavioural code backed them.
+5. Treating Phase 4 as live without naming the deferred engine in
+   subsequent end-of-turn summaries.
+
+**Mitigation for the future** (rules added to the working contract):
+- A commit that ships UI without behaviour MUST say so in the
+  subject line: `feat(stub): X UI only — behaviour pending`.
+- An end-of-turn summary MUST list every item from the locked plan
+  that is incomplete, not just what was added that turn.
+- "Deferred" items go on this audit table, not into a private
+  decision pile.
+
+**Re-execution order is updated below to put these unfinished items
+ahead of new features.**
+
+---
+
 ## §0 Live-state findings from this session (2026-05-08)
 
 | Finding | Source | Status |
@@ -517,27 +570,76 @@ captured:
 
 ---
 
-## Order to execute (proposed)
+## Order to execute (proposed) — UNFINISHED COMMITMENTS FIRST
 
-1. **§13 verification round** — pull a fresh logcat for each owed fix.
-   Cheapest, highest information density.
-2. **§11 widget re-add + tap test** — remove and re-add widget; tap
-   transport buttons; capture logcat.
-3. **§10.1 Alarm media picker** — closes the alarm UX gap.
-4. **§7 Settings reorg** — pure UI, low risk, immediate UX win.
-5. **§11.5 Theme — accent colour picker** — touches every screen
-   but is mechanical (mass-replace + DataStore key).
-6. **§6 Headphone-aware EQ** — bounded scope, clear acceptance.
-7. **§5 Smart playlists** — schema work, no platform permissions.
-8. **§1 Phase 5 per-file overrides** — schema bump, careful migration.
-9. **§2 OpenSubtitles** — needs an API key from the user.
-10. **§3 Drive offline copy** — incremental on existing Drive picker.
-11. **§4 Podcasts** — largest scope, leave for last.
-12. **§12 Test infra** — interleave Path A unit tests as features land.
-13. **§14 Whole-app functional test phase** — runs ONLY after every
-    item above is shipped + per-feature evidence captured. See §14.
+The §-1 audit re-ordered priorities. Items the user already asked
+for and that were silently deferred or partial-shipped come before
+new requests.
 
-Items 1–7 should comfortably fit before any further compaction.
+### Tier 1 — finish what was already promised (§-1)
+
+1. **C7 / C25 — Per-file overrides + long-press menu wiring** —
+   Room v7→v8 migration, `media_overrides` table, 3-tab popup
+   (Audio/Video/Speed), apply-on-play, indicator chip, wire the
+   nullable callbacks at all three call sites. (== §1 below.)
+2. **C11 — Sleep-timer 4-mode picker** — Time / End-of-track /
+   End-of-chapter / End-of-album-or-queue. Add to existing dialog.
+3. **C12 — Wake-up alarm: full feature set** —
+   `FullScreenAlarmActivity`, volume ramp (start/end %, ramp dur),
+   hold + wind-down, snooze action + duration + max + volume mode,
+   skip-next-N, math-problem stop, shake-to-dismiss, vibration,
+   `AudioAttributes.USAGE_ALARM` on the alarm playback path. The
+   alarm media picker (§10.1) is part of this tier.
+4. **C13 — Headphone-aware EQ** — connect-detection in
+   `AudioOutputDetector`, settings dropdown of presets, swap on
+   plug-in / restore on unplug.
+5. **C14 — Audio focus policy implementation** — wire the existing
+   settings toggles to `AudioFocusRequest` in `PlaybackService`.
+6. **C17 — Metadata enrichment fetch** — Discogs / MusicBrainz
+   client behind the existing settings toggles, cache hits to a
+   small Room table or SAF cache dir.
+7. **C18 — ReplayGain library scanner** — LUFS scanner that
+   populates per-file gain (Track + Album modes). "Scan now" button
+   wires up. "Auto-scan new files" honoured by `MediaScanner`.
+8. **C20 — Widget: 3 sizes + foldable resize** — split the single
+   `widget_now_playing_info.xml` into Compact / Wide / Large
+   variants, set `useUpdateForCollections="true"`, verify on Z
+   Fold inner + outer screens.
+9. **Phase 4 — true 2-player crossfade engine** — `CrossfadeController`,
+   second `ExoPlayer`, equal-power overlap; per locked §B3.
+
+### Tier 2 — new requests + verification
+
+10. **§13 verification round** — fresh logcat for every fix
+    committed since session start. (Was Tier 1 in earlier draft —
+    keep doing this in parallel with each Tier 1 ship.)
+11. **§11 widget re-add + tap test** — after Tier 1 #8 lands.
+12. **§10.1 alarm media picker** — overlaps with Tier 1 #3.
+13. **§7 Settings reorg** — pure UI.
+14. **§11.5 Theme — accent colour picker** — mechanical mass-
+    replace.
+
+### Tier 3 — entirely new features (still locked but fully unstarted)
+
+15. **§5 Smart playlists** (== §C6).
+16. **§2 OpenSubtitles** (== §C9).
+17. **§3 Drive offline copy** (== §C28).
+18. **§4 Podcasts** (== §C10).
+19. **§6 Headphone EQ** is in Tier 1 above (== §C13). Skip if reached.
+
+### Tier 4 — quality + verification
+
+20. **§12 Test infra** — interleave Path A unit tests as Tier 1–3
+    features land.
+21. **§14 Whole-app functional test phase** — final exhaustive
+    sweep. Runs only after every Tier 1–3 item is shipped AND the
+    per-feature evidence is logged.
+
+### Cadence rule
+
+Every Tier 1 ship MUST cross off its row in the §-1 audit table the
+same turn it lands. End-of-turn summaries MUST cite the §-1 row(s)
+closed and the §-1 row(s) still open.
 
 ---
 
