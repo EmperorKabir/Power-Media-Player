@@ -1,8 +1,10 @@
 package com.powermediaplayer.ui.overrides
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -163,18 +165,18 @@ private fun AudioTab(
             },
             onValueChange = { onSave(draft.copy(monoMix = it)) }
         )
-        AxisSlider(
+        AxisChips(
             label = "Reverb preset",
             active = draft.reverbPreset != null,
-            value = (draft.reverbPreset ?: 0).toFloat(),
-            range = 0f..5f, steps = 4,
+            currentIndex = draft.reverbPreset ?: 0,
+            options = listOf(
+                0 to "Off", 1 to "Room", 2 to "Medium hall",
+                3 to "Large hall", 4 to "Plate", 5 to "Cave"
+            ),
             onActiveChange = {
                 onSave(draft.copy(reverbPreset = if (it) 0 else null))
             },
-            onValueChange = {
-                onSave(draft.copy(reverbPreset = it.toInt().coerceIn(0, 5)))
-            },
-            display = { i -> reverbLabel(i.toInt()) }
+            onPick = { onSave(draft.copy(reverbPreset = it)) }
         )
         AxisSlider(
             label = "Volume boost (mB)",
@@ -351,6 +353,51 @@ private fun AxisSlider(
                 valueRange = range,
                 steps = steps
             )
+        }
+    }
+}
+
+/**
+ * Axis with a fixed enum-style option set rendered as a horizontal
+ * scrollable chip row. Used by the per-file reverb override where a
+ * slider made the steps invisible until the user already selected one.
+ */
+@Composable
+private fun AxisChips(
+    label: String,
+    active: Boolean,
+    currentIndex: Int,
+    options: List<Pair<Int, String>>,
+    onActiveChange: (Boolean) -> Unit,
+    onPick: (Int) -> Unit
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = active, onCheckedChange = onActiveChange)
+            Text(
+                label,
+                color = if (active) TextPrimary else TextTertiary,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp)
+            )
+        }
+        if (active) {
+            androidx.compose.foundation.layout.Row(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 4.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp)
+            ) {
+                options.forEach { (idx, name) ->
+                    androidx.compose.material3.FilterChip(
+                        selected = idx == currentIndex,
+                        onClick = { onPick(idx) },
+                        label = { Text(name) }
+                    )
+                }
+            }
         }
     }
 }

@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.util.BrightnessHelper
 
-private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
+private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.3f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
 
 /**
  * Volume slider (primary) + Brightness slider (secondary).

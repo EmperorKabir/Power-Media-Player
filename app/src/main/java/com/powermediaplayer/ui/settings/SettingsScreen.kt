@@ -835,7 +835,16 @@ private fun AudioFocusRow(
         )
         Spacer(Modifier.height(2.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("pause" to "Pause", "duck" to "Duck", "ignore" to "Ignore").forEach { (token, name) ->
+            // §C14 — chip labels are intentionally plain English. "Duck"
+            // is the audio-engineering term for "drop volume to ~30%" but
+            // it reads as the bird to most users; "Lower volume" is what
+            // we actually do. Token strings stay the same so persisted
+            // settings keep working.
+            listOf(
+                "pause" to "Pause",
+                "duck" to "Lower volume",
+                "ignore" to "Keep playing"
+            ).forEach { (token, name) ->
                 FilterChip(
                     selected = current == token,
                     onClick = { onChange(token) },
