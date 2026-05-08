@@ -34,6 +34,7 @@ class PlayerViewModel @Inject constructor(
     private val mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository,
     private val subtitleAutoFetcher: com.powermediaplayer.subtitles.SubtitleAutoFetcher,
     private val replayGainDao: com.powermediaplayer.data.db.dao.ReplayGainDao,
+    private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -121,6 +122,35 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
         }
+        // §C18 auto-scan-on-import — when the toggle is on AND we have
+        // no pre-scan row for the current track, kick a one-file scan
+        // off Dispatchers.IO so the next play has a usable gain.
+        viewModelScope.launch {
+            settingsDataStore.replayGainAutoScan
+                .combine(playbackConnection.playerState.map {
+                    playbackConnection.getPlayer()?.currentMediaItem?.mediaId.orEmpty()
+                }.distinctUntilChanged()) { auto, uri -> auto to uri }
+                .collect { (auto, uri) ->
+                    if (!auto || uri.isBlank()) return@collect
+                    val parsed = runCatching { android.net.Uri.parse(uri) }.getOrNull()
+                        ?: return@collect
+                    withContext(Dispatchers.IO) {
+                        if (replayGainDao.getForUri(uri) != null) return@withContext
+                        runCatching {
+                            replayGainScanner.scanSingle(
+                                com.powermediaplayer.ui.library.MediaFileInfo(
+                                    id = 0L, uri = parsed,
+                                    title = playbackConnection.playerState.value.title,
+                                    artist = "", album = "",
+                                    duration = 0L, mimeType = "", size = 0L,
+                                    dateModified = 0L, isVideo = false, albumArtUri = null
+                                )
+                            )
+                        }
+                    }
+                }
+        }
+
         // §C18 — apply ReplayGain to the live ExoPlayer. Source order:
         //   1. Embedded tag (replayGainTrackDb on PlayerState; NaN if
         //      the file ships without RG metadata).

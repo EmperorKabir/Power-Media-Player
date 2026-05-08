@@ -949,7 +949,7 @@ private fun TrackInfoSection(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    text = "Custom ${parts.joinToString(" + ")} for this file",
+                    text = "Custom ${parts.joinToString("/")} for this file",
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )

@@ -42,6 +42,9 @@ class ReplayGainScanner @Inject constructor(
     private val dao: ReplayGainDao
 ) {
 
+    /** §C18 single-file scan — used by auto-scan-on-play. */
+    suspend fun scanSingle(file: MediaFileInfo): Int = scan(listOf(file))
+
     suspend fun scan(files: List<MediaFileInfo>): Int = withContext(Dispatchers.IO) {
         if (files.isEmpty()) return@withContext 0
         val rows = mutableListOf<ReplayGainEntity>()

@@ -266,6 +266,11 @@ fun EqualizerScreen(
             }
         }
 
+        // §C13 — "Headphone presets" section at bottom of EQ tab.
+        // Per locked spec: per-paired-device preset dropdown driven by
+        // BluetoothAdapter.bondedDevices.
+        HeadphonePresetsSection(viewModel = viewModel)
+
         Spacer(modifier = Modifier.height(80.dp))
     }
 

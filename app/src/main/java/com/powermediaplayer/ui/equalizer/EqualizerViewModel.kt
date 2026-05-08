@@ -143,6 +143,16 @@ class EqualizerViewModel @Inject constructor(
     val headphoneEqPresetId: kotlinx.coroutines.flow.Flow<Long> =
         settingsDataStore.headphoneEqPresetId
 
+    /** §C13 — per-paired-device EQ map (address → presetId). */
+    val devicePresets: kotlinx.coroutines.flow.Flow<Map<String, Long>> =
+        settingsDataStore.headphoneEqDevicePresets
+
+    fun setDevicePreset(address: String, presetId: Long) {
+        viewModelScope.launch {
+            settingsDataStore.setHeadphoneEqDevicePreset(address, presetId)
+        }
+    }
+
     /**
      * Set a single band level.
      */

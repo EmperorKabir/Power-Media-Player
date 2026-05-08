@@ -176,6 +176,29 @@ private fun AlarmRow(
     }
 }
 
+/** Reusable int input. Kept compact so the editor stays scrollable. */
+@Composable
+private fun IntField(
+    label: String,
+    value: Int,
+    range: IntRange,
+    onChange: (Int) -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, color = TextSecondary, modifier = Modifier.weight(1f))
+        OutlinedTextField(
+            value = value.toString(),
+            onValueChange = {
+                val parsed = it.toIntOrNull()
+                if (parsed != null) onChange(parsed.coerceIn(range))
+                else if (it.isBlank()) onChange(range.first)
+            },
+            singleLine = true,
+            modifier = Modifier.size(width = 96.dp, height = 56.dp)
+        )
+    }
+}
+
 @Composable
 private fun FullScreenIntentBanner() {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -234,6 +257,20 @@ private fun AlarmEditor(
     var days by remember { mutableStateOf(initial.days) }
     var mediaUri by remember { mutableStateOf(initial.mediaUri) }
     var displayLabel by remember { mutableStateOf(initial.displayLabel) }
+    // §C12 LOCKED — full editor. Each field gets a sensible default
+    // from [AlarmRecord]; we only persist on Save.
+    var startVolumePct by remember { mutableStateOf(initial.startVolumePct) }
+    var endVolumePct by remember { mutableStateOf(initial.endVolumePct) }
+    var rampSeconds by remember { mutableStateOf(initial.rampSeconds) }
+    var holdMinutes by remember { mutableStateOf(initial.holdMinutes) }
+    var windDownSeconds by remember { mutableStateOf(initial.windDownSeconds) }
+    var snoozeEnabled by remember { mutableStateOf(initial.snoozeEnabled) }
+    var snoozeMinutes by remember { mutableStateOf(initial.snoozeMinutes) }
+    var maxSnoozes by remember { mutableStateOf(initial.maxSnoozes) }
+    var snoozeRestartFromStart by remember { mutableStateOf(initial.snoozeRestartFromStart) }
+    var skipNextCount by remember { mutableStateOf(initial.skipNextCount) }
+    var stopMethod by remember { mutableStateOf(initial.stopMethod) }
+    var vibration by remember { mutableStateOf(initial.vibration) }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -312,13 +349,86 @@ private fun AlarmEditor(
                         onDismiss = { showPicker = false }
                     )
                 }
+
+                // §C12 — Audio: ramp + hold + wind-down.
+                androidx.compose.material3.HorizontalDivider(
+                    color = TextTertiary, modifier = Modifier.padding(vertical = 4.dp)
+                )
+                Text("Volume ramp", color = TextSecondary,
+                    style = MaterialTheme.typography.labelMedium)
+                IntField("Start volume %", startVolumePct, 0..100) { startVolumePct = it }
+                IntField("End volume %", endVolumePct, 0..100) { endVolumePct = it }
+                IntField("Ramp duration (s)", rampSeconds, 0..600) { rampSeconds = it }
+                IntField("Hold (min, -1 = indefinite)", holdMinutes, -1..600) { holdMinutes = it }
+                IntField("Wind-down (s, 0 = abrupt cut)", windDownSeconds, 0..600) { windDownSeconds = it }
+
+                // §C12 — Snooze.
+                androidx.compose.material3.HorizontalDivider(
+                    color = TextTertiary, modifier = Modifier.padding(vertical = 4.dp)
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = snoozeEnabled,
+                        onCheckedChange = { snoozeEnabled = it })
+                    Text(" Snooze enabled",
+                        color = if (snoozeEnabled) TextPrimary else TextTertiary,
+                        modifier = Modifier.padding(top = 12.dp))
+                }
+                if (snoozeEnabled) {
+                    IntField("Snooze duration (min)", snoozeMinutes, 1..60) { snoozeMinutes = it }
+                    IntField("Max snoozes (-1 = unlimited)", maxSnoozes, -1..20) { maxSnoozes = it }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(checked = snoozeRestartFromStart,
+                            onCheckedChange = { snoozeRestartFromStart = it })
+                        Text(" Snooze restarts ramp from start",
+                            color = TextSecondary,
+                            modifier = Modifier.padding(top = 12.dp))
+                    }
+                }
+
+                // §C12 — Skip next N alarms.
+                IntField("Skip next N alarms", skipNextCount, 0..7) { skipNextCount = it }
+
+                // §C12 — Stop method + vibration.
+                androidx.compose.material3.HorizontalDivider(
+                    color = TextTertiary, modifier = Modifier.padding(vertical = 4.dp)
+                )
+                Text("Stop method", color = TextSecondary,
+                    style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    AlarmRecord.StopMethod.values().forEach { sm ->
+                        FilterChip(
+                            selected = stopMethod == sm,
+                            onClick = { stopMethod = sm },
+                            label = { Text(sm.name) }
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = vibration,
+                        onCheckedChange = { vibration = it })
+                    Text(" Vibrate while ringing",
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 12.dp))
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 onSave(initial.copy(
                     hour = hour, minute = minute, days = days,
-                    mediaUri = mediaUri, displayLabel = displayLabel
+                    mediaUri = mediaUri, displayLabel = displayLabel,
+                    startVolumePct = startVolumePct,
+                    endVolumePct = endVolumePct,
+                    rampSeconds = rampSeconds,
+                    holdMinutes = holdMinutes,
+                    windDownSeconds = windDownSeconds,
+                    snoozeEnabled = snoozeEnabled,
+                    snoozeMinutes = snoozeMinutes,
+                    maxSnoozes = maxSnoozes,
+                    snoozeRestartFromStart = snoozeRestartFromStart,
+                    skipNextCount = skipNextCount,
+                    stopMethod = stopMethod,
+                    vibration = vibration
                 ))
             }) { Text("Save", color = TealAccent) }
         },

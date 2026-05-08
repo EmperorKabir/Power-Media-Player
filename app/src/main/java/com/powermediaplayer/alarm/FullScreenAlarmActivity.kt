@@ -125,7 +125,13 @@ class FullScreenAlarmActivity : ComponentActivity() {
     private fun startRinging(alarm: AlarmRecord) {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val maxVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_ALARM) ?: 7
-        val startStep = (maxVol * alarm.startVolumePct / 100).coerceIn(0, maxVol)
+        // §C12 snoozeRestartFromStart: when this is a snooze fire and the
+        // user picked "continue ramp", begin at end-volume rather than
+        // start-volume so they don't hear the gentle wake-up curve again.
+        val isSnoozeFire = snoozeCount > 0
+        val openVolPct = if (isSnoozeFire && !alarm.snoozeRestartFromStart)
+            alarm.endVolumePct else alarm.startVolumePct
+        val startStep = (maxVol * openVolPct / 100).coerceIn(0, maxVol)
         audioManager?.setStreamVolume(AudioManager.STREAM_ALARM, startStep, 0)
 
         // Vibration if requested. Pattern: short pulses with fade
@@ -155,7 +161,11 @@ class FullScreenAlarmActivity : ComponentActivity() {
 
         ringJob = scope.launch {
             // Volume ramp: linear over rampSeconds from start% to end%.
-            val rampMs = alarm.rampSeconds.coerceAtLeast(0) * 1000L
+            // Skipped entirely on a snooze fire when the user chose to
+            // continue ramp at end-volume.
+            val skipRamp = isSnoozeFire && !alarm.snoozeRestartFromStart
+            val rampMs = if (skipRamp) 0L
+            else alarm.rampSeconds.coerceAtLeast(0) * 1000L
             if (rampMs > 0) {
                 val steps = 30
                 val tickMs = rampMs / steps

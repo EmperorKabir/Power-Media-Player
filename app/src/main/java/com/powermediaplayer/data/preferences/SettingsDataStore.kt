@@ -30,6 +30,10 @@ class SettingsDataStore @Inject constructor(
         val LAST_EQ_PRESET_ID = longPreferencesKey("last_eq_preset_id")
         val HEADPHONE_EQ_PRESET_ID = longPreferencesKey("headphone_eq_preset_id")
         val THEME_ACCENT_HEX = stringPreferencesKey("theme_accent_hex")
+        // §C13 — per-paired-device EQ preset map. Set of "addr|presetId".
+        // Address-keyed because device names aren't stable; the BT MAC
+        // is. presetId = -1 means "Don't auto-switch for this device".
+        val HEADPHONE_EQ_DEVICE_PRESETS = stringSetPreferencesKey("headphone_eq_device_presets")
         // §C28 — Drive offline copy registry. Set of "id|absolutePath".
         val OFFLINE_DRIVE_PAIRS = stringSetPreferencesKey("offline_drive_pairs")
         // §C9 — OpenSubtitles credentials.
@@ -685,6 +689,30 @@ class SettingsDataStore @Inject constructor(
     suspend fun setHeadphoneEqPresetId(id: Long) {
         context.dataStore.edit { prefs ->
             prefs[Keys.HEADPHONE_EQ_PRESET_ID] = id
+        }
+    }
+
+    /** §C13 — per-paired-device EQ. Map<address, presetId>. */
+    val headphoneEqDevicePresets: Flow<Map<String, Long>> = context.dataStore.data
+        .map { prefs ->
+            (prefs[Keys.HEADPHONE_EQ_DEVICE_PRESETS] ?: emptySet())
+                .mapNotNull {
+                    val sep = it.indexOf('|')
+                    if (sep <= 0) null
+                    else {
+                        val addr = it.substring(0, sep)
+                        val pid = it.substring(sep + 1).toLongOrNull()
+                        if (pid != null) addr to pid else null
+                    }
+                }
+                .toMap()
+        }
+
+    suspend fun setHeadphoneEqDevicePreset(address: String, presetId: Long) {
+        context.dataStore.edit { prefs ->
+            val cur = prefs[Keys.HEADPHONE_EQ_DEVICE_PRESETS] ?: emptySet()
+            val pruned = cur.filterNot { it.startsWith("$address|") }.toSet()
+            prefs[Keys.HEADPHONE_EQ_DEVICE_PRESETS] = pruned + "$address|$presetId"
         }
     }
 
