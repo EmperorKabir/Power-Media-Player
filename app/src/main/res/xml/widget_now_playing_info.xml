@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 8 — single foldable-responsive AppWidget. Min sizes target the
+  smallest cover (4×1 cells worth of width, two rows tall) so the
+  widget fits both phone and Z Fold inner-screen without separate
+  variants.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="100dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:initialLayout="@layout/widget_now_playing"
+    android:updatePeriodMillis="0"
+    android:description="@string/app_name"
+    android:previewLayout="@layout/widget_now_playing" />

@@ -530,6 +530,14 @@ class PlaybackService : MediaSessionService() {
                 // is enabled.
                 if (crossfadeMsFlag > 0) setCrossfadeFactor(0.0f)
                 else setCrossfadeFactor(1.0f)
+                // Phase 8 — refresh home-screen widget on track change.
+                com.powermediaplayer.widget.NowPlayingWidgetProvider
+                    .refresh(applicationContext)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                com.powermediaplayer.widget.NowPlayingWidgetProvider
+                    .refresh(applicationContext)
             }
         })
 

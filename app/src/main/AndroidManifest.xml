@@ -198,6 +198,23 @@
             </intent-filter>
         </service>
 
+        <!-- Phase 8 — home-screen now-playing widget. Foldable-
+             responsive via a single layout; tap → opens the app,
+             buttons fire Tasker-style broadcasts the existing
+             TaskerReceiver consumes. -->
+        <receiver
+            android:name=".widget.NowPlayingWidgetProvider"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.powermediaplayer.widget.REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_now_playing_info" />
+        </receiver>
+
         <!-- §C12 — wake-up alarms. exported=false: only fired by the
              AlarmManager PendingIntent we own. -->
         <receiver
