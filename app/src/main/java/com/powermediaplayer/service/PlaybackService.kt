@@ -1051,6 +1051,12 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun guessMimeFromUri(uri: android.net.Uri): String {
+        // First try ContentResolver — content:// URIs that lack a file
+        // extension still surface a stable MIME via MediaStore. Cast
+        // receivers refuse */* so this matters more on the Cast path
+        // than for the local DataSource which sniffs bytes itself.
+        val resolved = runCatching { contentResolver.getType(uri) }.getOrNull()
+        if (!resolved.isNullOrBlank()) return resolved
         val name = uri.lastPathSegment ?: return "*/*"
         return when (name.substringAfterLast('.', "").lowercase()) {
             "mp3" -> "audio/mpeg"
