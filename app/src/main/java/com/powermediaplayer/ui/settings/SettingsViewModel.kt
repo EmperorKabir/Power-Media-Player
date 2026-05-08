@@ -70,7 +70,8 @@ data class SettingsUiState(
     val taskerIntentsEnabled: Boolean = false,
     val bookmarkReplayContextSec: Int = 10,
     val stopOnTaskRemoved: Boolean = false,
-    val coldStartResumeBackoffSec: Int = 5
+    val coldStartResumeBackoffSec: Int = 5,
+    val scheduledAlarms: List<com.powermediaplayer.alarm.AlarmRecord> = emptyList()
 )
 
 /**
@@ -79,7 +80,7 @@ data class SettingsUiState(
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val settingsDataStore: SettingsDataStore,
+    val settingsDataStore: SettingsDataStore,
     private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector,
     val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao
 ) : ViewModel() {
@@ -150,7 +151,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.audioFocusOnOtherMedia,
             settingsDataStore.metadataEnrichmentEnabled,
             settingsDataStore.metadataEnrichmentProvider,
-            settingsDataStore.replayGainAutoScan
+            settingsDataStore.replayGainAutoScan,
+            settingsDataStore.scheduledAlarms
         )
     ) { v ->
         SettingsUiState(
@@ -210,7 +212,8 @@ class SettingsViewModel @Inject constructor(
             audioFocusOnOtherMedia = v[53] as String,
             metadataEnrichmentEnabled = v[54] as Boolean,
             metadataEnrichmentProvider = v[55] as String,
-            replayGainAutoScan = v[56] as Boolean
+            replayGainAutoScan = v[56] as Boolean,
+            scheduledAlarms = @Suppress("UNCHECKED_CAST") (v[57] as List<com.powermediaplayer.alarm.AlarmRecord>)
         )
     }.stateIn(
         scope = viewModelScope,

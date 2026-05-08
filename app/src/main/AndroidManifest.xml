@@ -40,6 +40,13 @@
     <!-- Notifications (SDK 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- §C12 — wake-up alarm. USE_EXACT_ALARM is auto-granted to
+         alarm-clock-class apps on Android 13+; SCHEDULE_EXACT_ALARM
+         is the legacy permission. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- Bluetooth: list/connect to A2DP/AVRCP devices on SDK 31+.
          BLUETOOTH_CONNECT is needed to query bonded devices and read
          names; BLUETOOTH_SCAN is needed to surface available unpaired
@@ -190,6 +197,16 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <!-- §C12 — wake-up alarms. exported=false: only fired by the
+             AlarmManager PendingIntent we own. -->
+        <receiver
+            android:name=".alarm.AlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.powermediaplayer.alarm.FIRE" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

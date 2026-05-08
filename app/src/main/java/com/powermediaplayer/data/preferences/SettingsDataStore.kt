@@ -189,6 +189,10 @@ class SettingsDataStore @Inject constructor(
         // skip). Never reset.
         val FIRST_RUN_SEEN = booleanPreferencesKey("first_run_seen")
 
+        // §C12 — scheduled alarms. Each entry is the AlarmRecord
+        // serialized form 'id|hour|minute|days|mediaUri|enabled'.
+        val SCHEDULED_ALARMS = stringSetPreferencesKey("scheduled_alarms")
+
         // Cover-art scaling mode for the now-playing surface — "fit"
         // (default; show whole cover with margins) or "fill" (no
         // margins, may crop edges).
@@ -563,6 +567,27 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setFirstRunSeen() {
         context.dataStore.edit { it[Keys.FIRST_RUN_SEEN] = true }
+    }
+
+    // §C12 — scheduled alarms.
+    val scheduledAlarms: Flow<List<com.powermediaplayer.alarm.AlarmRecord>> =
+        context.dataStore.data.map { prefs ->
+            (prefs[Keys.SCHEDULED_ALARMS] ?: emptySet())
+                .mapNotNull { com.powermediaplayer.alarm.AlarmRecord.deserialize(it) }
+                .sortedBy { it.hour * 60 + it.minute }
+        }
+    suspend fun upsertAlarm(alarm: com.powermediaplayer.alarm.AlarmRecord) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.SCHEDULED_ALARMS] ?: emptySet()
+            val pruned = current.filterNot { it.startsWith("${alarm.id}|") }.toSet()
+            prefs[Keys.SCHEDULED_ALARMS] = pruned + alarm.serialize()
+        }
+    }
+    suspend fun deleteAlarm(id: Long) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.SCHEDULED_ALARMS] ?: emptySet()
+            prefs[Keys.SCHEDULED_ALARMS] = current.filterNot { it.startsWith("$id|") }.toSet()
+        }
     }
 
     /**

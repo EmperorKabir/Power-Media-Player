@@ -32,6 +32,13 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
+    var showAlarmsSheet by remember { mutableStateOf(false) }
+    if (showAlarmsSheet) {
+        com.powermediaplayer.alarm.AlarmsSheet(
+            settingsDataStore = viewModel.settingsDataStore,
+            onDismiss = { showAlarmsSheet = false }
+        )
+    }
     if (showHiddenSheet) {
         com.powermediaplayer.ui.library.HiddenFilesSheet(
             hiddenUris = uiState.hiddenUris,
@@ -228,6 +235,36 @@ fun SettingsScreen(
             checked = uiState.taskerIntentsEnabled,
             onCheckedChange = { viewModel.setTaskerIntentsEnabled(it) }
         )
+
+        // §C12 — wake-up alarms. Tap to open the sheet that lists
+        // and edits scheduled alarms.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showAlarmsSheet = true }
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Alarm,
+                contentDescription = null,
+                tint = TealAccent,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Wake-up alarms (${uiState.scheduledAlarms.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Schedule playback at a chosen time. One-shot or recurring days-of-week.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
+                )
+            }
+        }
 
         // Hidden files (§C27) — tap to open the sheet listing every
         // URI hidden via the Library long-press menu, with per-row
