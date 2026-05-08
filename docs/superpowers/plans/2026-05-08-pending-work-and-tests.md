@@ -233,9 +233,10 @@ headers but the order doesn't match §D.
 10. Bluetooth
 11. Auto-hide / popups
 12. Wake-up alarms
-13. External control (Tasker)
-14. Privacy / hidden
-15. Reset / about
+13. Theme (§11.5 — accent colour picker)
+14. External control (Tasker)
+15. Privacy / hidden
+16. Reset / about
 
 **Files to edit:**
 1. `ui/settings/SettingsScreen.kt` — refactor existing block order;
@@ -286,14 +287,82 @@ this session.**
 
 ---
 
-## §10 Phase 7 alarm — live verification
+## §10 Phase 7 alarm — live verification + media picker
 
 **Status:** Implementation shipped (commits `6227dd9`, `0c33279`).
 **Live-tested by user once: alarm fired.** Not yet:
 - DND override
-- Picker for media URI (current input is text field, blank = resume)
+- Media picker (current input is a text field — users won't type URIs)
 - Snooze action on the notification
 - Volume ramp / wind-down (Q6 in §C12 was deferred)
+
+### §10.1 Media picker for the alarm Sound field
+
+The current `AlarmEditor` exposes a raw `OutlinedTextField` for the
+URI. That's a developer affordance, not a user one. Replace it with
+a typeahead that surfaces the user's existing curated lists.
+
+**Source set (in priority order):**
+1. **Bookmarks** — `BookmarkDao.getAll()` (already exists). Each
+   bookmark has `mediaUri + label + positionMs`. Surface label as
+   the title; alarm fires the bookmarked file (we ignore positionMs
+   — alarms always start at 0 unless the user explicitly opts in).
+2. **Favourites** — `FavoriteDao.getAll()` (already exists).
+3. **Last Played** — `PlaybackHistoryDao.recent(limit = 25)` —
+   gives a "what you've listened to lately" rail.
+4. **Local library** — `LibraryViewModel.localFiles` flow (already
+   collected in MediaScanner). Title + artist + uri.
+5. **Cloud** — files indexed by the existing cloud browser
+   (Drive + OneDrive + Dropbox). Cached list lives in the cloud
+   provider repos.
+
+**UI design — `AlarmMediaPickerSheet.kt`:**
+- Top: search field. Empty → shows the four sources as expandable
+  groups (Bookmarks / Favourites / Last Played / Library). Typing
+  filters every group simultaneously, case-insensitive substring on
+  title + artist.
+- Each row: 40 dp artwork thumbnail (already loaded via Coil),
+  title, subtitle (artist or "Bookmark @ 12:34"), source-tag chip.
+- Tap row → returns `(uri, displayLabel)` to `AlarmEditor`, which
+  stores `uri` in the AlarmRecord and shows `displayLabel` in the
+  list row instead of the raw URI fragment.
+- Footer: "Custom URI…" expands the existing text field as an
+  escape hatch for power users.
+
+**Files to author / edit:**
+1. `ui/alarm/AlarmMediaPickerSheet.kt` (new) — composable
+   `ModalBottomSheet`, hoists results from a `derivedStateOf` over
+   the four source flows + search query.
+2. `alarm/AlarmRecord.kt` — already has `mediaUri: String`. Add
+   sibling field `displayLabel: String` (default "" so existing
+   serialised records still parse). Update `serialize` to include
+   it after `enabled`. Bump deserialise to fall back when missing.
+3. `alarm/AlarmsSheet.kt` — replace the `OutlinedTextField` for
+   `mediaUri` with a tap row "Sound: $displayLabel" that opens the
+   picker; keep "Custom URI…" toggle for the typed path.
+4. `alarm/AlarmReceiver.kt` — no behaviour change; mediaUri still
+   drives playback. Just log displayLabel for nicer diagnostics.
+
+**Typeahead-narrows-as-you-type:**
+- `searchQuery` is a `MutableStateFlow<String>` debounced 150 ms.
+- Each source flow is `combine`d with the query: `flow.map { list ->
+  list.filter { it.matches(query) } }`.
+- Cloud sources only narrow within the already-cached index — we do
+  NOT issue live cloud requests on every keystroke (would rate-limit
+  and burn battery).
+
+**Acceptance evidence:**
+- Alarm dialog opens picker → all four groups populate.
+- Type "phil" → only matching titles remain in every group.
+- Tap a bookmark → editor closes, alarm row shows the friendly
+  label, alarm fires the right file.
+- Roundtrip a saved alarm: edit it → label re-displays correctly.
+
+**Risk:** Cloud index size — for users with thousands of cloud
+files, in-memory filter is fine; only consider paging if reports
+of jank arrive.
+
+### §10.2 Live verification (existing)
 
 **Acceptance evidence:**
 - Set alarm 1 min in the future, lock phone, confirm fire.
@@ -314,6 +383,90 @@ widgets after APK reinstall).
   visible.
 - Tap play-pause → if PMP is alive, toggles. If not, opens MainActivity.
 - Start playing a track → widget title updates within ~500 ms.
+
+---
+
+## §11.5 Theme — user-selectable accent colour
+
+**Status:** 0%. Theme is hard-coded in `ui/theme/Color.kt` —
+`TealAccent`, `OledBlack`, `TextPrimary`, etc. consumed by every
+screen. Background remains pure black per OLED-power discipline;
+only the accent layer (icons, dividers, slider tracks, toggles,
+chips, focused outlines) is user-controllable.
+
+### §11.5.1 What the user can change
+
+- **Accent colour** — replaces every site that currently uses
+  `TealAccent`. Single value, persisted in DataStore as
+  `THEME_ACCENT_HEX: String` (e.g. `#1ABC9C`).
+- **Optional secondary accent** — replaces `MintAccent` /
+  `SecondaryGreen`. Defaults to a HSL shift of the primary
+  (~30° hue rotation) so a single picker still produces a coherent
+  pair. User can override.
+- **Background stays `#000000`.** Not user-controllable. (Power
+  discipline; OLED-savings reasoning unchanged.)
+- **Text colours stay greyscale.** Not user-controllable —
+  tinting text against an arbitrary accent makes contrast unreliable.
+
+### §11.5.2 Picker UI
+
+Two entry modes side-by-side, both writing the same `THEME_ACCENT_HEX`:
+
+1. **Hex field** — `OutlinedTextField` accepting `#RRGGBB` or
+   `#RRGGBBAA`. Live preview swatch beside the field.
+2. **Colour wheel + brightness slider** — reuse a known-good Compose
+   library (`com.github.skydoves:colorpicker-compose:1.x` is
+   actively maintained). Verify version + syntax via Context7
+   (`mcp__context7__resolve-library-id` → `query-docs`) before adding
+   to `app/build.gradle.kts`. Picker pops a `ModalBottomSheet`,
+   confirms with "Use this colour" / "Cancel".
+
+Plus a small palette of 8 presets along the bottom (current Teal,
+amber, indigo, magenta, cyan, lime, rose, slate) so a non-power
+user gets a one-tap path.
+
+### §11.5.3 Files to author / edit
+
+1. `ui/theme/Color.kt` — keep the constants but rename
+   `TealAccent → AccentDefault`. Existing colour names become
+   defaults that the runtime overrides.
+2. `ui/theme/ThemeAccent.kt` (new) — `object ThemeAccent` with a
+   `val current: State<Color>` driven by the DataStore flow, plus a
+   `derived secondary: Color` computed from HSL.
+3. `ui/theme/Theme.kt` — at the root composable, wrap content in a
+   `CompositionLocalProvider(LocalAccent provides
+   themeAccent.current.value)`. Replace direct `TealAccent` references
+   throughout the codebase with `LocalAccent.current`.
+4. `data/preferences/SettingsDataStore.kt` — keys
+   `THEME_ACCENT_HEX` (default `"#1ABC9C"` to preserve current look)
+   and `THEME_SECONDARY_HEX` (default `""` = auto-derive).
+5. `ui/settings/ThemeSection.kt` (new) — section with hex field,
+   "Pick…" button (opens wheel sheet), preset row, "Reset to default"
+   action.
+6. `app/build.gradle.kts` — add `colorpicker-compose` after
+   confirming the artifact ID + latest version via Context7.
+
+### §11.5.4 Migration cost
+
+`grep -r "TealAccent\|MintAccent" app/src/main/java/com/powermediaplayer
+/ui --include="*.kt" | wc -l` is the count of call sites. Plan for
+~80–120 replacements; mechanical refactor.
+
+Risk: a screen that hard-codes a hex literal instead of importing
+`TealAccent` won't pick up the user's choice. Audit pass after the
+mass replace: `grep -rE "Color\(0xFF[0-9A-Fa-f]{6}\)"` and review
+each result for "should this be the accent?".
+
+### §11.5.5 Acceptance evidence
+
+- Set accent to `#FF6B6B` via hex field → re-open the player → top
+  app bar title, slider thumb, EQ band selectors, settings icons all
+  go red within one frame.
+- Set via wheel picker → same result.
+- Tap "Reset to default" → returns to teal.
+- Kill + relaunch → custom colour persists.
+- Disable hex (clear the field) → field rejects empty save with
+  inline error; wheel picker remains the source of truth.
 
 ---
 
@@ -370,14 +523,367 @@ captured:
    Cheapest, highest information density.
 2. **§11 widget re-add + tap test** — remove and re-add widget; tap
    transport buttons; capture logcat.
-3. **§7 Settings reorg** — pure UI, low risk, immediate UX win.
-4. **§6 Headphone-aware EQ** — bounded scope, clear acceptance.
-5. **§5 Smart playlists** — needs schema work but no platform
-   permissions.
-6. **§1 Phase 5 per-file overrides** — schema bump, careful migration.
-7. **§2 OpenSubtitles** — needs an API key from the user.
-8. **§3 Drive offline copy** — incremental on existing Drive picker.
-9. **§4 Podcasts** — largest scope, leave for last.
-10. **§12 Test infra** — interleave Path A unit tests as features land.
+3. **§10.1 Alarm media picker** — closes the alarm UX gap.
+4. **§7 Settings reorg** — pure UI, low risk, immediate UX win.
+5. **§11.5 Theme — accent colour picker** — touches every screen
+   but is mechanical (mass-replace + DataStore key).
+6. **§6 Headphone-aware EQ** — bounded scope, clear acceptance.
+7. **§5 Smart playlists** — schema work, no platform permissions.
+8. **§1 Phase 5 per-file overrides** — schema bump, careful migration.
+9. **§2 OpenSubtitles** — needs an API key from the user.
+10. **§3 Drive offline copy** — incremental on existing Drive picker.
+11. **§4 Podcasts** — largest scope, leave for last.
+12. **§12 Test infra** — interleave Path A unit tests as features land.
+13. **§14 Whole-app functional test phase** — runs ONLY after every
+    item above is shipped + per-feature evidence captured. See §14.
 
-Items 1–6 should comfortably fit before any further compaction.
+Items 1–7 should comfortably fit before any further compaction.
+
+---
+
+## §14 Whole-app functional test phase
+
+**This phase is sequenced AFTER §1–§13. Do not start §14 until every
+item above is shipped and its per-feature acceptance evidence is on
+file.** §14 is a separate, exhaustive sweep that exercises every
+feature, toggle, setting, and combination — nothing is "obvious" or
+"covered by an earlier check"; everything gets re-pressed.
+
+### §14.0 Required tooling
+
+- **Superpowers** — every test entry below must be driven through
+  the relevant Superpowers skill (`superpowers:debugging`,
+  `superpowers:test-driven-development`,
+  `superpowers:verification-before-completion`,
+  `superpowers:investigation`). Each test entry calls out which.
+- **Context7** — for any external dependency or platform API
+  involved in a test, query Context7
+  (`mcp__context7__resolve-library-id` then `query-docs`) before
+  writing the test, even for libraries we already use (Media3,
+  Compose, Hilt, Room, DataStore, WorkManager, AppWidgetProvider,
+  AlarmManager, AudioManager, MediaSession). Prevents drift between
+  what we coded against and what currently ships.
+- **Devices** — both must run every test:
+  - **Z Fold 6** (`adb -s RFCY70BARDJ`) — physical, foldable, real
+    headphone jack absent → BT headphones used.
+  - **Emulator** (`adb -s emulator-5554`) — current API level set in
+    AVD. Catches geometry/AOSP behaviours the Samsung skin masks.
+- **adb commands** standard kit:
+  - `adb -s <id> install -r <apk>`
+  - `adb -s <id> logcat -c` (clear before each test entry)
+  - `adb -s <id> shell am start -n com.powermediaplayer/.MainActivity`
+  - `adb -s <id> shell input tap <x> <y>` / `swipe`
+  - `adb -s <id> shell screencap -p /sdcard/<name>.png` + `pull`
+  - `adb -s <id> logcat -d -t N | grep -E "PMP_DIAG|FATAL|AndroidRuntime|ExoPlayer|MediaCodec"` after each test, attach
+    output to the test row.
+  - `adb -s <id> shell dumpsys window | grep com.powermediaplayer` to
+    verify expected window stack.
+  - `adb -s <id> shell dumpsys appwidget` for widget tests.
+  - `adb -s <id> shell dumpsys notification` for alarm/notif tests.
+  - `adb -s <id> shell run-as com.powermediaplayer sqlite3
+    databases/power_media_player.db '<query>'` for DB tests.
+
+### §14.1 Format of each test row
+
+Every test entry in the matrices below is logged in
+`docs/superpowers/test-runs/<date>-fullapp/<section>.md` with:
+
+```
+ID: T-<section>-<seq>
+Feature: <human label>
+Skill used: <superpowers skill>
+Devices: [Z Fold 6, Emulator] | [Z Fold 6 only with reason]
+Steps: <numbered>
+Expected: <observable>
+Actual: <pasted observation>
+Logcat slice: <pasted>
+Screencap (if UI): <path>
+Verdict: PASS | FAIL | BLOCKED
+Owner-action: <only if FAIL — link to issue / fix commit>
+```
+
+A FAIL doesn't end the run; it gets logged, the next test continues.
+At the end, FAILs are triaged in priority order and re-run after
+fixes.
+
+### §14.2 Test matrix — Library
+
+For each entry: tap, observe, capture logcat + screencap.
+
+- T-LIB-01 — Library tab cold-load on fresh install (storage permission
+  prompt fires, deep-scan dialog (§F) appears, tap "Skip" → list
+  populates within 5 s).
+- T-LIB-02 — Same but tap "Yes, deep-scan" → progress indicator,
+  album art populates for files that previously had none.
+- T-LIB-03 — Search input narrows live across artist + album + title.
+- T-LIB-04 — Sort: each option (date, name, duration, size) flips the
+  list deterministically.
+- T-LIB-05 — Filter: video-only / audio-only / both.
+- T-LIB-06 — Long-press menu: every action (play, queue next, queue
+  end, hide, favourite, delete, open in other app). Each verified.
+- T-LIB-07 — Multi-select: enter via long-press → "Select all" →
+  bulk hide → bulk favourite → exit (confirms multi-select auto-
+  exits per commit `1be3d85`).
+- T-LIB-08 — Hidden files: §C27 sheet → unhide one → file reappears
+  → "Unhide all" → all return.
+- T-LIB-09 — Folder mode (audiobook): play folder → cross-file
+  chapters work.
+- T-LIB-10 — Cloud tab: each provider chip (Drive / OneDrive /
+  Dropbox) opens picker; pick a remote audio file, plays.
+- T-LIB-11 — Last-Played tab: rows reflect history; tap re-plays from
+  last position.
+- T-LIB-12 — Pinned: pin a file from long-press → appears in Pinned.
+- T-LIB-13 — First-run dialog: confirm one-time gate (§F).
+- T-LIB-14 — File deletion confirmation dialog cancels safely (no
+  delete on cancel).
+
+### §14.3 Test matrix — Player
+
+- T-PLR-01 — Tap audio file → opens player, plays, position ticker
+  advances, isPlaying=true in logcat.
+- T-PLR-02 — Tap video file → video surface renders, audio plays,
+  isPlaying=true. **Carries the open "no media loaded" claim — must
+  verify clean once §13 evidence is in.**
+- T-PLR-03 — Pause / resume via centre button.
+- T-PLR-04 — Scrub via slider — position jumps; logcat shows
+  `seekTo target=Xms`.
+- T-PLR-05 — Prev / Next chips advance items in the queue.
+- T-PLR-06 — A-B loop: set A, set B, confirm loop, persists across
+  app restart per commit `f43f63f`.
+- T-PLR-07 — Speed: cycle 0.5×, 1×, 1.5×, 2×, custom.
+- T-PLR-08 — Pitch: ±semitones, audible verification.
+- T-PLR-09 — Loop modes: off, one, all.
+- T-PLR-10 — Sleep timer presets + custom minutes; player pauses at
+  the right moment.
+- T-PLR-11 — Bookmark create + rename (commit `d23a6d3`) + jump.
+- T-PLR-12 — Crossfade: enable, set ms, observe overlap on track end
+  (every sub-toggle: album mode, skip silence, manual fade-now,
+  fade-out on pause, fade-in on resume).
+- T-PLR-13 — Audio effects popup: BW / sepia / invert / flip H+V /
+  rotation; auto-hide respects §C user setting.
+- T-PLR-14 — Subtitle delay slider, audio delay slider.
+- T-PLR-15 — Volume boost slider (now lazy-attaches LE — confirm log
+  is silent for clamped=0).
+- T-PLR-16 — Reverb preset dropdown.
+- T-PLR-17 — Stereo flip / Mono mix (disabled on true-mono devices,
+  per `AudioOutputDetector`).
+- T-PLR-18 — Frame step forward / back on paused video.
+- T-PLR-19 — Screenshot.
+- T-PLR-20 — PiP: enter, controls work, return.
+- T-PLR-21 — MiniPlayerBar: appears on home tab when player is
+  loaded; tap row → opens full player.
+- T-PLR-22 — Cold-start resume backoff: leave a track mid-play → kill
+  → reopen → resume offset honoured.
+
+### §14.4 Test matrix — Settings (every toggle, every dropdown)
+
+Walk top-to-bottom in §D order. For each control:
+1. Note default. 2. Toggle. 3. Verify behaviour change. 4. Toggle
+back. 5. Kill + relaunch — state persists.
+
+Sections covered: Account, Library scanning, Metadata, Cloud,
+Playback, Audio output / focus, Effects, Subtitles, Video,
+Bluetooth, Auto-hide / popups, Wake-up alarms, **Theme (§11.5)**,
+External control (Tasker), Privacy / hidden, Reset / about.
+
+Every dropdown enumerates every option (e.g. audio focus on call:
+pause / duck / continue — three runs each).
+
+Reset all settings (§Reset): triggers confirm dialog, clears every
+DataStore key, app re-renders with defaults.
+
+### §14.5 Test matrix — EQ
+
+- T-EQ-01 — Each preset applies (logcat: equaliser bands set to
+  preset values).
+- T-EQ-02 — Custom band drag affects audio (subjective + spectrum
+  meter if available).
+- T-EQ-03 — Save custom preset → appears in dropdown → reload it.
+- T-EQ-04 — Headphone-aware EQ (§6 once shipped): plug → preset
+  swap; unplug → revert.
+- T-EQ-05 — ReplayGain on/off + auto-scan (§3adb903).
+
+### §14.6 Test matrix — Cast
+
+- T-CAST-01 — On same Wi-Fi, MediaRoute button appears.
+- T-CAST-02 — Pick Chromecast device → audio plays on receiver.
+- T-CAST-03 — Pick with content:// URI → relay starts (log line
+  "Started cast relay on http://…").
+- T-CAST-04 — Wi-Fi disconnect mid-cast → relay null → error toast,
+  player stays local (commit `cb1bdbd`).
+- T-CAST-05 — Cast video — surface appears on receiver.
+- T-CAST-06 — Disconnect cast cleanly via picker.
+
+### §14.7 Test matrix — Spotify Connect
+
+- T-SP-01 — Cold launch PMP, Spotify killed → tap a Spotify-source
+  track → bridge auto-launches Spotify, bounces back, audio plays
+  via Connect.
+- T-SP-02 — Spotify already running → no bounce; immediate playback.
+- T-SP-03 — Pick remote device in Spotify Connect picker (speaker,
+  phone, computer); audio routes accordingly.
+- T-SP-04 — Pause/play/skip from PMP controls — propagates.
+- T-SP-05 — Spotify token expiry — silent refresh.
+
+### §14.8 Test matrix — Bluetooth / wired audio
+
+- T-BT-01 — Connect BT headphones → audio routes to BT.
+- T-BT-02 — Disconnect → audio pauses or routes to speaker per
+  user's preference.
+- T-BT-03 — AVRCP keys: play / pause / next / prev / skip-back-30 /
+  skip-forward-30 each fire the configured action.
+- T-BT-04 — `headphonePlugAutoplay` toggle: plug headphones with no
+  media → behaviour matches setting.
+- T-BT-05 — Wired headphone jack — N/A on Z Fold 6 (no jack).
+
+### §14.9 Test matrix — Quick Settings tiles (§C1)
+
+- T-QS-01 — PMP play/pause tile fires from QS panel.
+- T-QS-02 — −15 s / +15 s tiles fire.
+
+### §14.10 Test matrix — Tasker / external control (§C3)
+
+- T-TASK-01 — Toggle off (default) → `adb shell am broadcast -a
+  com.powermediaplayer.action.PLAY` → ignored, log line confirms.
+- T-TASK-02 — Toggle on → same broadcast → playback starts.
+- T-TASK-03 — Each action verified: PLAY, PAUSE, PLAY_PAUSE,
+  SKIP_NEXT, SKIP_PREV, SKIP_BACK_30, SKIP_FORWARD_30, SEEK_TO.
+
+### §14.11 Test matrix — Wake-up alarms
+
+- T-AL-01 — Add alarm 1 min ahead, lock phone → fires + sound +
+  notification.
+- T-AL-02 — Recurring alarm: set Mon-Fri → re-arms after fire.
+- T-AL-03 — Toggle off saved alarm → cancel scheduled, no fire.
+- T-AL-04 — Delete alarm → row + system schedule both gone.
+- T-AL-05 — DND on → alarm still rings (channel `setBypassDnd(true)`).
+- T-AL-06 — Reboot device → alarm rescheduled (after BOOT_COMPLETED
+  receiver wires up; currently NOT implemented — log as BLOCKED).
+- T-AL-07 — Media picker (§10.1 once shipped): pick a bookmark →
+  alarm plays it.
+- T-AL-08 — Custom URI fallback works.
+
+### §14.12 Test matrix — Home-screen widget (§11)
+
+- T-WID-01 — Long-press home → Widgets → "Power Media Player" listed.
+- T-WID-02 — Drag onto home — renders title + artist + 3 transport
+  buttons (post-`0c33279`).
+- T-WID-03 — Tap row → opens MainActivity.
+- T-WID-04 — Tap play-pause with no media → opens app.
+- T-WID-05 — Tap play-pause with media loaded → toggles isPlaying.
+- T-WID-06 — Tap prev / next — advances queue.
+- T-WID-07 — Title / artist update within 500 ms of track change.
+- T-WID-08 — Resize widget → still renders correctly.
+
+### §14.13 Test matrix — Stats / history
+
+- T-STAT-01 — Settings → listening stats (§C2) opens; counts +
+  top-5 lists populate from `playback_history`.
+- T-STAT-02 — After plays, counts increment.
+
+### §14.14 Test matrix — Theme (§11.5 once shipped)
+
+- T-THM-01 — Hex field accepts `#FF6B6B` → app accent goes red,
+  background stays black.
+- T-THM-02 — Wheel picker confirms a colour → applied.
+- T-THM-03 — Preset chip (e.g. amber) — applied.
+- T-THM-04 — "Reset to default" → returns to teal.
+- T-THM-05 — Persists across kill + relaunch.
+- T-THM-06 — Audit pass: every screen visited, no surface still
+  hard-coded teal.
+
+### §14.15 Test matrix — Smart playlists (§5 once shipped)
+
+- T-SP-01 — Create "Played 5+ times this month" → resolves.
+- T-SP-02 — Edit criteria → result set updates.
+- T-SP-03 — Delete → row gone, no orphaned data.
+
+### §14.16 Test matrix — OpenSubtitles (§2 once shipped)
+
+- T-SUB-01 — Sign-in success persists token.
+- T-SUB-02 — Wrong password → error message.
+- T-SUB-03 — Play a video without sibling SRT → subtitles fetched.
+- T-SUB-04 — Airplane mode mid-search → silent no-op.
+
+### §14.17 Test matrix — Drive offline (§3 once shipped)
+
+- T-DRV-01 — Save offline → file appears in cache.
+- T-DRV-02 — Kill network → plays from cache.
+- T-DRV-03 — Cache > 1 GB → eviction kicks in.
+
+### §14.18 Test matrix — Podcasts (§4 once shipped)
+
+- T-POD-01 — Add by URL → episodes populate.
+- T-POD-02 — Background sync via WorkManager → new episodes appear.
+- T-POD-03 — Tap episode → plays.
+
+### §14.19 Test matrix — Combinations (the explicit ask)
+
+The user's directive: "every possible function and combination of
+functions". A non-exhaustive but representative grid:
+
+- T-COMBO-01 — Crossfade ON + Album mode ON + Sleep timer in 1 min:
+  fade-out at sleep boundary respected.
+- T-COMBO-02 — Speed 1.5× + pitch +2 + EQ "Bass Boost": all three
+  layers audible.
+- T-COMBO-03 — Volume boost 1500 mB + ReplayGain ON: net level sane,
+  no clipping in logcat (`MediaCodec` warnings absent).
+- T-COMBO-04 — A-B loop + Custom EQ + speed 0.75: loops within the
+  segment at the slowed speed.
+- T-COMBO-05 — Cast active + tap a different file: relay re-points
+  cleanly.
+- T-COMBO-06 — Cast + crossfade enabled: fade behaviour on the cast
+  side (Media3 limitation possible — log result).
+- T-COMBO-07 — BT headphones + Headphone-aware EQ + ReplayGain: EQ
+  swap doesn't disrupt RG.
+- T-COMBO-08 — Tasker SEEK_TO + A-B loop active: seek inside loop
+  retargets correctly; seek outside loop releases the loop.
+- T-COMBO-09 — Wake-up alarm + Spotify Connect last source: alarm
+  fires its own track via local pipeline, doesn't try to wake
+  Spotify.
+- T-COMBO-10 — Widget play tap + app cold: opens app, then
+  subsequent taps toggle.
+- T-COMBO-11 — Theme accent change while video playing: live re-tint
+  doesn't drop a frame.
+- T-COMBO-12 — Quick Settings tile + Tasker intent toggle off: tile
+  still works (tile is internal, not gated by Tasker toggle).
+- T-COMBO-13 — Smart playlist + crossfade + sleep timer.
+- T-COMBO-14 — DND on + alarm + crossfade: alarm sound bypasses, then
+  crossfade settings carry into post-alarm playback.
+- T-COMBO-15 — Settings reset all + active playback: playback
+  continues, settings revert.
+
+(Each combination row gets the standard
+ID/Steps/Expected/Actual/Logcat/Verdict treatment.)
+
+### §14.20 Per-device coverage rule
+
+Every test in §14.2–§14.19 runs on **both Z Fold 6 and emulator**
+unless the row says "Z Fold 6 only" with a justification (BT, real
+headphones, Spotify Connect on real device, real Cast hardware).
+
+### §14.21 Logcat discipline
+
+Before each test:
+```sh
+adb -s <id> logcat -c
+```
+After each test:
+```sh
+adb -s <id> logcat -d -t 400 | grep -E \
+  "PMP_DIAG|FATAL|AndroidRuntime|ExoPlayer|MediaCodec|ANR" \
+  > docs/superpowers/test-runs/<date>-fullapp/logs/<test-id>.log
+```
+Attach the file path to the test row. No log = no PASS.
+
+### §14.22 Triage and exit criteria
+
+§14 is complete when:
+1. Every test ID in §14.2–§14.19 has a verdict logged.
+2. Every FAIL has either a fix commit linked or a documented BLOCKED
+   reason (e.g. "no Chromecast available — re-run when one is").
+3. The combined report `docs/superpowers/test-runs/<date>-fullapp/
+   summary.md` shows pass-rate per section.
+
+§14 is **not** a pre-merge gate during §1–§13. It is the final
+clean-up before the release candidate.
