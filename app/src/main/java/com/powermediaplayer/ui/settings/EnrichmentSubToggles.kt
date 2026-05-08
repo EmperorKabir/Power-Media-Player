@@ -30,12 +30,34 @@ fun EnrichmentSubToggles(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val ds = viewModel.settingsDataStore
+    val provider by ds.metadataEnrichmentProvider.collectAsState(initial = "musicbrainz")
     val artwork by ds.enrichFetchArtwork.collectAsState(initial = true)
     val year by ds.enrichFetchYear.collectAsState(initial = true)
     val genre by ds.enrichFetchGenre.collectAsState(initial = true)
     val scope by ds.enrichApplyScope.collectAsState(initial = "missing_only")
     val cs = rememberCoroutineScope()
     Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Text(
+            "Provider:", color = TextSecondary,
+            style = MaterialTheme.typography.labelMedium
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = provider == "musicbrainz",
+                onClick = { cs.launch { ds.setMetadataEnrichmentProvider("musicbrainz") } },
+                label = { Text("MusicBrainz") }
+            )
+            FilterChip(
+                selected = provider == "discogs",
+                onClick = { cs.launch { ds.setMetadataEnrichmentProvider("discogs") } },
+                label = { Text("Discogs") }
+            )
+            FilterChip(
+                selected = provider == "both",
+                onClick = { cs.launch { ds.setMetadataEnrichmentProvider("both") } },
+                label = { Text("Both") }
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(checked = artwork, onCheckedChange = { cs.launch { ds.setEnrichFetchArtwork(it) } })
             Text("  Fetch missing artwork", color = TextPrimary,

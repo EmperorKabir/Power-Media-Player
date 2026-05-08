@@ -48,6 +48,8 @@ class PlayerViewModel @Inject constructor(
 
     private val musicBrainzClient =
         com.powermediaplayer.enrichment.MusicBrainzClient()
+    private val discogsClient =
+        com.powermediaplayer.enrichment.DiscogsClient()
 
     /**
      * §B5 LOCKED — auto-revert reason exposed via a Flow so the player
@@ -121,8 +123,24 @@ class PlayerViewModel @Inject constructor(
                     val hasArtist = curState.artist.isNotBlank()
                     val hasAlbum = curState.album.isNotBlank()
                     if (applyScope == "missing_only" && hasArtist && hasAlbum) return@collect
+                    val provider = settingsDataStore.metadataEnrichmentProvider.first()
                     val res = withContext(Dispatchers.IO) {
-                        musicBrainzClient.lookupRecording(title, artistHint.takeIf { it.isNotBlank() })
+                        // §C17 LOCKED — MusicBrainz / Discogs / Both.
+                        // "both" prefers MusicBrainz, falls through to
+                        // Discogs only when MB returns null.
+                        when (provider) {
+                            "discogs" -> discogsClient.lookupRecording(
+                                title, artistHint.takeIf { it.isNotBlank() }
+                            )
+                            "both" -> musicBrainzClient.lookupRecording(
+                                title, artistHint.takeIf { it.isNotBlank() }
+                            ) ?: discogsClient.lookupRecording(
+                                title, artistHint.takeIf { it.isNotBlank() }
+                            )
+                            else -> musicBrainzClient.lookupRecording(
+                                title, artistHint.takeIf { it.isNotBlank() }
+                            )
+                        }
                     } ?: return@collect
                     // Honor sub-toggles by zeroing fields the user
                     // disabled before patching state.

@@ -748,6 +748,11 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // §B3 LOCKED — Pause = both players pause synchronously.
+                // Resume = both players resume; secondary continues
+                // ramping from where its volume sat.
+                if (isPlaying) crossfadeController.resumeAll()
+                else crossfadeController.pauseAll()
                 com.powermediaplayer.widget.NowPlayingWidgetProvider
                     .refresh(applicationContext)
             }

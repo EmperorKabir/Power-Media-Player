@@ -169,6 +169,22 @@ class CrossfadeController(
         else -> (1f - t) to t // linear
     }
 
+    /**
+     * §B3 LOCKED — Pause both players synchronously when a user-driven
+     * pause arrives mid-crossfade. The overlap loop is left running so
+     * resume() picks up where the volumes were.
+     */
+    fun pauseAll() {
+        runCatching { secondary?.pause() }
+    }
+
+    fun resumeAll() {
+        runCatching {
+            val s = secondary ?: return
+            s.play()
+        }
+    }
+
     /** Abort an active overlap (e.g. on user-driven Skip Next/Prev). */
     fun abort() {
         overlapJob?.cancel()
