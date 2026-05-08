@@ -48,6 +48,41 @@ object AlarmScheduler {
         }
     }
 
+    /**
+     * §C12 — schedule a one-shot snooze fire for [snoozeCount] minutes
+     * from now, identified by [snoozeAlarmId] so it can be cancelled
+     * independently of the master alarm. The receiver's `snoozeCount`
+     * extra is incremented so the activity can enforce maxSnoozes.
+     */
+    fun scheduleSnooze(
+        context: Context,
+        original: AlarmRecord,
+        snoozeAlarmId: Long,
+        snoozeCount: Int
+    ) {
+        val am = context.getSystemService(AlarmManager::class.java) ?: return
+        val triggerAt = System.currentTimeMillis() + original.snoozeMinutes * 60_000L
+        val intent = Intent(context, AlarmReceiver::class.java).apply {
+            action = AlarmReceiver.ACTION_FIRE
+            putExtra(AlarmReceiver.EXTRA_ALARM_ID, original.id)
+            putExtra(AlarmReceiver.EXTRA_SNOOZE_COUNT, snoozeCount)
+        }
+        val pi = PendingIntent.getBroadcast(
+            context, snoozeAlarmId.toInt(), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        runCatching {
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(triggerAt, pi), pi)
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "AlarmScheduler snooze scheduled id=${original.id} " +
+                    "snoozeCount=$snoozeCount triggerAt=$triggerAt"
+            )
+        }.onFailure {
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "AlarmScheduler.scheduleSnooze failed", it)
+        }
+    }
+
     fun cancel(context: Context, alarmId: Long) {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
         val pi = pendingIntent(context, alarmId, flags = PendingIntent.FLAG_NO_CREATE)

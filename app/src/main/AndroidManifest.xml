@@ -42,9 +42,14 @@
 
     <!-- §C12 — wake-up alarm. USE_EXACT_ALARM is auto-granted to
          alarm-clock-class apps on Android 13+; SCHEDULE_EXACT_ALARM
-         is the legacy permission. -->
+         is the legacy permission. USE_FULL_SCREEN_INTENT is required
+         on API 34+ to display the full-screen alarm activity over the
+         lockscreen; VIBRATE drives the alarm pattern. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.TURN_SCREEN_ON" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Bluetooth: list/connect to A2DP/AVRCP devices on SDK 31+.
@@ -227,6 +232,18 @@
                 <action android:name="com.powermediaplayer.alarm.FIRE" />
             </intent-filter>
         </receiver>
+
+        <!-- §C12 — full-screen alarm activity. showWhenLocked + turnScreenOn
+             flags are also set imperatively in the activity (they're
+             newer / the manifest analogue is API 27+). -->
+        <activity
+            android:name=".alarm.FullScreenAlarmActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.PowerMediaPlayer" />
 
     </application>
 

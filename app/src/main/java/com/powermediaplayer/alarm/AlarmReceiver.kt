@@ -6,11 +6,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import androidx.media3.common.MediaItem
-import com.powermediaplayer.MainActivity
 import com.powermediaplayer.R
 import com.powermediaplayer.data.preferences.SettingsDataStore
-import com.powermediaplayer.service.PlaybackService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +37,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val alarmId = intent.getLongExtra(EXTRA_ALARM_ID, -1L)
+        val snoozeCount = intent.getIntExtra(EXTRA_SNOOZE_COUNT, 0)
         if (alarmId < 0) return
 
         scope.launch {
@@ -47,43 +45,46 @@ class AlarmReceiver : BroadcastReceiver() {
                 .firstOrNull { it.id == alarmId } ?: return@launch
             if (!alarm.enabled) return@launch
 
-            // Start playback. If mediaUri is empty, fall back to whatever
-            // the player has loaded (resume mode).
-            val player = PlaybackService.getExoPlayer()
-            if (alarm.mediaUri.isNotBlank()) {
-                runCatching {
-                    val item = MediaItem.Builder()
-                        .setMediaId(alarm.mediaUri)
-                        .setUri(android.net.Uri.parse(alarm.mediaUri))
-                        .build()
-                    player?.setMediaItems(listOf(item), 0, 0L)
-                    player?.prepare()
-                    player?.playWhenReady = true
-                }
-            } else if (player?.currentMediaItem != null) {
-                player.play()
-            } else {
-                // No media at all — open the app so the user can pick one.
-                runCatching {
-                    val openApp = Intent(context, MainActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(openApp)
-                }
+            // §C12 skip-next-N: decrement on each fire and skip if > 0.
+            if (alarm.skipNextCount > 0 && snoozeCount == 0) {
+                val updated = alarm.copy(skipNextCount = alarm.skipNextCount - 1)
+                runCatching { settingsDataStore.upsertAlarm(updated) }
+                if (alarm.days != 0) AlarmScheduler.schedule(context, updated)
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "AlarmReceiver SKIPPED id=${alarm.id} (skipNext=${alarm.skipNextCount}→${updated.skipNextCount})"
+                )
+                return@launch
             }
 
-            postNotification(context, alarm)
+            // §C12 — Launch FullScreenAlarmActivity. The activity owns
+            // the actual ringing (USAGE_ALARM MediaPlayer), volume ramp,
+            // hold/wind-down, snooze, math/shake/tap stop, and vibration.
+            val launchIntent = FullScreenAlarmActivity.intent(context, alarm.id, snoozeCount)
+            postNotification(context, alarm, launchIntent)
+            runCatching { context.startActivity(launchIntent) }
+
             // Reschedule next occurrence if recurring (days != 0).
-            if (alarm.days != 0) AlarmScheduler.schedule(context, alarm)
+            // Snooze fires never reschedule the master alarm — that
+            // happens once when the original alarm fires.
+            if (alarm.days != 0 && snoozeCount == 0) {
+                AlarmScheduler.schedule(context, alarm)
+            }
 
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
                 "AlarmReceiver fired id=${alarm.id} time=${alarm.timeLabel} " +
-                    "days=${alarm.daysLabel} mediaUri=${alarm.mediaUri.ifBlank { "<resume>" }}"
+                    "days=${alarm.daysLabel} mediaUri=${alarm.mediaUri.ifBlank { "<resume>" }} " +
+                    "snoozeCount=$snoozeCount"
             )
         }
     }
 
-    private fun postNotification(context: Context, alarm: AlarmRecord) {
+    private fun postNotification(
+        context: Context,
+        alarm: AlarmRecord,
+        fullScreenIntent: Intent
+    ) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
         // Alarm channel — MAX importance so it bypasses DND/silent.
         val channelId = "pmp_alarm_v1"
@@ -95,26 +96,26 @@ class AlarmReceiver : BroadcastReceiver() {
         }
         nm.createNotificationChannel(ch)
 
-        val tap = android.app.PendingIntent.getActivity(
-            context, alarm.id.toInt(),
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        val fullScreenPi = android.app.PendingIntent.getActivity(
+            context, alarm.id.toInt(), fullScreenIntent,
             android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
         )
         val notif = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Power Media Player alarm — ${alarm.timeLabel}")
-            .setContentText(alarm.daysLabel)
+            .setContentText(alarm.displayLabel.ifBlank { alarm.daysLabel })
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
-            .setContentIntent(tap)
+            .setContentIntent(fullScreenPi)
+            .setFullScreenIntent(fullScreenPi, true)
             .build()
         runCatching { nm.notify(alarm.id.toInt(), notif) }
     }
 
     companion object {
         const val EXTRA_ALARM_ID = "alarm_id"
+        const val EXTRA_SNOOZE_COUNT = "snooze_count"
         const val ACTION_FIRE = "com.powermediaplayer.alarm.FIRE"
     }
 }
