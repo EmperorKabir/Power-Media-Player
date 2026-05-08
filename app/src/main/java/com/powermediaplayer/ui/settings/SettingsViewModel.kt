@@ -42,8 +42,13 @@ data class SettingsUiState(
     val passthroughAudio: Boolean = true,
     val artworkScaleMode: String = "fit",
     val videoControlsHideSec: Int = 4,
-    val audioEffectsPopupHideSec: Int = 3,
-    val videoEffectsPopupHideSec: Int = 3,
+    val audioEffectsPopupHideSec: Int = 0,
+    val videoEffectsPopupHideSec: Int = 0,
+    val crossfadePopupHideSec: Int = 0,
+    val infoSheetHideSec: Int = 0,
+    val trackContextSheetHideSec: Int = 0,
+    val audioControlsHideFoldedSec: Int = 0,
+    val audioControlsHideTabletSec: Int = 0,
     val hiddenUris: Set<String> = emptySet(),
     // Crossfade (Phase 4 / §B2)
     val crossfadeEnabled: Boolean = false,
@@ -128,7 +133,12 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.taskerIntentsEnabled,
             settingsDataStore.bookmarkReplayContextSec,
             settingsDataStore.stopOnTaskRemoved,
-            settingsDataStore.coldStartResumeBackoffSec
+            settingsDataStore.coldStartResumeBackoffSec,
+            settingsDataStore.crossfadePopupHideSec,
+            settingsDataStore.infoSheetHideSec,
+            settingsDataStore.trackContextSheetHideSec,
+            settingsDataStore.audioControlsHideFoldedSec,
+            settingsDataStore.audioControlsHideTabletSec
         )
     ) { v ->
         SettingsUiState(
@@ -177,7 +187,12 @@ class SettingsViewModel @Inject constructor(
             taskerIntentsEnabled = v[42] as Boolean,
             bookmarkReplayContextSec = v[43] as Int,
             stopOnTaskRemoved = v[44] as Boolean,
-            coldStartResumeBackoffSec = v[45] as Int
+            coldStartResumeBackoffSec = v[45] as Int,
+            crossfadePopupHideSec = v[46] as Int,
+            infoSheetHideSec = v[47] as Int,
+            trackContextSheetHideSec = v[48] as Int,
+            audioControlsHideFoldedSec = v[49] as Int,
+            audioControlsHideTabletSec = v[50] as Int
         )
     }.stateIn(
         scope = viewModelScope,
@@ -246,6 +261,21 @@ class SettingsViewModel @Inject constructor(
 
     fun setColdStartResumeBackoffSec(v: Int) =
         viewModelScope.launch { settingsDataStore.setColdStartResumeBackoffSec(v) }.let { }
+
+    fun setCrossfadePopupHideSec(v: Int) =
+        viewModelScope.launch { settingsDataStore.setCrossfadePopupHideSec(v) }.let { }
+
+    fun setInfoSheetHideSec(v: Int) =
+        viewModelScope.launch { settingsDataStore.setInfoSheetHideSec(v) }.let { }
+
+    fun setTrackContextSheetHideSec(v: Int) =
+        viewModelScope.launch { settingsDataStore.setTrackContextSheetHideSec(v) }.let { }
+
+    fun setAudioControlsHideFoldedSec(v: Int) =
+        viewModelScope.launch { settingsDataStore.setAudioControlsHideFoldedSec(v) }.let { }
+
+    fun setAudioControlsHideTabletSec(v: Int) =
+        viewModelScope.launch { settingsDataStore.setAudioControlsHideTabletSec(v) }.let { }
 
     fun resetAllSettings() =
         viewModelScope.launch { settingsDataStore.resetAllSettings() }.let { }

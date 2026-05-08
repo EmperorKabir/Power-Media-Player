@@ -339,6 +339,27 @@ fun SettingsScreen(
             onChange = { viewModel.setVideoEffectsPopupHideSec(it) },
             allowNever = true
         )
+        AutoHideRow(
+            label = "Crossfade panel",
+            description = "Master crossfade + 9 sub-toggles popup.",
+            currentSeconds = uiState.crossfadePopupHideSec,
+            onChange = { viewModel.setCrossfadePopupHideSec(it) },
+            allowNever = true
+        )
+        AutoHideRow(
+            label = "Info sheet (the 'i' icon)",
+            description = "Per-tab help / explanation sheet.",
+            currentSeconds = uiState.infoSheetHideSec,
+            onChange = { viewModel.setInfoSheetHideSec(it) },
+            allowNever = true
+        )
+        AutoHideRow(
+            label = "Long-press track menu",
+            description = "Favourite / Hide / Share / Delete row sheet.",
+            currentSeconds = uiState.trackContextSheetHideSec,
+            onChange = { viewModel.setTrackContextSheetHideSec(it) },
+            allowNever = true
+        )
         SettingsDivider()
 
         // ══════════════════════════════════════════════════════════

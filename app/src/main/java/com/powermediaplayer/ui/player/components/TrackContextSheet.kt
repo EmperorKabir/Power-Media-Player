@@ -28,7 +28,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -86,8 +88,19 @@ fun TrackContextSheet(
     title: String,
     subtitle: String,
     actions: TrackContextActions,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    settingsVm: com.powermediaplayer.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
+    val sState by settingsVm.uiState.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(sState.trackContextSheetHideSec) {
+        // 0 = Never. Positive value: dismiss after that many seconds
+        // of sheet visibility (no interaction-resets here — long-press
+        // menus tend to be tap-once-and-go).
+        if (sState.trackContextSheetHideSec > 0) {
+            kotlinx.coroutines.delay(sState.trackContextSheetHideSec * 1000L)
+            onDismiss()
+        }
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.Black

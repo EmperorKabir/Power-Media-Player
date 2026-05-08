@@ -51,12 +51,10 @@ fun CrossfadeButton(
     var lastInteract by remember { mutableStateOf(0L) }
     fun touch() { lastInteract = System.currentTimeMillis() }
 
-    androidx.compose.runtime.LaunchedEffect(showSheet, lastInteract, s.crossfadePreFadeTriggerS) {
-        // Reuse the same auto-hide pattern as audio/video effects sheets
-        // — Settings → Auto-hide controls → "Sub-popup auto-hide
-        // (crossfade panel)" not yet wired; default 5 s.
-        if (showSheet) {
-            kotlinx.coroutines.delay(5000)
+    androidx.compose.runtime.LaunchedEffect(showSheet, lastInteract, s.crossfadePopupHideSec) {
+        // 0 seconds = "Never" — popup stays open until user dismisses.
+        if (showSheet && s.crossfadePopupHideSec > 0) {
+            kotlinx.coroutines.delay(s.crossfadePopupHideSec * 1000L)
             showSheet = false
         }
     }

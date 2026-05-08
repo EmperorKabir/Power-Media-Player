@@ -82,10 +82,17 @@ class SettingsDataStore @Inject constructor(
         val LIBRARY_SORT_MODE = stringPreferencesKey("library_sort_mode")
 
         // Auto-hide control timers — seconds. 0 means "Never auto-hide".
-        // Defaults locked from plan §D2 + current PlayerScreen behaviour.
+        // Defaults: video controls 4s (the only one user wanted to keep
+        // ticking by default); every popup defaults to Never per user
+        // directive — they pop AT EXPLICIT TAP and shouldn't time out.
         val VIDEO_CONTROLS_HIDE_SEC = intPreferencesKey("video_controls_hide_sec")
         val AUDIO_EFFECTS_POPUP_HIDE_SEC = intPreferencesKey("audio_effects_popup_hide_sec")
         val VIDEO_EFFECTS_POPUP_HIDE_SEC = intPreferencesKey("video_effects_popup_hide_sec")
+        val CROSSFADE_POPUP_HIDE_SEC = intPreferencesKey("crossfade_popup_hide_sec")
+        val INFO_SHEET_HIDE_SEC = intPreferencesKey("info_sheet_hide_sec")
+        val TRACK_CONTEXT_SHEET_HIDE_SEC = intPreferencesKey("track_context_sheet_hide_sec")
+        val AUDIO_CONTROLS_HIDE_FOLDED_SEC = intPreferencesKey("audio_controls_hide_folded_sec")
+        val AUDIO_CONTROLS_HIDE_TABLET_SEC = intPreferencesKey("audio_controls_hide_tablet_sec")
 
         // Hidden files (§C27) — set of URIs (toString()) the user has
         // chosen to hide from Library / Cloud lists. Files stay on the
@@ -273,16 +280,46 @@ class SettingsDataStore @Inject constructor(
         context.dataStore.edit { it[Keys.VIDEO_CONTROLS_HIDE_SEC] = seconds }
     }
     val audioEffectsPopupHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
-        prefs[Keys.AUDIO_EFFECTS_POPUP_HIDE_SEC] ?: 3
+        prefs[Keys.AUDIO_EFFECTS_POPUP_HIDE_SEC] ?: 0
     }
     suspend fun setAudioEffectsPopupHideSec(seconds: Int) {
         context.dataStore.edit { it[Keys.AUDIO_EFFECTS_POPUP_HIDE_SEC] = seconds }
     }
     val videoEffectsPopupHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
-        prefs[Keys.VIDEO_EFFECTS_POPUP_HIDE_SEC] ?: 3
+        prefs[Keys.VIDEO_EFFECTS_POPUP_HIDE_SEC] ?: 0
     }
     suspend fun setVideoEffectsPopupHideSec(seconds: Int) {
         context.dataStore.edit { it[Keys.VIDEO_EFFECTS_POPUP_HIDE_SEC] = seconds }
+    }
+    val crossfadePopupHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.CROSSFADE_POPUP_HIDE_SEC] ?: 0
+    }
+    suspend fun setCrossfadePopupHideSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.CROSSFADE_POPUP_HIDE_SEC] = seconds }
+    }
+    val infoSheetHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.INFO_SHEET_HIDE_SEC] ?: 0
+    }
+    suspend fun setInfoSheetHideSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.INFO_SHEET_HIDE_SEC] = seconds }
+    }
+    val trackContextSheetHideSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.TRACK_CONTEXT_SHEET_HIDE_SEC] ?: 0
+    }
+    suspend fun setTrackContextSheetHideSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.TRACK_CONTEXT_SHEET_HIDE_SEC] = seconds }
+    }
+    val audioControlsHideFoldedSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.AUDIO_CONTROLS_HIDE_FOLDED_SEC] ?: 0
+    }
+    suspend fun setAudioControlsHideFoldedSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.AUDIO_CONTROLS_HIDE_FOLDED_SEC] = seconds }
+    }
+    val audioControlsHideTabletSec: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[Keys.AUDIO_CONTROLS_HIDE_TABLET_SEC] ?: 0
+    }
+    suspend fun setAudioControlsHideTabletSec(seconds: Int) {
+        context.dataStore.edit { it[Keys.AUDIO_CONTROLS_HIDE_TABLET_SEC] = seconds }
     }
 
     // ── Hidden files (§C27) ───────────────────────────────────────────

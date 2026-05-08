@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -87,13 +88,23 @@ data class InfoSheetData(
 @Composable
 fun InfoSheet(
     data: InfoSheetData,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    settingsVm: com.powermediaplayer.ui.settings.SettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     rememberCoroutineScope()
     // null = nothing open. Otherwise the index of the currently-open
     // section (accordion: at most one).
     var openIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    val sState by settingsVm.uiState.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(sState.infoSheetHideSec, openIndex) {
+        // Auto-dismiss only if the user has chosen a positive timer.
+        // openIndex restart cancels (interaction restarts the timer).
+        if (sState.infoSheetHideSec > 0) {
+            kotlinx.coroutines.delay(sState.infoSheetHideSec * 1000L)
+            onDismiss()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

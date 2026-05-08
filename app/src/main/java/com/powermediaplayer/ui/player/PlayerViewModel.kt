@@ -163,6 +163,10 @@ class PlayerViewModel @Inject constructor(
     // and by the audio/video effects sub-popups.
     val videoControlsHideSec: StateFlow<Int> = settingsDataStore.videoControlsHideSec
         .stateIn(viewModelScope, SharingStarted.Eagerly, 4)
+    val audioControlsHideFoldedSec: StateFlow<Int> = settingsDataStore.audioControlsHideFoldedSec
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val audioControlsHideTabletSec: StateFlow<Int> = settingsDataStore.audioControlsHideTabletSec
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     // ── State backing fields referenced by init-block coroutines ──
     // These MUST be declared BEFORE the `init {}` block, otherwise
