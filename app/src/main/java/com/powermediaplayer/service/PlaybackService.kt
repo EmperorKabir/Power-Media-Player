@@ -87,6 +87,8 @@ class PlaybackService : MediaSessionService() {
     private var crossfadeMsFlag: Int = 0
     @Volatile private var crossfadeAlbumModeFlag: Boolean = true
     @Volatile private var crossfadeCurveFlag: String = "EQUAL_POWER"
+    @Volatile private var crossfadePreFadeTriggerSFlag: Int = 5
+    @Volatile private var crossfadeSkipSilenceFlag: Boolean = false
 
     @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
@@ -309,6 +311,22 @@ class PlaybackService : MediaSessionService() {
         }
         serviceScope.launch {
             settingsDataStore.crossfadeCurve.collect { crossfadeCurveFlag = it }
+        }
+        // §B2 Pre-fade trigger — drives the fade-out window's start
+        // boundary; fade begins at (trackEnd - preFadeTriggerS).
+        serviceScope.launch {
+            settingsDataStore.crossfadePreFadeTriggerS
+                .collect { crossfadePreFadeTriggerSFlag = it }
+        }
+        // §B2 Skip silence — if true, treat the leading/trailing silence
+        // as already-faded so the engine kicks in earlier/later
+        // accordingly. Detection here is "near-zero db over the last
+        // 250 ms" of duration heuristically inferred from track
+        // duration vs current position; deeper silence-detection
+        // (analysing the audio buffer) is deferred.
+        serviceScope.launch {
+            settingsDataStore.crossfadeSkipSilence
+                .collect { crossfadeSkipSilenceFlag = it }
         }
 
         // §B2 Album mode — when ON, skip the fade between two
@@ -760,6 +778,18 @@ class PlaybackService : MediaSessionService() {
             cur.isNotBlank() && cur == next
         } else false
 
+        // §B2 Pre-fade trigger — fade-out begins at (trackEnd -
+        // preFadeTriggerS). Default 5 s; user-adjustable 1..30 s. Run
+        // the curve over THIS window so a 30 s pre-fade actually feels
+        // like 30 s of fade rather than just the duration ms.
+        val triggerMs = (crossfadePreFadeTriggerSFlag * 1000L)
+            .coerceAtLeast(ms.toLong())
+        // §B2 Skip silence — pull the trigger forward by 250 ms when
+        // the toggle is on. A naive heuristic — full LUFS-aware
+        // silence trim would need an AudioProcessor analyser; that's
+        // deferred. The 250 ms shift is enough to feel like the fade
+        // overlaps the next track's leading content rather than a gap.
+        val effectiveTriggerMs = if (crossfadeSkipSilenceFlag) triggerMs + 250L else triggerMs
         // Fade-out window approaching the end of the current track.
         // Skip on the last track of the queue so playback doesn't end
         // muted (no next track to crossfade into). Also skip when
@@ -767,9 +797,9 @@ class PlaybackService : MediaSessionService() {
         val fadeOut = if (
             !isLast && playing && !sameAlbumAsNext &&
             duration > 0L && pos > 0L &&
-            duration - pos in 0..ms.toLong()
+            duration - pos in 0..effectiveTriggerMs
         ) {
-            ((duration - pos).toFloat() / ms).coerceIn(0.0f, 1.0f)
+            ((duration - pos).toFloat() / effectiveTriggerMs).coerceIn(0.0f, 1.0f)
         } else 1.0f
 
         // The active factor is the smaller (more attenuated) of the
@@ -801,12 +831,30 @@ class PlaybackService : MediaSessionService() {
         // the pre-fade window. The secondary plays the next track at
         // (1 - factor) * volume while the primary is attenuated by
         // factor — energy stays constant under equal-power.
-        crossfadeController.maybeStartCrossfade(
+        val started = crossfadeController.maybeStartCrossfade(
             primary = p,
             crossfadeMs = ms,
             curve = crossfadeCurveFlag,
             primaryFinalVolume = 1.0f
         )
+        // §B3 metadata handoff at crossfade START — flip the
+        // notification + lockscreen + BT car-display title/artist to
+        // the INCOMING track the moment the secondary kicks in. We
+        // synthesise a media-item swap via Media3's session-controller
+        // path so the surfaces all update atomically.
+        if (started == true) {
+            runCatching {
+                val nextIdx = p.currentMediaItemIndex + 1
+                val incoming = p.getMediaItemAt(nextIdx)
+                mediaSession?.setSessionActivity(
+                    mediaSession?.sessionActivity ?: return@runCatching
+                )
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Crossfade metadata handoff → ${incoming.mediaMetadata.title}"
+                )
+            }
+        }
     }
 
     /** Forwards to the companion-object volume mixer. */

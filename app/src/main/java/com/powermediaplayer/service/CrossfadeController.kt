@@ -70,25 +70,26 @@ class CrossfadeController(
         crossfadeMs: Int,
         curve: String,
         primaryFinalVolume: Float
-    ) {
-        if (crossfadeMs <= 0) return
-        val p = primary ?: return
-        if (overlapJob?.isActive == true) return
+    ): Boolean {
+        if (crossfadeMs <= 0) return false
+        val p = primary ?: return false
+        if (overlapJob?.isActive == true) return false
 
         val pos = p.currentPosition
         val dur = p.duration
-        if (dur <= 0L || pos <= 0L) return
-        if (dur - pos > crossfadeMs.toLong()) return
+        if (dur <= 0L || pos <= 0L) return false
+        if (dur - pos > crossfadeMs.toLong()) return false
         val isLast = p.currentMediaItemIndex >= p.mediaItemCount - 1
-        if (isLast) return
+        if (isLast) return false
 
         val nextIdx = p.currentMediaItemIndex + 1
-        val next = runCatching { p.getMediaItemAt(nextIdx) }.getOrNull() ?: return
-        val curId = p.currentMediaItem?.mediaId ?: return
-        if (curId == lastInitiatedForItemId) return
+        val next = runCatching { p.getMediaItemAt(nextIdx) }.getOrNull() ?: return false
+        val curId = p.currentMediaItem?.mediaId ?: return false
+        if (curId == lastInitiatedForItemId) return false
         lastInitiatedForItemId = curId
 
         startOverlap(next, crossfadeMs, curve, primaryFinalVolume)
+        return true
     }
 
     private fun startOverlap(
