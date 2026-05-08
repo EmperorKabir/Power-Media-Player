@@ -86,6 +86,7 @@ class PlaybackService : MediaSessionService() {
     @Volatile
     private var crossfadeMsFlag: Int = 0
     @Volatile private var crossfadeAlbumModeFlag: Boolean = true
+    @Volatile private var crossfadeCurveFlag: String = "EQUAL_POWER"
 
     @javax.inject.Inject
     lateinit var settingsDataStore: SettingsDataStore
@@ -284,6 +285,9 @@ class PlaybackService : MediaSessionService() {
                 settingsDataStore.crossfadeEnabled
             ) { ms, enabled -> if (enabled) ms else 0 }
                 .collect { crossfadeMsFlag = it }
+        }
+        serviceScope.launch {
+            settingsDataStore.crossfadeCurve.collect { crossfadeCurveFlag = it }
         }
 
         // §B2 Album mode — when ON, skip the fade between two
@@ -724,7 +728,23 @@ class PlaybackService : MediaSessionService() {
 
         // The active factor is the smaller (more attenuated) of the
         // two so transitions sound continuous.
-        val factor = minOf(fadeIn, fadeOut).coerceIn(0.0f, 1.0f)
+        val rawFactor = minOf(fadeIn, fadeOut).coerceIn(0.0f, 1.0f)
+        // §B2 / Phase 4 — apply the user-selected fade curve. Equal
+        // power (default) = sin(π/2 × t) which delivers vA² + vB² = 1
+        // (no perceived dip in the middle). Linear keeps the previous
+        // dip-prone behaviour for users who explicitly chose it.
+        // Logarithmic / exponential rough-shape curves fall back to
+        // linear for now (their full per-track perceived-loudness
+        // pairing would need a second player to be audibly distinct).
+        val factor = when (crossfadeCurveFlag) {
+            "EQUAL_POWER" -> kotlin.math.sin(rawFactor * Math.PI.toFloat() / 2f)
+            "LOGARITHMIC" -> {
+                if (rawFactor <= 0f) 0f else
+                    (kotlin.math.log10(1f + 9f * rawFactor)).coerceIn(0f, 1f)
+            }
+            "EXPONENTIAL" -> rawFactor * rawFactor
+            else -> rawFactor
+        }.coerceIn(0.0f, 1.0f)
         if (kotlin.math.abs(factor - crossfadeFactor) > 0.005f ||
             (factor == 1.0f && crossfadeFactor != 1.0f) ||
             (factor == 0.0f && crossfadeFactor != 0.0f)
