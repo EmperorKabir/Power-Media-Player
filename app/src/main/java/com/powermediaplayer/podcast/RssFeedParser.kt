@@ -43,9 +43,9 @@ class RssFeedParser(
     fun parse(feedUrl: String, xml: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? {
         return runCatching {
             val factory = XmlPullParserFactory.newInstance()
-            factory.isNamespaceAware = false
             val parser = factory.newPullParser()
-            parser.setInput(xml.reader())
+            parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+            parser.setInput(java.io.StringReader(xml))
 
             var showTitle = ""
             var showArtwork: String? = null
@@ -128,6 +128,10 @@ class RssFeedParser(
                 lastChecked = System.currentTimeMillis()
             )
             show to episodes
+        }.onFailure { ex ->
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "RSS parse failed: ${ex.message}", ex)
+            // Surface to stderr in unit tests where Log is muted.
+            ex.printStackTrace()
         }.getOrNull()
     }
 

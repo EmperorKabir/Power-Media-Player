@@ -64,6 +64,10 @@ data class PlayerState(
     // §C18 — embedded ReplayGain track gain (dB). NaN when this file
     // ships with no RG metadata; consumers fall back to volume = 1.0.
     val replayGainTrackDb: Double = Double.NaN,
+    // §C17 — year + genre filled by online metadata enrichment when
+    // the file's embedded tags don't carry them.
+    val year: Int = 0,
+    val genre: String = "",
     // Last playback error (network 401, codec failure, etc.) — null when ok.
     val playerError: String? = null,
     // True while a cloud cache download (chapters/metadata extraction)
@@ -662,16 +666,28 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
-     * §C17 — patch artist / album fields with values fetched from the
-     * online metadata provider. Only fills blank fields; never
-     * overwrites embedded tags the user already has.
+     * §C17 — patch artist / album / year / genre with values fetched
+     * from the online metadata provider. Only fills blank/zero fields;
+     * never overwrites embedded tags the user already has.
      */
-    fun patchPlayerStateMetadata(artist: String, album: String) {
+    fun patchPlayerStateMetadata(
+        artist: String,
+        album: String,
+        year: Int = 0,
+        genre: String = ""
+    ) {
         val cur = _playerState.value
         val newArtist = if (cur.artist.isBlank() && artist.isNotBlank()) artist else cur.artist
         val newAlbum = if (cur.album.isBlank() && album.isNotBlank()) album else cur.album
-        if (newArtist != cur.artist || newAlbum != cur.album) {
-            _playerState.value = cur.copy(artist = newArtist, album = newAlbum)
+        val newYear = if (cur.year == 0 && year > 0) year else cur.year
+        val newGenre = if (cur.genre.isBlank() && genre.isNotBlank()) genre else cur.genre
+        if (newArtist != cur.artist || newAlbum != cur.album ||
+            newYear != cur.year || newGenre != cur.genre
+        ) {
+            _playerState.value = cur.copy(
+                artist = newArtist, album = newAlbum,
+                year = newYear, genre = newGenre
+            )
         }
     }
 

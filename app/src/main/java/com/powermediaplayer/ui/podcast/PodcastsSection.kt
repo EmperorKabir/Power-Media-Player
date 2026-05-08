@@ -33,8 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.powermediaplayer.data.db.dao.PodcastDao
+import com.powermediaplayer.data.db.entity.PodcastEpisodeEntity
 import com.powermediaplayer.data.db.entity.PodcastShowEntity
 import com.powermediaplayer.podcast.RssFeedParser
+import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.ui.theme.ErrorRed
 import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
@@ -59,7 +61,8 @@ import androidx.lifecycle.viewModelScope
  */
 @HiltViewModel
 class PodcastsViewModel @Inject constructor(
-    private val podcastDao: PodcastDao
+    private val podcastDao: PodcastDao,
+    private val playbackConnection: PlaybackConnection
 ) : ViewModel() {
     private val parser = RssFeedParser()
 
@@ -70,6 +73,29 @@ class PodcastsViewModel @Inject constructor(
 
     private val _status = kotlinx.coroutines.flow.MutableStateFlow("")
     val status: StateFlow<String> = _status
+
+    fun episodesFor(feedUrl: String): kotlinx.coroutines.flow.Flow<List<PodcastEpisodeEntity>> =
+        podcastDao.observeEpisodes(feedUrl)
+
+    fun playEpisode(episode: PodcastEpisodeEntity) {
+        val uri = android.net.Uri.parse(episode.audioUrl)
+        val item = androidx.media3.common.MediaItem.Builder()
+            .setMediaId(episode.audioUrl)
+            .setUri(uri)
+            .setRequestMetadata(
+                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(uri).build()
+            )
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(episode.title).build()
+            )
+            .build()
+        playbackConnection.setMediaItems(listOf(item), 0)
+        viewModelScope.launch(Dispatchers.IO) {
+            podcastDao.setPlayed(episode.guid, true)
+        }
+    }
 
     fun addByUrl(rssUrl: String) {
         if (rssUrl.isBlank()) return
@@ -156,15 +182,19 @@ fun PodcastsSection(
                 color = TextTertiary
             )
         } else {
+            var expandedFeed by remember { mutableStateOf<String?>(null) }
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.height(200.dp)
+                modifier = Modifier.height(360.dp)
             ) {
                 items(shows, key = { it.feedUrl }) { show ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { /* future: open episode list */ }
+                            .clickable {
+                                expandedFeed = if (expandedFeed == show.feedUrl) null
+                                else show.feedUrl
+                            }
                             .padding(vertical = 8.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -188,6 +218,56 @@ fun PodcastsSection(
                                 tint = ErrorRed
                             )
                         }
+                    }
+                    if (expandedFeed == show.feedUrl) {
+                        EpisodeList(
+                            feedUrl = show.feedUrl,
+                            vm = vm
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeList(
+    feedUrl: String,
+    vm: PodcastsViewModel
+) {
+    val episodes by vm.episodesFor(feedUrl).collectAsState(initial = emptyList())
+    Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
+        if (episodes.isEmpty()) {
+            Text(
+                "Loading episodes…",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary
+            )
+        } else {
+            episodes.take(15).forEach { e ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { vm.playEpisode(e) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            e.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (e.isPlayed) TextTertiary else TextPrimary,
+                            maxLines = 2
+                        )
+                        Text(
+                            (if (e.durationS > 0) "${e.durationS / 60} min · " else "") +
+                                java.text.SimpleDateFormat(
+                                    "yyyy-MM-dd", java.util.Locale.getDefault()
+                                ).format(java.util.Date(e.publishedAt.coerceAtLeast(0L))),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary
+                        )
                     }
                 }
             }

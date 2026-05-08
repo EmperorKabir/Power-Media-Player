@@ -207,24 +207,19 @@ fun SettingsScreen(
         com.powermediaplayer.ui.settings.HeadphoneEqSection()
         SettingsDivider()
 
-        // §11.5 — user-selectable accent colour.
-        SettingsSectionHeader("Theme")
-        com.powermediaplayer.ui.settings.ThemeSection()
-        SettingsDivider()
+        // §D ordering: these four sections are placed at their
+        // canonical positions further down (Theme near About,
+        // Subtitles before Subtitle Format Preference, Podcasts +
+        // Smart playlists in the cloud/library area). The block
+        // here used to host them; left as a marker so future edits
+        // don't accidentally re-insert at the wrong rung.
 
-        // §C9 — OpenSubtitles account.
-        SettingsSectionHeader("Subtitles")
-        com.powermediaplayer.ui.settings.OpenSubtitlesSection()
-        SettingsDivider()
-
-        // §C10 — Podcast subscription manager.
-        SettingsSectionHeader("Podcasts")
-        com.powermediaplayer.ui.podcast.PodcastsSection()
-        SettingsDivider()
-
-        // §C6 — Smart playlists.
+        // §D position 4 — Cloud / library content sources.
         SettingsSectionHeader("Smart playlists")
         com.powermediaplayer.ui.smartplaylists.SmartPlaylistsSection()
+        SettingsDivider()
+        SettingsSectionHeader("Podcasts")
+        com.powermediaplayer.ui.podcast.PodcastsSection()
         SettingsDivider()
 
         // §C17 — Online metadata enrichment toggle.
@@ -237,6 +232,10 @@ fun SettingsScreen(
             checked = uiState.metadataEnrichmentEnabled,
             onCheckedChange = { viewModel.setMetadataEnrichmentEnabled(it) }
         )
+
+        // §C18 — manual "Scan now" button + auto-scan toggle.
+        com.powermediaplayer.ui.settings.ReplayGainScanRow()
+        SettingsDivider()
 
         // §C18 — Auto-scan ReplayGain on import toggle.
         SettingsToggleItem(
@@ -368,6 +367,12 @@ fun SettingsScreen(
         // ══════════════════════════════════════════════════════════
         // SUBTITLE FORMAT
         // ══════════════════════════════════════════════════════════
+        // §D position 8 — Subtitles. OpenSubtitles account first,
+        // file-format preference second.
+        SettingsSectionHeader("OpenSubtitles account")
+        com.powermediaplayer.ui.settings.OpenSubtitlesSection()
+        SettingsDivider()
+
         SettingsSectionHeader("Subtitle Format Preference")
 
         val formats = listOf(
@@ -609,6 +614,12 @@ fun SettingsScreen(
         // ══════════════════════════════════════════════════════════
         // ABOUT
         // ══════════════════════════════════════════════════════════
+        // §D position 13 — Theme accent picker. Sits just before About
+        // / Reset so it's the last cosmetic toggle in the scroll.
+        SettingsSectionHeader("Theme")
+        com.powermediaplayer.ui.settings.ThemeSection()
+        SettingsDivider()
+
         SettingsSectionHeader("About")
 
         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {

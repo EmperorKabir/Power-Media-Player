@@ -76,7 +76,8 @@ class CloudViewModel @Inject constructor(
     private val spotifyProvider: SpotifyProvider,
     private val playbackConnection: PlaybackConnection,
     private val settingsDataStore: SettingsDataStore,
-    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
+    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
 ) : ViewModel() {
 
     /**

@@ -101,6 +101,17 @@ android {
         buildConfig = true
     }
 
+    // Robolectric: enable Android-stub default values so unit tests
+    // can construct things like android.net.Uri without explicit
+    // Robolectric setup. Tests that genuinely need Robolectric (e.g.
+    // Uri.parse) annotate with @RunWith(RobolectricTestRunner).
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+            isIncludeAndroidResources = true
+        }
+    }
+
     packaging {
         resources {
             excludes += setOf(
@@ -234,8 +245,14 @@ dependencies {
     // because drive.file is non-sensitive.
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
+    // ── §C10 Podcast auto-sync via WorkManager + Hilt ────────────
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+
     // ── Testing ──────────────────────────────────────────────────
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.13")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
     androidTestImplementation(composeBom)

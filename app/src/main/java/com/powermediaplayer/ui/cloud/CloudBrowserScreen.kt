@@ -57,9 +57,24 @@ fun CloudBrowserScreen(
             onDismiss = { showInfoSheet = false }
         )
     }
+    var overrideTarget by remember { mutableStateOf<com.powermediaplayer.cloud.CloudMediaItem?>(null) }
+    overrideTarget?.let { tgt ->
+        com.powermediaplayer.ui.overrides.MediaOverridesPopup(
+            mediaUri = tgt.id,
+            title = tgt.name,
+            dao = viewModel.mediaOverrideDao,
+            onDismiss = { overrideTarget = null }
+        )
+    }
     contextItem?.let { item ->
         val isSpotify = item.sourceProvider == CloudProviderType.SPOTIFY
         val isDriveTrack = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
+        // §C25 — Drive favourites can carry per-file overrides keyed
+        // by the SAF content:// URI. Drive OAuth (REST) has session-
+        // dependent stream URLs that don't key stably, so override-*
+        // surfaces only for SAF-imported tracks.
+        val isFavDriveSaf = isDriveTrack && item.id.startsWith("content://") &&
+            uiState.driveFavouriteTracks.any { it.id == item.id }
         com.powermediaplayer.ui.player.components.TrackContextSheet(
             title = item.name,
             subtitle = if (isSpotify) "Spotify" else "Drive",
@@ -93,6 +108,18 @@ fun CloudBrowserScreen(
                 } else null,
                 onRemoveOffline = if (isDriveTrack && viewModel.hasOfflineCopy(item.id)) {
                     { viewModel.removeDriveOffline(item.id); contextItem = null }
+                } else null,
+                onOverrideSpeed = if (isFavDriveSaf) {
+                    { overrideTarget = item; contextItem = null }
+                } else null,
+                onOverrideAudio = if (isFavDriveSaf) {
+                    { overrideTarget = item; contextItem = null }
+                } else null,
+                onOverrideVideo = if (isFavDriveSaf &&
+                    (item.mimeType.startsWith("video/") ||
+                        item.name.substringAfterLast('.', "").lowercase() in
+                        setOf("mp4", "mkv", "webm", "mov", "avi", "m4v", "ts", "3gp", "wmv", "flv"))) {
+                    { overrideTarget = item; contextItem = null }
                 } else null
                 // Hide / Delete / Override-* deferred — not applicable to
                 // streamed cloud items in Phase 3 scope.

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -149,51 +151,92 @@ fun SmartPlaylistsSection(
     }
 }
 
+/**
+ * §C6 — form-based smart-playlist editor. Users add an arbitrary
+ * number of rule rows (field × op × value), pick a sort + limit, and
+ * we serialise to JSON for [SmartPlaylistResolver]. The raw-JSON
+ * advanced editor is still reachable via the "Advanced" toggle for
+ * power users who want to hand-craft.
+ */
 @Composable
 private fun SmartPlaylistEditor(
     onCancel: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var json by remember {
+    var advanced by remember { mutableStateOf(false) }
+    var advancedJson by remember {
         mutableStateOf(
             "{\"rules\":[{\"field\":\"isFavourite\",\"op\":\"eq\",\"value\":true}]," +
                 "\"sort\":\"lastPlayed\",\"limit\":50}"
         )
     }
+    val rules = remember { mutableStateListOf<RuleRow>(
+        RuleRow(field = "isFavourite", op = "eq", value = "true")
+    ) }
+    var sort by remember { mutableStateOf("lastPlayed") }
+    var limit by remember { mutableStateOf("50") }
+
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text("New smart playlist", color = TealAccent) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    singleLine = true
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Name") }, singleLine = true
                 )
-                OutlinedTextField(
-                    value = json,
-                    onValueChange = { json = it },
-                    label = { Text("Rules JSON") },
-                    minLines = 4
-                )
+                Row {
+                    androidx.compose.material3.Switch(
+                        checked = advanced,
+                        onCheckedChange = { advanced = it }
+                    )
+                    Text(
+                        "  Raw JSON",
+                        color = if (advanced) TealAccent else TextSecondary,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+                if (advanced) {
+                    OutlinedTextField(
+                        value = advancedJson,
+                        onValueChange = { advancedJson = it },
+                        label = { Text("Rules JSON") },
+                        minLines = 4
+                    )
+                } else {
+                    rules.forEachIndexed { idx, r ->
+                        RuleRowEditor(
+                            row = r,
+                            onChange = { rules[idx] = it },
+                            onDelete = { rules.removeAt(idx) }
+                        )
+                    }
+                    androidx.compose.material3.TextButton(onClick = {
+                        rules.add(RuleRow(field = "artist", op = "contains", value = ""))
+                    }) {
+                        Text("+ Add rule", color = TealAccent)
+                    }
+                    SortAndLimit(
+                        sort = sort, onSort = { sort = it },
+                        limit = limit, onLimit = { limit = it }
+                    )
+                }
                 Text(
-                    "Field options: title, artist, album, duration, " +
-                        "playCount, lastPlayedDays, hasBookmark, " +
-                        "isFavourite. Ops: equals/contains for strings; " +
-                        "eq/lt/lte/gt/gte for numbers; eq for booleans. " +
-                        "Sort: name | dateAdded | lastPlayed | playCount " +
-                        "| duration | random.",
+                    if (advanced)
+                        "Power-user mode. Refer to the resolver docs for the JSON shape."
+                    else
+                        "Rules combine with AND. Saved playlists appear at the top of the Library tab.",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name, json) }) {
-                Text("Save", color = TealAccent)
-            }
+            TextButton(onClick = {
+                val json = if (advanced) advancedJson else buildJson(rules, sort, limit)
+                onSave(name, json)
+            }) { Text("Save", color = TealAccent) }
         },
         dismissButton = {
             TextButton(onClick = onCancel) {
@@ -202,4 +245,132 @@ private fun SmartPlaylistEditor(
         },
         containerColor = OledBlack
     )
+}
+
+private data class RuleRow(val field: String, val op: String, val value: String)
+
+private val FIELDS = listOf(
+    "title", "artist", "album", "duration",
+    "playCount", "lastPlayedDays",
+    "isFavourite", "hasBookmark"
+)
+private val OPS_STRING = listOf("contains", "not_contains", "equals", "not_equals")
+private val OPS_NUMBER = listOf("eq", "lt", "lte", "gt", "gte")
+private val OPS_BOOL = listOf("eq")
+private val SORTS = listOf(
+    "name", "dateAdded", "lastPlayed", "playCount", "duration", "random"
+)
+
+private fun opsFor(field: String) = when (field) {
+    "title", "artist", "album" -> OPS_STRING
+    "duration", "playCount", "lastPlayedDays" -> OPS_NUMBER
+    "isFavourite", "hasBookmark" -> OPS_BOOL
+    else -> OPS_STRING
+}
+
+@Composable
+private fun RuleRowEditor(
+    row: RuleRow,
+    onChange: (RuleRow) -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+    ) {
+        DropdownPill(
+            value = row.field,
+            options = FIELDS,
+            onPick = { onChange(row.copy(field = it, op = opsFor(it).first())) },
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(4.dp))
+        DropdownPill(
+            value = row.op,
+            options = opsFor(row.field),
+            onPick = { onChange(row.copy(op = it)) },
+            modifier = Modifier.weight(0.8f)
+        )
+        Spacer(Modifier.width(4.dp))
+        OutlinedTextField(
+            value = row.value,
+            onValueChange = { onChange(row.copy(value = it)) },
+            singleLine = true,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(onClick = onDelete) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Remove",
+                tint = ErrorRed
+            )
+        }
+    }
+}
+
+@Composable
+private fun SortAndLimit(
+    sort: String, onSort: (String) -> Unit,
+    limit: String, onLimit: (String) -> Unit
+) {
+    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Text("Sort:", color = TextSecondary)
+        Spacer(Modifier.width(4.dp))
+        DropdownPill(
+            value = sort, options = SORTS, onPick = onSort,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text("Limit:", color = TextSecondary)
+        Spacer(Modifier.width(4.dp))
+        OutlinedTextField(
+            value = limit,
+            onValueChange = { onLimit(it.filter(Char::isDigit)) },
+            singleLine = true,
+            modifier = Modifier.width(80.dp)
+        )
+    }
+}
+
+@Composable
+private fun DropdownPill(
+    value: String,
+    options: List<String>,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        androidx.compose.material3.OutlinedButton(
+            onClick = { expanded = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(value, style = MaterialTheme.typography.labelMedium)
+        }
+        androidx.compose.material3.DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { opt ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(opt) },
+                    onClick = { onPick(opt); expanded = false }
+                )
+            }
+        }
+    }
+}
+
+private fun buildJson(rules: List<RuleRow>, sort: String, limit: String): String {
+    val rulesJsonArr = rules.joinToString(",") { r ->
+        val v = when {
+            r.value.equals("true", ignoreCase = true) -> "true"
+            r.value.equals("false", ignoreCase = true) -> "false"
+            r.value.toIntOrNull() != null -> r.value
+            else -> "\"${r.value.replace("\"", "\\\"")}\""
+        }
+        "{\"field\":\"${r.field}\",\"op\":\"${r.op}\",\"value\":$v}"
+    }
+    return "{\"rules\":[$rulesJsonArr],\"sort\":\"$sort\"," +
+        "\"limit\":${limit.toIntOrNull() ?: 0}}"
 }

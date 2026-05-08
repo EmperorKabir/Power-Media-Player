@@ -32,6 +32,8 @@ class PlayerViewModel @Inject constructor(
     private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
     private val mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository,
+    private val subtitleAutoFetcher: com.powermediaplayer.subtitles.SubtitleAutoFetcher,
+    private val replayGainDao: com.powermediaplayer.data.db.dao.ReplayGainDao,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -87,33 +89,74 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
         }
-        // §C18 — apply embedded ReplayGain track gain to the live
-        // ExoPlayer.volume when the user has the RG toggle on. A NaN
-        // gain (file with no RG metadata) restores volume = 1.0; on
-        // toggle-off the volume returns to 1.0 as well.
+        // §C9 — on video play with no sidecar SRT, kick off the
+        // OpenSubtitles auto-fetch. Throttled internally — repeat
+        // plays of the same mediaUri don't re-hit the API. Skips
+        // silently when not signed in.
         viewModelScope.launch {
-            settingsDataStore.replayGainEnabled.combine(
-                playbackConnection.playerState.map { it.replayGainTrackDb }.distinctUntilChanged()
-            ) { enabled, db -> enabled to db }
-                .collect { (enabled, db) ->
+            playbackConnection.playerState
+                .map { it.title to (playbackConnection.getPlayer()?.currentMediaItem?.mediaId ?: "") }
+                .distinctUntilChanged()
+                .collect { (title, mediaId) ->
+                    if (mediaId.isBlank() || title.isBlank()) return@collect
+                    val isVideo = playbackConnection.playerState.value.videoWidth > 0
+                    if (!isVideo) return@collect
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            subtitleAutoFetcher.fetchIfNeeded(mediaId, title)
+                        }
+                    }
+                }
+        }
+        // §C18 — apply ReplayGain to the live ExoPlayer. Source order:
+        //   1. Embedded tag (replayGainTrackDb on PlayerState; NaN if
+        //      the file ships without RG metadata).
+        //   2. Pre-scan row (`replay_gain` Room table — populated by
+        //      ReplayGainScanner via the "Scan now" button or auto-
+        //      scan on import).
+        //   3. None → volume = 1.0.
+        viewModelScope.launch {
+            playbackConnection.playerState
+                .map { it.replayGainTrackDb to (playbackConnection.getPlayer()?.currentMediaItem?.mediaId ?: "") }
+                .distinctUntilChanged()
+                .combine(settingsDataStore.replayGainEnabled) { (db, uri), enabled ->
+                    Triple(enabled, db, uri)
+                }
+                .collect { (enabled, embeddedDb, uri) ->
                     val player = com.powermediaplayer.service.PlaybackService
                         .getExoPlayer() ?: return@collect
-                    val target = if (!enabled || db.isNaN()) 1.0f
-                    else (Math.pow(10.0, db / 20.0).coerceIn(0.05, 4.0)).toFloat()
+                    val effectiveDb: Double = if (!embeddedDb.isNaN()) embeddedDb
+                    else withContext(Dispatchers.IO) {
+                        val row = if (uri.isBlank()) null else replayGainDao.getForUri(uri)
+                        when {
+                            row == null -> Double.NaN
+                            row.trackGainDb !=
+                                com.powermediaplayer.data.db.entity.ReplayGainEntity.ABSENT ->
+                                row.trackGainDb
+                            row.albumGainDb !=
+                                com.powermediaplayer.data.db.entity.ReplayGainEntity.ABSENT ->
+                                row.albumGainDb
+                            else -> Double.NaN
+                        }
+                    }
+                    val target = if (!enabled || effectiveDb.isNaN()) 1.0f
+                    else (Math.pow(10.0, effectiveDb / 20.0).coerceIn(0.05, 4.0)).toFloat()
                     runCatching { player.volume = target }
                     com.powermediaplayer.util.Diag.i(
                         "PMP_DIAG",
-                        "ReplayGain applied enabled=$enabled db=$db volume=$target"
+                        "ReplayGain applied enabled=$enabled embedded=$embeddedDb " +
+                            "effective=$effectiveDb volume=$target"
                     )
                 }
         }
     }
 
     private fun applyEnrichment(res: com.powermediaplayer.enrichment.EnrichmentResult) {
-        val cur = playbackConnection.playerState.value
         playbackConnection.patchPlayerStateMetadata(
-            artist = if (cur.artist.isBlank()) res.artist.orEmpty() else cur.artist,
-            album = if (cur.album.isBlank()) res.album.orEmpty() else cur.album
+            artist = res.artist.orEmpty(),
+            album = res.album.orEmpty(),
+            year = res.year ?: 0,
+            genre = res.genre.orEmpty()
         )
     }
 
@@ -1469,6 +1512,8 @@ class PlayerViewModel @Inject constructor(
             artist = TextNormalizer.normalize(playerState.artist),
             album = TextNormalizer.normalize(playerState.album),
             description = TextNormalizer.normalize(playerState.description),
+            year = playerState.year,
+            genre = TextNormalizer.normalize(playerState.genre),
             artworkUri = playerState.artworkUri,
             hasCoverArt = playerState.hasCoverArt,
             currentPosition = displayedTrackPos,

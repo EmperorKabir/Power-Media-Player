@@ -446,6 +446,18 @@ fun LibraryScreen(
             )
         }
 
+        // §C6 — saved smart-playlist rail. Tap a chip to play the
+        // resolved track list. Empty state hidden so this never shows
+        // unless the user has actually created one.
+        com.powermediaplayer.ui.smartplaylists.SmartPlaylistRail(
+            onPlayResolved = { resolved ->
+                if (resolved.isNotEmpty()) {
+                    viewModel.playFiles(resolved, 0)
+                    onNavigateToPlayer()
+                }
+            }
+        )
+
         // ── Content ──────────────────────────────────────────────
         if (!hasPermission) {
             // Permission not granted

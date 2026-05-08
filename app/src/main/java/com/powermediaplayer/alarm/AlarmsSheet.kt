@@ -69,6 +69,12 @@ fun AlarmsSheet(
         containerColor = Color.Black
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            // §C12 — full-screen-intent permission gate banner. Android 14+
+            // requires explicit user approval before an app can launch a
+            // full-screen activity from a notification. Without this the
+            // alarm would still post a heads-up notification but the
+            // FullScreenAlarmActivity wouldn't auto-launch on lockscreen.
+            FullScreenIntentBanner()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Alarms", style = MaterialTheme.typography.titleMedium, color = TealAccent)
                 Spacer(modifier = Modifier.weight(1f))
@@ -171,6 +177,53 @@ private fun AlarmRow(
 }
 
 @Composable
+private fun FullScreenIntentBanner() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val nm = context.getSystemService(android.app.NotificationManager::class.java)
+    val canFsi = remember {
+        if (android.os.Build.VERSION.SDK_INT >= 34 && nm != null)
+            runCatching { nm.canUseFullScreenIntent() }.getOrDefault(true)
+        else true
+    }
+    if (canFsi) return
+    androidx.compose.material3.Surface(
+        color = androidx.compose.ui.graphics.Color(0x33FFA000),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Full-screen alarm permission needed",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary
+                )
+                Text(
+                    "Android 14+ requires you to explicitly grant " +
+                        "full-screen alarm rights. Without it, alarms " +
+                        "still ring but can't draw over the lock-screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            }
+            androidx.compose.material3.TextButton(onClick = {
+                runCatching {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                        android.net.Uri.parse("package:${context.packageName}")
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                }
+            }) { Text("Grant", color = TealAccent) }
+        }
+    }
+}
+
+@Composable
 private fun AlarmEditor(
     initial: AlarmRecord,
     onCancel: () -> Unit,
@@ -180,6 +233,7 @@ private fun AlarmEditor(
     var minute by remember { mutableStateOf(initial.minute) }
     var days by remember { mutableStateOf(initial.days) }
     var mediaUri by remember { mutableStateOf(initial.mediaUri) }
+    var displayLabel by remember { mutableStateOf(initial.displayLabel) }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -219,30 +273,53 @@ private fun AlarmEditor(
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
+                var showPicker by remember { mutableStateOf(false) }
+                val pickedLabel = displayLabel
                 Text(
                     "Sound",
                     color = TextSecondary,
                     style = MaterialTheme.typography.labelMedium
                 )
-                OutlinedTextField(
-                    value = mediaUri,
-                    onValueChange = { mediaUri = it },
-                    label = { Text("Track to play") },
-                    placeholder = { Text("Leave blank to resume last track") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = if (pickedLabel.isNotBlank()) pickedLabel
+                        else mediaUri.substringAfterLast('/'),
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Track") },
+                        placeholder = { Text("Tap Pick to choose") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.TextButton(
+                        onClick = { showPicker = true }
+                    ) { Text("Pick", color = TealAccent) }
+                }
                 Text(
-                    "Tip: leave blank and the alarm will play whatever you " +
-                        "had playing last. Picker UI is on the roadmap.",
+                    if (mediaUri.isBlank())
+                        "Leave empty to resume the last track that was playing."
+                    else "Picked: ${pickedLabel.ifBlank { mediaUri.substringAfterLast('/') }}",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary
                 )
+                if (showPicker) {
+                    AlarmMediaPickerSheet(
+                        onPicked = { uri, label ->
+                            mediaUri = uri
+                            displayLabel = label
+                            showPicker = false
+                        },
+                        onDismiss = { showPicker = false }
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                onSave(initial.copy(hour = hour, minute = minute, days = days, mediaUri = mediaUri))
+                onSave(initial.copy(
+                    hour = hour, minute = minute, days = days,
+                    mediaUri = mediaUri, displayLabel = displayLabel
+                ))
             }) { Text("Save", color = TealAccent) }
         },
         dismissButton = {

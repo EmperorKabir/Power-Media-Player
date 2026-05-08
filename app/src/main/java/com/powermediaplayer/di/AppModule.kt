@@ -47,10 +47,12 @@ object AppModule {
             // touching existing data. First non-destructive migration.
             // v8 → v9 (§C6): adds smart_playlists table.
             // v9 → v10 (§C10): adds podcast_shows + podcast_episodes.
+            // v10 → v11 (§C18): adds replay_gain pre-scan table.
             .addMigrations(
                 AppDatabase.MIGRATION_7_8,
                 AppDatabase.MIGRATION_8_9,
-                AppDatabase.MIGRATION_9_10
+                AppDatabase.MIGRATION_9_10,
+                AppDatabase.MIGRATION_10_11
             )
             .build()
     }
@@ -127,6 +129,28 @@ object AppModule {
     fun providePodcastDao(database: AppDatabase): com.powermediaplayer.data.db.dao.PodcastDao {
         return database.podcastDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideReplayGainDao(database: AppDatabase): com.powermediaplayer.data.db.dao.ReplayGainDao {
+        return database.replayGainDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideReplayGainScanner(
+        @ApplicationContext context: Context,
+        dao: com.powermediaplayer.data.db.dao.ReplayGainDao
+    ): com.powermediaplayer.replaygain.ReplayGainScanner =
+        com.powermediaplayer.replaygain.ReplayGainScanner(context, dao)
+
+    @Provides
+    @Singleton
+    fun provideSubtitleAutoFetcher(
+        @ApplicationContext context: Context,
+        settingsDataStore: SettingsDataStore
+    ): com.powermediaplayer.subtitles.SubtitleAutoFetcher =
+        com.powermediaplayer.subtitles.SubtitleAutoFetcher(context, settingsDataStore)
 
     @Provides
     @Singleton

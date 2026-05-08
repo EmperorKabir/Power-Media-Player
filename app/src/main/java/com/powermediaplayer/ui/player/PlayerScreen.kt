@@ -914,6 +914,22 @@ private fun TrackInfoSection(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        // §C17 — year • genre line, populated by online enrichment when
+        // the embedded tags don't carry them.
+        val yearGenreLine = listOfNotNull(
+            uiState.year.takeIf { it > 0 }?.toString(),
+            uiState.genre.takeIf { it.isNotBlank() }
+        ).joinToString(" • ")
+        if (yearGenreLine.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = yearGenreLine,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
 
         // §C7 — indicator chip when this file has saved overrides.
         // Tells the user "what they're hearing differs from defaults."

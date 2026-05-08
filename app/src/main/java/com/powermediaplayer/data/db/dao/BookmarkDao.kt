@@ -21,4 +21,8 @@ interface BookmarkDao {
     /** Rename a bookmark's label without touching position/timestamp. */
     @Query("UPDATE bookmarks SET label = :label WHERE id = :id")
     suspend fun updateLabel(id: Long, label: String)
+
+    /** §10.1 alarm picker — every bookmark across all files, newest first. */
+    @Query("SELECT * FROM bookmarks ORDER BY createdAtMs DESC")
+    fun observeAll(): Flow<List<BookmarkEntity>>
 }

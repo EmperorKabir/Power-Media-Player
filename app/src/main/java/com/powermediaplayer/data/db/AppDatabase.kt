@@ -16,6 +16,7 @@ import com.powermediaplayer.data.db.dao.MediaOverrideDao
 import com.powermediaplayer.data.db.dao.PlaybackHistoryDao
 import com.powermediaplayer.data.db.dao.PlaybackStateDao
 import com.powermediaplayer.data.db.dao.PodcastDao
+import com.powermediaplayer.data.db.dao.ReplayGainDao
 import com.powermediaplayer.data.db.dao.SmartPlaylistDao
 import com.powermediaplayer.data.db.entity.BookmarkEntity
 import com.powermediaplayer.data.db.entity.EqualizerPresetEntity
@@ -28,6 +29,7 @@ import com.powermediaplayer.data.db.entity.PlaybackHistoryEntity
 import com.powermediaplayer.data.db.entity.PlaybackStateEntity
 import com.powermediaplayer.data.db.entity.PodcastEpisodeEntity
 import com.powermediaplayer.data.db.entity.PodcastShowEntity
+import com.powermediaplayer.data.db.entity.ReplayGainEntity
 import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
 
 /**
@@ -47,7 +49,8 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
         MediaOverrideEntity::class,
         SmartPlaylistEntity::class,
         PodcastShowEntity::class,
-        PodcastEpisodeEntity::class
+        PodcastEpisodeEntity::class,
+        ReplayGainEntity::class
     ],
     // v5: PlaybackHistory + HistoryFavourite switched to autogen IDs;
     // added HistoryBookmark + FavouriteBookmark snapshot tables.
@@ -62,7 +65,8 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
     // preserved.
     // v9: §C6 smart playlists — adds `smart_playlists` table.
     // v10: §C10 podcasts — adds `podcast_shows` + `podcast_episodes`.
-    version = 10,
+    // v11: §C18 ReplayGain pre-scan — adds `replay_gain`.
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -78,6 +82,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun mediaOverrideDao(): MediaOverrideDao
     abstract fun smartPlaylistDao(): SmartPlaylistDao
     abstract fun podcastDao(): PodcastDao
+    abstract fun replayGainDao(): ReplayGainDao
 
     companion object {
         const val DATABASE_NAME = "power_media_player.db"
@@ -127,6 +132,25 @@ abstract class AppDatabase : RoomDatabase() {
                         rulesJson TEXT NOT NULL,
                         createdAt INTEGER NOT NULL,
                         updatedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * §C18 v10→v11 — adds the replay_gain pre-scan table.
+         */
+        val MIGRATION_10_11: Migration = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS replay_gain (
+                        mediaUri TEXT NOT NULL PRIMARY KEY,
+                        trackGainDb REAL NOT NULL,
+                        albumGainDb REAL NOT NULL,
+                        albumKey TEXT NOT NULL,
+                        scannedAt INTEGER NOT NULL
                     )
                     """.trimIndent()
                 )

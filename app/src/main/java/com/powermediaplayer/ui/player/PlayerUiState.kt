@@ -24,6 +24,8 @@ data class PlayerUiState(
     val artist: String = "",
     val album: String = "",
     val description: String = "",
+    val year: Int = 0,
+    val genre: String = "",
 
     // Cover art
     val artworkUri: Uri? = null,
