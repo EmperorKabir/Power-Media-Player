@@ -154,9 +154,9 @@ fun SmartPlaylistsSection(
 /**
  * §C6 — form-based smart-playlist editor. Users add an arbitrary
  * number of rule rows (field × op × value), pick a sort + limit, and
- * we serialise to JSON for [SmartPlaylistResolver]. The raw-JSON
- * advanced editor is still reachable via the "Advanced" toggle for
- * power users who want to hand-craft.
+ * we serialise to JSON for [SmartPlaylistResolver]. C8 fix: the
+ * raw-JSON escape hatch was never asked for and has been removed —
+ * form-only.
  */
 @Composable
 private fun SmartPlaylistEditor(
@@ -164,13 +164,6 @@ private fun SmartPlaylistEditor(
     onSave: (String, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var advanced by remember { mutableStateOf(false) }
-    var advancedJson by remember {
-        mutableStateOf(
-            "{\"rules\":[{\"field\":\"isFavourite\",\"op\":\"eq\",\"value\":true}]," +
-                "\"sort\":\"lastPlayed\",\"limit\":50}"
-        )
-    }
     val rules = remember { mutableStateListOf<RuleRow>(
         RuleRow(field = "isFavourite", op = "eq", value = "true")
     ) }
@@ -186,47 +179,24 @@ private fun SmartPlaylistEditor(
                     value = name, onValueChange = { name = it },
                     label = { Text("Name") }, singleLine = true
                 )
-                Row {
-                    androidx.compose.material3.Switch(
-                        checked = advanced,
-                        onCheckedChange = { advanced = it }
-                    )
-                    Text(
-                        "  Raw JSON",
-                        color = if (advanced) TealAccent else TextSecondary,
-                        modifier = Modifier.padding(top = 12.dp)
+                rules.forEachIndexed { idx, r ->
+                    RuleRowEditor(
+                        row = r,
+                        onChange = { rules[idx] = it },
+                        onDelete = { rules.removeAt(idx) }
                     )
                 }
-                if (advanced) {
-                    OutlinedTextField(
-                        value = advancedJson,
-                        onValueChange = { advancedJson = it },
-                        label = { Text("Rules JSON") },
-                        minLines = 4
-                    )
-                } else {
-                    rules.forEachIndexed { idx, r ->
-                        RuleRowEditor(
-                            row = r,
-                            onChange = { rules[idx] = it },
-                            onDelete = { rules.removeAt(idx) }
-                        )
-                    }
-                    androidx.compose.material3.TextButton(onClick = {
-                        rules.add(RuleRow(field = "artist", op = "contains", value = ""))
-                    }) {
-                        Text("+ Add rule", color = TealAccent)
-                    }
-                    SortAndLimit(
-                        sort = sort, onSort = { sort = it },
-                        limit = limit, onLimit = { limit = it }
-                    )
+                androidx.compose.material3.TextButton(onClick = {
+                    rules.add(RuleRow(field = "artist", op = "contains", value = ""))
+                }) {
+                    Text("+ Add rule", color = TealAccent)
                 }
+                SortAndLimit(
+                    sort = sort, onSort = { sort = it },
+                    limit = limit, onLimit = { limit = it }
+                )
                 Text(
-                    if (advanced)
-                        "Power-user mode. Refer to the resolver docs for the JSON shape."
-                    else
-                        "Rules combine with AND. Saved playlists appear at the top of the Library tab.",
+                    "Rules combine with AND. Saved playlists appear at the top of the Library tab.",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary
                 )
@@ -234,7 +204,7 @@ private fun SmartPlaylistEditor(
         },
         confirmButton = {
             TextButton(onClick = {
-                val json = if (advanced) advancedJson else buildJson(rules, sort, limit)
+                val json = buildJson(rules, sort, limit)
                 onSave(name, json)
             }) { Text("Save", color = TealAccent) }
         },

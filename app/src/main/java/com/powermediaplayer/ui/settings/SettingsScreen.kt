@@ -101,7 +101,8 @@ fun SettingsScreen(
         )
 
         // §D-1 Display
-        SettingsSectionHeader("§D-1 Display")
+        // §D-1
+        SettingsSectionHeader("Display")
         Text(
             text = "Choose whether the now-playing cover art shows the " +
                 "whole image with margins (Fit) or fills the screen, " +
@@ -117,7 +118,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-2 Auto-hide controls
-        SettingsSectionHeader("§D-2 Auto-hide controls")
+        // §D-2
+        SettingsSectionHeader("Auto-hide controls")
         Text(
             text = "How long the on-screen controls stay visible after you " +
                 "stop touching the screen. 'Never' keeps them until you tap.",
@@ -140,7 +142,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-3 Playback
-        SettingsSectionHeader("§D-3 Playback")
+        // §D-3
+        SettingsSectionHeader("Playback")
         Text(
             text = "What this app does when something else needs the speakers — phone calls, alarms, navigation, or another music app.",
             style = MaterialTheme.typography.bodySmall,
@@ -192,7 +195,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-4 Audio effects
-        SettingsSectionHeader("§D-4 Audio effects")
+        // §D-4
+        SettingsSectionHeader("Audio effects")
         com.powermediaplayer.ui.settings.HeadphoneEqSection()
         Text(
             "Reverb",
@@ -241,7 +245,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-5 Crossfade
-        SettingsSectionHeader("§D-5 Crossfade")
+        // §D-5
+        SettingsSectionHeader("Crossfade")
         SliderRow("Crossfade", "${uiState.crossfadeMs} ms",
             uiState.crossfadeMs.toFloat(), 0f..10_000f) { viewModel.setCrossfade(it.toInt()) }
         Text(
@@ -253,7 +258,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-6 Video
-        SettingsSectionHeader("§D-6 Video")
+        // §D-6
+        SettingsSectionHeader("Video")
         SettingsToggleItem(
             title = "Software Decoding",
             description = "Hardware decoding (default) uses your phone's dedicated video chip " +
@@ -287,9 +293,10 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-7 Subtitles
-        SettingsSectionHeader("§D-7 Subtitles — OpenSubtitles account")
+        // §D-7
+        SettingsSectionHeader("Subtitles — OpenSubtitles account")
         com.powermediaplayer.ui.settings.OpenSubtitlesSection()
-        SettingsSectionHeader("§D-7 Subtitles — Format Preference")
+        SettingsSectionHeader("Subtitles — Format Preference")
         val formats = listOf(
             SubtitleFormatInfo(
                 code = "SRT",
@@ -323,7 +330,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-8 Library
-        SettingsSectionHeader("§D-8 Library")
+        // §D-8
+        SettingsSectionHeader("Library")
         SettingsToggleItem(
             title = "Deep Scan",
             description = "When enabled, reads the entire file header to find missing tags " +
@@ -393,11 +401,11 @@ fun SettingsScreen(
             Icons.Filled.GraphicEq, uiState.replayGainEnabled) { viewModel.setReplayGain(it) }
         SettingsDivider()
 
-        // §D-9 Cloud
-        SettingsSectionHeader("§D-9 Cloud — Smart playlists")
-        com.powermediaplayer.ui.smartplaylists.SmartPlaylistsSection()
-        SettingsSectionHeader("§D-9 Cloud — Podcasts")
-        com.powermediaplayer.ui.podcast.PodcastsSection()
+        // §D-9 Cloud — C10 fix: Smart playlists now live in the
+        // Library tab, Podcasts in the Cloud tab. Only cross-cutting
+        // cloud prefs remain here.
+        // §D-9
+        SettingsSectionHeader("Cloud")
         com.powermediaplayer.ui.settings.OfflineStorageLimitRow()
         SettingsToggleItem("Pre-fetch next cloud track",
             "Buffer the next item in a cloud queue for seamless transition.",
@@ -405,7 +413,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-10 Bluetooth Car
-        SettingsSectionHeader("§D-10 Bluetooth Car Controls")
+        // §D-10
+        SettingsSectionHeader("Bluetooth Car Controls")
         Text(
             text = "Remap the Previous and Next buttons on your car stereo " +
                 "(or any Bluetooth remote) when playing through this app. " +
@@ -434,7 +443,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-11 Alarms
-        SettingsSectionHeader("§D-11 Wake-up alarms")
+        // §D-11
+        SettingsSectionHeader("Wake-up alarms")
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -455,7 +465,8 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-12 External app control
-        SettingsSectionHeader("§D-12 External")
+        // §D-12
+        SettingsSectionHeader("External app control")
         SettingsToggleItem(
             title = "External app control (Tasker / Macrodroid)",
             description = "Let other apps trigger play, pause, skip, and seek via Android " +
@@ -468,12 +479,14 @@ fun SettingsScreen(
         SettingsDivider()
 
         // §D-13 Theme
-        SettingsSectionHeader("§D-13 Theme")
+        // §D-13
+        SettingsSectionHeader("Theme")
         com.powermediaplayer.ui.settings.ThemeSection()
         SettingsDivider()
 
         // §D-14 About + §D-15 Crash diagnostics
-        SettingsSectionHeader("§D-14 About")
+        // §D-14 / §D-15 (crash diagnostics bundled)
+        SettingsSectionHeader("About")
         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
             Text(
                 text = "Power Media Player",

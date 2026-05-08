@@ -474,6 +474,10 @@ fun LibraryScreen(
                 }
             }
         )
+        // §C10 fix — smart-playlist editor (create/list/delete) now
+        // sits next to the rail in the Library tab per the locked
+        // spec, replacing the prior Settings-tab placement.
+        com.powermediaplayer.ui.smartplaylists.SmartPlaylistsSection()
 
         // ── Content ──────────────────────────────────────────────
         if (!hasPermission) {

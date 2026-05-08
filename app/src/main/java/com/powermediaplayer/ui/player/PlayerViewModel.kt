@@ -35,6 +35,7 @@ class PlayerViewModel @Inject constructor(
     private val subtitleAutoFetcher: com.powermediaplayer.subtitles.SubtitleAutoFetcher,
     private val replayGainDao: com.powermediaplayer.data.db.dao.ReplayGainDao,
     private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -124,11 +125,25 @@ class PlayerViewModel @Inject constructor(
                     val hasAlbum = curState.album.isNotBlank()
                     if (applyScope == "missing_only" && hasArtist && hasAlbum) return@collect
                     val provider = settingsDataStore.metadataEnrichmentProvider.first()
-                    val res = withContext(Dispatchers.IO) {
+                    // §C17 A11.4 — cache key keyed on artist|title.
+                    val cacheKey = "${provider}|" +
+                        "${artistHint.lowercase()}|${title.lowercase()}"
+                    val cached = withContext(Dispatchers.IO) {
+                        runCatching { enrichmentCacheDao.get(cacheKey) }.getOrNull()
+                    }
+                    val res = if (cached != null) {
+                        com.powermediaplayer.enrichment.EnrichmentResult(
+                            title = cached.title,
+                            artist = cached.artist,
+                            album = cached.album,
+                            year = cached.year,
+                            genre = cached.genre
+                        )
+                    } else withContext(Dispatchers.IO) {
                         // §C17 LOCKED — MusicBrainz / Discogs / Both.
                         // "both" prefers MusicBrainz, falls through to
                         // Discogs only when MB returns null.
-                        when (provider) {
+                        val fresh = when (provider) {
                             "discogs" -> discogsClient.lookupRecording(
                                 title, artistHint.takeIf { it.isNotBlank() }
                             )
@@ -141,6 +156,24 @@ class PlayerViewModel @Inject constructor(
                                 title, artistHint.takeIf { it.isNotBlank() }
                             )
                         }
+                        if (fresh != null) {
+                            runCatching {
+                                enrichmentCacheDao.put(
+                                    com.powermediaplayer.data.db.entity.EnrichmentCacheEntity(
+                                        cacheKey = cacheKey,
+                                        provider = provider,
+                                        title = fresh.title,
+                                        artist = fresh.artist,
+                                        album = fresh.album,
+                                        year = fresh.year,
+                                        genre = fresh.genre,
+                                        artworkUrl = null,
+                                        fetchedAtMs = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                        }
+                        fresh
                     } ?: return@collect
                     // Honor sub-toggles by zeroing fields the user
                     // disabled before patching state.

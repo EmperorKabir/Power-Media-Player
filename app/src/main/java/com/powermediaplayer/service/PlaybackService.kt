@@ -344,15 +344,17 @@ class PlaybackService : MediaSessionService() {
             settingsDataStore.crossfadePreFadeTriggerS
                 .collect { crossfadePreFadeTriggerSFlag = it }
         }
-        // §B2 Skip silence — if true, treat the leading/trailing silence
-        // as already-faded so the engine kicks in earlier/later
-        // accordingly. Detection here is "near-zero db over the last
-        // 250 ms" of duration heuristically inferred from track
-        // duration vs current position; deeper silence-detection
-        // (analysing the audio buffer) is deferred.
+        // §B2 / D6 fix — Skip silence now drives ExoPlayer's built-in
+        // SilenceSkippingAudioProcessor via setSkipSilenceEnabled,
+        // so the audible playback stream itself drops sub-threshold
+        // segments. The +250 ms trigger shift in applyCrossfadeTick
+        // remains as belt-and-braces for the crossfade ramp's start.
         serviceScope.launch {
             settingsDataStore.crossfadeSkipSilence
-                .collect { crossfadeSkipSilenceFlag = it }
+                .collect { v ->
+                    crossfadeSkipSilenceFlag = v
+                    runCatching { player?.skipSilenceEnabled = v }
+                }
         }
 
         // §B2 Album mode — when ON, skip the fade between two

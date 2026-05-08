@@ -1,5 +1,6 @@
 package com.powermediaplayer.ui.settings
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.Icon
@@ -181,5 +183,100 @@ fun OpenSubtitlesSection(
         if (status.isNotBlank()) {
             Text(status, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
         }
+
+        // §C9 A2.2-A2.5 — search & save preferences.
+        Spacer(Modifier.height(12.dp))
+        OpenSubsSearchPrefs(ds, scope)
+    }
+}
+
+/**
+ * §C9 A2.2-A2.5 — language chips, match-by-hash radio, save-next-to-
+ * video radio, override-existing switch.
+ */
+@Composable
+private fun OpenSubsSearchPrefs(
+    ds: SettingsDataStore,
+    scope: kotlinx.coroutines.CoroutineScope
+) {
+    val langs by ds.openSubsLanguages.collectAsState(initial = setOf("en"))
+    val matchByHash by ds.openSubsMatchByHash.collectAsState(initial = false)
+    val saveNextToVideo by ds.openSubsSaveNextToVideo.collectAsState(initial = false)
+    val overrideExisting by ds.openSubsOverrideExisting.collectAsState(initial = false)
+
+    Text(
+        "Languages", style = MaterialTheme.typography.titleSmall,
+        color = TextPrimary
+    )
+    val available = listOf(
+        "en" to "English", "es" to "Spanish", "fr" to "French",
+        "de" to "German", "it" to "Italian", "pt" to "Portuguese",
+        "ru" to "Russian", "zh" to "Chinese", "ja" to "Japanese",
+        "ko" to "Korean", "ar" to "Arabic", "hi" to "Hindi"
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        available.forEach { (code, label) ->
+            androidx.compose.material3.FilterChip(
+                selected = code in langs,
+                onClick = {
+                    scope.launch {
+                        val updated = if (code in langs) langs - code else langs + code
+                        ds.setOpenSubsLanguages(updated)
+                    }
+                },
+                label = { Text(label) }
+            )
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Search method", style = MaterialTheme.typography.titleSmall,
+        color = TextPrimary
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        androidx.compose.material3.FilterChip(
+            selected = matchByHash,
+            onClick = { scope.launch { ds.setOpenSubsMatchByHash(true) } },
+            label = { Text("Match by hash") }
+        )
+        androidx.compose.material3.FilterChip(
+            selected = !matchByHash,
+            onClick = { scope.launch { ds.setOpenSubsMatchByHash(false) } },
+            label = { Text("Filename") }
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Save location", style = MaterialTheme.typography.titleSmall,
+        color = TextPrimary
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        androidx.compose.material3.FilterChip(
+            selected = saveNextToVideo,
+            onClick = { scope.launch { ds.setOpenSubsSaveNextToVideo(true) } },
+            label = { Text("Next to video") }
+        )
+        androidx.compose.material3.FilterChip(
+            selected = !saveNextToVideo,
+            onClick = { scope.launch { ds.setOpenSubsSaveNextToVideo(false) } },
+            label = { Text("App cache") }
+        )
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Switch(
+            checked = overrideExisting,
+            onCheckedChange = { scope.launch { ds.setOpenSubsOverrideExisting(it) } }
+        )
+        Text(
+            "  Override existing .srt files",
+            color = TextPrimary,
+            modifier = Modifier.padding(top = 12.dp)
+        )
     }
 }

@@ -4,6 +4,10 @@
   smallest cover (4×1 cells worth of width, two rows tall) so the
   widget fits both phone and Z Fold inner-screen without separate
   variants.
+
+  A7.2 audit row dismissed — useUpdateForCollections is for
+  RemoteViewsService-backed list widgets only; our widget is a
+  single RemoteViews layout with transport buttons.
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="60dp"

@@ -343,8 +343,12 @@ class FullScreenAlarmActivity : ComponentActivity() {
         if (alarm.maxSnoozes >= 0 && snoozeCount >= alarm.maxSnoozes) {
             stopRinging(); finish(); return
         }
-        // Schedule a one-shot follow-up alarm in `snoozeMinutes`.
-        val snoozeId = -alarm.id - System.currentTimeMillis() % 1000
+        // §C12 C6 fix — deterministic snooze ID, guaranteed unique
+        // per (alarm.id, snoozeCount) and disjoint from the master
+        // alarm.id PendingIntent space (negative half-plane). Replaces
+        // the prior `-alarm.id - millis % 1000` heuristic which could
+        // collide for adjacent alarm IDs with neighbouring millis.
+        val snoozeId = -(alarm.id * 256L + ((snoozeCount + 1).toLong() and 0xFF))
         AlarmScheduler.scheduleSnooze(
             this, alarm, snoozeId, snoozeCount + 1
         )

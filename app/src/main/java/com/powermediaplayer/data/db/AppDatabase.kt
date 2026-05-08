@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.powermediaplayer.data.db.dao.BookmarkDao
+import com.powermediaplayer.data.db.dao.EnrichmentCacheDao
 import com.powermediaplayer.data.db.dao.EqualizerPresetDao
 import com.powermediaplayer.data.db.dao.FavoriteDao
 import com.powermediaplayer.data.db.dao.FavouriteBookmarkDao
@@ -20,6 +21,7 @@ import com.powermediaplayer.data.db.dao.PodcastDao
 import com.powermediaplayer.data.db.dao.ReplayGainDao
 import com.powermediaplayer.data.db.dao.SmartPlaylistDao
 import com.powermediaplayer.data.db.entity.BookmarkEntity
+import com.powermediaplayer.data.db.entity.EnrichmentCacheEntity
 import com.powermediaplayer.data.db.entity.EqualizerPresetEntity
 import com.powermediaplayer.data.db.entity.FavoriteEntity
 import com.powermediaplayer.data.db.entity.FavouriteBookmarkEntity
@@ -53,7 +55,8 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
         PodcastShowEntity::class,
         PodcastEpisodeEntity::class,
         ReplayGainEntity::class,
-        OfflineCopyEntity::class
+        OfflineCopyEntity::class,
+        EnrichmentCacheEntity::class
     ],
     // v5: PlaybackHistory + HistoryFavourite switched to autogen IDs;
     // added HistoryBookmark + FavouriteBookmark snapshot tables.
@@ -75,7 +78,9 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
     //      Set so byteSize / lastPlayedAt are tracked for LRU eviction.
     // v14: D12 — adds an index on bookmarks.createdAtMs to back the
     //      observeAll() query that orders by it.
-    version = 14,
+    // v15: §C17 A11.4 — adds `enrichment_cache` table so repeat
+    //      MusicBrainz / Discogs lookups skip the network.
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -93,6 +98,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun podcastDao(): PodcastDao
     abstract fun replayGainDao(): ReplayGainDao
     abstract fun offlineCopyDao(): OfflineCopyDao
+    abstract fun enrichmentCacheDao(): EnrichmentCacheDao
 
     companion object {
         const val DATABASE_NAME = "power_media_player.db"
@@ -207,6 +213,30 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_bookmarks_createdAtMs ON bookmarks(createdAtMs)"
+                )
+            }
+        }
+
+        /**
+         * §C17 A11.4 v14→v15 — adds the enrichment cache table so
+         * repeat MusicBrainz / Discogs lookups skip the network.
+         */
+        val MIGRATION_14_15: Migration = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS enrichment_cache (
+                        cacheKey TEXT NOT NULL PRIMARY KEY,
+                        provider TEXT NOT NULL,
+                        title TEXT,
+                        artist TEXT,
+                        album TEXT,
+                        year INTEGER,
+                        genre TEXT,
+                        artworkUrl TEXT,
+                        fetchedAtMs INTEGER NOT NULL
+                    )
+                    """.trimIndent()
                 )
             }
         }

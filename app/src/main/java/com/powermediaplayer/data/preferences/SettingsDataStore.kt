@@ -45,6 +45,11 @@ class SettingsDataStore @Inject constructor(
         val OPENSUBS_TOKEN = stringPreferencesKey("opensubs_token")
         val OPENSUBS_EMAIL = stringPreferencesKey("opensubs_email")
         val OPENSUBS_API_KEY = stringPreferencesKey("opensubs_api_key")
+        // §C9 A2.2-A2.5 — search & save preferences.
+        val OPENSUBS_LANGUAGES = stringSetPreferencesKey("opensubs_languages")
+        val OPENSUBS_MATCH_BY_HASH = booleanPreferencesKey("opensubs_match_by_hash")
+        val OPENSUBS_SAVE_NEXT_TO_VIDEO = booleanPreferencesKey("opensubs_save_next_to_video")
+        val OPENSUBS_OVERRIDE_EXISTING = booleanPreferencesKey("opensubs_override_existing")
         // §C18 LOCKED — Track gain vs Album gain mode.
         val REPLAY_GAIN_MODE = stringPreferencesKey("replay_gain_mode")
         // §C17 LOCKED — sub-toggles + apply scope.
@@ -858,6 +863,37 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setOpenSubsApiKey(k: String) {
         context.dataStore.edit { prefs -> prefs[Keys.OPENSUBS_API_KEY] = k }
+    }
+
+    /** §C9 A2.2 — ISO-639-1 codes selected; default ["en"]. */
+    val openSubsLanguages: Flow<Set<String>> = context.dataStore.data.map {
+        it[Keys.OPENSUBS_LANGUAGES] ?: setOf("en")
+    }
+    suspend fun setOpenSubsLanguages(codes: Set<String>) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.OPENSUBS_LANGUAGES] = if (codes.isEmpty()) setOf("en") else codes
+        }
+    }
+    /** §C9 A2.3 — moviehash search vs filename query. */
+    val openSubsMatchByHash: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.OPENSUBS_MATCH_BY_HASH] ?: false
+    }
+    suspend fun setOpenSubsMatchByHash(v: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.OPENSUBS_MATCH_BY_HASH] = v }
+    }
+    /** §C9 A2.4 — write the SRT next to the video file vs in app cache. */
+    val openSubsSaveNextToVideo: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.OPENSUBS_SAVE_NEXT_TO_VIDEO] ?: false
+    }
+    suspend fun setOpenSubsSaveNextToVideo(v: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.OPENSUBS_SAVE_NEXT_TO_VIDEO] = v }
+    }
+    /** §C9 A2.5 — overwrite a sibling .srt instead of skipping. */
+    val openSubsOverrideExisting: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.OPENSUBS_OVERRIDE_EXISTING] ?: false
+    }
+    suspend fun setOpenSubsOverrideExisting(v: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.OPENSUBS_OVERRIDE_EXISTING] = v }
     }
 
     // ── Brightness Override ──────────────────────────────────────

@@ -64,15 +64,20 @@ class OpenSubtitlesClient(
 
     /**
      * Search by filename or imdb_id. Returns the best file_id (used
-     * for download) or null on miss.
+     * for download) or null on miss. When [moviehash] is non-blank
+     * the search uses the OpenSubtitles `moviehash` parameter
+     * (8-byte hash + size) per §C9 A2.3.
      */
     fun searchBestSubtitleFileId(
         token: String,
         filename: String,
-        languages: String = "en"
+        languages: String = "en",
+        moviehash: String = ""
     ): Long? {
         val q = URLEncoder.encode(filename.substringBeforeLast('.'), "UTF-8")
-        val url = "$BASE/subtitles?query=$q&languages=$languages"
+        val hashParam = if (moviehash.isNotBlank())
+            "&moviehash=${URLEncoder.encode(moviehash, "UTF-8")}" else ""
+        val url = "$BASE/subtitles?query=$q&languages=$languages$hashParam"
         val req = Request.Builder()
             .url(url)
             .header("Api-Key", apiKey)

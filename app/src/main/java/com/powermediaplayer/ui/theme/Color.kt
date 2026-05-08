@@ -1,24 +1,15 @@
 package com.powermediaplayer.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
 
-// ── Teal Primary Palette ─────────────────────────────────────
-val Teal50 = Color(0xFFE0F2F1)
-val Teal100 = Color(0xFFB2DFDB)
-val Teal200 = Color(0xFF80CBC4)
-val Teal300 = Color(0xFF4DB6AC)
-val Teal400 = Color(0xFF26A69A)
-val Teal500 = Color(0xFF009688)
-val Teal600 = Color(0xFF00897B)
-val Teal700 = Color(0xFF00796B)
-val Teal800 = Color(0xFF00695C)
-val Teal900 = Color(0xFF004D40)
-// §11.5 — TealAccent is the user-configurable accent. Backed by a
-// Compose MutableState so every composable that reads it recomposes
+// §11.5 / B4 — TealAccent is the user-configurable accent. Backed by
+// a Compose MutableState so every composable that reads it recomposes
 // when the user changes the accent in Settings → Theme. ThemeAccent
 // (in ThemeAccent.kt) hooks the DataStore key into the holder at app
-// start. The default value preserves the original Material teal so
-// fresh installs look identical to v1.
+// start. Default preserves the original Material teal so fresh
+// installs look identical to v1.
 private val _tealAccentState =
     androidx.compose.runtime.mutableStateOf(Color(0xFF00BFA5))
 val TealAccent: Color
@@ -26,7 +17,29 @@ val TealAccent: Color
 internal fun setTealAccentColor(c: Color) {
     _tealAccentState.value = c
 }
-val TealBright = Color(0xFF1DE9B6)
+
+// ── Teal Primary Palette ─────────────────────────────────────
+// B4 fix — every shade is derived from the current TealAccent's H/S
+// with a fixed L mapped to the Material 50→900 lightness ramp. So
+// when the user picks a different accent, the entire palette tracks
+// it. TealBright = the accent itself shifted to 60% lightness.
+private fun shadeOfAccent(lightness: Float): Color {
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(TealAccent.toArgb(), hsl)
+    hsl[2] = lightness.coerceIn(0f, 1f)
+    return Color(ColorUtils.HSLToColor(hsl))
+}
+val Teal50: Color get() = shadeOfAccent(0.94f)
+val Teal100: Color get() = shadeOfAccent(0.86f)
+val Teal200: Color get() = shadeOfAccent(0.76f)
+val Teal300: Color get() = shadeOfAccent(0.66f)
+val Teal400: Color get() = shadeOfAccent(0.55f)
+val Teal500: Color get() = shadeOfAccent(0.45f)
+val Teal600: Color get() = shadeOfAccent(0.38f)
+val Teal700: Color get() = shadeOfAccent(0.30f)
+val Teal800: Color get() = shadeOfAccent(0.22f)
+val Teal900: Color get() = shadeOfAccent(0.14f)
+val TealBright: Color get() = shadeOfAccent(0.60f)
 
 // ── OLED Black & Surfaces ────────────────────────────────────
 val OledBlack = Color(0xFF000000)

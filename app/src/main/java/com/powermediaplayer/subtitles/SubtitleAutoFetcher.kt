@@ -12,14 +12,10 @@ import java.io.File
 
 /**
  * §C9 — coordinator: when a video starts and no sibling .srt exists,
- * call OpenSubtitles, persist the SRT into the cache dir alongside
- * the video filename. Returns the cached File when a download
- * succeeded, null otherwise.
- *
- * The actual ExoPlayer subtitle-track addition is handled by the
- * existing subtitle pipeline once the file lands on disk; this class
- * is a pure download helper. Caches lookups by mediaUri so repeat
- * plays of the same video don't trigger another network hit.
+ * call OpenSubtitles, persist the SRT either next to the video or in
+ * the cache dir, and return the resulting File. Honours the
+ * A2.2-A2.5 flags (languages, match-by-hash, save-next-to-video,
+ * override-existing).
  */
 @Singleton
 class SubtitleAutoFetcher @Inject constructor(
@@ -27,53 +23,67 @@ class SubtitleAutoFetcher @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val credStore: OpenSubsCredStore
 ) {
-    private val dir: File by lazy {
+    private val cacheDir: File by lazy {
         File(context.cacheDir, "auto-subs").also { it.mkdirs() }
     }
     private val tried = mutableSetOf<String>()
 
-    suspend fun fetchIfNeeded(mediaUri: String, videoFilename: String): File? =
-        withContext(Dispatchers.IO) {
-            if (mediaUri.isBlank() || videoFilename.isBlank()) return@withContext null
-            if (mediaUri in tried) return@withContext null
+    suspend fun fetchIfNeeded(
+        mediaUri: String,
+        videoFilename: String,
+        localFilePath: String? = null
+    ): File? = withContext(Dispatchers.IO) {
+        if (mediaUri.isBlank() || videoFilename.isBlank()) return@withContext null
+        if (mediaUri in tried) return@withContext null
 
-            // §C9 LOCKED — credential lookup order:
-            //   1. EncryptedSharedPreferences (current path).
-            //   2. Plain DataStore (legacy installs migrated on first
-            //      EncryptedSharedPreferences write).
-            //   3. BuildConfig API key (identifies the app, not user).
-            val token = credStore.getToken().ifBlank {
-                settingsDataStore.openSubsToken.first()
-            }
-            val apiKey = com.powermediaplayer.BuildConfig.OPENSUBS_API_KEY
-                .ifBlank { credStore.getApiKey() }
-                .ifBlank { settingsDataStore.openSubsApiKey.first() }
-            if (token.isBlank() || apiKey.isBlank()) return@withContext null
-
-            tried += mediaUri
-
-            // Idempotent: if we already have a cached SRT for this file,
-            // skip the network entirely.
-            val target = File(dir, "${videoFilename.substringBeforeLast('.')}.srt")
-            if (target.exists() && target.length() > 0) return@withContext target
-
-            val client = OpenSubtitlesClient(apiKey)
-            val fileId = client.searchBestSubtitleFileId(token, videoFilename)
-                ?: return@withContext null
-            val link = client.fetchDownloadLink(token, fileId)
-                ?: return@withContext null
-            val ok = client.downloadToFile(link, target)
-            com.powermediaplayer.util.Diag.i(
-                "PMP_DIAG",
-                "C9 OpenSubs ${if (ok) "downloaded" else "failed"} fileId=$fileId " +
-                    "→ ${target.absolutePath}"
-            )
-            if (ok) target else null
+        val token = credStore.getToken().ifBlank {
+            settingsDataStore.openSubsToken.first()
         }
+        val apiKey = com.powermediaplayer.BuildConfig.OPENSUBS_API_KEY
+            .ifBlank { credStore.getApiKey() }
+            .ifBlank { settingsDataStore.openSubsApiKey.first() }
+        if (token.isBlank() || apiKey.isBlank()) return@withContext null
+
+        // §C9 A2.2-A2.5 — read user prefs.
+        val languages = settingsDataStore.openSubsLanguages.first()
+            .takeIf { it.isNotEmpty() } ?: setOf("en")
+        val matchByHash = settingsDataStore.openSubsMatchByHash.first()
+        val saveNextToVideo = settingsDataStore.openSubsSaveNextToVideo.first()
+        val overrideExisting = settingsDataStore.openSubsOverrideExisting.first()
+
+        tried += mediaUri
+
+        // §C9 A2.4 — destination dir.
+        val baseName = videoFilename.substringBeforeLast('.')
+        val targetDir = if (saveNextToVideo && localFilePath != null) {
+            runCatching { File(localFilePath).parentFile }.getOrNull() ?: cacheDir
+        } else cacheDir
+        val target = File(targetDir, "$baseName.srt")
+        if (target.exists() && target.length() > 0 && !overrideExisting) {
+            return@withContext target
+        }
+
+        val client = OpenSubtitlesClient(apiKey)
+        // §C9 A2.3 — moviehash when we have a local file path.
+        val hash = if (matchByHash && localFilePath != null)
+            OpenSubsHash.compute(localFilePath).orEmpty() else ""
+        val langCsv = languages.joinToString(",")
+        val fileId = client.searchBestSubtitleFileId(token, videoFilename, langCsv, hash)
+            ?: return@withContext null
+        val link = client.fetchDownloadLink(token, fileId) ?: return@withContext null
+        val ok = client.downloadToFile(link, target)
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "C9 OpenSubs ${if (ok) "downloaded" else "failed"} fileId=$fileId " +
+                "lang=$langCsv hash=${if (hash.isBlank()) "-" else hash.take(8)} " +
+                "→ ${target.absolutePath}"
+        )
+        if (ok) target else null
+    }
 
     fun cachedSrtFor(videoFilename: String): File? {
         if (videoFilename.isBlank()) return null
-        val target = File(dir, "${videoFilename.substringBeforeLast('.')}.srt")
+        val target = File(cacheDir, "${videoFilename.substringBeforeLast('.')}.srt")
         return target.takeIf { it.exists() && it.length() > 0 }
     }
 }
