@@ -213,6 +213,23 @@ class PlaybackService : MediaSessionService() {
         val senderMetadataByMediaId: java.util.concurrent.ConcurrentHashMap<String, androidx.media3.common.MediaMetadata> =
             java.util.concurrent.ConcurrentHashMap()
 
+        /**
+         * Cast bug fix (user-reported "ERROR_CODE_IO_CLEARTEXT_NOT_PERMITTED
+         * appears when I stop casting"): once switchPlayer rebuilds
+         * MediaItems for Cast (URI rewritten to a `http://<lan-ip>` relay
+         * URL), the queue inside CastPlayer no longer has the original
+         * `content://` / `file://` / `https://` URIs. When the user
+         * disconnects, switchPlayer reads items from CastPlayer and
+         * hands those relay URLs back to the local ExoPlayer — Android
+         * 9+ blocks cleartext HTTP -> source error.
+         *
+         * Cache the ORIGINAL MediaItem (with the source-side URI) keyed
+         * on mediaId so switchPlayer can restore it when going back to
+         * local. Same mediaId space as senderMetadataByMediaId.
+         */
+        val senderItemByMediaId: java.util.concurrent.ConcurrentHashMap<String, androidx.media3.common.MediaItem> =
+            java.util.concurrent.ConcurrentHashMap()
+
         /** ReplayGain attenuation for negative track-gain tags
          *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
         fun setReplayGainAttenuation(factor: Float) {
@@ -983,12 +1000,19 @@ class PlaybackService : MediaSessionService() {
         val currentIndex = current.currentMediaItemIndex
         val currentPosition = current.currentPosition
         val playWhenReady = current.playWhenReady
-        // Cache sender-side metadata for every item already in the queue
-        // so album art / title / artist survive the receiver echo when
-        // we switch to CastPlayer.
+        // Cache sender-side metadata + the full original item for every
+        // item already in the queue so album art / title / artist
+        // survive the receiver echo when we switch to CastPlayer, and
+        // the original URI can be restored when switching back.
         items.forEach { item ->
             if (item.mediaId.isNotEmpty()) {
                 Companion.senderMetadataByMediaId[item.mediaId] = item.mediaMetadata
+                if (current !is CastPlayer) {
+                    // Only stash the WHOLE item if it currently holds
+                    // the original sender-side URI — i.e. when we're on
+                    // the local ExoPlayer about to switch to Cast.
+                    Companion.senderItemByMediaId[item.mediaId] = item
+                }
             }
         }
 
@@ -1021,7 +1045,16 @@ class PlaybackService : MediaSessionService() {
             items.map { rebuildForCast(it, server) }
         } else {
             stopCastRelay()
-            items
+            // Cleartext-fix (user-reported "ERROR_CODE_IO_CLEARTEXT
+            // _NOT_PERMITTED on stop casting"): the items currently in
+            // CastPlayer carry the relay http URLs, which the local
+            // ExoPlayer can't fetch on Android 9+. Restore each item
+            // from the sender-side cache (keyed by mediaId) so the
+            // local player gets back its original content://, file://
+            // or https:// URI.
+            items.map { item ->
+                Companion.senderItemByMediaId[item.mediaId] ?: item
+            }
         }
 
         current.stop()
@@ -1335,10 +1368,13 @@ class PlaybackService : MediaSessionService() {
                 } else {
                     item
                 }
-                // Cache sender-side metadata BEFORE the cast rebuild so
-                // album art etc. survive the receiver round-trip.
+                // Cache sender-side metadata + the full original item
+                // BEFORE the cast rebuild so album art etc. survive the
+                // receiver round-trip and the original URI can be
+                // restored on switch-back-to-local (cleartext fix).
                 if (withUri.mediaId.isNotEmpty()) {
                     senderMetadataByMediaId[withUri.mediaId] = withUri.mediaMetadata
+                    senderItemByMediaId[withUri.mediaId] = withUri
                 }
                 if (relay != null) rebuildForCast(withUri, relay) else withUri
             }.toMutableList()

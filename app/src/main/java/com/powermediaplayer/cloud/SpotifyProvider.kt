@@ -691,10 +691,20 @@ class SpotifyProvider @Inject constructor(
             .build()
         return try {
             http.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@use emptyList<Pair<String, String>>()
                 val body = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) {
+                    com.powermediaplayer.util.Diag.w(
+                        "PMP_DIAG",
+                        "Spotify.listDevices http=${resp.code} body=${body.take(300)}"
+                    )
+                    return@use emptyList<Pair<String, String>>()
+                }
                 val arr = JsonParser.parseString(body).asJsonObject
                     .getAsJsonArray("devices") ?: return@use emptyList()
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Spotify.listDevices count=${arr.size()} body=${body.take(500)}"
+                )
                 arr.mapNotNull {
                     val o = it.asJsonObject
                     val id = o.get("id")?.asString ?: return@mapNotNull null
@@ -702,7 +712,10 @@ class SpotifyProvider @Inject constructor(
                     id to name
                 }
             }
-        } catch (_: Exception) { emptyList() }
+        } catch (e: Exception) {
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "Spotify.listDevices threw", e)
+            emptyList()
+        }
     }
 
     private fun transferPlayback(token: String, deviceId: String): Result<Unit> {
