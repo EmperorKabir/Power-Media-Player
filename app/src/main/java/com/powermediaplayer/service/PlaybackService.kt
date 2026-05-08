@@ -97,6 +97,12 @@ class PlaybackService : MediaSessionService() {
     @javax.inject.Inject
     lateinit var mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository
 
+    // §B3 — true 2-player crossfade engine (lazy: spins up the second
+    // ExoPlayer only inside the pre-fade window, releases on completion).
+    private val crossfadeController by lazy {
+        com.powermediaplayer.service.CrossfadeController(this)
+    }
+
 
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
@@ -751,6 +757,16 @@ class PlaybackService : MediaSessionService() {
         ) {
             setCrossfadeFactor(factor)
         }
+        // §B3 — true 2-player overlap. Kicks off when we cross into
+        // the pre-fade window. The secondary plays the next track at
+        // (1 - factor) * volume while the primary is attenuated by
+        // factor — energy stays constant under equal-power.
+        crossfadeController.maybeStartCrossfade(
+            primary = p,
+            crossfadeMs = ms,
+            curve = crossfadeCurveFlag,
+            primaryFinalVolume = 1.0f
+        )
     }
 
     /** Forwards to the companion-object volume mixer. */

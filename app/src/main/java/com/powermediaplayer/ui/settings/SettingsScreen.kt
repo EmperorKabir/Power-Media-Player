@@ -217,6 +217,16 @@ fun SettingsScreen(
         com.powermediaplayer.ui.settings.OpenSubtitlesSection()
         SettingsDivider()
 
+        // §C10 — Podcast subscription manager.
+        SettingsSectionHeader("Podcasts")
+        com.powermediaplayer.ui.podcast.PodcastsSection()
+        SettingsDivider()
+
+        // §C6 — Smart playlists.
+        SettingsSectionHeader("Smart playlists")
+        com.powermediaplayer.ui.smartplaylists.SmartPlaylistsSection()
+        SettingsDivider()
+
         // §C17 — Online metadata enrichment toggle.
         SettingsToggleItem(
             title = "Online metadata enrichment",

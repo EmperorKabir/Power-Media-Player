@@ -1,0 +1,151 @@
+package com.powermediaplayer.podcast
+
+import com.powermediaplayer.data.db.entity.PodcastEpisodeEntity
+import com.powermediaplayer.data.db.entity.PodcastShowEntity
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.xmlpull.v1.XmlPullParser
+import org.xmlpull.v1.XmlPullParserFactory
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+/**
+ * §C10 — minimal RSS 2.0 + iTunes-namespace parser. Walks the
+ * `<channel>` for show metadata and each `<item>` for episode rows.
+ * Returns a (show, episodes) pair or null on failure.
+ */
+class RssFeedParser(
+    private val httpClient: OkHttpClient = defaultClient
+) {
+    companion object {
+        private val defaultClient = OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .build()
+
+        // RFC 822 — common podcast pubDate format.
+        private val RFC822 = SimpleDateFormat(
+            "EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH
+        )
+    }
+
+    fun fetch(feedUrl: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? {
+        val req = Request.Builder().url(feedUrl).build()
+        val xml = runCatching {
+            httpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) null else resp.body?.string()
+            }
+        }.getOrNull() ?: return null
+        return parse(feedUrl, xml)
+    }
+
+    fun parse(feedUrl: String, xml: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? {
+        return runCatching {
+            val factory = XmlPullParserFactory.newInstance()
+            factory.isNamespaceAware = false
+            val parser = factory.newPullParser()
+            parser.setInput(xml.reader())
+
+            var showTitle = ""
+            var showArtwork: String? = null
+            var showDesc = ""
+            val episodes = mutableListOf<PodcastEpisodeEntity>()
+
+            // Working buffers for the current item.
+            var inItem = false
+            var inImage = false
+            var itemTitle = ""
+            var itemGuid = ""
+            var itemAudio = ""
+            var itemDuration = 0L
+            var itemPub = 0L
+            var lastTag = ""
+            var text = ""
+
+            var event = parser.eventType
+            while (event != XmlPullParser.END_DOCUMENT) {
+                when (event) {
+                    XmlPullParser.START_TAG -> {
+                        lastTag = parser.name
+                        when (parser.name.lowercase()) {
+                            "item" -> {
+                                inItem = true
+                                itemTitle = ""; itemGuid = ""; itemAudio = ""
+                                itemDuration = 0L; itemPub = 0L
+                            }
+                            "enclosure" -> if (inItem) {
+                                itemAudio = parser.getAttributeValue(null, "url").orEmpty()
+                            }
+                            "itunes:image" -> if (!inItem && showArtwork == null) {
+                                showArtwork = parser.getAttributeValue(null, "href")
+                            }
+                            "image" -> if (!inItem) inImage = true
+                        }
+                    }
+                    XmlPullParser.TEXT -> text = parser.text.orEmpty().trim()
+                    XmlPullParser.END_TAG -> {
+                        val tag = parser.name.lowercase()
+                        if (inItem) {
+                            when (tag) {
+                                "title" -> if (itemTitle.isBlank()) itemTitle = text
+                                "guid" -> itemGuid = text
+                                "pubdate" -> itemPub = parsePubDate(text)
+                                "itunes:duration" -> itemDuration = parseDurationSec(text)
+                                "item" -> {
+                                    if (itemAudio.isNotBlank()) {
+                                        episodes += PodcastEpisodeEntity(
+                                            guid = itemGuid.ifBlank { itemAudio },
+                                            feedUrl = feedUrl,
+                                            title = itemTitle,
+                                            audioUrl = itemAudio,
+                                            durationS = itemDuration,
+                                            publishedAt = itemPub
+                                        )
+                                    }
+                                    inItem = false
+                                }
+                            }
+                        } else {
+                            when (tag) {
+                                "title" -> if (showTitle.isBlank()) showTitle = text
+                                "description" -> if (showDesc.isBlank()) showDesc = text
+                                "url" -> if (inImage && showArtwork == null) showArtwork = text
+                                "image" -> inImage = false
+                            }
+                        }
+                        text = ""
+                    }
+                }
+                event = parser.next()
+            }
+
+            val show = PodcastShowEntity(
+                feedUrl = feedUrl,
+                title = showTitle.ifBlank { feedUrl },
+                artworkUrl = showArtwork,
+                description = showDesc,
+                lastChecked = System.currentTimeMillis()
+            )
+            show to episodes
+        }.getOrNull()
+    }
+
+    private fun parsePubDate(s: String): Long = runCatching {
+        synchronized(RFC822) { RFC822.parse(s)?.time ?: 0L }
+    }.getOrDefault(0L)
+
+    private fun parseDurationSec(s: String): Long {
+        if (s.isBlank()) return 0L
+        return runCatching {
+            // Accept "HH:MM:SS", "MM:SS", or raw seconds.
+            val parts = s.split(":")
+            when (parts.size) {
+                3 -> parts[0].toLong() * 3600 + parts[1].toLong() * 60 + parts[2].toLong()
+                2 -> parts[0].toLong() * 60 + parts[1].toLong()
+                1 -> parts[0].toLong()
+                else -> 0L
+            }
+        }.getOrDefault(0L)
+    }
+}

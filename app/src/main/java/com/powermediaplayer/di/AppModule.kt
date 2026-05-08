@@ -46,7 +46,12 @@ object AppModule {
             // v7 → v8 (§C7): adds media_overrides table without
             // touching existing data. First non-destructive migration.
             // v8 → v9 (§C6): adds smart_playlists table.
-            .addMigrations(AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
+            // v9 → v10 (§C10): adds podcast_shows + podcast_episodes.
+            .addMigrations(
+                AppDatabase.MIGRATION_7_8,
+                AppDatabase.MIGRATION_8_9,
+                AppDatabase.MIGRATION_9_10
+            )
             .build()
     }
 
@@ -115,6 +120,12 @@ object AppModule {
     @Singleton
     fun provideSmartPlaylistDao(database: AppDatabase): com.powermediaplayer.data.db.dao.SmartPlaylistDao {
         return database.smartPlaylistDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePodcastDao(database: AppDatabase): com.powermediaplayer.data.db.dao.PodcastDao {
+        return database.podcastDao()
     }
 
     @Provides
