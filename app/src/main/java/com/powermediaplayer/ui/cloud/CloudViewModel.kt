@@ -462,7 +462,19 @@ class CloudViewModel @Inject constructor(
     }
 
     fun buildDriveSignInIntent(): Intent = driveProvider.buildSignInIntent()
-    fun buildSpotifyAuthIntent(): Intent = spotifyProvider.buildAuthIntent()
+    fun buildSpotifyAuthIntent(): Intent {
+        // Bug fix (user-reported "Spotify sign-in resumes playback"):
+        // mark OAuth in-flight so PlaybackService.handleAudioFocusChange
+        // ignores the loss-then-gain pair caused by the browser Custom
+        // Tab stealing audio focus. Cleared in handleSpotifyResult or
+        // by the 60s safety timer below.
+        com.powermediaplayer.service.PlaybackService.oauthInFlight = true
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(60_000)
+            com.powermediaplayer.service.PlaybackService.oauthInFlight = false
+        }
+        return spotifyProvider.buildAuthIntent()
+    }
     fun buildDriveOAuthSignInIntent(): Intent = driveOAuthProvider.buildSignInIntent()
 
     /**
@@ -538,6 +550,10 @@ class CloudViewModel @Inject constructor(
 
     fun handleSpotifyResult(data: Intent?) {
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cloud.handleSpotifyResult data=${data != null}")
+        // Clear the OAuth-in-flight flag immediately on result so
+        // AudioFocus handling resumes its normal pause/duck/ignore
+        // policy starting from the next focus event.
+        com.powermediaplayer.service.PlaybackService.oauthInFlight = false
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             val result = spotifyProvider.handleAuthResponse(data)

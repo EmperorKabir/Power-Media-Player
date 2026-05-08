@@ -179,6 +179,18 @@ class PlaybackService : MediaSessionService() {
         @Volatile var crossfadeAutoRevertReason: String? = null
 
         /**
+         * Bug fix (user-reported "playback resumes when I sign in to
+         * Spotify even though I never paused"): set to `true` while the
+         * Spotify OAuth Custom Tab is in the foreground so the
+         * AudioFocus loss-then-gain pair caused by the browser stealing
+         * focus doesn't auto-pause and then auto-resume our player.
+         * CloudViewModel toggles this when launching / completing the
+         * OAuth intent. A 60s safety timer in PlaybackService also
+         * clears it in case the user cancels OAuth without returning.
+         */
+        @Volatile var oauthInFlight: Boolean = false
+
+        /**
          * D10 fix — pushed by the Player.Listener.onMediaItemTransition
          * inside [installCrossfadeListener]. Replaces a per-750ms
          * polling loop in MediaOverrideRepository. Empty string until
@@ -685,6 +697,13 @@ class PlaybackService : MediaSessionService() {
 
     private fun handleAudioFocusChange(change: Int) {
         val p = player ?: return
+        if (Companion.oauthInFlight) {
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "AudioFocus change=$change SUPPRESSED (OAuth in flight)"
+            )
+            return
+        }
         val policy = serviceScope.async {
             when (change) {
                 android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ->
