@@ -199,6 +199,20 @@ class PlaybackService : MediaSessionService() {
         val currentMediaIdFlow: kotlinx.coroutines.flow.MutableStateFlow<String> =
             kotlinx.coroutines.flow.MutableStateFlow("")
 
+        /**
+         * Cast bug fix (user-reported "album art gone when I cast"):
+         * CastPlayer.currentMediaItem is RECONSTRUCTED from receiver
+         * state via DefaultMediaItemConverter, so the original
+         * sender-side mediaMetadata.artworkUri (a phone-local
+         * `content://media/external/audio/albumart/<id>` URI the
+         * receiver can't fetch) is dropped. Cache the sender-side
+         * metadata keyed on mediaId so PlaybackConnection's update
+         * path can still surface the right artwork in the app UI
+         * regardless of what the receiver echoes back.
+         */
+        val senderMetadataByMediaId: java.util.concurrent.ConcurrentHashMap<String, androidx.media3.common.MediaMetadata> =
+            java.util.concurrent.ConcurrentHashMap()
+
         /** ReplayGain attenuation for negative track-gain tags
          *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
         fun setReplayGainAttenuation(factor: Float) {
@@ -969,6 +983,14 @@ class PlaybackService : MediaSessionService() {
         val currentIndex = current.currentMediaItemIndex
         val currentPosition = current.currentPosition
         val playWhenReady = current.playWhenReady
+        // Cache sender-side metadata for every item already in the queue
+        // so album art / title / artist survive the receiver echo when
+        // we switch to CastPlayer.
+        items.forEach { item ->
+            if (item.mediaId.isNotEmpty()) {
+                Companion.senderMetadataByMediaId[item.mediaId] = item.mediaMetadata
+            }
+        }
 
         val transformed = if (target is CastPlayer) {
             // Cast bug fix: start the relay UNCONDITIONALLY (even with an
@@ -1312,6 +1334,11 @@ class PlaybackService : MediaSessionService() {
                     item.buildUpon().setUri(resolvedUri).build()
                 } else {
                     item
+                }
+                // Cache sender-side metadata BEFORE the cast rebuild so
+                // album art etc. survive the receiver round-trip.
+                if (withUri.mediaId.isNotEmpty()) {
+                    senderMetadataByMediaId[withUri.mediaId] = withUri.mediaMetadata
                 }
                 if (relay != null) rebuildForCast(withUri, relay) else withUri
             }.toMutableList()

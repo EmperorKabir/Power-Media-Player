@@ -122,8 +122,26 @@ fun VolumeAndBrightnessControls(
             )
         }
 
-        // WRITE_SETTINGS permission hint
-        if (!BrightnessHelper.canWriteSettings(context)) {
+        // WRITE_SETTINGS permission hint — re-checks on every
+        // ON_RESUME so the banner disappears as soon as the user grants
+        // permission in Settings (and reappears if the user revokes it
+        // later). Without the lifecycle observer the canWriteSettings
+        // check ran at composition time only and the banner stuck
+        // around even after the grant.
+        val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+        var canWrite by remember {
+            mutableStateOf(BrightnessHelper.canWriteSettings(context))
+        }
+        androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                    canWrite = BrightnessHelper.canWriteSettings(context)
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        if (!canWrite) {
             Text(
                 text = "Tap to grant brightness permission",
                 style = MaterialTheme.typography.bodySmall,

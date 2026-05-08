@@ -811,7 +811,16 @@ class PlaybackConnection @Inject constructor(
         //     — Media3 1.6's combine logic OVERWRITES extras during merge,
         //     so our is_video_hint Boolean only survives on the raw item.
         val metadata = c.mediaMetadata
-        val itemMetadata = c.currentMediaItem?.mediaMetadata
+        // Cast bug fix: when CastPlayer is active, c.currentMediaItem
+        // is RECONSTRUCTED from receiver state via DefaultMediaItemConverter
+        // — sender-side fields like the phone-local artworkUri are lost.
+        // Look up the original metadata cached in PlaybackService's
+        // senderMetadataByMediaId by the current item's mediaId so
+        // album art, title, artist survive the receiver round-trip.
+        val rawCurrentItem = c.currentMediaItem
+        val cached = rawCurrentItem?.mediaId?.takeIf { it.isNotEmpty() }
+            ?.let { com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId[it] }
+        val itemMetadata = cached ?: rawCurrentItem?.mediaMetadata
         val chapters = extractChapters(c)
         val isFolderMode = folderChapters != null
         val absolutePlaylistPos = cachedPlaylistPosition(c)

@@ -756,6 +756,7 @@ fun CloudBrowserScreen(
     if (uiState.spotifyConnectPickerVisible) {
         SpotifyConnectPickerSheet(
             devices = uiState.spotifyConnectDevices,
+            onRefresh = { viewModel.openSpotifyConnectPicker() },
             onPick = { id, name -> viewModel.selectSpotifyConnectDevice(id, name) },
             onDismiss = { viewModel.dismissSpotifyConnectPicker() }
         )
@@ -766,6 +767,7 @@ fun CloudBrowserScreen(
 @Composable
 private fun SpotifyConnectPickerSheet(
     devices: List<Pair<String, String>>,
+    onRefresh: () -> Unit,
     onPick: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -778,19 +780,58 @@ private fun SpotifyConnectPickerSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Text(
-                text = "Pick a Spotify Connect device",
-                style = MaterialTheme.typography.titleMedium,
-                color = SpotifyGreen
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Pick a Spotify Connect device",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = SpotifyGreen,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Refresh device list",
+                        tint = SpotifyGreen
+                    )
+                }
+            }
             Spacer(Modifier.height(8.dp))
             if (devices.isEmpty()) {
-                Text(
-                    text = "No devices found. Open Spotify on a phone or speaker first, then try again.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
-                    modifier = Modifier.padding(vertical = 12.dp)
-                )
+                Column(modifier = Modifier.padding(vertical = 12.dp)) {
+                    Text(
+                        text = "No Spotify Connect devices visible right now.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Spotify only lists devices that have used Spotify recently. " +
+                            "Google Home / Nest / smart TVs only appear if:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "1. The device is linked to your Spotify account in the Google Home app " +
+                            "(Account → Linked services → Spotify).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary
+                    )
+                    Text(
+                        text = "2. You've recently said something like \"Hey Google, play music on " +
+                            "[device]\" with Spotify as the default music service so the speaker " +
+                            "registers itself with Spotify Connect.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Tip: opening the Spotify app on any phone / browser also makes that " +
+                            "device appear in this list.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SpotifyGreen
+                    )
+                }
             } else {
                 devices.forEach { (id, name) ->
                     Surface(
