@@ -74,7 +74,8 @@ data class AlarmPickerEntry(
 class AlarmMediaPickerViewModel @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val favoriteDao: FavoriteDao,
-    private val historyDao: PlaybackHistoryDao
+    private val historyDao: PlaybackHistoryDao,
+    private val smartPlaylistDao: com.powermediaplayer.data.db.dao.SmartPlaylistDao
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -121,10 +122,35 @@ class AlarmMediaPickerViewModel @Inject constructor(
             }
         }
 
+    private val playlists: Flow<List<AlarmPickerEntry>> =
+        smartPlaylistDao.getAll().map { rows ->
+            rows.map { p ->
+                // §C10 LOCKED alarm source — smart playlists carry the
+                // "smartplaylist://" pseudo-scheme so AlarmReceiver
+                // resolves them via SmartPlaylistResolver at fire time.
+                AlarmPickerEntry(
+                    uri = "smartplaylist://${p.id}",
+                    title = p.name,
+                    subtitle = "Smart playlist",
+                    source = "Playlists",
+                    icon = Icons.Filled.Star
+                )
+            }
+        }
+
     val all: StateFlow<List<AlarmPickerEntry>> = combine(
-        bookmarks, favourites, recents, _query
-    ) { b, f, r, q ->
-        val merged = (b + f + r).distinctBy { it.uri }
+        bookmarks, favourites, recents, playlists, _query
+    ) { entries: Array<Any> ->
+        @Suppress("UNCHECKED_CAST")
+        val b = entries[0] as List<AlarmPickerEntry>
+        @Suppress("UNCHECKED_CAST")
+        val f = entries[1] as List<AlarmPickerEntry>
+        @Suppress("UNCHECKED_CAST")
+        val r = entries[2] as List<AlarmPickerEntry>
+        @Suppress("UNCHECKED_CAST")
+        val pl = entries[3] as List<AlarmPickerEntry>
+        val q = entries[4] as String
+        val merged = (pl + b + f + r).distinctBy { it.uri }
         if (q.isBlank()) merged
         else merged.filter {
             it.title.contains(q, ignoreCase = true) ||

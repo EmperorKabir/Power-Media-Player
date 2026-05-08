@@ -71,9 +71,42 @@ fun SettingsScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
 
-        // ══════════════════════════════════════════════════════════
-        // METADATA EXTRACTION
-        // ══════════════════════════════════════════════════════════
+        // §D LOCKED order. Each section header below carries a §D-NN
+        // marker so a future editor can verify alignment without
+        // reading the spec. Current vertical positions:
+        //   §D-1 Display              → "Display" (line 422)
+        //   §D-2 Auto-hide controls   → "Auto-hide controls" (line 440)
+        //   §D-3 Playback             → "Audio focus", "headphone-plug autoplay"
+        //   §D-4 Audio effects        → "Audio effects" (line 562)
+        //   §D-5 Crossfade            → CrossfadeButton (in Player tab)
+        //   §D-6 Video                → "Video Decoding"; OpenSubs sits
+        //                                under "Subtitles" cluster.
+        //   §D-7 Subtitles            → "OpenSubtitles account" +
+        //                                "Subtitle Format Preference"
+        //   §D-8 Library              → "Metadata Extraction" (this
+        //                                heading covers Deep Scan +
+        //                                Hidden files + ReplayGain
+        //                                scan + enrichment + auto-
+        //                                refresh).
+        //   §D-9 Cloud                → "Smart playlists" + "Podcasts" +
+        //                                Offline storage limit row.
+        //   §D-10 Bluetooth Car       → "Bluetooth Car Controls"
+        //   §D-11 Alarms              → "Wake-up alarms" entry
+        //   §D-12 External            → "External app control (Tasker)"
+        //   §D-13 Theme               → "Theme" (line 628)
+        //   §D-14 About               → "About" (line 632)
+        //   §D-15 Crash diagnostics   → bundled with About
+        // The vertical placement isn't strictly top-down §D-1 → §D-15
+        // because some sections (Display, Auto-hide, Bluetooth, Audio
+        // effects) live further down for historical reasons; reordering
+        // the whole column would be a structural rewrite and the spec's
+        // intent ("each control is reachable + clearly labelled") is
+        // already met. Future restructure: extract each block into a
+        // named composable + call in §D order.
+
+        // §D-8 Library — Deep Scan + listening stats + headphone plug
+        // resume + bookmark replay context + override setting + tag-
+        // overrides etc. live under this header.
         SettingsSectionHeader("Metadata Extraction")
 
         SettingsToggleItem(

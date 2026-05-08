@@ -52,10 +52,14 @@ fun OpenSubtitlesSection(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val ds: SettingsDataStore = viewModel.settingsDataStore
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val credStore = remember(ctx) {
+        com.powermediaplayer.subtitles.OpenSubsCredStore(ctx.applicationContext)
+    }
     val token by ds.openSubsToken.collectAsState(initial = "")
     val savedEmail by ds.openSubsEmail.collectAsState(initial = "")
     val savedApiKey by ds.openSubsApiKey.collectAsState(initial = "")
-    val signedIn = token.isNotBlank()
+    val signedIn = token.isNotBlank() || credStore.getToken().isNotBlank()
 
     var apiKey by remember(savedApiKey) { mutableStateOf(savedApiKey) }
     var email by remember(savedEmail) { mutableStateOf(savedEmail) }
@@ -118,12 +122,28 @@ fun OpenSubtitlesSection(
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            // §C9 LOCKED — "Sign up" launches the user's browser to
+            // opensubtitles.com so a free account can be created
+            // without leaving the app context.
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            TextButton(onClick = {
+                runCatching {
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(
+                            "https://www.opensubtitles.com/users/sign_up"
+                        )
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(intent)
+                }
+            }) { Text("Sign up at opensubtitles.com", color = TealAccent) }
             if (signedIn) {
                 TextButton(onClick = {
                     scope.launch {
                         ds.setOpenSubsToken("")
+                        credStore.clear()
                         status = "Signed out."
                     }
                 }) { Text("Sign out", color = TextSecondary) }
@@ -141,6 +161,14 @@ fun OpenSubtitlesSection(
                         if (newToken == null) {
                             status = "Sign-in failed — check API key + credentials."
                         } else {
+                            // §C9 LOCKED — credentials in
+                            // EncryptedSharedPreferences. Plain DataStore
+                            // mirror kept for legacy callers + offline-
+                            // initialised classes that haven't been
+                            // refactored to inject the cred store yet.
+                            credStore.setApiKey(apiKey)
+                            credStore.setEmail(email)
+                            credStore.setToken(newToken)
                             ds.setOpenSubsApiKey(apiKey)
                             ds.setOpenSubsEmail(email)
                             ds.setOpenSubsToken(newToken)

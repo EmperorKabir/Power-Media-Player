@@ -152,7 +152,8 @@ class FullScreenAlarmActivity : ComponentActivity() {
             .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        val uri = if (alarm.mediaUri.isNotBlank()) android.net.Uri.parse(alarm.mediaUri)
+        val resolved = resolveAlarmMediaUri(alarm.mediaUri)
+        val uri = if (resolved.isNotBlank()) android.net.Uri.parse(resolved)
         else android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
         runCatching {
             mediaPlayer = MediaPlayer().apply {
@@ -205,6 +206,85 @@ class FullScreenAlarmActivity : ComponentActivity() {
         }
 
         if (alarm.stopMethod == AlarmRecord.StopMethod.SHAKE) installShakeStop(alarm)
+    }
+
+    /**
+     * §C12 / A4.5 — resolves the alarm's mediaUri. Plain content://
+     * + file:// URIs pass through; the "smartplaylist://<id>"
+     * pseudo-scheme triggers SmartPlaylistResolver against the
+     * MediaStore audio library and picks the first match. The smart
+     * playlist's full sequence isn't queued (alarm playback is a
+     * single-track ring); we deliberately keep it simple.
+     */
+    private fun resolveAlarmMediaUri(input: String): String {
+        if (input.isBlank()) return ""
+        if (!input.startsWith("smartplaylist://")) return input
+        val id = input.removePrefix("smartplaylist://").toLongOrNull() ?: return ""
+        return runCatching {
+            val deps = dagger.hilt.android.EntryPointAccessors.fromApplication(
+                applicationContext, AlarmDeps::class.java
+            )
+            val playlist = kotlinx.coroutines.runBlocking { deps.smartPlaylistDao().getById(id) }
+                ?: return ""
+            val files = scanLibraryAudioFiles().take(2000)
+            val resolved = com.powermediaplayer.playlist.SmartPlaylistResolver.resolve(
+                files = files, rulesJson = playlist.rulesJson
+            )
+            resolved.firstOrNull()?.uri?.toString() ?: ""
+        }.getOrDefault("")
+    }
+
+    private fun scanLibraryAudioFiles(): List<com.powermediaplayer.ui.library.MediaFileInfo> {
+        val ctx = applicationContext
+        val proj = arrayOf(
+            android.provider.MediaStore.Audio.Media._ID,
+            android.provider.MediaStore.Audio.Media.TITLE,
+            android.provider.MediaStore.Audio.Media.ARTIST,
+            android.provider.MediaStore.Audio.Media.ALBUM,
+            android.provider.MediaStore.Audio.Media.DURATION,
+            android.provider.MediaStore.Audio.Media.MIME_TYPE,
+            android.provider.MediaStore.Audio.Media.SIZE,
+            android.provider.MediaStore.Audio.Media.DATE_MODIFIED
+        )
+        val files = mutableListOf<com.powermediaplayer.ui.library.MediaFileInfo>()
+        ctx.contentResolver.query(
+            android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            proj, null, null, null
+        )?.use { c ->
+            val idC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media._ID)
+            val titleC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.TITLE)
+            val artistC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.ARTIST)
+            val albumC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.ALBUM)
+            val durC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.DURATION)
+            val mimeC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.MIME_TYPE)
+            val sizeC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.SIZE)
+            val dateC = c.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media.DATE_MODIFIED)
+            while (c.moveToNext()) {
+                val id = c.getLong(idC)
+                files += com.powermediaplayer.ui.library.MediaFileInfo(
+                    id = id,
+                    uri = android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
+                    ),
+                    title = c.getString(titleC).orEmpty(),
+                    artist = c.getString(artistC).orEmpty(),
+                    album = c.getString(albumC).orEmpty(),
+                    duration = c.getLong(durC),
+                    mimeType = c.getString(mimeC).orEmpty(),
+                    size = c.getLong(sizeC),
+                    dateModified = c.getLong(dateC),
+                    isVideo = false,
+                    albumArtUri = null
+                )
+            }
+        }
+        return files
+    }
+
+    @dagger.hilt.EntryPoint
+    @dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+    interface AlarmDeps {
+        fun smartPlaylistDao(): com.powermediaplayer.data.db.dao.SmartPlaylistDao
     }
 
     private fun startVibration(alarm: AlarmRecord) {

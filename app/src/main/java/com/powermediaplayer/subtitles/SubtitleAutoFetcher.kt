@@ -24,7 +24,8 @@ import java.io.File
 @Singleton
 class SubtitleAutoFetcher @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    private val credStore: OpenSubsCredStore
 ) {
     private val dir: File by lazy {
         File(context.cacheDir, "auto-subs").also { it.mkdirs() }
@@ -36,11 +37,16 @@ class SubtitleAutoFetcher @Inject constructor(
             if (mediaUri.isBlank() || videoFilename.isBlank()) return@withContext null
             if (mediaUri in tried) return@withContext null
 
-            val token = settingsDataStore.openSubsToken.first()
-            // §C9 LOCKED — prefer the baked BuildConfig key (identifies
-            // the app); fall back to user-supplied for legacy installs
-            // that signed in before the BuildConfig path existed.
+            // §C9 LOCKED — credential lookup order:
+            //   1. EncryptedSharedPreferences (current path).
+            //   2. Plain DataStore (legacy installs migrated on first
+            //      EncryptedSharedPreferences write).
+            //   3. BuildConfig API key (identifies the app, not user).
+            val token = credStore.getToken().ifBlank {
+                settingsDataStore.openSubsToken.first()
+            }
             val apiKey = com.powermediaplayer.BuildConfig.OPENSUBS_API_KEY
+                .ifBlank { credStore.getApiKey() }
                 .ifBlank { settingsDataStore.openSubsApiKey.first() }
             if (token.isBlank() || apiKey.isBlank()) return@withContext null
 

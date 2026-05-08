@@ -286,11 +286,26 @@ class PlaybackService : MediaSessionService() {
         // separate engine work scheduled for a follow-up commit; the
         // panel surface ships now so users can preview their config.
         serviceScope.launch {
+            // §B5 effectiveCrossfadeEnabled — the user's preference is
+            // auto-greyed when the active source can't crossfade
+            // (Cast / Spotify Connect / video / audiobook). The
+            // PERSISTED preference is untouched; we just zero the
+            // effective ms in the audio path so the engine is a no-op.
             kotlinx.coroutines.flow.combine(
                 settingsDataStore.crossfadeMs,
                 settingsDataStore.crossfadeEnabled
             ) { ms, enabled -> if (enabled) ms else 0 }
-                .collect { crossfadeMsFlag = it }
+                .collect { incoming ->
+                    val effective = if (canCrossfadeNow()) incoming else 0
+                    if (effective != crossfadeMsFlag) {
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "Crossfade ms=$effective " +
+                                "(persisted=$incoming, canCrossfade=${canCrossfadeNow()})"
+                        )
+                    }
+                    crossfadeMsFlag = effective
+                }
         }
         serviceScope.launch {
             settingsDataStore.crossfadeCurve.collect { crossfadeCurveFlag = it }
@@ -541,6 +556,31 @@ class PlaybackService : MediaSessionService() {
     // float multiply + a single setVolume() call when changing).
     private var crossfadeJob: kotlinx.coroutines.Job? = null
     @Volatile private var trackStartTimestampMs: Long = 0L
+
+    /**
+     * §B4/B5 — true when the current source supports crossfade.
+     * Returns false on any of:
+     *  - active player is a CastPlayer (Cast receiver handles its own
+     *    transitions; we don't have access to its mixer).
+     *  - currentMediaItem is video (greyed per §B4 matrix).
+     *  - currentMediaItem looks like an audiobook (M4B with chapters or
+     *    explicit chapter_count extras).
+     */
+    private fun canCrossfadeNow(): Boolean {
+        val ms = mediaSession ?: return true
+        val active = ms.player
+        if (active is androidx.media3.cast.CastPlayer) return false
+        val item = active.currentMediaItem ?: return true
+        // §B4 video → greyed.
+        val mime = item.localConfiguration?.mimeType.orEmpty()
+        if (mime.startsWith("video/")) return false
+        // Audiobook detection (M4B or chapter_count > 0).
+        val ext = item.localConfiguration?.uri?.path?.substringAfterLast('.', "")?.lowercase().orEmpty()
+        if (ext == "m4b") return false
+        val chapters = item.mediaMetadata.extras?.getInt("chapter_count", 0) ?: 0
+        if (chapters > 0) return false
+        return true
+    }
 
     // ── §C14 audio-focus policy ─────────────────────────────────
     //
@@ -1189,8 +1229,17 @@ class PlaybackService : MediaSessionService() {
      */
     private fun applyAction(player: Player, action: String, seconds: Int, isPrev: Boolean) {
         when (action) {
-            BluetoothMediaActions.PREV_TRACK -> player.seekToPreviousMediaItem()
-            BluetoothMediaActions.NEXT_TRACK -> player.seekToNextMediaItem()
+            BluetoothMediaActions.PREV_TRACK -> {
+                crossfadeController.abort()
+                player.seekToPreviousMediaItem()
+            }
+            BluetoothMediaActions.NEXT_TRACK -> {
+                // §B3 — abort any active crossfade when the user skips
+                // explicitly so the secondary doesn't keep ramping into
+                // the new track.
+                crossfadeController.abort()
+                player.seekToNextMediaItem()
+            }
             BluetoothMediaActions.SKIP_BACK -> {
                 // Route through the same cumulativeSkip path the in-app
                 // skip buttons use — inherits cross-boundary spill,

@@ -156,9 +156,17 @@ object AppModule {
     @Singleton
     fun provideSubtitleAutoFetcher(
         @ApplicationContext context: Context,
-        settingsDataStore: SettingsDataStore
+        settingsDataStore: SettingsDataStore,
+        credStore: com.powermediaplayer.subtitles.OpenSubsCredStore
     ): com.powermediaplayer.subtitles.SubtitleAutoFetcher =
-        com.powermediaplayer.subtitles.SubtitleAutoFetcher(context, settingsDataStore)
+        com.powermediaplayer.subtitles.SubtitleAutoFetcher(context, settingsDataStore, credStore)
+
+    @Provides
+    @Singleton
+    fun provideOpenSubsCredStore(
+        @ApplicationContext context: Context
+    ): com.powermediaplayer.subtitles.OpenSubsCredStore =
+        com.powermediaplayer.subtitles.OpenSubsCredStore(context)
 
     @Provides
     @Singleton

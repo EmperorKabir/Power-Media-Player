@@ -124,6 +124,22 @@ class PodcastsViewModel @Inject constructor(
         }
     }
 
+    /** §C10 LOCKED — iTunes search results. */
+    private val itunes = com.powermediaplayer.podcast.ITunesPodcastSearch()
+    private val _itunesResults =
+        kotlinx.coroutines.flow.MutableStateFlow<List<com.powermediaplayer.podcast.ITunesPodcastSearch.Hit>>(emptyList())
+    val itunesResults: StateFlow<List<com.powermediaplayer.podcast.ITunesPodcastSearch.Hit>> = _itunesResults
+
+    fun searchItunes(query: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _itunesResults.value = itunes.search(query)
+        }
+    }
+
+    fun subscribeFromItunes(hit: com.powermediaplayer.podcast.ITunesPodcastSearch.Hit) {
+        addByUrl(hit.feedUrl)
+    }
+
     fun setShowSettings(
         feedUrl: String,
         autoDownload: Boolean,
@@ -176,17 +192,44 @@ fun PodcastsSection(
             OutlinedTextField(
                 value = url,
                 onValueChange = { url = it },
-                label = { Text("RSS feed URL") },
+                label = { Text("RSS feed URL or search term") },
                 singleLine = true,
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(8.dp))
             TextButton(onClick = {
-                vm.addByUrl(url)
-                url = ""
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    vm.addByUrl(url)
+                    url = ""
+                } else {
+                    vm.searchItunes(url)
+                }
             }) {
                 Icon(Icons.Filled.Add, contentDescription = "Add")
-                Text("Add", color = TealAccent)
+                Text("Add / search", color = TealAccent)
+            }
+        }
+        // §C10 LOCKED — iTunes podcast search results inline. Tap a
+        // row to subscribe.
+        val hits by vm.itunesResults.collectAsState()
+        if (hits.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text("Apple Podcasts results:", color = TextSecondary,
+                style = MaterialTheme.typography.labelSmall)
+            hits.take(8).forEach { hit ->
+                Row(modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { vm.subscribeFromItunes(hit); url = "" }
+                    .padding(vertical = 4.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(hit.title, color = TextPrimary,
+                            style = MaterialTheme.typography.bodySmall, maxLines = 1)
+                        Text(hit.author, color = TextTertiary,
+                            style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    }
+                    Text("Subscribe", color = TealAccent,
+                        style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
         if (status.isNotBlank()) {
