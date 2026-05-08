@@ -41,8 +41,12 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider {
                     "${throwable.message}", throwable)
             previous?.uncaughtException(thread, throwable)
         }
-        // §C10 — kick off periodic feed refresh. KEEP policy means we
-        // don't reset the schedule on every app launch.
-        PodcastSyncWorker.enqueueIfNeeded(this)
+        // §C10 / F6 fix — kick off periodic feed refresh on a worker
+        // thread so the synchronous WorkManager.getInstance() call
+        // doesn't sit on Application.onCreate's main-thread budget on
+        // slower devices.
+        Thread {
+            runCatching { PodcastSyncWorker.enqueueIfNeeded(this) }
+        }.start()
     }
 }

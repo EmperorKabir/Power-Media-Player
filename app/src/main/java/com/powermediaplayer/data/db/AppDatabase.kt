@@ -73,7 +73,9 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
     //      + notifyOnNewEpisode columns to podcast_shows.
     // v13: §C28 LOCKED `offline_copy` table — replaces the DataStore
     //      Set so byteSize / lastPlayedAt are tracked for LRU eviction.
-    version = 13,
+    // v14: D12 — adds an index on bookmarks.createdAtMs to back the
+    //      observeAll() query that orders by it.
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -193,6 +195,18 @@ abstract class AppDatabase : RoomDatabase() {
                         scannedAt INTEGER NOT NULL
                     )
                     """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * D12 v13→v14 — index bookmarks.createdAtMs (the
+         * BookmarkDao.observeAll() ORDER BY column).
+         */
+        val MIGRATION_13_14: Migration = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_bookmarks_createdAtMs ON bookmarks(createdAtMs)"
                 )
             }
         }

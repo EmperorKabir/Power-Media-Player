@@ -10,7 +10,7 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "bookmarks",
-    indices = [Index("mediaUri")]
+    indices = [Index("mediaUri"), Index("createdAtMs")]
 )
 data class BookmarkEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
