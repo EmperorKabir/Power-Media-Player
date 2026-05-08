@@ -69,12 +69,11 @@ fun AlarmsSheet(
         containerColor = Color.Black
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            // §C12 — full-screen-intent permission gate banner. Android 14+
-            // requires explicit user approval before an app can launch a
-            // full-screen activity from a notification. Without this the
-            // alarm would still post a heads-up notification but the
-            // FullScreenAlarmActivity wouldn't auto-launch on lockscreen.
-            FullScreenIntentBanner()
+            // §C12 — full-screen-intent permission banner. Locked spec
+            // says it appears on the FIRST alarm save. We surface it
+            // when alarms.isNotEmpty() (post-save) AND the permission
+            // is missing.
+            if (alarms.isNotEmpty()) FullScreenIntentBanner()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Alarms", style = MaterialTheme.typography.titleMedium, color = TealAccent)
                 Spacer(modifier = Modifier.weight(1f))

@@ -30,19 +30,40 @@ class PodcastSyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val parser = RssFeedParser()
+        val downloader = com.powermediaplayer.podcast.PodcastDownloader(applicationContext)
         val shows = podcastDao.observeShows().first()
         var totalNew = 0
+        var totalDownloaded = 0
         shows.forEach { show ->
             val parsed = runCatching { parser.fetch(show.feedUrl) }.getOrNull()
                 ?: return@forEach
             val (refreshed, episodes) = parsed
-            podcastDao.upsertShow(refreshed.copy(subscribedAt = show.subscribedAt))
+            // Preserve user-set per-show settings + subscribedAt.
+            podcastDao.upsertShow(
+                refreshed.copy(
+                    subscribedAt = show.subscribedAt,
+                    autoDownload = show.autoDownload,
+                    retentionLastN = show.retentionLastN,
+                    notifyOnNewEpisode = show.notifyOnNewEpisode
+                )
+            )
             podcastDao.upsertEpisodes(episodes)
             totalNew += episodes.size
+            // §C10 auto-download — when the user opted in, fetch the
+            // newest N episodes' audio files into the spec'd folder.
+            if (show.autoDownload) {
+                val budget = if (show.retentionLastN > 0) show.retentionLastN else 5
+                val newest = episodes.sortedByDescending { it.publishedAt }.take(budget)
+                newest.forEach { ep ->
+                    val ok = downloader.downloadIfMissing(show, ep)
+                    if (ok) totalDownloaded++
+                }
+            }
         }
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
-            "Podcast sync: ${shows.size} feed(s), $totalNew episode(s) upserted"
+            "Podcast sync: ${shows.size} feed(s), $totalNew episode(s) upserted, " +
+                "$totalDownloaded audio downloaded"
         )
         return Result.success()
     }

@@ -20,6 +20,13 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -269,21 +276,46 @@ class FullScreenAlarmActivity : ComponentActivity() {
     }
 
     private fun renderUi(alarm: AlarmRecord) {
+        // Edge-to-edge per locked spec.
+        runCatching {
+            window.decorView.systemUiVisibility = (
+                android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                )
+        }
         setContent {
             val time = remember { java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
                 .format(java.util.Date()) }
+            val dayOfWeek = remember {
+                java.text.SimpleDateFormat("EEEE", java.util.Locale.getDefault())
+                    .format(java.util.Date())
+            }
             var rampPct by remember { mutableStateOf(alarm.startVolumePct) }
+            // Live countdown text driven by the same hold/wind-down
+            // boundaries as the ringJob. Renders "Auto-stops in 28 min"
+            // during hold and "Winding down…" during the wind-down fade.
+            var countdown by remember { mutableStateOf("") }
             LaunchedEffect(Unit) {
                 val totalMs = alarm.rampSeconds * 1000L
-                if (totalMs <= 0) { rampPct = alarm.endVolumePct; return@LaunchedEffect }
-                val tick = 200L
-                var elapsed = 0L
-                while (elapsed < totalMs) {
-                    delay(tick)
-                    elapsed += tick
-                    rampPct = alarm.startVolumePct +
-                        ((alarm.endVolumePct - alarm.startVolumePct) * elapsed / totalMs).toInt()
+                if (totalMs <= 0) rampPct = alarm.endVolumePct
+                else {
+                    val tick = 200L
+                    var elapsed = 0L
+                    while (elapsed < totalMs) {
+                        delay(tick); elapsed += tick
+                        rampPct = alarm.startVolumePct +
+                            ((alarm.endVolumePct - alarm.startVolumePct) * elapsed / totalMs).toInt()
+                    }
                 }
+                if (alarm.holdMinutes < 0) { countdown = "Indefinite"; return@LaunchedEffect }
+                val holdEnd = System.currentTimeMillis() + alarm.holdMinutes * 60_000L
+                while (System.currentTimeMillis() < holdEnd) {
+                    val remMin = ((holdEnd - System.currentTimeMillis()) / 60_000L)
+                        .coerceAtLeast(0L).toInt()
+                    countdown = "Auto-stops in $remMin min"
+                    delay(1_000)
+                }
+                countdown = "Winding down…"
             }
             Column(
                 modifier = Modifier
@@ -296,12 +328,20 @@ class FullScreenAlarmActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth()) {
                     Text(time, style = MaterialTheme.typography.displayLarge,
                         color = Color(0xFFB2DFDB))
+                    Text(dayOfWeek, style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFFCCCCCC))
                     Spacer(Modifier.height(4.dp))
                     Text(alarm.daysLabel, style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFFAAAAAA))
                 }
                 Column(modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Cover-art placeholder square (locked spec). When
+                    // a media item is loaded its mediaMetadata.artworkUri
+                    // is fetched via Coil. Falls back to a tinted icon
+                    // for the resume / default-alarm-sound case.
+                    AlbumArtSquare(alarm)
+                    Spacer(Modifier.height(12.dp))
                     val label = alarm.displayLabel.ifBlank {
                         if (alarm.mediaUri.isBlank()) "Default alarm sound"
                         else alarm.mediaUri.substringAfterLast('/').take(60)
@@ -315,6 +355,11 @@ class FullScreenAlarmActivity : ComponentActivity() {
                     )
                     Text("Volume: $rampPct%", color = Color(0xFFAAAAAA),
                         style = MaterialTheme.typography.bodySmall)
+                    if (countdown.isNotBlank()) {
+                        Text(countdown, color = Color(0xFFB2DFDB),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(top = 4.dp))
+                    }
                 }
                 StopAndSnoozeBar(
                     alarm = alarm,
@@ -331,6 +376,41 @@ class FullScreenAlarmActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * §C12 cover-art square. Renders the alarm's mediaUri-derived art
+     * when the URI carries one, else a tinted default. Coil handles
+     * sizing + placeholder fallback.
+     */
+    @Composable
+    private fun AlbumArtSquare(alarm: AlarmRecord) {
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .size(180.dp)
+                .background(Color(0xFF1A1A1A), androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (alarm.mediaUri.isNotBlank()) {
+                coil3.compose.AsyncImage(
+                    model = coil3.request.ImageRequest.Builder(ctx)
+                        .data(alarm.mediaUri)
+                        .build(),
+                    contentDescription = "Alarm cover art",
+                    modifier = Modifier
+                        .size(180.dp)
+                        .background(Color.Transparent)
+                )
+            } else {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Filled.Alarm,
+                    contentDescription = null,
+                    tint = Color(0xFFB2DFDB),
+                    modifier = Modifier.size(80.dp)
+                )
+            }
+        }
+    }
+
     @Composable
     private fun StopAndSnoozeBar(
         alarm: AlarmRecord,
@@ -341,26 +421,41 @@ class FullScreenAlarmActivity : ComponentActivity() {
         var mathInput by remember { mutableStateOf("") }
         val a = remember { (10..99).random() }
         val b = remember { (10..99).random() }
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // §C12 LOCKED — large rounded Snooze button at 70% width.
             if (alarm.snoozeEnabled) {
-                Button(onClick = onSnooze, modifier = Modifier.fillMaxWidth()) {
-                    Text("Snooze ${alarm.snoozeMinutes} min")
+                androidx.compose.material3.Button(
+                    onClick = onSnooze,
+                    modifier = Modifier
+                        .fillMaxWidth(0.7f)
+                        .height(72.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(36.dp)
+                ) {
+                    Text(
+                        "Snooze ${alarm.snoozeMinutes} min",
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(12.dp))
             }
-            Button(
-                onClick = {
-                    if (alarm.stopMethod == AlarmRecord.StopMethod.MATH) showMath = true
-                    else onStop()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(when (alarm.stopMethod) {
-                    AlarmRecord.StopMethod.TAP -> "Stop"
+            // §C12 LOCKED — Stop requires swipe-to-confirm on TAP mode.
+            // SHAKE and MATH still surface their button label for
+            // discoverability but the stop signal travels via the
+            // sensor / dialog.
+            SwipeToStopButton(
+                label = when (alarm.stopMethod) {
+                    AlarmRecord.StopMethod.TAP -> "Swipe to stop"
                     AlarmRecord.StopMethod.SHAKE -> "Shake to stop"
                     AlarmRecord.StopMethod.MATH -> "Solve to stop"
-                })
-            }
+                },
+                onConfirm = {
+                    if (alarm.stopMethod == AlarmRecord.StopMethod.MATH) showMath = true
+                    else onStop()
+                }
+            )
             if (showMath) {
                 Spacer(Modifier.height(8.dp))
                 Text("Solve: $a + $b = ?", color = Color.White)
@@ -388,6 +483,74 @@ class FullScreenAlarmActivity : ComponentActivity() {
         super.onDestroy()
         stopRinging()
         scope.cancel()
+    }
+
+    /**
+     * §C12 LOCKED — swipe-to-confirm Stop button. Drag the inner thumb
+     * 60% across the track to confirm; tap-only is intentionally
+     * insufficient (otherwise an accidental knee-tap kills the alarm).
+     * Visual: tall rounded pill with a sliding thumb + label that
+     * fades out as the user drags.
+     */
+    @Composable
+    private fun SwipeToStopButton(
+        label: String,
+        onConfirm: () -> Unit
+    ) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val trackHeightDp = 64.dp
+        var trackWidthPx by remember { mutableStateOf(0f) }
+        var dragX by remember { mutableStateOf(0f) }
+        val thumbSize = with(density) { trackHeightDp.toPx() }
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(trackHeightDp)
+                .background(
+                    Color(0xFF1A1A1A),
+                    androidx.compose.foundation.shape.RoundedCornerShape(32.dp)
+                )
+                .onSizeChanged { trackWidthPx = it.width.toFloat() },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            val labelAlpha = (1f - (dragX / (trackWidthPx - thumbSize).coerceAtLeast(1f)))
+                .coerceIn(0f, 1f)
+            Text(
+                label,
+                color = Color(0xFFFFFFFF).copy(alpha = labelAlpha),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = trackHeightDp + 8.dp)
+            )
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(dragX.toInt(), 0) }
+                    .size(trackHeightDp)
+                    .background(
+                        Color(0xFFB2DFDB),
+                        androidx.compose.foundation.shape.CircleShape
+                    )
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (dragX > (trackWidthPx - thumbSize) * 0.6f) onConfirm()
+                                else dragX = 0f
+                            },
+                            onHorizontalDrag = { _: androidx.compose.ui.input.pointer.PointerInputChange, delta: Float ->
+                                dragX = (dragX + delta).coerceIn(0f, trackWidthPx - thumbSize)
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Filled.PlayArrow,
+                    contentDescription = "Swipe to stop",
+                    tint = Color(0xFF000000)
+                )
+            }
+        }
     }
 
     companion object {

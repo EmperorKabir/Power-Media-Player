@@ -91,6 +91,13 @@ class LibraryViewModel @Inject constructor(
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
 ) : ViewModel() {
 
+    /** §C25 / A9 — write a per-file tag override. */
+    fun editTags(uri: String, title: String, artist: String, album: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            settingsDataStore.upsertTagOverride(uri, title, artist, album)
+        }
+    }
+
     /**
      * §C7 — when the user unfavourites a row, drop any per-file
      * overrides we'd kept for it. The override-popup is starred-or-

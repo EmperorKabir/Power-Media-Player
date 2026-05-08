@@ -11,7 +11,11 @@ data class PodcastShowEntity(
     val artworkUrl: String? = null,
     val description: String = "",
     val lastChecked: Long = 0L,
-    val subscribedAt: Long = System.currentTimeMillis()
+    val subscribedAt: Long = System.currentTimeMillis(),
+    // §C10 per-show settings (LOCKED).
+    val autoDownload: Boolean = false,
+    val retentionLastN: Int = 0,            // 0 = keep all
+    val notifyOnNewEpisode: Boolean = false
 )
 
 @Entity(tableName = "podcast_episodes")

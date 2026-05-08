@@ -36,10 +36,25 @@ class SettingsDataStore @Inject constructor(
         val HEADPHONE_EQ_DEVICE_PRESETS = stringSetPreferencesKey("headphone_eq_device_presets")
         // §C28 — Drive offline copy registry. Set of "id|absolutePath".
         val OFFLINE_DRIVE_PAIRS = stringSetPreferencesKey("offline_drive_pairs")
+        // §C28 LOCKED — offline storage cap in bytes; 0 = unlimited.
+        // Defaults to 5 GB per the locked spec.
+        val OFFLINE_STORAGE_LIMIT_BYTES = androidx.datastore.preferences.core.longPreferencesKey(
+            "offline_storage_limit_bytes"
+        )
         // §C9 — OpenSubtitles credentials.
         val OPENSUBS_TOKEN = stringPreferencesKey("opensubs_token")
         val OPENSUBS_EMAIL = stringPreferencesKey("opensubs_email")
         val OPENSUBS_API_KEY = stringPreferencesKey("opensubs_api_key")
+        // §C18 LOCKED — Track gain vs Album gain mode.
+        val REPLAY_GAIN_MODE = stringPreferencesKey("replay_gain_mode")
+        // §C17 LOCKED — sub-toggles + apply scope.
+        val ENRICH_FETCH_ARTWORK = booleanPreferencesKey("enrich_fetch_artwork")
+        val ENRICH_FETCH_YEAR = booleanPreferencesKey("enrich_fetch_year")
+        val ENRICH_FETCH_GENRE = booleanPreferencesKey("enrich_fetch_genre")
+        val ENRICH_APPLY_SCOPE = stringPreferencesKey("enrich_apply_scope")
+        // §C25 / A9 — per-file tag overrides ("Edit tags" menu item).
+        // Set of "urititleartistalbum" entries.
+        val TAG_OVERRIDES = stringSetPreferencesKey("tag_overrides")
         val BRIGHTNESS_OVERRIDE = floatPreferencesKey("brightness_override")
 
         // Bluetooth media-button remapping. Stored as the action token
@@ -754,6 +769,75 @@ class SettingsDataStore @Inject constructor(
             val cur = prefs[Keys.OFFLINE_DRIVE_PAIRS] ?: emptySet()
             prefs[Keys.OFFLINE_DRIVE_PAIRS] =
                 cur.filterNot { it.startsWith("$id|") }.toSet()
+        }
+    }
+
+    /** §C28 — offline storage cap. 0 = unlimited; default 5 GB. */
+    val offlineStorageLimitBytes: Flow<Long> = context.dataStore.data.map {
+        it[Keys.OFFLINE_STORAGE_LIMIT_BYTES] ?: (5L * 1024 * 1024 * 1024)
+    }
+    suspend fun setOfflineStorageLimitBytes(bytes: Long) {
+        context.dataStore.edit { prefs -> prefs[Keys.OFFLINE_STORAGE_LIMIT_BYTES] = bytes }
+    }
+
+    /** §C18 — "track" or "album" gain mode. Default: track. */
+    val replayGainMode: Flow<String> = context.dataStore.data.map {
+        it[Keys.REPLAY_GAIN_MODE] ?: "track"
+    }
+    suspend fun setReplayGainMode(mode: String) {
+        context.dataStore.edit { prefs -> prefs[Keys.REPLAY_GAIN_MODE] = mode }
+    }
+
+    /** §C17 — enrichment sub-toggles + apply scope. */
+    val enrichFetchArtwork: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.ENRICH_FETCH_ARTWORK] ?: true
+    }
+    val enrichFetchYear: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.ENRICH_FETCH_YEAR] ?: true
+    }
+    val enrichFetchGenre: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.ENRICH_FETCH_GENRE] ?: true
+    }
+    val enrichApplyScope: Flow<String> = context.dataStore.data.map {
+        it[Keys.ENRICH_APPLY_SCOPE] ?: "missing_only"
+    }
+    suspend fun setEnrichFetchArtwork(v: Boolean) =
+        context.dataStore.edit { it[Keys.ENRICH_FETCH_ARTWORK] = v }.let { }
+    suspend fun setEnrichFetchYear(v: Boolean) =
+        context.dataStore.edit { it[Keys.ENRICH_FETCH_YEAR] = v }.let { }
+    suspend fun setEnrichFetchGenre(v: Boolean) =
+        context.dataStore.edit { it[Keys.ENRICH_FETCH_GENRE] = v }.let { }
+    suspend fun setEnrichApplyScope(scope: String) =
+        context.dataStore.edit { it[Keys.ENRICH_APPLY_SCOPE] = scope }.let { }
+
+    /**
+     * §C25 / A9 — per-file tag overrides. Stored as a Set<String> with
+     * unit-separator () field delimiters so commas / pipes /
+     * normal characters in titles can't collide with the encoding.
+     */
+    private val TAG_SEP = ""
+    val tagOverrides: Flow<Map<String, Triple<String, String, String>>> =
+        context.dataStore.data.map { prefs ->
+            (prefs[Keys.TAG_OVERRIDES] ?: emptySet())
+                .mapNotNull {
+                    val parts = it.split(TAG_SEP)
+                    if (parts.size < 4) null
+                    else parts[0] to Triple(parts[1], parts[2], parts[3])
+                }
+                .toMap()
+        }
+    suspend fun upsertTagOverride(uri: String, title: String, artist: String, album: String) {
+        context.dataStore.edit { prefs ->
+            val cur = prefs[Keys.TAG_OVERRIDES] ?: emptySet()
+            val pruned = cur.filterNot { it.startsWith("$uri$TAG_SEP") }.toSet()
+            prefs[Keys.TAG_OVERRIDES] =
+                pruned + "$uri$TAG_SEP$title$TAG_SEP$artist$TAG_SEP$album"
+        }
+    }
+    suspend fun clearTagOverride(uri: String) {
+        context.dataStore.edit { prefs ->
+            val cur = prefs[Keys.TAG_OVERRIDES] ?: emptySet()
+            prefs[Keys.TAG_OVERRIDES] = cur.filterNot { it.startsWith("$uri$TAG_SEP") }.toSet()
         }
     }
 

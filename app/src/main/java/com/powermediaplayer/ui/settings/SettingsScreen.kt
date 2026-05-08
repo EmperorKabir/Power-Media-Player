@@ -222,6 +222,10 @@ fun SettingsScreen(
         com.powermediaplayer.ui.podcast.PodcastsSection()
         SettingsDivider()
 
+        // §C17 — sub-toggles + apply scope.
+        com.powermediaplayer.ui.settings.EnrichmentSubToggles()
+        SettingsDivider()
+
         // §C17 — Online metadata enrichment toggle.
         SettingsToggleItem(
             title = "Online metadata enrichment",
@@ -235,6 +239,11 @@ fun SettingsScreen(
 
         // §C18 — manual "Scan now" button + auto-scan toggle.
         com.powermediaplayer.ui.settings.ReplayGainScanRow()
+        com.powermediaplayer.ui.settings.ReplayGainModeRow()
+        SettingsDivider()
+
+        // §C28 — offline storage limit.
+        com.powermediaplayer.ui.settings.OfflineStorageLimitRow()
         SettingsDivider()
 
         // §C18 — Auto-scan ReplayGain on import toggle.

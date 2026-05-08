@@ -42,6 +42,12 @@ android {
         // and origin, not by secrecy).
         buildConfigField("String", "DRIVE_PICKER_APP_ID", "\"${localProp("DRIVE_PICKER_APP_ID")}\"")
         buildConfigField("String", "DRIVE_PICKER_API_KEY", "\"${localProp("DRIVE_PICKER_API_KEY")}\"")
+        // §C9 LOCKED — OpenSubtitles app-identifying API key. The key
+        // identifies our APP, not the user; per-user login uses a
+        // separate token. Empty default means the auto-fetcher
+        // disables itself silently when the dev hasn't set the key
+        // in local.properties.
+        buildConfigField("String", "OPENSUBS_API_KEY", "\"${localProp("OPENSUBS_API_KEY")}\"")
 
         // AppAuth needs the redirect URI scheme registered as a manifest
         // placeholder so its RedirectUriReceiverActivity can be auto-merged.

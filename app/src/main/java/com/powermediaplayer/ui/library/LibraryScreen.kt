@@ -49,6 +49,19 @@ fun LibraryScreen(
     var contextItem by remember { mutableStateOf<MediaFileInfo?>(null) }
     var pendingDelete by remember { mutableStateOf<MediaFileInfo?>(null) }
     var overrideTarget by remember { mutableStateOf<MediaFileInfo?>(null) }
+    var editTagsTarget by remember { mutableStateOf<MediaFileInfo?>(null) }
+    editTagsTarget?.let { item ->
+        com.powermediaplayer.ui.library.EditTagsDialog(
+            initialTitle = item.title,
+            initialArtist = item.artist,
+            initialAlbum = item.album,
+            onCancel = { editTagsTarget = null },
+            onSave = { t, a, al ->
+                viewModel.editTags(item.uri.toString(), t, a, al)
+                editTagsTarget = null
+            }
+        )
+    }
     overrideTarget?.let { item ->
         com.powermediaplayer.ui.overrides.MediaOverridesPopup(
             mediaUri = item.uri.toString(),
@@ -85,6 +98,10 @@ fun LibraryScreen(
                 },
                 onAddToQueueNext = {
                     viewModel.addToQueueNext(item)
+                    contextItem = null
+                },
+                onEditTags = {
+                    editTagsTarget = item
                     contextItem = null
                 },
                 // §C7 / §C25 — override-* items only when the row is

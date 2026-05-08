@@ -37,7 +37,11 @@ class SubtitleAutoFetcher @Inject constructor(
             if (mediaUri in tried) return@withContext null
 
             val token = settingsDataStore.openSubsToken.first()
-            val apiKey = settingsDataStore.openSubsApiKey.first()
+            // §C9 LOCKED — prefer the baked BuildConfig key (identifies
+            // the app); fall back to user-supplied for legacy installs
+            // that signed in before the BuildConfig path existed.
+            val apiKey = com.powermediaplayer.BuildConfig.OPENSUBS_API_KEY
+                .ifBlank { settingsDataStore.openSubsApiKey.first() }
             if (token.isBlank() || apiKey.isBlank()) return@withContext null
 
             tried += mediaUri

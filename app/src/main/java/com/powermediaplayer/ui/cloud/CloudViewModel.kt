@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -77,7 +78,8 @@ class CloudViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val settingsDataStore: SettingsDataStore,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
-    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao
 ) : ViewModel() {
 
     /**
@@ -104,6 +106,14 @@ class CloudViewModel @Inject constructor(
             }.getOrNull()
             if (file != null && file.exists()) {
                 settingsDataStore.upsertOfflineDrive(item.id, file.absolutePath)
+                offlineCopyDao.upsert(
+                    com.powermediaplayer.data.db.entity.OfflineCopyEntity(
+                        driveFileId = item.id,
+                        localPath = file.absolutePath,
+                        byteSize = file.length()
+                    )
+                )
+                evictOfflineLruIfOverLimit()
                 _uiState.update {
                     it.copy(errorMessage = "Saved offline: ${item.name}")
                 }
@@ -126,7 +136,56 @@ class CloudViewModel @Inject constructor(
                 runCatching { java.io.File(path).delete() }
             }
             settingsDataStore.removeOfflineDrive(driveId)
+            offlineCopyDao.delete(driveId)
             com.powermediaplayer.util.Diag.i("PMP_DIAG", "C28 removed offline id=$driveId")
+        }
+    }
+
+    /**
+     * §C28 — evict oldest unstarred offline copies until total bytes
+     * fall under the user-configured limit (default 5 GB; 0 =
+     * unlimited).
+     */
+    /**
+     * §C16 — Cloud-tab refresh-on-open. Re-runs the active provider's
+     * listing if the data is older than [thresholdMs]. Cheaper than
+     * always-refresh because the user often hops between tabs without
+     * needing a network roundtrip.
+     */
+    @Volatile private var lastCloudRefreshMs: Long = 0L
+    fun refreshIfStale(thresholdMs: Long = 30_000L) {
+        val now = System.currentTimeMillis()
+        if (now - lastCloudRefreshMs < thresholdMs) return
+        lastCloudRefreshMs = now
+        val st = _uiState.value
+        when (st.activeProvider) {
+            com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE -> {
+                val (id, label) = st.folderStack.lastOrNull() ?: (null to "Root")
+                browseDrive(id, label)
+            }
+            com.powermediaplayer.cloud.CloudProviderType.SPOTIFY ->
+                browseSpotify()
+            else -> {}
+        }
+    }
+
+    private suspend fun evictOfflineLruIfOverLimit() {
+        val limit = settingsDataStore.offlineStorageLimitBytes.first()
+        if (limit <= 0) return
+        var total = offlineCopyDao.totalBytes()
+        if (total <= limit) return
+        val lru = offlineCopyDao.lruSnapshot()
+        for (row in lru) {
+            if (total <= limit) break
+            if (row.isStarred) continue
+            runCatching { java.io.File(row.localPath).delete() }
+            offlineCopyDao.delete(row.driveFileId)
+            settingsDataStore.removeOfflineDrive(row.driveFileId)
+            total -= row.byteSize
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "C28 LRU evicted id=${row.driveFileId} freed=${row.byteSize}B"
+            )
         }
     }
 

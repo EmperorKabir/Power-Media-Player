@@ -123,6 +123,24 @@ class PodcastsViewModel @Inject constructor(
             podcastDao.unsubscribe(feedUrl)
         }
     }
+
+    fun setShowSettings(
+        feedUrl: String,
+        autoDownload: Boolean,
+        retentionLastN: Int,
+        notifyOnNewEpisode: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val show = podcastDao.getShow(feedUrl) ?: return@launch
+            podcastDao.upsertShow(
+                show.copy(
+                    autoDownload = autoDownload,
+                    retentionLastN = retentionLastN,
+                    notifyOnNewEpisode = notifyOnNewEpisode
+                )
+            )
+        }
+    }
 }
 
 @Composable
@@ -220,6 +238,7 @@ fun PodcastsSection(
                         }
                     }
                     if (expandedFeed == show.feedUrl) {
+                        ShowSettingsRow(show = show, vm = vm)
                         EpisodeList(
                             feedUrl = show.feedUrl,
                             vm = vm
@@ -227,6 +246,64 @@ fun PodcastsSection(
                     }
                 }
             }
+        }
+    }
+}
+
+/** §C10 per-show settings row — autoDownload + retention + notify. */
+@Composable
+private fun ShowSettingsRow(
+    show: PodcastShowEntity,
+    vm: PodcastsViewModel
+) {
+    var autoDl by remember(show.feedUrl) { mutableStateOf(show.autoDownload) }
+    var retention by remember(show.feedUrl) { mutableStateOf(show.retentionLastN) }
+    var notify by remember(show.feedUrl) { mutableStateOf(show.notifyOnNewEpisode) }
+    fun persist() = vm.setShowSettings(show.feedUrl, autoDl, retention, notify)
+
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Switch(
+                checked = autoDl,
+                onCheckedChange = { autoDl = it; persist() }
+            )
+            Text(
+                "  Auto-download new episodes",
+                color = if (autoDl) TextPrimary else TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Switch(
+                checked = notify,
+                onCheckedChange = { notify = it; persist() }
+            )
+            Text(
+                "  Notify on new episode",
+                color = if (notify) TextPrimary else TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Keep last (0 = all):",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f)
+            )
+            androidx.compose.material3.OutlinedTextField(
+                value = retention.toString(),
+                onValueChange = {
+                    retention = it.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                    persist()
+                },
+                singleLine = true,
+                modifier = Modifier.width(96.dp)
+            )
         }
     }
 }

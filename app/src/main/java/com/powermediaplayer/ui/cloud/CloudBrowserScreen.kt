@@ -66,6 +66,11 @@ fun CloudBrowserScreen(
             onDismiss = { overrideTarget = null }
         )
     }
+    // §C16 — refresh-on-tab-open. Mirrors the Library tab pattern.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.refreshIfStale()
+    }
+
     contextItem?.let { item ->
         val isSpotify = item.sourceProvider == CloudProviderType.SPOTIFY
         val isDriveTrack = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
@@ -313,16 +318,33 @@ fun CloudBrowserScreen(
 
         if (uiState.activeProvider == null) {
             // Provider selection / sign-in state
-            ProviderCards(
-                driveLoggedIn = uiState.driveLoggedIn,
-                spotifyLoggedIn = uiState.spotifyLoggedIn,
-                onConnectDrive = { launchDriveOAuth() },
-                onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
-                onBrowseDrive = { viewModel.browseDrive(null, "Root") },
-                onBrowseSpotify = { viewModel.browseSpotify() },
-                onSignOutDrive = { viewModel.signOutDrive() },
-                onSignOutSpotify = { viewModel.signOutSpotify() }
-            )
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(key = "providers") {
+                    ProviderCards(
+                        driveLoggedIn = uiState.driveLoggedIn,
+                        spotifyLoggedIn = uiState.spotifyLoggedIn,
+                        onConnectDrive = { launchDriveOAuth() },
+                        onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
+                        onBrowseDrive = { viewModel.browseDrive(null, "Root") },
+                        onBrowseSpotify = { viewModel.browseSpotify() },
+                        onSignOutDrive = { viewModel.signOutDrive() },
+                        onSignOutSpotify = { viewModel.signOutSpotify() }
+                    )
+                }
+                // §C10 LOCKED — "New section in Cloud tab below Spotify
+                // favourites." Surfaced here as a peer of the provider
+                // cards. Tapping into a podcast row opens the inline
+                // episode browser; the same composable is also available
+                // as a Settings entry for parity.
+                item(key = "podcasts_cloud") {
+                    androidx.compose.material3.HorizontalDivider(
+                        color = DisabledGrey, modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    com.powermediaplayer.ui.podcast.PodcastsSection()
+                }
+            }
         } else {
             // File browser
             if (uiState.isLoading) {
@@ -667,7 +689,8 @@ fun CloudBrowserScreen(
                                     viewModel.openItem(item, onPlaybackStarted = onNavigateToPlayer)
                                 }
                             },
-                            onLongClick = { if (!item.isFolder) contextItem = item }
+                            onLongClick = { if (!item.isFolder) contextItem = item },
+                            isOffline = isDriveTrack && viewModel.hasOfflineCopy(item.id)
                         )
                     }
                     if (uiState.items.isEmpty() && uiState.driveFavourites.isEmpty()) {
@@ -1038,7 +1061,8 @@ private fun CloudItemRow(
     onToggleFavourite: () -> Unit = {},
     canForget: Boolean = false,
     onForget: () -> Unit = {},
-    onLongClick: () -> Unit = {}
+    onLongClick: () -> Unit = {},
+    isOffline: Boolean = false
 ) {
     Row(
         modifier = Modifier
@@ -1071,6 +1095,20 @@ private fun CloudItemRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (isOffline) {
+            Surface(
+                color = TealAccent.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier.padding(end = 4.dp)
+            ) {
+                Text(
+                    "Offline",
+                    color = TealAccent,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
+        }
         if (canFavourite) {
             IconButton(onClick = onToggleFavourite, modifier = Modifier.size(36.dp)) {
                 Icon(

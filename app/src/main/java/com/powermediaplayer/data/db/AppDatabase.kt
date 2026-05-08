@@ -13,6 +13,7 @@ import com.powermediaplayer.data.db.dao.FavouriteBookmarkDao
 import com.powermediaplayer.data.db.dao.HistoryBookmarkDao
 import com.powermediaplayer.data.db.dao.HistoryFavouriteDao
 import com.powermediaplayer.data.db.dao.MediaOverrideDao
+import com.powermediaplayer.data.db.dao.OfflineCopyDao
 import com.powermediaplayer.data.db.dao.PlaybackHistoryDao
 import com.powermediaplayer.data.db.dao.PlaybackStateDao
 import com.powermediaplayer.data.db.dao.PodcastDao
@@ -25,6 +26,7 @@ import com.powermediaplayer.data.db.entity.FavouriteBookmarkEntity
 import com.powermediaplayer.data.db.entity.HistoryBookmarkEntity
 import com.powermediaplayer.data.db.entity.HistoryFavouriteEntity
 import com.powermediaplayer.data.db.entity.MediaOverrideEntity
+import com.powermediaplayer.data.db.entity.OfflineCopyEntity
 import com.powermediaplayer.data.db.entity.PlaybackHistoryEntity
 import com.powermediaplayer.data.db.entity.PlaybackStateEntity
 import com.powermediaplayer.data.db.entity.PodcastEpisodeEntity
@@ -50,7 +52,8 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
         SmartPlaylistEntity::class,
         PodcastShowEntity::class,
         PodcastEpisodeEntity::class,
-        ReplayGainEntity::class
+        ReplayGainEntity::class,
+        OfflineCopyEntity::class
     ],
     // v5: PlaybackHistory + HistoryFavourite switched to autogen IDs;
     // added HistoryBookmark + FavouriteBookmark snapshot tables.
@@ -66,7 +69,11 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
     // v9: §C6 smart playlists — adds `smart_playlists` table.
     // v10: §C10 podcasts — adds `podcast_shows` + `podcast_episodes`.
     // v11: §C18 ReplayGain pre-scan — adds `replay_gain`.
-    version = 11,
+    // v12: §C10 per-show settings — adds autoDownload + retentionLastN
+    //      + notifyOnNewEpisode columns to podcast_shows.
+    // v13: §C28 LOCKED `offline_copy` table — replaces the DataStore
+    //      Set so byteSize / lastPlayedAt are tracked for LRU eviction.
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -83,6 +90,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun smartPlaylistDao(): SmartPlaylistDao
     abstract fun podcastDao(): PodcastDao
     abstract fun replayGainDao(): ReplayGainDao
+    abstract fun offlineCopyDao(): OfflineCopyDao
 
     companion object {
         const val DATABASE_NAME = "power_media_player.db"
@@ -135,6 +143,38 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        /**
+         * §C28 v12→v13 — adds the `offline_copy` table.
+         */
+        val MIGRATION_12_13: Migration = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS offline_copy (
+                        driveFileId TEXT NOT NULL PRIMARY KEY,
+                        localPath TEXT NOT NULL,
+                        byteSize INTEGER NOT NULL,
+                        createdAt INTEGER NOT NULL,
+                        lastPlayedAt INTEGER NOT NULL,
+                        isStarred INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        /**
+         * §C10 v11→v12 — adds per-show settings columns to
+         * podcast_shows.
+         */
+        val MIGRATION_11_12: Migration = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE podcast_shows ADD COLUMN autoDownload INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE podcast_shows ADD COLUMN retentionLastN INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE podcast_shows ADD COLUMN notifyOnNewEpisode INTEGER NOT NULL DEFAULT 0")
             }
         }
 

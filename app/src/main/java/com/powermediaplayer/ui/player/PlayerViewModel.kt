@@ -57,6 +57,23 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             currentOverride.collect { row ->
                 applyDirectAxes(row)
+                // §C7 / A10.2 — when the override carries eqPresetId,
+                // hot-swap the EQ to that preset for the duration of
+                // this track. Cleared on track change when the next
+                // override row resolves.
+                row?.eqPresetId?.let { eqPresetId ->
+                    viewModelScope.launch(Dispatchers.IO) {
+                        runCatching {
+                            // Resolve via PlaybackService static helper
+                            // to avoid wiring EqualizerPresetDao here.
+                            // EqualizerEffectController already accepts
+                            // a List<Int> band-levels write; defer the
+                            // resolution to a small companion call.
+                            com.powermediaplayer.audio.EqualizerOverrideRouter
+                                .applyPresetForUri(context, eqPresetId)
+                        }
+                    }
+                }
             }
         }
         // §C17 — online metadata enrichment. When enabled, on every
@@ -74,19 +91,32 @@ class PlayerViewModel @Inject constructor(
                 .map { (_, ps) -> ps.title to ps.artist }
                 .distinctUntilChanged()
                 .collect { (title, artistHint) ->
+                    val fetchYear = settingsDataStore.enrichFetchYear.first()
+                    val fetchGenre = settingsDataStore.enrichFetchGenre.first()
+                    val applyScope = settingsDataStore.enrichApplyScope.first()
+                    val curState = playbackConnection.playerState.value
+                    val hasArtist = curState.artist.isNotBlank()
+                    val hasAlbum = curState.album.isNotBlank()
+                    if (applyScope == "missing_only" && hasArtist && hasAlbum) return@collect
                     val res = withContext(Dispatchers.IO) {
                         musicBrainzClient.lookupRecording(title, artistHint.takeIf { it.isNotBlank() })
                     } ?: return@collect
+                    // Honor sub-toggles by zeroing fields the user
+                    // disabled before patching state.
+                    val gated = res.copy(
+                        year = if (fetchYear) res.year else null,
+                        genre = if (fetchGenre) res.genre else null
+                    )
                     com.powermediaplayer.util.Diag.i(
                         "PMP_DIAG",
-                        "MusicBrainz hit title=$title artist=${res.artist} " +
-                            "album=${res.album} year=${res.year} genre=${res.genre}"
+                        "MusicBrainz hit title=$title artist=${gated.artist} " +
+                            "album=${gated.album} year=${gated.year} genre=${gated.genre}"
                     )
                     // Patch the live player's MediaItem metadata with
                     // any non-null returned field. The lookup runs
                     // off-main; metadata mutation must hop back.
                     withContext(Dispatchers.Main) {
-                        applyEnrichment(res)
+                        applyEnrichment(gated)
                     }
                 }
         }
@@ -168,11 +198,25 @@ class PlayerViewModel @Inject constructor(
                 .collect { (enabled, embeddedDb, uri) ->
                     val player = com.powermediaplayer.service.PlaybackService
                         .getExoPlayer() ?: return@collect
+                    val override = mediaOverrideRepo.activeOverride.value
+                    // §C7 / A10.1 — per-file replayGainMode override
+                    // wins over the global setting.
+                    val mode = override?.replayGainMode
+                        ?: settingsDataStore.replayGainMode.first()
                     val effectiveDb: Double = if (!embeddedDb.isNaN()) embeddedDb
                     else withContext(Dispatchers.IO) {
                         val row = if (uri.isBlank()) null else replayGainDao.getForUri(uri)
                         when {
                             row == null -> Double.NaN
+                            // §C18 mode toggle — "album" prefers album gain
+                            // when present, falls back to track. "track"
+                            // (default) does the reverse.
+                            mode == "album" && row.albumGainDb !=
+                                com.powermediaplayer.data.db.entity.ReplayGainEntity.ABSENT ->
+                                row.albumGainDb
+                            mode == "album" && row.trackGainDb !=
+                                com.powermediaplayer.data.db.entity.ReplayGainEntity.ABSENT ->
+                                row.trackGainDb
                             row.trackGainDb !=
                                 com.powermediaplayer.data.db.entity.ReplayGainEntity.ABSENT ->
                                 row.trackGainDb
