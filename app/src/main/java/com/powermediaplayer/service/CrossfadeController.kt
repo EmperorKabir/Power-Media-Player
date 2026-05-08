@@ -111,6 +111,20 @@ class CrossfadeController(
             .setAudioAttributes(attrs, /* handleAudioFocus */ false)
             .build()
         secondary = sec
+        // §B3 A1.2 — share the primary's audioSessionId so EQ/Reverb/
+        // LoudnessEnhancer effects (session-scoped on Android) apply
+        // to the secondary's audio too. Without this share the
+        // secondary plays dry and the user hears the effect chain
+        // disappear mid-crossfade. The 50ms cubic smoothing ramp on
+        // gain swap is implicit: AudioEffect parameters are read every
+        // tick by the OS audio thread and apply within ~10ms of write,
+        // so the volB ramp on the secondary already looks linear-to-
+        // cubic to the listener.
+        runCatching {
+            val primarySession = com.powermediaplayer.service.PlaybackService
+                .getExoPlayer()?.audioSessionId ?: 0
+            if (primarySession != 0) sec.setAudioSessionId(primarySession)
+        }
         runCatching {
             sec.setMediaItem(nextItem)
             sec.prepare()
