@@ -922,17 +922,14 @@ class PlaybackService : MediaSessionService() {
         val playWhenReady = current.playWhenReady
 
         val transformed = if (target is CastPlayer) {
+            // Cast bug fix: start the relay UNCONDITIONALLY (even with an
+            // empty queue) so subsequent items added via onAddMediaItems
+            // can be relayed. Without this, connecting to Cast before
+            // picking any media left the relay un-started and the very
+            // first track inserted afterwards reached the receiver with
+            // a raw content:// URI — receiver bails → empty player.
             val server = startCastRelayIfNeeded()
-            if (server == null && items.isNotEmpty()) {
-                // BUG FIX (user-reported "cast connects but nothing plays,
-                // player wipes all tracks"): if the relay can't start,
-                // we used to silently fall through to the original
-                // content:// / file:// URIs which the receiver cannot
-                // fetch — CastPlayer.setMediaItems then loaded
-                // unreachable URLs, the receiver bailed, currentMediaItem
-                // went null, and the UI rendered as an empty player.
-                // Now we abort the takeover entirely: keep playing
-                // locally + post a toast so the user knows.
+            if (server == null) {
                 com.powermediaplayer.util.Diag.w(
                     "PMP_DIAG",
                     "Cast aborted — relay unavailable (no Wi-Fi LAN IP or " +
@@ -950,7 +947,7 @@ class PlaybackService : MediaSessionService() {
                 }
                 return  // stay with local player; user can retry
             }
-            server?.let { items.map { rebuildForCast(it, server) } } ?: items
+            items.map { rebuildForCast(it, server) }
         } else {
             stopCastRelay()
             items
@@ -1240,15 +1237,28 @@ class PlaybackService : MediaSessionService() {
             // localConfiguration (same-process MediaController preserves it),
             // requestMetadata.mediaUri (preserved across IPC), or mediaId
             // (we set this to the URI string for cloud + library items).
+            //
+            // BUG FIX (user-reported "cast connects but the player goes
+            // empty as soon as I pick anything"): when the active player
+            // is a CastPlayer, items inserted via the MediaSession path
+            // were reaching the Cast receiver with raw `content://` /
+            // `file://` / OAuth-Drive URIs the receiver can't fetch,
+            // so currentMediaItem went null and the UI rendered as
+            // "no media loaded". Now we route every CastPlayer-bound
+            // item through `rebuildForCast` so the receiver gets a plain
+            // `http://<lan-ip>:<port>/<token>` URL served by our relay.
+            val isCasting = mediaSession.player is CastPlayer
+            val relay = if (isCasting) castRelayServer else null
             val resolvedItems = mediaItems.map { item ->
                 val resolvedUri = item.localConfiguration?.uri
                     ?: item.requestMetadata.mediaUri
                     ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull()
-                if (resolvedUri != null) {
+                val withUri = if (resolvedUri != null) {
                     item.buildUpon().setUri(resolvedUri).build()
                 } else {
                     item
                 }
+                if (relay != null) rebuildForCast(withUri, relay) else withUri
             }.toMutableList()
             return Futures.immediateFuture(resolvedItems)
         }
