@@ -76,6 +76,7 @@ fun CrossfadeButton(
     }
 
     if (showSheet) {
+        PopupOpenGuard()
         ModalBottomSheet(
             onDismissRequest = { showSheet = false },
             containerColor = Color.Black

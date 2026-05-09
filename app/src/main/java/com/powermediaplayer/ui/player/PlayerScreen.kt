@@ -46,6 +46,19 @@ import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.util.CoverArtColors
 
 /**
+ * Bug fix (popup-timeout vs controls-timeout independence): every popup
+ * launched from the player overlay (audio effects, video effects,
+ * crossfade, BT, info, etc.) registers itself here on open and
+ * deregisters on close. PlayerScreen's controls auto-hide LaunchedEffect
+ * checks this counter so the controls won't fade out (and tear down
+ * the popup composables) while the user is still in a popup whose own
+ * timeout is set to a longer value or "Never".
+ */
+val LocalOpenPopupCount = compositionLocalOf<androidx.compose.runtime.MutableIntState> {
+    error("LocalOpenPopupCount not provided")
+}
+
+/**
  * Main player screen — fully adaptive layout.
  *
  * Compact (phone portrait): single column, controls at bottom
@@ -303,11 +316,26 @@ private fun PlayerScreenCompact(
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
+    // Bug fix (user-reported "popup goes away when its timeout is set
+    // to longer than the controls timeout"): every popup-launching
+    // button used to keep its showSheet state inside its own composable.
+    // When controls auto-hid, OverlayContent left composition → every
+    // popup's remember was destroyed → sheets dismissed regardless of
+    // their own timeout. Suppress the controls auto-hide while ANY
+    // popup is open (counter > 0).
+    val openPopupCount = remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val videoHideSec by viewModel.videoControlsHideSec.collectAsStateWithLifecycle()
-    LaunchedEffect(uiState.isVideoContent, controlsVisible, videoHideSec) {
-        if (uiState.isVideoContent && controlsVisible && videoHideSec > 0) {
+    LaunchedEffect(
+        uiState.isVideoContent, controlsVisible, videoHideSec,
+        openPopupCount.intValue
+    ) {
+        if (uiState.isVideoContent && controlsVisible &&
+            videoHideSec > 0 && openPopupCount.intValue == 0
+        ) {
             delay(videoHideSec * 1000L)
-            controlsVisible = false
+            // Re-check after delay — a popup may have opened in the
+            // meantime which would have invalidated this hide.
+            if (openPopupCount.intValue == 0) controlsVisible = false
         }
     }
     LaunchedEffect(uiState.isVideoContent) {
@@ -333,6 +361,7 @@ private fun PlayerScreenCompact(
         Modifier
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalOpenPopupCount provides openPopupCount) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -424,6 +453,7 @@ private fun PlayerScreenCompact(
             )
         }
     }
+    } // closes CompositionLocalProvider
 }
 
 /**

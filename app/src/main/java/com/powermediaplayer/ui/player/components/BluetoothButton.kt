@@ -73,6 +73,7 @@ fun BluetoothButton(modifier: Modifier = Modifier) {
     }
 
     if (sheetOpen) {
+        PopupOpenGuard()
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
             onDismissRequest = { sheetOpen = false },

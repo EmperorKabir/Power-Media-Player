@@ -65,6 +65,7 @@ fun VideoEffectsButton(
     }
 
     if (showSheet) {
+        PopupOpenGuard()
         ModalBottomSheet(
             onDismissRequest = { showSheet = false },
             containerColor = androidx.compose.ui.graphics.Color.Black
