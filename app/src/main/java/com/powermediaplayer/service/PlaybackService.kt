@@ -850,6 +850,25 @@ class PlaybackService : MediaSessionService() {
                 com.powermediaplayer.widget.NowPlayingWidgetProvider
                     .refresh(applicationContext)
             }
+
+            override fun onMediaMetadataChanged(
+                mediaMetadata: androidx.media3.common.MediaMetadata
+            ) {
+                // Cast bug fix #2: ExoPlayer's MetadataDecoder enriches
+                // MediaMetadata after the file is parsed (artworkData /
+                // artworkUri / chapter title pulled from the file
+                // tags). Mirror the merged metadata into the sender
+                // cache continuously so when the user later taps Cast,
+                // the cache already has the rich version.
+                val curId = player?.currentMediaItem?.mediaId
+                if (!curId.isNullOrEmpty()) {
+                    val existing = senderMetadataByMediaId[curId]
+                    val builder = androidx.media3.common.MediaMetadata.Builder()
+                    existing?.let { builder.populate(it) }
+                    builder.populate(mediaMetadata)
+                    senderMetadataByMediaId[curId] = builder.build()
+                }
+            }
         })
 
         crossfadeJob = serviceScope.launch {
@@ -1015,7 +1034,8 @@ class PlaybackService : MediaSessionService() {
                 val incoming = item.mediaMetadata
                 if (existing == null ||
                     (incoming.title != null && existing.title == null) ||
-                    (incoming.artworkUri != null && existing.artworkUri == null)
+                    (incoming.artworkUri != null && existing.artworkUri == null) ||
+                    (incoming.artworkData != null && existing.artworkData == null)
                 ) {
                     Companion.senderMetadataByMediaId[item.mediaId] = incoming
                 }
@@ -1024,6 +1044,37 @@ class PlaybackService : MediaSessionService() {
                     // the original sender-side URI — i.e. when we're on
                     // the local ExoPlayer about to switch to Cast.
                     Companion.senderItemByMediaId[item.mediaId] = item
+                }
+            }
+        }
+        // Cast bug fix #2 (album art still missing on cast): the items
+        // above only carry queue-time MediaItem.mediaMetadata, which
+        // for local audio files lacks artworkData until ExoPlayer's
+        // MetadataDecoder has parsed the file. The MERGED Player
+        // metadata (current.mediaMetadata) is the enriched copy. Snapshot
+        // it for the CURRENT item so the cache lookup during cast finds
+        // the artworkUri / artworkData / chapter title that the local
+        // player had built up.
+        runCatching {
+            val curItem = current.currentMediaItem
+            val curId = curItem?.mediaId
+            if (!curId.isNullOrEmpty()) {
+                val merged = current.mediaMetadata
+                val mergedHasArt = merged.artworkUri != null || merged.artworkData != null
+                val mergedHasTitle = merged.title != null
+                if (mergedHasArt || mergedHasTitle) {
+                    val existing = Companion.senderMetadataByMediaId[curId]
+                    val builder = androidx.media3.common.MediaMetadata.Builder()
+                    // Carry forward all fields from existing (if any) then
+                    // overlay the merged enriched fields.
+                    existing?.let { builder.populate(it) }
+                    builder.populate(merged)
+                    Companion.senderMetadataByMediaId[curId] = builder.build()
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "switchPlayer cached merged metadata for id='${curId.takeLast(40)}' " +
+                            "art=${mergedHasArt} title=${mergedHasTitle}"
+                    )
                 }
             }
         }
