@@ -1,19 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Phase 8 — single foldable-responsive AppWidget. Min sizes target the
-  smallest cover (4×1 cells worth of width, two rows tall) so the
-  widget fits both phone and Z Fold inner-screen without separate
-  variants.
+  §C20 — home-screen now-playing widget metadata.
 
-  A7.2 audit row dismissed — useUpdateForCollections is for
-  RemoteViewsService-backed list widgets only; our widget is a
-  single RemoteViews layout with transport buttons.
+  #89 fix (2026-05-09): the previous values made Samsung One UI
+  Honey Space silently refuse to add the widget — `targetCellWidth=1`
+  is below the launcher's minimum cell, `widgetFeatures="reconfigurable"`
+  was declared without a corresponding `android:configure` Activity,
+  and `minWidth=60dp` is below the Samsung-recommended 70dp floor.
+  `dumpsys appwidget` showed the provider registered but ZERO placed
+  instances (count over multiple add attempts).
+
+  New values:
+  - minWidth/minHeight 110dp matches the Pixel Launcher minimum and
+    is well above Samsung One UI's 70dp threshold.
+  - targetCellWidth=4, targetCellHeight=2 = a typical "wide+tall"
+    media-control widget cell footprint (matches Spotify, Google Now
+    Playing, BBC Sounds, etc).
+  - maxResize allows the user to grow it to 4×3.
+  - widgetFeatures attribute removed (no configure Activity exists).
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="60dp"
-    android:minHeight="60dp"
-    android:targetCellWidth="1"
-    android:targetCellHeight="1"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
     android:maxResizeWidth="320dp"
     android:maxResizeHeight="240dp"
     android:resizeMode="horizontal|vertical"
@@ -21,5 +31,4 @@
     android:initialLayout="@layout/widget_now_playing"
     android:updatePeriodMillis="0"
     android:description="@string/app_name"
-    android:previewLayout="@layout/widget_now_playing"
-    android:widgetFeatures="reconfigurable" />
+    android:previewLayout="@layout/widget_now_playing" />
