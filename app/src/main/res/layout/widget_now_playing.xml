@@ -69,7 +69,11 @@
             android:contentDescription="Next" />
     </LinearLayout>
 
-    <View
+    <!-- #89 fix — RemoteViews does NOT allow bare android.view.View
+         (Class not allowed to be inflated). FrameLayout IS in the
+         RemoteViews allowlist and behaves identically as a transparent
+         weighted spacer that accepts our tap-to-open click. -->
+    <FrameLayout
         android:id="@+id/widget_top"
         android:layout_width="match_parent"
         android:layout_height="0dp"
