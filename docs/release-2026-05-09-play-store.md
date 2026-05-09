@@ -6,6 +6,8 @@
 |---|---|
 | Signed Release AAB | `app/build/outputs/bundle/release/app-release.aab` |
 | Signed Release AAB (timestamped copy) | `dist/PowerMediaPlayer-1.0.0-release-2026-05-09.aab` |
+| **Package-registration APK** (signed with same release keystore; contains `assets/adi-registration.properties` snippet for Google's Sept-2026 Android developer verification) | `dist/PowerMediaPlayer-1.0.0-registration-2026-05-09.apk` |
+| Backup registration APK | `app/build/outputs/apk/release/app-release.apk` |
 | Release keystore (KEEP SAFE — losing this means a new app listing) | `powermediaplayer-release.keystore` |
 | Privacy policy (HTML, public-hostable) | `docs/privacy.html` |
 | Spotify SDK roadmap (referenced in store listing notes) | `docs/roadmap-spotify-sdk.md` |
@@ -88,6 +90,25 @@ See the Chrome extension prompt below — it contains the full long-description 
 - [ ] Feature graphic (1024×500 PNG) — **not yet drawn**; Play Console requires one
 - [ ] Phone screenshots (≥2, recommended 4-8) — **not yet collected**; existing `dbg_*.png` files in repo root could be cleaned up
 - [ ] Store-listing icon (512×512) — derive from `mipmap-xxxhdpi/ic_launcher.png`
+
+## Play Console package-key blocker (resolved)
+
+**Symptom seen 2026-05-09**: Chrome-extension first run failed at
+"Create app" with "package name not registered". The package
+`com.powermediaplayer` already existed in Draft state with one key
+attached: SHA-256 starting `F8:08:70:3B…`. Local keystore scan
+showed only two keystore files on the machine — the debug keystore
+and the new release keystore I generated (`39:81…CD:2B:BC:E4`). The
+F8:08… key is **the user's debug keystore** (`~/.android/debug.keystore`),
+not a real release key — somebody pre-registered the package with a
+debug-signed APK at some point.
+
+**Resolution**: built a registration APK signed with the new release
+keystore, placed `assets/adi-registration.properties` containing
+`DPUWCI6IVRYCWAAAAAAAAAAAA` inside it. Resume Chrome-extension run
+uses `docs/play-console-chrome-prompt-resume.md` which (a) swaps the
+registered key on the package draft to the new release keystore and
+(b) continues from STEP 1 of the original prompt.
 
 ## Outstanding (functional, not Play-Store-blocking)
 
