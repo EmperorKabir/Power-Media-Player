@@ -655,13 +655,42 @@ class SpotifyProvider @Inject constructor(
             .build()
         return try {
             http.newCall(req).execute().use { resp ->
-                com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.playRequest http=${resp.code}")
+                val bodyText = resp.body?.string().orEmpty()
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Spotify.playRequest http=${resp.code} body=${bodyText.take(400)}"
+                )
                 when (resp.code) {
                     in 200..299 -> Result.success(Unit)
                     401 -> Result.failure(IllegalStateException("Spotify session expired — sign in again"))
-                    403 -> Result.failure(IllegalStateException("Spotify Premium required for full playback. If you have Premium, sign out and sign in again to grant the new playback permissions."))
+                    403 -> {
+                        // Spotify returns 403 for several reasons. Distinguish
+                        // by reading the error.reason field — only PREMIUM_
+                        // REQUIRED actually means no Premium. NO_ACTIVE_DEVICE,
+                        // RESTRICTED, PLAYER_COMMAND_FAILED, etc. are other
+                        // causes. Don't blame Premium when Premium isn't the
+                        // issue.
+                        val reason = runCatching {
+                            org.json.JSONObject(bodyText)
+                                .optJSONObject("error")?.optString("reason").orEmpty()
+                        }.getOrDefault("")
+                        val message = runCatching {
+                            org.json.JSONObject(bodyText)
+                                .optJSONObject("error")?.optString("message").orEmpty()
+                        }.getOrDefault("")
+                        val msg = when (reason) {
+                            "PREMIUM_REQUIRED" -> "Spotify Premium required."
+                            "NO_ACTIVE_DEVICE" -> "Spotify Connect: pick a device first."
+                            "PLAYER_COMMAND_FAILED" ->
+                                "Spotify rejected the play command. Make sure the Spotify app is open or a Connect device is active."
+                            "RESTRICTED" -> "This Spotify content is restricted on your account."
+                            "" -> "Spotify HTTP 403${if (message.isNotBlank()) ": $message" else ""}"
+                            else -> "Spotify HTTP 403 ($reason)${if (message.isNotBlank()) ": $message" else ""}"
+                        }
+                        Result.failure(IllegalStateException(msg))
+                    }
                     404 -> Result.failure(IllegalStateException("NO_ACTIVE_DEVICE"))
-                    else -> Result.failure(IllegalStateException("Spotify HTTP ${resp.code}: ${resp.body?.string()?.take(200)}"))
+                    else -> Result.failure(IllegalStateException("Spotify HTTP ${resp.code}: ${bodyText.take(200)}"))
                 }
             }
         } catch (e: Exception) {

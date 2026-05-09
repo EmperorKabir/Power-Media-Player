@@ -29,7 +29,9 @@ class LastPlayedViewModel @Inject constructor(
     private val repo: LastPlayedRepository,
     private val playbackConnection: PlaybackConnection,
     private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
-    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
+    @param:dagger.hilt.android.qualifiers.ApplicationContext
+    private val context: android.content.Context
 ) : ViewModel() {
 
     /**
@@ -190,6 +192,15 @@ class LastPlayedViewModel @Inject constructor(
         }
         val uri = runCatching { Uri.parse(item.mediaUri) }.getOrNull() ?: return
         val targetPos = atPositionMs ?: item.lastPositionMs
+        // Bug fix (user-reported "resume → chapter metadata gone on
+        // Harry Potter audiobook"): extractChaptersAsBundle() reads
+        // M4B chapter atoms off the file. Mirror what LibraryViewModel
+        // does for the start-index item so chapters survive the
+        // resume-from-Last-Played path.
+        val chapterExtras = runCatching {
+            com.powermediaplayer.util.M4bChapterParser
+                .extractChaptersAsBundle(context, uri)
+        }.getOrDefault(android.os.Bundle())
         val mediaItem = androidx.media3.common.MediaItem.Builder()
             .setMediaId(item.mediaUri)
             .setUri(uri)
@@ -201,6 +212,7 @@ class LastPlayedViewModel @Inject constructor(
                 androidx.media3.common.MediaMetadata.Builder()
                     .setTitle(item.title)
                     .setArtist(item.subtitle)
+                    .setExtras(chapterExtras)
                     .build()
             )
             .build()

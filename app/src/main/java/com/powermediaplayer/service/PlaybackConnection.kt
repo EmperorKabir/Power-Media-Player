@@ -194,6 +194,15 @@ class PlaybackConnection @Inject constructor(
     @Volatile
     private var updateScheduled = false
 
+    /**
+     * Cast bug fix #3: keep the last known mediaId so when MediaController
+     * briefly returns currentMediaItem=null during the cast-takeover swap
+     * we can still read the right cached metadata and avoid the
+     * "no media loaded" flash.
+     */
+    @Volatile
+    private var lastKnownMediaId: String? = null
+
     // Caches for values that change only on discrete listener events,
     // not on every position tick. Avoids walking the Timeline + Tracks
     // (~hundreds of IPC calls/sec on long playlists) twice per second
@@ -818,15 +827,26 @@ class PlaybackConnection @Inject constructor(
         // senderMetadataByMediaId by the current item's mediaId so
         // album art, title, artist survive the receiver round-trip.
         val rawCurrentItem = c.currentMediaItem
-        val rawId = rawCurrentItem?.mediaId.orEmpty()
-        val cached = rawId.takeIf { it.isNotEmpty() }
+        // Cast bug fix #3 (user-reported "during the brief period
+        // between pressing cast and it loading, the player loses all
+        // metadata and says no media loaded"): when the player swap
+        // happens inside switchPlayer, MediaController briefly reports
+        // currentMediaItem=null. Fall back to the last-known mediaId
+        // so the UI keeps showing whatever was playing.
+        val rawId = rawCurrentItem?.mediaId
+            ?.takeIf { it.isNotEmpty() }
+            ?: lastKnownMediaId
+        if (rawCurrentItem != null && rawCurrentItem.mediaId.isNotEmpty()) {
+            lastKnownMediaId = rawCurrentItem.mediaId
+        }
+        val cached = rawId?.takeIf { it.isNotEmpty() }
             ?.let { com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId[it] }
         val itemMetadata = cached ?: rawCurrentItem?.mediaMetadata
         // Metadata cache diag: c is a MediaController so we can't check
         // CastPlayer-ness directly here. Always log cache hit/miss with
         // a hashCode of the controller-reported metadata so we can
         // correlate per-tick whether the cache fallback is ever firing.
-        if (rawId.isNotEmpty()) {
+        if (!rawId.isNullOrEmpty()) {
             val keys = com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId.keys
                 .take(3).joinToString("|") { it.takeLast(40) }
             com.powermediaplayer.util.Diag.i(

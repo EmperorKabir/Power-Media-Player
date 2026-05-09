@@ -83,7 +83,9 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     val settingsDataStore: SettingsDataStore,
     private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector,
-    val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao
+    val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao,
+    private val spotifyTokenStore: com.powermediaplayer.cloud.SpotifyTokenStore,
+    private val openSubsCredStore: com.powermediaplayer.subtitles.OpenSubsCredStore
 ) : ViewModel() {
 
     /**
@@ -319,8 +321,22 @@ class SettingsViewModel @Inject constructor(
     fun setReplayGainAutoScan(v: Boolean) =
         viewModelScope.launch { settingsDataStore.setReplayGainAutoScan(v) }.let { }
 
+    /**
+     * Wipe DataStore (settings) + Spotify auth state + OpenSubtitles
+     * credentials. User-reported "reset doesn't truly reset everything"
+     * was the OAuth tokens surviving — those live in their own
+     * preferences files outside the main settings DataStore.
+     */
     fun resetAllSettings() =
-        viewModelScope.launch { settingsDataStore.resetAllSettings() }.let { }
+        viewModelScope.launch {
+            settingsDataStore.resetAllSettings()
+            runCatching { spotifyTokenStore.write(null) }
+            runCatching { openSubsCredStore.clear() }
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "resetAllSettings: cleared DataStore + Spotify token + OpenSubs creds"
+            )
+        }.let { }
 
     fun setSubtitleFormat(format: String) {
         viewModelScope.launch { settingsDataStore.setSubtitleFormat(format) }
