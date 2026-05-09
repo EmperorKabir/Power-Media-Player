@@ -818,9 +818,24 @@ class PlaybackConnection @Inject constructor(
         // senderMetadataByMediaId by the current item's mediaId so
         // album art, title, artist survive the receiver round-trip.
         val rawCurrentItem = c.currentMediaItem
-        val cached = rawCurrentItem?.mediaId?.takeIf { it.isNotEmpty() }
+        val rawId = rawCurrentItem?.mediaId.orEmpty()
+        val cached = rawId.takeIf { it.isNotEmpty() }
             ?.let { com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId[it] }
         val itemMetadata = cached ?: rawCurrentItem?.mediaMetadata
+        // Cast metadata diag: print cache hit/miss + first 20 cached
+        // keys so we can correlate the user-reported "metadata blank
+        // during cast" with what's actually in the lookup table.
+        val isCastingNow = c.javaClass.simpleName.contains("CastPlayer", ignoreCase = true)
+        if (isCastingNow) {
+            val keys = com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId.keys
+                .take(5).joinToString(",")
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "Cast metadata lookup rawId='${rawId.take(80)}' " +
+                    "cacheHit=${cached != null} cacheSize=${com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId.size} " +
+                    "sampleKeys=[$keys]"
+            )
+        }
         val chapters = extractChapters(c)
         val isFolderMode = folderChapters != null
         val absolutePlaylistPos = cachedPlaylistPosition(c)
