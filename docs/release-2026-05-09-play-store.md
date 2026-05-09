@@ -103,12 +103,24 @@ F8:08… key is **the user's debug keystore** (`~/.android/debug.keystore`),
 not a real release key — somebody pre-registered the package with a
 debug-signed APK at some point.
 
-**Resolution**: built a registration APK signed with the new release
-keystore, placed `assets/adi-registration.properties` containing
-`DPUWCI6IVRYCWAAAAAAAAAAAA` inside it. Resume Chrome-extension run
-uses `docs/play-console-chrome-prompt-resume.md` which (a) swaps the
-registered key on the package draft to the new release keystore and
-(b) continues from STEP 1 of the original prompt.
+**Resolution v1 (didn't work)**: built a registration APK signed with
+the new release keystore. Play's "eligible keys" list only shows keys
+Play has previously seen in this developer account — the new 39:81…
+key wasn't in that list, so the Change-key dialog returned "No
+results" when searched.
+
+**Resolution v2 (worked)**: re-signed the same registration APK with
+the existing eligible debug keystore via `apksigner sign --ks
+~/.android/debug.keystore`. The asset
+`assets/adi-registration.properties=DPUWCI6IVRYCWAAAAAAAAAAAA`
+survives the re-sign. Path:
+`dist/PowerMediaPlayer-1.0.0-registration-debug-signed-2026-05-09.apk`.
+Upload to satisfy ownership verification.
+
+After ownership is verified, the production AAB still gets uploaded
+signed with the new release keystore (39:81…) — Play App Signing
+decouples the registered ownership key from the upload key, so the
+mismatch is allowed for first-time AAB uploads.
 
 ## Outstanding (functional, not Play-Store-blocking)
 
