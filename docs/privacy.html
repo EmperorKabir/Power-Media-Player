@@ -30,7 +30,7 @@
 <body>
 
 <h1>Privacy Policy — Power Media Player</h1>
-<p class="meta">Last updated: 3 May 2026</p>
+<p class="meta">Last updated: 9 May 2026</p>
 
 <p>
   Power Media Player ("the App") is an offline-first audio and video player for Android, developed
@@ -79,7 +79,42 @@
 <h3>Chromecast</h3>
 <ul>
   <li>The App uses the Google Cast SDK to discover and stream to Chromecast devices on your local network.</li>
+  <li>While casting local files, the App runs a small embedded HTTP relay on your phone (bound to your Wi-Fi LAN IP) so the receiver can fetch your file. The relay only serves URLs the App generated for the current cast session; it shuts down when you stop casting.</li>
   <li>No Chromecast-related data is transmitted to the Developer.</li>
+</ul>
+
+<h3>OpenSubtitles (optional)</h3>
+<ul>
+  <li>If you sign in with OpenSubtitles, the App searches their API for SRT subtitles matching the video filename (and, if you opt in, the video's content hash).</li>
+  <li>Authentication uses your OpenSubtitles email + password to obtain a per-session token. The token is stored on your device in <code>EncryptedSharedPreferences</code>; the password is sent only to <code>api.opensubtitles.com</code> over HTTPS and is not retained.</li>
+  <li>Search queries (filename, language code, optional moviehash) are sent to OpenSubtitles. They are not routed through any server operated by the Developer.</li>
+  <li>Sign out from within the App at any time, or revoke at <a href="https://www.opensubtitles.com/users" target="_blank" rel="noopener">opensubtitles.com</a>.</li>
+</ul>
+
+<h3>Podcasts (optional)</h3>
+<ul>
+  <li>You can subscribe to podcasts by RSS feed URL or via the iTunes / Apple Podcasts directory search.</li>
+  <li>The App fetches feeds and episode artwork directly from each podcast's host and from <code>itunes.apple.com</code>. No subscription data is sent to the Developer.</li>
+  <li>Audio episodes you choose to download are saved on your device (<code>Movies/PowerMediaPlayer/podcasts/</code>).</li>
+</ul>
+
+<h3>Online metadata enrichment (optional, off by default)</h3>
+<ul>
+  <li>If you enable enrichment in Settings, the App can look up missing track / artist / album / year / genre fields from <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a> and / or <a href="https://discogs.com" target="_blank" rel="noopener">Discogs</a>.</li>
+  <li>Only the existing track title and (if present) artist are sent to those services. No personal identifiers leave your device.</li>
+  <li>Lookup results are cached locally so the same query doesn't repeat the network call.</li>
+</ul>
+
+<h2>Permissions</h2>
+<ul>
+  <li><code>READ_MEDIA_AUDIO</code>, <code>READ_MEDIA_VIDEO</code> (Android 13+) / <code>READ_EXTERNAL_STORAGE</code> (Android 12 and below) — scan and play your local media library.</li>
+  <li><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code> — streaming, Cast discovery, optional cloud integrations above.</li>
+  <li><code>BLUETOOTH_CONNECT</code>, <code>BLUETOOTH_SCAN</code> — list paired audio devices in the on-screen output picker.</li>
+  <li><code>FOREGROUND_SERVICE</code> + <code>FOREGROUND_SERVICE_MEDIA_PLAYBACK</code> + <code>WAKE_LOCK</code> — keep playback running when the screen is off or the App is in the background.</li>
+  <li><code>POST_NOTIFICATIONS</code> — show the standard media playback notification with transport controls and the wake-up alarm full-screen notification.</li>
+  <li><code>WRITE_SETTINGS</code> — only when you opt in to override system brightness during video playback.</li>
+  <li><code>SCHEDULE_EXACT_ALARM</code> + <code>USE_FULL_SCREEN_INTENT</code> + <code>RECEIVE_BOOT_COMPLETED</code> — wake-up alarms (optional feature). Alarms are scheduled locally; the boot receiver re-arms them after device restart.</li>
+  <li><code>VIBRATE</code> — wake-up alarm vibration (when enabled).</li>
 </ul>
 
 <h2>Data Retention</h2>
