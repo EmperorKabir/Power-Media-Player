@@ -797,6 +797,24 @@ private fun SpotifyConnectPickerSheet(
                     )
                 }
             }
+            Surface(
+                color = androidx.compose.ui.graphics.Color(0xFF332200),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 4.dp)
+            ) {
+                Text(
+                    text = "Not yet working — Spotify's public Web API only " +
+                        "exposes Spotify SDK-registered devices. Google Home / " +
+                        "Fire Stick / Sonos / smart TVs don't appear here yet. " +
+                        "Use the Cast icon on the Player tab as a workaround. " +
+                        "Native Spotify SDK integration is on the roadmap.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.ui.graphics.Color(0xFFFFB74D),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
             // Bounce-out button: opens the Spotify app for ~1.5 s and
             // bounces back. Spotify's public Web API only lists devices
             // registered via the Spotify SDK, so Google Home / Fire
