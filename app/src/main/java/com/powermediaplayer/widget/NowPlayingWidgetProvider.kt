@@ -115,6 +115,25 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
                 ?: "Tap to open"
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_artist, artist)
+            // Album art: try embedded artworkData (mp3/m4a tag), fall
+            // back to the layered placeholder drawable.
+            val art = item?.mediaMetadata?.artworkData
+            if (art != null && art.isNotEmpty()) {
+                val bmp = runCatching {
+                    android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size)
+                }.getOrNull()
+                if (bmp != null) {
+                    views.setImageViewBitmap(R.id.widget_art, bmp)
+                } else {
+                    views.setImageViewResource(
+                        R.id.widget_art, R.drawable.widget_art_placeholder
+                    )
+                }
+            } else {
+                views.setImageViewResource(
+                    R.id.widget_art, R.drawable.widget_art_placeholder
+                )
+            }
         }
         val isPlaying = player?.isPlaying == true
         views.setImageViewResource(

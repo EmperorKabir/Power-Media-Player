@@ -731,6 +731,12 @@ private fun PlayerScreenExpanded(
     onShowChapterPicker: () -> Unit,
     onShowInfo: () -> Unit
 ) {
+    // #103 fix — AudioEffectsButton / CrossfadeButton / CastSwitcherButton
+    // call PopupOpenGuard which reads LocalOpenPopupCount. PlayerScreenCompact
+    // provides it; PlayerScreenExpanded didn't, so opening any popup on the
+    // Z Fold 6 inner display crashed with "LocalOpenPopupCount not provided".
+    val openPopupCount = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.compose.runtime.CompositionLocalProvider(LocalOpenPopupCount provides openPopupCount) {
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -917,6 +923,7 @@ private fun PlayerScreenExpanded(
             )
         }
     }
+    } // closes CompositionLocalProvider (#103 fix)
 }
 
 // ── Shared Sub-Composables ─────────────────────────────────────────

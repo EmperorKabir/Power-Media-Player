@@ -85,7 +85,8 @@ class SettingsViewModel @Inject constructor(
     private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector,
     val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao,
     private val spotifyTokenStore: com.powermediaplayer.cloud.SpotifyTokenStore,
-    private val openSubsCredStore: com.powermediaplayer.subtitles.OpenSubsCredStore
+    private val openSubsCredStore: com.powermediaplayer.subtitles.OpenSubsCredStore,
+    private val driveProvider: com.powermediaplayer.cloud.DriveOAuthProvider
 ) : ViewModel() {
 
     /**
@@ -332,9 +333,14 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.resetAllSettings()
             runCatching { spotifyTokenStore.write(null) }
             runCatching { openSubsCredStore.clear() }
+            // Drive OAuth lives in Google Sign-In's own account cache,
+            // not in our DataStore. Without an explicit signOut() the
+            // Cloud tab still shows the user as signed-in to Drive
+            // after a "Reset all".
+            runCatching { driveProvider.signOut() }
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
-                "resetAllSettings: cleared DataStore + Spotify token + OpenSubs creds"
+                "resetAllSettings: cleared DataStore + Spotify + OpenSubs + Drive OAuth"
             )
         }.let { }
 

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  §C20 — 4×1 wide: title row + transport buttons in a single row.
-  Used when the user resizes to a long thin widget — most common
+  §C20 — 4×1 wide: art square on left, title row + transport row on
+  right. Used when the user resizes to a long thin widget — common
   shape on the dock area of a foldable inner screen.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -12,11 +12,20 @@
     android:padding="8dp"
     android:background="#202020">
 
+    <ImageView
+        android:id="@+id/widget_art"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:scaleType="centerCrop"
+        android:src="@drawable/widget_art_placeholder"
+        android:contentDescription="Album art" />
+
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
+        android:layout_marginStart="8dp"
         android:layout_marginEnd="8dp">
 
         <TextView

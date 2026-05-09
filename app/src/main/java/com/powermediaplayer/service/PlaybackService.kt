@@ -868,6 +868,11 @@ class PlaybackService : MediaSessionService() {
                     builder.populate(mediaMetadata)
                     senderMetadataByMediaId[curId] = builder.build()
                 }
+                // Widget art arrives AFTER onMediaItemTransition for
+                // most files (ExoPlayer parses tags asynchronously).
+                // Refresh again here so the embedded artwork shows up.
+                com.powermediaplayer.widget.NowPlayingWidgetProvider
+                    .refresh(applicationContext)
             }
         })
 

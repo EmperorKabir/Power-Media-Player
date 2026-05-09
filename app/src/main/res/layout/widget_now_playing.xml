@@ -1,81 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Phase 8 — home-screen now-playing widget.
-  Flat single-column layout: title + artist on top, three transport
-  buttons below. Nested LinearLayouts with weights collapsed on
-  Samsung One UI Home (Z Fold 6 inner display) and only the play
-  icon rendered — keeping this flat avoids that.
+  Phase 8 — home-screen now-playing widget (4×2 LARGE variant).
+  Horizontal split: 84dp square album art on left, title + artist + 3
+  transport buttons stacked on the right. Tapping the right column
+  opens the Player tab; tapping the art also opens the Player tab.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="12dp"
+    android:orientation="horizontal"
+    android:padding="10dp"
     android:background="#202020">
 
-    <TextView
-        android:id="@+id/widget_title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="#ffffff"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:singleLine="true"
-        android:ellipsize="end"
-        android:text="Power Media Player" />
-
-    <TextView
-        android:id="@+id/widget_artist"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:textColor="#bbbbbb"
-        android:textSize="12sp"
-        android:singleLine="true"
-        android:ellipsize="end"
-        android:text="Tap to open" />
+    <ImageView
+        android:id="@+id/widget_art"
+        android:layout_width="84dp"
+        android:layout_height="84dp"
+        android:layout_gravity="center_vertical"
+        android:scaleType="centerCrop"
+        android:src="@drawable/widget_art_placeholder"
+        android:contentDescription="Album art" />
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:gravity="center"
-        android:orientation="horizontal">
-
-        <ImageButton
-            android:id="@+id/widget_prev"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:src="@android:drawable/ic_media_previous"
-            android:background="#33ffffff"
-            android:contentDescription="Previous" />
-
-        <ImageButton
-            android:id="@+id/widget_play_pause"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginStart="12dp"
-            android:layout_marginEnd="12dp"
-            android:src="@android:drawable/ic_media_play"
-            android:background="#33ffffff"
-            android:contentDescription="Play / Pause" />
-
-        <ImageButton
-            android:id="@+id/widget_next"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:src="@android:drawable/ic_media_next"
-            android:background="#33ffffff"
-            android:contentDescription="Next" />
-    </LinearLayout>
-
-    <!-- #89 fix — RemoteViews does NOT allow bare android.view.View
-         (Class not allowed to be inflated). FrameLayout IS in the
-         RemoteViews allowlist and behaves identically as a transparent
-         weighted spacer that accepts our tap-to-open click. -->
-    <FrameLayout
         android:id="@+id/widget_top"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_height="match_parent"
+        android:layout_marginStart="10dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#ffffff"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="Power Media Player" />
+
+        <TextView
+            android:id="@+id/widget_artist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:textColor="#bbbbbb"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="Tap to open" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/widget_prev"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_media_previous"
+                android:background="#33ffffff"
+                android:contentDescription="Previous" />
+
+            <ImageButton
+                android:id="@+id/widget_play_pause"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="10dp"
+                android:src="@android:drawable/ic_media_play"
+                android:background="#33ffffff"
+                android:contentDescription="Play / Pause" />
+
+            <ImageButton
+                android:id="@+id/widget_next"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_media_next"
+                android:background="#33ffffff"
+                android:contentDescription="Next" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

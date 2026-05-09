@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder shown when no media is loaded or artwork is missing.
+     Dark teal-tinted square with a centered music-note glyph. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0E2E2C" />
+            <corners android:radius="6dp" />
+        </shape>
+    </item>
+    <item
+        android:gravity="center"
+        android:width="36dp"
+        android:height="36dp"
+        android:drawable="@android:drawable/ic_media_play"
+        android:tint="#1FBFB0" />
+</layer-list>
