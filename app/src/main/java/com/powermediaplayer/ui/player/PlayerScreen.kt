@@ -646,6 +646,9 @@ private fun OverlayContent(
                     modifier = Modifier.size(48.dp),
                     enabled = uiState.isCurrentMediaCastable
                 )
+                // #79 — direct device-switch affordance, only visible
+                // while a session is active.
+                CastSwitcherButton(modifier = Modifier.size(48.dp))
             }
         }
         // Bookmark chips for the currently playing item.
@@ -873,6 +876,7 @@ private fun PlayerScreenExpanded(
                 BluetoothButton(modifier = Modifier.size(48.dp))
                 if (!uiState.isSpotifyActive) {
                     CastButton(modifier = Modifier.size(48.dp))
+                    CastSwitcherButton(modifier = Modifier.size(48.dp))
                 }
             }
             val bookmarksE by viewModel.bookmarks.collectAsStateWithLifecycle()
