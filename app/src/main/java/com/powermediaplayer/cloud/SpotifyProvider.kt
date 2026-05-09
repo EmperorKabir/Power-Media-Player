@@ -559,6 +559,16 @@ class SpotifyProvider @Inject constructor(
      * fired successfully; false (with no UI side-effect) when the
      * user doesn't have Spotify installed.
      */
+    /**
+     * Public wake-and-return: open Spotify briefly so it registers
+     * Connect devices with the Web API, then bounce back. Used by the
+     * device picker when /me/player/devices returns no devices other
+     * than the phone — Google Home / Fire Stick / Sonos only appear in
+     * the public API after the Spotify app has been recently active
+     * on this account.
+     */
+    fun wakeSpotifyAndReturn(): Boolean = launchSpotifyAndReturn()
+
     private fun launchSpotifyAndReturn(): Boolean {
         // Delegate to SpotifyBounceBridgeActivity — a translucent, in-
         // task Activity that owns the Spotify auto-launch and the

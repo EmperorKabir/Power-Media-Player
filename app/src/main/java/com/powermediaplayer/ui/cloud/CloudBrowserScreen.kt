@@ -757,6 +757,7 @@ fun CloudBrowserScreen(
         SpotifyConnectPickerSheet(
             devices = uiState.spotifyConnectDevices,
             onRefresh = { viewModel.openSpotifyConnectPicker() },
+            onWakeSpotify = { viewModel.wakeSpotifyForDeviceDiscovery() },
             onPick = { id, name -> viewModel.selectSpotifyConnectDevice(id, name) },
             onDismiss = { viewModel.dismissSpotifyConnectPicker() }
         )
@@ -768,6 +769,7 @@ fun CloudBrowserScreen(
 private fun SpotifyConnectPickerSheet(
     devices: List<Pair<String, String>>,
     onRefresh: () -> Unit,
+    onWakeSpotify: () -> Unit,
     onPick: (String, String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -794,6 +796,28 @@ private fun SpotifyConnectPickerSheet(
                         tint = SpotifyGreen
                     )
                 }
+            }
+            // Bounce-out button: opens the Spotify app for ~1.5 s and
+            // bounces back. Spotify's public Web API only lists devices
+            // registered via the Spotify SDK, so Google Home / Fire
+            // Stick / Sonos don't appear until Spotify itself has
+            // recently been active. Tapping this wakes Spotify so those
+            // devices publish themselves, then re-fetches devices.
+            TextButton(
+                onClick = onWakeSpotify,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.OpenInNew,
+                    contentDescription = null,
+                    tint = SpotifyGreen,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "Wake Spotify to find Google Home / Fire Stick / Sonos",
+                    color = SpotifyGreen
+                )
             }
             Spacer(Modifier.height(8.dp))
             if (devices.isEmpty()) {

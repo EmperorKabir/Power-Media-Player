@@ -661,6 +661,35 @@ class CloudViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Bounce out to the Spotify app for ~1.5s and come back. Spotify's
+     * public Web API /me/player/devices only lists devices that have
+     * registered with Connect via the Spotify SDK; opening the app
+     * causes Google Home / Fire Stick / Sonos to publish themselves to
+     * the user's Connect network, after which a re-fetch picks them up.
+     */
+    fun wakeSpotifyForDeviceDiscovery() {
+        // Suppress audio focus pause/gain across the bounce so the
+        // current playback doesn't auto-resume on return — same trick
+        // as the OAuth sign-in flow.
+        com.powermediaplayer.service.PlaybackService.oauthInFlight = true
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(60_000)
+            com.powermediaplayer.service.PlaybackService.oauthInFlight = false
+        }
+        spotifyProvider.wakeSpotifyAndReturn()
+        // Re-fetch devices ~3s after the bounce should have completed.
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(3_000)
+            val devices = spotifyProvider.listConnectDevices()
+            _uiState.update {
+                it.copy(spotifyConnectDevices = devices)
+            }
+            // Clear the OAuth flag now that the bounce window is over.
+            com.powermediaplayer.service.PlaybackService.oauthInFlight = false
+        }
+    }
+
     fun dismissSpotifyConnectPicker() {
         _uiState.update { it.copy(spotifyConnectPickerVisible = false) }
     }
