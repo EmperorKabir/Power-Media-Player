@@ -27,7 +27,7 @@ android {
         applicationId = "com.powermediaplayer"
         minSdk = 30
         targetSdk = 35
-        versionCode = 11
+        versionCode = 12
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -80,6 +80,13 @@ android {
             )
             // Attach the release signingConfig only if it was created above.
             signingConfigs.findByName("release")?.let { signingConfig = it }
+            // §91 — bundle native debug symbols (Media3 ExoPlayer
+            // extensions, Cast SDK, NanoHTTPD JNI) into the AAB so
+            // Play Console can symbolicate native crash / ANR stack
+            // traces. SYMBOL_TABLE keeps the AAB small (vs FULL which
+            // ships entire .debug sections); sufficient for symbol
+            // resolution.
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
         }
         debug {
             isMinifyEnabled = false
@@ -226,13 +233,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.1")
-
-    // ── Text Recognition (ML Kit v2) ─────────────────────────────
-    implementation("com.google.mlkit:text-recognition:16.0.1")
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
-    implementation("com.google.mlkit:text-recognition-devanagari:16.0.1")
-    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
-    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
 
     // ── Google Guava (for MediaController ListenableFuture) ─────
     implementation("com.google.guava:guava:33.4.0-android")
