@@ -820,43 +820,42 @@ private fun SpotifyConnectPickerSheet(
                 )
             }
             Spacer(Modifier.height(8.dp))
-            if (devices.isEmpty()) {
+            if (devices.isEmpty() || devices.size == 1) {
                 Column(modifier = Modifier.padding(vertical = 12.dp)) {
                     Text(
-                        text = "No Spotify Connect devices visible right now.",
+                        text = if (devices.isEmpty()) "No Spotify Connect devices visible right now."
+                        else "Only this phone is visible.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextPrimary
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Spotify only lists devices that have used Spotify recently. " +
-                            "Google Home / Nest / smart TVs only appear if:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "1. The device is linked to your Spotify account in the Google Home app " +
-                            "(Account → Linked services → Spotify).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary
-                    )
-                    Text(
-                        text = "2. You've recently said something like \"Hey Google, play music on " +
-                            "[device]\" with Spotify as the default music service so the speaker " +
-                            "registers itself with Spotify Connect.",
+                        text = "Spotify's public API only returns devices that are currently " +
+                            "active on Spotify Connect. Google Home / Nest / Fire Stick / Sonos " +
+                            "show up in the official Spotify app via local-network discovery — " +
+                            "a channel third-party apps can't use.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Tip: opening the Spotify app on any phone / browser also makes that " +
-                            "device appear in this list.",
+                        text = "What works: open the Spotify app on a phone or web browser, tap " +
+                            "Connect, and pick the device once. After that it'll be visible here " +
+                            "for a while. The button above tries to do this automatically.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Alternative: tap the Cast icon on the Player tab to send LOCAL " +
+                            "audio to a Chromecast / Google Home / smart TV directly — that uses " +
+                            "Cast (not Spotify Connect) and discovers devices over your Wi-Fi.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SpotifyGreen
                     )
                 }
-            } else {
+            }
+            if (devices.isNotEmpty()) {
                 devices.forEach { (id, name) ->
                     Surface(
                         color = SurfaceElevated,

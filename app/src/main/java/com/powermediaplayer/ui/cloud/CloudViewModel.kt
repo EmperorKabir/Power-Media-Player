@@ -683,22 +683,23 @@ class CloudViewModel @Inject constructor(
      */
     fun wakeSpotifyForDeviceDiscovery() {
         // Suppress audio focus pause/gain across the bounce so the
-        // current playback doesn't auto-resume on return — same trick
-        // as the OAuth sign-in flow.
+        // current playback doesn't auto-resume on return.
         com.powermediaplayer.service.PlaybackService.oauthInFlight = true
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(60_000)
-            com.powermediaplayer.service.PlaybackService.oauthInFlight = false
-        }
         spotifyProvider.wakeSpotifyAndReturn()
-        // Re-fetch devices ~3s after the bounce should have completed.
+        // Poll /me/player/devices every 2s for 16s after the bounce.
+        // Spotify's Web API takes seconds-to-many-seconds to enumerate
+        // Google Home / Fire Stick / Sonos after the Spotify app
+        // re-registers them with Connect. Take the largest result.
         viewModelScope.launch {
-            kotlinx.coroutines.delay(3_000)
-            val devices = spotifyProvider.listConnectDevices()
-            _uiState.update {
-                it.copy(spotifyConnectDevices = devices)
+            var bestList: List<Pair<String, String>> = emptyList()
+            for (attempt in 0 until 8) {
+                kotlinx.coroutines.delay(2_000)
+                val devices = spotifyProvider.listConnectDevices()
+                if (devices.size > bestList.size) {
+                    bestList = devices
+                    _uiState.update { it.copy(spotifyConnectDevices = devices) }
+                }
             }
-            // Clear the OAuth flag now that the bounce window is over.
             com.powermediaplayer.service.PlaybackService.oauthInFlight = false
         }
     }
