@@ -107,6 +107,50 @@ See the Chrome extension prompt below — it contains the full long-description 
 - `docs/MIGRATION_INSTRUCTIONS.md` — Room migration policy (no destructive migrations from v1.0).
 - `docs/roadmap-spotify-sdk.md` — Spotify Connect device-discovery limitation, future SDK integration option.
 
+## Closed-testing prerequisites — provider-side configuration
+
+Closed testing will FAIL for Drive sign-in, Drive Picker and Spotify
+until the **Play App Signing SHA-1** is added to each provider's
+console. Google generates that SHA-1 only AFTER the first AAB upload
+(see Play Console → Setup → App signing).
+
+Once you have that SHA-1:
+
+1. **Google Cloud Console** (project owning the existing OAuth client):
+   - APIs & Services → Credentials → Android OAuth client → add the
+     Play App Signing SHA-1 (keep the debug SHA-1 too).
+   - OAuth consent screen → publishing status = **Testing** for
+     closed testing; add every tester's Google account under "Test
+     users" (cap 100). For prod launch, switch to "In production" —
+     the `drive.file` scope is non-sensitive, no Google verification
+     required.
+   - Drive Picker API key → restrict to the Picker API only AND set
+     Application Restriction = Android, package `com.powermediaplayer`,
+     SHA-1 = Play App Signing SHA-1.
+
+2. **Spotify Developer Dashboard** (app `9721f7d7d2e34f2a8d508f22e48d77db`):
+   - Settings → Redirect URIs → confirm `powermediaplayer://callback`.
+   - Settings → Android section (if visible) → package name +
+     Play App Signing SHA-1.
+   - Settings → User Management → add every tester's Spotify email
+     (cap 25 in Development Mode). For >25, file an "Extended Quota
+     Mode" request — typically 2-4 weeks review.
+   - Spotify Premium is required by Spotify for full-track playback;
+     Free testers will hit the 403 PREMIUM_REQUIRED path.
+
+3. **OpenSubtitles** (optional in closed testing): create a Consumer
+   API key at opensubtitles.com → Profile → Consumers → paste into
+   `local.properties` as `OPENSUBS_API_KEY` and rebuild the AAB.
+
+4. **Cast / MusicBrainz / Discogs / Podcasts / iTunes** — no
+   provider-side configuration needed. Cast uses the public default
+   receiver; the others have no per-app registration.
+
+5. **Privacy policy URL** must be live before Play and Google OAuth
+   will let the listing/consent screen go live. Host `docs/privacy.html`
+   on GitHub Pages (`https://EmperorKabir.github.io/Power-Media-Player/privacy.html`)
+   or any HTTPS endpoint.
+
 ## Risks for Play Store review
 
 1. **`SCHEDULE_EXACT_ALARM` requires user-visible justification** — wake-up alarms are a documented use-case; should pass.
