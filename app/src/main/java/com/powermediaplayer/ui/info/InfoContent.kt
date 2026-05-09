@@ -34,23 +34,32 @@ val playerInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Time + position",
             bullets = listOf(
-                "Speed — 0.5× to 2.0×. Tap \"Reset\" to go back to 1×.",
-                "Sleep timer — Auto-pause after a chosen time, with optional fade-out.",
-                "Bookmark — Saves the current second to come back to later. The chips above the bottom row are your bookmarks for this file. Tap a chip to jump. Tap the × to delete."
+                "Speed — 0.5×, 0.75×, 1×, 1.25×, 1.3×, 1.5×, 1.75×, 2×, 2.5×, 3×. Tap \"Reset\" to go back to 1×.",
+                "Sleep timer — Auto-pause after a chosen time OR at end-of-track / end-of-chapter / end-of-queue. Optional linear fade-out over the last 30 s.",
+                "Bookmark — Saves the current second to come back to later. The chips above the bottom row are your bookmarks for this file. Tap a chip to jump (lands a few seconds before for context — adjustable in Settings). Tap the × to delete."
             )
         ),
         InfoSection(
             title = "Effects",
             bullets = listOf(
-                "Audio effects — Quick toggle for reverb, stereo flip, mono mix. Some are greyed out when casting because audio is on the speaker.",
-                "Crossfade — Smooth transitions between tracks. Tap the icon to open the crossfade settings. Greyed out when the active source can't crossfade."
+                "Audio effects popup — Quick toggle for reverb (Off / Room / Medium hall / Large hall / Plate / Cave), stereo flip (L↔R), mono mix, multi-channel passthrough. Some are greyed out when casting because audio is on the speaker.",
+                "Crossfade — True 2-player overlap with equal-power / linear / exponential / logarithmic curves. Tap the icon to open the panel: master ms slider, per-curve picker, skip-silence, pre-fade trigger, gapless. Greyed out for video and audiobooks unless you opt in via the panel."
             )
         ),
         InfoSection(
             title = "Output",
             bullets = listOf(
-                "Bluetooth button — Shows the device this app is currently sending audio to (phone speaker, headphones, car, etc.) and lets you switch. Settings → Bluetooth Car Controls is where you'd remap a car's prev/next buttons — configured in settings.",
-                "Cast button — Opens the Cast picker for Google Home / TV / Chromecast. Greyed out when the current file isn't in a format the cast device can play (MP4 and WebM work; MKV / AVI / MOV don't)."
+                "Bluetooth button — Shows the device this app is currently sending audio to (phone speaker, headphones, car, etc.) and lets you switch. Remap a car's prev/next buttons under Settings → Bluetooth Car Controls.",
+                "Cast button — Opens the Cast picker for Chromecast / Google Home / smart TV. The app runs an embedded LAN HTTP relay so the receiver can fetch your phone-local content (works for MP4, M4A, M4B audiobooks, FLAC, MP3, MKV, etc — receiver compatibility decides what plays).",
+                "Spotify Connect — Opened from the Cloud tab → Spotify section. Spotify's public API only surfaces SDK-registered devices, so Google Home / Fire Stick / Sonos may not appear here. Use the Cast button on the Player tab to send LOCAL audio to those devices instead."
+            )
+        ),
+        InfoSection(
+            title = "Wake-up alarms",
+            bullets = listOf(
+                "Settings → Wake-up alarms — Schedule playback at a chosen time. One-shot or recurring days-of-week.",
+                "Per alarm — Pick the source (any track / playlist / smart playlist / saved bookmark or favourite), start volume %, end volume %, ramp duration, hold duration, wind-down, snooze settings (continue ramp or restart, max snoozes, snooze minutes), stop method (math problem / shake / swipe-to-confirm), vibration.",
+                "Edge cases — Bypasses Do Not Disturb and silent mode. Re-arms after device reboot. Skip-next-N lets you skip the next N occurrences of a recurring alarm."
             )
         )
     )
@@ -78,9 +87,18 @@ val libraryInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Actions on a row",
             bullets = listOf(
-                "Long press menu — Hold a row to open a menu with Favourite, Hide, Add to queue next, Edit tags, Override speed, Override audio effects, Override video effects, Share, Delete. Override options are only available for files you've starred or pinned.",
+                "Long press menu — Hold a row to open a menu with Favourite, Hide, Add to queue next, Edit tags, per-file Overrides (speed, pitch, EQ preset, ReplayGain mode, reverb (chip list, not a slider), volume boost, video flips, A-B loop), Share, Delete. Override options are only available for files you've starred or pinned. Saved overrides persist across plays — the override panel shows a coloured chip on the now-playing screen so you know they're active.",
+                "Edit tags — Manually override the title / artist / album the app shows for this file. Doesn't write to the file itself; lives in app settings (cleared on Reset).",
                 "Hidden files — Hide from the long press menu removes a file from this list without deleting it. Unhide from Settings → Library → Hidden files.",
                 "Multi-select — Tap the three-dot menu in the top bar then \"Select multiple\" to bulk-favourite, bulk-delete, or bulk-add to queue."
+            )
+        ),
+        InfoSection(
+            title = "Smart playlists",
+            bullets = listOf(
+                "Strip below the search bar — Saved smart playlists. Tap a chip to play the resolved track list.",
+                "Create — Tap the \"+\" on the strip. Form-based editor: name, rules (field × operator × value, AND-combined), sort, limit. No JSON to hand-craft.",
+                "Available fields — title, artist, album, duration, playCount, lastPlayedDays, isFavourite, isHidden, mediaKind. Operators include eq / contains / gt / lt / between."
             )
         )
     )
@@ -130,7 +148,10 @@ val cloudInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Spotify-specific",
             bullets = listOf(
-                "Spotify Connect device — Green card at the top of the Spotify section. Tap it to pick which speaker, phone, or Google Home plays Spotify."
+                "Spotify Connect device — Green card at the top of the Spotify section. Tap it to pick which speaker, phone, or Google Home plays Spotify.",
+                "Web API limitation — Spotify's public API only returns devices registered with the Spotify SDK. Google Home / Nest / Fire Stick / Sonos appear in the official Spotify app via local-network discovery (a channel third-party apps cannot use). The picker shows an amber 'Not yet working' notice for this. Workaround: use the Cast button on the Player tab to send LOCAL audio to those devices instead.",
+                "Wake-Spotify button — Auto-bounces to the Spotify app for ~1.5 s and returns. Sometimes makes more devices appear in our picker after Spotify itself registers them with Connect.",
+                "Premium required — Spotify's API rejects full-track playback for Free accounts. Free testers see a 'Spotify Premium required' toast on play."
             )
         ),
         InfoSection(
@@ -143,9 +164,10 @@ val cloudInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Content features",
             bullets = listOf(
-                "Subtitles auto-fetch — When playing a Drive video, the app can look up matching subtitles from OpenSubtitles. Toggle in Settings → Video.",
-                "Podcasts — Subscribe to RSS feeds in the Podcasts section. New episodes auto-download to a chosen folder. Tap a podcast row to see its episodes.",
-                "Offline copy — Pin a Drive track to make a local copy that plays without needing an internet connection."
+                "Subtitles auto-fetch — Sign in to OpenSubtitles (Settings → Subtitles). The app looks up matching SRTs by filename or by content hash (your choice). Configure: language chip set (12 languages), match-by-hash radio, save next to the video file vs in app cache, override-existing-.srt switch.",
+                "Podcasts — Add to the Podcasts section by RSS feed URL OR via the iTunes / Apple Podcasts directory search. Per-show settings: auto-download new, retain last N episodes, notify on new. Episodes save to Movies/PowerMediaPlayer/podcasts/<showSlug>/.",
+                "Online metadata enrichment — Off by default. When on, the app looks up missing track / artist / album / year / genre fields from MusicBrainz and / or Discogs. Per-result cache so repeat lookups skip the network. Apply scope: all files OR only files with no embedded tags.",
+                "Offline copy — Pin a Drive track to make a local copy that plays without internet. Settings → Cloud → Offline storage limit caps total size; LRU eviction clears the oldest pin first."
             )
         )
     )
