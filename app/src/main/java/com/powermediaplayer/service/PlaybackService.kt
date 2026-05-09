@@ -1004,9 +1004,21 @@ class PlaybackService : MediaSessionService() {
         // item already in the queue so album art / title / artist
         // survive the receiver echo when we switch to CastPlayer, and
         // the original URI can be restored when switching back.
+        // ALSO populate metadata-only entries from the CastPlayer side
+        // when reattaching mid-cast after a process restart — without
+        // this the cache is empty and the in-app UI shows blank.
         items.forEach { item ->
             if (item.mediaId.isNotEmpty()) {
-                Companion.senderMetadataByMediaId[item.mediaId] = item.mediaMetadata
+                // Always keep best-known metadata. Don't blow away an
+                // existing rich entry with a sparse cast-side reconstruction.
+                val existing = Companion.senderMetadataByMediaId[item.mediaId]
+                val incoming = item.mediaMetadata
+                if (existing == null ||
+                    (incoming.title != null && existing.title == null) ||
+                    (incoming.artworkUri != null && existing.artworkUri == null)
+                ) {
+                    Companion.senderMetadataByMediaId[item.mediaId] = incoming
+                }
                 if (current !is CastPlayer) {
                     // Only stash the WHOLE item if it currently holds
                     // the original sender-side URI — i.e. when we're on
@@ -1053,16 +1065,30 @@ class PlaybackService : MediaSessionService() {
             // local player gets back its original content://, file://
             // or https:// URI.
             items.map { item ->
-                Companion.senderItemByMediaId[item.mediaId] ?: item
+                val cached = Companion.senderItemByMediaId[item.mediaId]
+                cached ?: rebuildLocalFromCastItem(item)
             }
         }
 
         current.stop()
         ms.player = target
         if (transformed.isNotEmpty()) {
-            target.setMediaItems(transformed, currentIndex, currentPosition)
-            target.playWhenReady = playWhenReady
-            target.prepare()
+            // CRASH FIX (NPE in DefaultMediaSourceFactory.createMediaSource):
+            // ExoPlayer requires every MediaItem to have a non-null
+            // localConfiguration. CastPlayer's reconstructed items can
+            // come back with localConfiguration=null when the receiver
+            // round-trip drops it. Filter the items defensively.
+            val safe = transformed.filter { it.localConfiguration != null }
+            if (safe.isNotEmpty()) {
+                target.setMediaItems(safe, currentIndex.coerceIn(0, safe.size - 1), currentPosition)
+                target.playWhenReady = playWhenReady
+                target.prepare()
+            } else {
+                com.powermediaplayer.util.Diag.w(
+                    "PMP_DIAG",
+                    "switchPlayer: every item lost localConfiguration after cast - skipping setMediaItems"
+                )
+            }
         }
 
         // Re-publish the active player reference for the video surface.
@@ -1152,6 +1178,27 @@ class PlaybackService : MediaSessionService() {
                     .build()
             )
             .build()
+    }
+
+    /**
+     * Cast bug fix (cast-stop crash): when CastPlayer hands us back a
+     * MediaItem after disconnect, its localConfiguration may be null
+     * (Cast SDK's converter drops it for items reconstructed from a
+     * remote MediaInfo). Rebuild a usable local MediaItem from the
+     * mediaId / requestMetadata fallbacks. Skips relay http URLs (the
+     * cleartext path) — caller should prefer the senderItemByMediaId
+     * cache for those.
+     */
+    private fun rebuildLocalFromCastItem(item: MediaItem): MediaItem {
+        val candidate = item.localConfiguration?.uri
+            ?: item.requestMetadata.mediaUri
+            ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull()
+            ?: return item
+        // Skip cleartext relay URLs — local player can't fetch them
+        // and they're not the user's content anyway.
+        if (candidate.scheme == "http" &&
+            candidate.host?.startsWith("192.168.") == true) return item
+        return item.buildUpon().setUri(candidate).build()
     }
 
     private fun guessMimeFromUri(uri: android.net.Uri): String {
@@ -1359,6 +1406,11 @@ class PlaybackService : MediaSessionService() {
             // `http://<lan-ip>:<port>/<token>` URL served by our relay.
             val isCasting = mediaSession.player is CastPlayer
             val relay = if (isCasting) castRelayServer else null
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "onAddMediaItems count=${mediaItems.size} casting=$isCasting " +
+                    "firstId='${mediaItems.firstOrNull()?.mediaId?.takeLast(40).orEmpty()}'"
+            )
             val resolvedItems = mediaItems.map { item ->
                 val resolvedUri = item.localConfiguration?.uri
                     ?: item.requestMetadata.mediaUri

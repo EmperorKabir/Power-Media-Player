@@ -822,17 +822,20 @@ class PlaybackConnection @Inject constructor(
         val cached = rawId.takeIf { it.isNotEmpty() }
             ?.let { com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId[it] }
         val itemMetadata = cached ?: rawCurrentItem?.mediaMetadata
-        // Cast metadata diag: print cache hit/miss + first 20 cached
-        // keys so we can correlate the user-reported "metadata blank
-        // during cast" with what's actually in the lookup table.
-        val isCastingNow = c.javaClass.simpleName.contains("CastPlayer", ignoreCase = true)
-        if (isCastingNow) {
+        // Metadata cache diag: c is a MediaController so we can't check
+        // CastPlayer-ness directly here. Always log cache hit/miss with
+        // a hashCode of the controller-reported metadata so we can
+        // correlate per-tick whether the cache fallback is ever firing.
+        if (rawId.isNotEmpty()) {
             val keys = com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId.keys
-                .take(5).joinToString(",")
+                .take(3).joinToString("|") { it.takeLast(40) }
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
-                "Cast metadata lookup rawId='${rawId.take(80)}' " +
+                "Metadata lookup rawId='…${rawId.takeLast(40)}' " +
                     "cacheHit=${cached != null} cacheSize=${com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId.size} " +
+                    "ctrlTitle='${metadata.title?.toString().orEmpty().take(30)}' " +
+                    "itemTitle='${itemMetadata?.title?.toString().orEmpty().take(30)}' " +
+                    "itemArtwork=${itemMetadata?.artworkUri != null} " +
                     "sampleKeys=[$keys]"
             )
         }

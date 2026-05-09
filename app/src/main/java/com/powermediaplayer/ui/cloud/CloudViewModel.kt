@@ -650,16 +650,29 @@ class CloudViewModel @Inject constructor(
     fun openSpotifyConnectPicker() {
         viewModelScope.launch {
             val devices = spotifyProvider.listConnectDevices()
+            val phoneOnly = devices.size <= 1
             _uiState.update {
                 it.copy(
                     spotifyConnectDevices = devices,
                     spotifyConnectPickerVisible = true,
                     errorMessage = if (devices.isEmpty())
-                        "No Spotify Connect devices found. Open Spotify on a phone or speaker first." else it.errorMessage
+                        "No Spotify Connect devices found. Tap the Wake-Spotify button below."
+                    else it.errorMessage
                 )
+            }
+            // Auto-bounce on first open when only the phone (or nothing)
+            // is visible — Spotify's public Web API only lists devices
+            // recently active on the user's account, so without poking
+            // the Spotify app the picker stays empty. Bounce only ONCE
+            // per picker open to avoid loops.
+            if (phoneOnly && !alreadyBouncedThisOpen) {
+                alreadyBouncedThisOpen = true
+                wakeSpotifyForDeviceDiscovery()
             }
         }
     }
+
+    private var alreadyBouncedThisOpen: Boolean = false
 
     /**
      * Bounce out to the Spotify app for ~1.5s and come back. Spotify's
@@ -692,6 +705,7 @@ class CloudViewModel @Inject constructor(
 
     fun dismissSpotifyConnectPicker() {
         _uiState.update { it.copy(spotifyConnectPickerVisible = false) }
+        alreadyBouncedThisOpen = false
     }
 
     /**
