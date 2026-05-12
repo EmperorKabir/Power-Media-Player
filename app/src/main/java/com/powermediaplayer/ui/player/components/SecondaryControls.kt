@@ -182,7 +182,10 @@ fun SpeedControl(
         ExposedDropdownMenuBox(
             expanded = speedMenuExpanded,
             onExpandedChange = { speedMenuExpanded = it },
-            modifier = Modifier.width(110.dp)
+            // widthIn(min=…) lets the dropdown grow with the user's
+            // font scale — a hard width(110.dp) clips "1.75×" / "2.5×"
+            // at scale ≥ 1.4×.
+            modifier = Modifier.widthIn(min = 110.dp)
         ) {
             OutlinedTextField(
                 value = formatSpeed(playbackSpeed),

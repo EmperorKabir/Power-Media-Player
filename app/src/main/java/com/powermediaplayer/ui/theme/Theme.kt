@@ -3,7 +3,16 @@ package com.powermediaplayer.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.powermediaplayer.ui.settings.SettingsViewModel
 
 /**
  * Power Media Player Material 3 dark theme.
@@ -40,6 +49,16 @@ private val PowerDarkColorScheme = darkColorScheme(
     surfaceTint = TealAccent
 )
 
+/**
+ * Hybrid font/hitbox scale set by the user in Settings → Display →
+ * Font size. Read this CompositionLocal from any Composable that
+ * needs to scale touch-target dimensions (button size, row height,
+ * padding) while leaving icon glyphs at their design size. Text
+ * automatically scales via the LocalDensity.fontScale override below.
+ * Default 1.0f when nobody provides it (preview / unit-test contexts).
+ */
+val LocalPmpScale = compositionLocalOf { 1.0f }
+
 @Composable
 fun PowerMediaPlayerTheme(
     content: @Composable () -> Unit
@@ -49,9 +68,31 @@ fun PowerMediaPlayerTheme(
     // recomposes when the user changes it in Settings → Theme. No
     // per-call-site rewrite required.
     InstallThemeAccent()
-    MaterialTheme(
-        colorScheme = PowerDarkColorScheme,
-        typography = PowerTypography,
-        content = content
-    )
+
+    // Hybrid font scale: read the user's value via the same Settings
+    // ViewModel pattern used by InstallThemeAccent. Apply it as a
+    // multiplier on LocalDensity.fontScale (this is what makes every
+    // sp-based TextStyle grow) AND publish it via LocalPmpScale so
+    // composables can scale their touch targets to match.
+    val vm: SettingsViewModel = hiltViewModel()
+    val state by vm.uiState.collectAsState()
+    val userScale = state.fontSizeScale.coerceIn(0.85f, 2.0f)
+    val baseDensity = LocalDensity.current
+    val scaledDensity = remember(baseDensity, userScale) {
+        Density(
+            density = baseDensity.density,
+            fontScale = baseDensity.fontScale * userScale
+        )
+    }
+
+    CompositionLocalProvider(
+        LocalDensity provides scaledDensity,
+        LocalPmpScale provides userScale
+    ) {
+        MaterialTheme(
+            colorScheme = PowerDarkColorScheme,
+            typography = PowerTypography,
+            content = content
+        )
+    }
 }

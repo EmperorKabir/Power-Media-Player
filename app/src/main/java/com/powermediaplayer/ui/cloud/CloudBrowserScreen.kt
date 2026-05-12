@@ -576,8 +576,10 @@ fun CloudBrowserScreen(
                     // the per-row star icon.
                     val favFolders = uiState.driveFavourites
                     val favTracks = uiState.driveFavouriteTracks
+                    // Favourites strip now shows at any folder depth so a
+                    // long-press-to-favourite reflects immediately without
+                    // navigating back to root.
                     val showFavourites = uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE &&
-                        uiState.folderStack.size <= 1 &&
                         (favFolders.isNotEmpty() || favTracks.isNotEmpty())
                     if (showFavourites) {
                         item(key = "fav_header") {
@@ -756,9 +758,12 @@ fun CloudBrowserScreen(
     if (uiState.spotifyConnectPickerVisible) {
         SpotifyConnectPickerSheet(
             devices = uiState.spotifyConnectDevices,
+            activeDeviceName = uiState.spotifyActiveDeviceName,
+            isPlaying = uiState.spotifyIsPlaying,
             onRefresh = { viewModel.openSpotifyConnectPicker() },
             onWakeSpotify = { viewModel.wakeSpotifyForDeviceDiscovery() },
             onPick = { id, name -> viewModel.selectSpotifyConnectDevice(id, name) },
+            onPauseSpotify = { viewModel.pauseSpotify() },
             onDismiss = { viewModel.dismissSpotifyConnectPicker() }
         )
     }
@@ -768,9 +773,12 @@ fun CloudBrowserScreen(
 @Composable
 private fun SpotifyConnectPickerSheet(
     devices: List<Pair<String, String>>,
+    activeDeviceName: String?,
+    isPlaying: Boolean,
     onRefresh: () -> Unit,
     onWakeSpotify: () -> Unit,
     onPick: (String, String) -> Unit,
+    onPauseSpotify: () -> Unit,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -795,6 +803,57 @@ private fun SpotifyConnectPickerSheet(
                         contentDescription = "Refresh device list",
                         tint = SpotifyGreen
                     )
+                }
+            }
+            // "Now playing on X" banner with inline Pause / Disconnect.
+            // Only shown when /me/player polling reports a non-blank
+            // active device. Pause silences playback on that device
+            // (Spotify Web API has no true disconnect — pause is the
+            // closest user-visible equivalent).
+            if (!activeDeviceName.isNullOrBlank()) {
+                Surface(
+                    color = SpotifyGreen.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.GraphicEq else Icons.Filled.Speaker,
+                            contentDescription = null,
+                            tint = SpotifyGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isPlaying) "Now playing on" else "Last active on",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextTertiary
+                            )
+                            Text(
+                                text = activeDeviceName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary
+                            )
+                        }
+                        if (isPlaying) {
+                            TextButton(onClick = onPauseSpotify) {
+                                Icon(
+                                    imageVector = Icons.Filled.Pause,
+                                    contentDescription = null,
+                                    tint = SpotifyGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(text = "Stop", color = SpotifyGreen)
+                            }
+                        }
+                    }
                 }
             }
             Surface(
@@ -875,8 +934,11 @@ private fun SpotifyConnectPickerSheet(
             }
             if (devices.isNotEmpty()) {
                 devices.forEach { (id, name) ->
+                    val isActiveRow = !activeDeviceName.isNullOrBlank() &&
+                        name.equals(activeDeviceName, ignoreCase = true)
                     Surface(
-                        color = SurfaceElevated,
+                        color = if (isActiveRow) SpotifyGreen.copy(alpha = 0.18f)
+                        else SurfaceElevated,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -900,6 +962,13 @@ private fun SpotifyConnectPickerSheet(
                                 color = TextPrimary,
                                 modifier = Modifier.weight(1f)
                             )
+                            if (isActiveRow) {
+                                Text(
+                                    text = if (isPlaying) "Playing" else "Active",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SpotifyGreen
+                                )
+                            }
                         }
                     }
                 }

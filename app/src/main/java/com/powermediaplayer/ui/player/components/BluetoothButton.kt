@@ -248,8 +248,7 @@ private fun BluetoothDeviceRow(device: BluetoothDeviceInfo, onClick: () -> Unit)
             Text(
                 text = if (device.isConnected) "Connected" else device.address,
                 style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-                fontSize = 11.sp
+                color = TextTertiary
             )
         }
         if (device.isConnected) {

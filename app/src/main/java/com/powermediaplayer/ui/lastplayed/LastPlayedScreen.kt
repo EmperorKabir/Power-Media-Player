@@ -278,7 +278,11 @@ private fun RecentsSectionHeader(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(Modifier.width(4.dp))
-                Text("Clear all", color = TealAccent, fontSize = 12.sp)
+                Text(
+                    "Clear all",
+                    color = TealAccent,
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
     }
@@ -614,10 +618,8 @@ private fun SourcePill(source: Source) {
         shape = RoundedCornerShape(6.dp)
     ) {
         Text(label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
             color = color,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }

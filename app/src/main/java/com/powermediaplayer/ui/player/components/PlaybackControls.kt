@@ -189,10 +189,10 @@ private fun SkipButton(
     val outlineColor = Color.Black
 
     // 20% bump from prior 15/11 sp so 5s/10s/30s read at glance even on
-    // an unfolded fold. Compose only re-rasterises on size change so
-    // the runtime cost is one-shot.
-    val numStyle = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
-    val sStyle   = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+    // an unfolded fold. Now sourced from MaterialTheme.typography so
+    // the user's Font-size scale propagates here too.
+    val numStyle = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+    val sStyle   = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold)
 
     IconButton(
         onClick = wrappedClick,
@@ -315,7 +315,7 @@ fun LabelledNavigationButton(
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = label,
-                style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = if (enabled) TextPrimary else DisabledGrey
             )
         }

@@ -72,7 +72,8 @@ data class SettingsUiState(
     val stopOnTaskRemoved: Boolean = false,
     val coldStartResumeBackoffSec: Int = 5,
     val scheduledAlarms: List<com.powermediaplayer.alarm.AlarmRecord> = emptyList(),
-    val themeAccentHex: String = ""
+    val themeAccentHex: String = "",
+    val fontSizeScale: Float = 1.0f
 )
 
 /**
@@ -157,7 +158,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.metadataEnrichmentProvider,
             settingsDataStore.replayGainAutoScan,
             settingsDataStore.scheduledAlarms,
-            settingsDataStore.themeAccentHex
+            settingsDataStore.themeAccentHex,
+            settingsDataStore.fontSizeScale
         )
     ) { v ->
         SettingsUiState(
@@ -219,7 +221,8 @@ class SettingsViewModel @Inject constructor(
             metadataEnrichmentProvider = v[55] as String,
             replayGainAutoScan = v[56] as Boolean,
             scheduledAlarms = @Suppress("UNCHECKED_CAST") (v[57] as List<com.powermediaplayer.alarm.AlarmRecord>),
-            themeAccentHex = v[58] as String
+            themeAccentHex = v[58] as String,
+            fontSizeScale = v[59] as Float
         )
     }.stateIn(
         scope = viewModelScope,
@@ -229,6 +232,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setDeepScan(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setDeepScan(enabled) }
+    }
+
+    fun setFontSizeScale(value: Float) {
+        viewModelScope.launch { settingsDataStore.setFontSizeScale(value) }
     }
 
     fun setVideoControlsHideSec(seconds: Int) {

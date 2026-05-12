@@ -117,6 +117,16 @@ fun SettingsScreen(
         )
         SettingsDivider()
 
+        // Hybrid font / hitbox scale. Slider 0.85x..2.00x with live
+        // preview. Drag commits continuously so the rest of the UI
+        // recomposes in real time and the user can see exactly how
+        // every screen looks at the chosen scale.
+        FontSizeScalePicker(
+            current = uiState.fontSizeScale,
+            onChange = { viewModel.setFontSizeScale(it) }
+        )
+        SettingsDivider()
+
         // §D-2 Auto-hide controls
         // §D-2
         SettingsSectionHeader("Auto-hide controls")
@@ -1002,5 +1012,63 @@ private fun ArtworkScalePicker(
                 }
             }
         }
+    }
+}
+
+/**
+ * Hybrid font + hitbox scale picker. Slider 0.85x..2.00x in 0.05x
+ * steps with a live preview row beneath so the user can see how
+ * typography reflows at the chosen scale. The slider commits as the
+ * user drags so the rest of the app reflows in real time too.
+ */
+@Composable
+private fun FontSizeScalePicker(
+    current: Float,
+    onChange: (Float) -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = "Font size",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Scales text and touch targets across the whole app. " +
+                "Icon glyphs stay at their design size. Drag the slider " +
+                "to preview — every screen reflows live.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "0.85×",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary
+            )
+            Slider(
+                value = current.coerceIn(0.85f, 2.0f),
+                onValueChange = onChange,
+                valueRange = 0.85f..2.0f,
+                steps = 22, // 0.05x increments between min and max
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+            )
+            Text(
+                text = "2.0×",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Current: " + "%.2f".format(current) + "×",
+            style = MaterialTheme.typography.bodySmall,
+            color = TealAccent
+        )
     }
 }

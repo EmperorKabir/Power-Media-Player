@@ -30,6 +30,7 @@ class SettingsDataStore @Inject constructor(
         val LAST_EQ_PRESET_ID = longPreferencesKey("last_eq_preset_id")
         val HEADPHONE_EQ_PRESET_ID = longPreferencesKey("headphone_eq_preset_id")
         val THEME_ACCENT_HEX = stringPreferencesKey("theme_accent_hex")
+        val FONT_SIZE_SCALE = floatPreferencesKey("font_size_scale")
         // §C13 — per-paired-device EQ preset map. Set of "addr|presetId".
         // Address-keyed because device names aren't stable; the BT MAC
         // is. presetId = -1 means "Don't auto-switch for this device".
@@ -745,6 +746,20 @@ class SettingsDataStore @Inject constructor(
     suspend fun setThemeAccentHex(hex: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.THEME_ACCENT_HEX] = hex
+        }
+    }
+
+    // App-wide font / hitbox scale. Hybrid: text grows + touch targets
+    // grow proportionally via LocalPmpScale; icon glyphs stay at design
+    // size. Range 0.85f..2.0f, default 1.0f. Clamped at read time so a
+    // stale value never breaks the layout.
+    val fontSizeScale: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[Keys.FONT_SIZE_SCALE] ?: 1.0f).coerceIn(0.85f, 2.0f)
+    }
+
+    suspend fun setFontSizeScale(value: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.FONT_SIZE_SCALE] = value.coerceIn(0.85f, 2.0f)
         }
     }
 

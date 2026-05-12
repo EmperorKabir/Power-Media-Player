@@ -66,7 +66,15 @@ data class CloudUiState(
      * list is non-empty AND the picker bottom-sheet is open.
      */
     val spotifyConnectDevices: List<Pair<String, String>> = emptyList(),
-    val spotifyConnectPickerVisible: Boolean = false
+    val spotifyConnectPickerVisible: Boolean = false,
+
+    /**
+     * Currently-active Spotify device name + playing state, mirrored
+     * from /me/player. Used by the Connect picker sheet to show a
+     * "Now playing on X" banner and a Pause button.
+     */
+    val spotifyActiveDeviceName: String? = null,
+    val spotifyIsPlaying: Boolean = false
 )
 
 @HiltViewModel
@@ -266,6 +274,19 @@ class CloudViewModel @Inject constructor(
         // a non-blank trackUri appears — and re-fired on each fresh
         // trackUri so consecutive mirrored tracks each get a Recents
         // row matching the user's "every fresh play = new row" model.
+        // Mirror Spotify playback state (active device + playing flag)
+        // into uiState so the Connect picker sheet can show "Now playing
+        // on X" + the Pause control.
+        viewModelScope.launch {
+            spotifyProvider.spotifyState.collect { s ->
+                _uiState.update {
+                    it.copy(
+                        spotifyActiveDeviceName = s?.deviceName,
+                        spotifyIsPlaying = s?.isPlaying == true
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             spotifyProvider.spotifyState
                 .map { it?.trackUri.orEmpty() }
@@ -509,9 +530,29 @@ class CloudViewModel @Inject constructor(
     }
 
     /** Persist a folder picked via the Drive Picker WebView. */
+    /**
+     * Pauses Spotify playback on whatever device is currently active.
+     * Used by the Connect picker's "Stop playing" / Disconnect row so
+     * the user can silence playback on an Echo / Sonos / etc. without
+     * needing the official Spotify app.
+     */
+    fun pauseSpotify() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { spotifyProvider.pause() }
+        }
+    }
+
     fun rememberPickedDriveFolder(folderId: String, folderName: String) {
         viewModelScope.launch(Dispatchers.IO) {
             driveOAuthProvider.rememberPickedFolder(folderId, folderName)
+            // Force a fresh Drive root listing so the newly-picked folder
+            // appears immediately, bypassing refreshIfStale's 30s gate.
+            lastCloudRefreshMs = System.currentTimeMillis()
+            val st = _uiState.value
+            if (st.activeProvider == CloudProviderType.GOOGLE_DRIVE) {
+                val (id, label) = st.folderStack.lastOrNull() ?: (null to "Root")
+                browseDrive(id, label)
+            }
         }
     }
 
