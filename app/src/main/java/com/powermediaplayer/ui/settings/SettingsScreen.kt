@@ -1252,9 +1252,15 @@ fun BtVideoAudioOffsetRow(
 }
 
 /**
- * Smart-home integrations panel — Philips Hue + IFTTT. Both zero-cost
- * at user side; details surface as the features land in subsequent
+ * Smart-home integrations panel — Philips Hue + generic Webhooks. Both
+ * zero-cost; details surface as the features land in subsequent
  * versions. Placeholder for now so the Settings layout is final.
+ *
+ * IFTTT-specific branding intentionally dropped — IFTTT moved Webhooks
+ * to Pro tier (paid for end users) post-2023. The Webhooks feature
+ * compatibly drives Home Assistant, Pipedream, n8n, Make.com free
+ * tiers, Tasker, and IFTTT Pro — user chooses which receiver to point
+ * the webhook URLs at.
  */
 @Composable
 fun SmartHomePlaceholder() {
@@ -1266,10 +1272,11 @@ fun SmartHomePlaceholder() {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Philips Hue and IFTTT integrations are on the roadmap. " +
-                "Both are free at user side — no subscriptions required. " +
-                "Hue will discover bridges on your local Wi-Fi; IFTTT " +
-                "will use webhooks you supply.",
+            text = "Philips Hue and Webhooks integrations are on the roadmap. " +
+                "Both are zero-cost. Hue will discover bridges on your local " +
+                "Wi-Fi; Webhooks lets you connect to any service that accepts " +
+                "incoming HTTP — Home Assistant, Pipedream, n8n, Make.com, " +
+                "IFTTT Pro, Tasker, etc.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
         )
