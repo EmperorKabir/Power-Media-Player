@@ -330,7 +330,13 @@ class PlaybackService : MediaSessionService() {
         // Audio delay slider — lives in the AudioDelayProcessor's
         // ring buffer; the supplier reads this @Volatile per buffer.
         serviceScope.launch {
-            settingsDataStore.audioDelayMs.collect { audioDelayFlag = it }
+            // Sum of the manual audio-delay slider AND the BT video
+            // audio-offset slider. Both feed the same processor so users
+            // can stack them without surprises.
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.audioDelayMs,
+                settingsDataStore.btVideoAudioOffsetMs
+            ) { a, b -> a + b }.collect { audioDelayFlag = it }
         }
         // Crossfade slider — drives the volume-ramp coroutine
         // started below in onCreate after the player is built.
@@ -534,6 +540,10 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .setSeekBackIncrementMs(initialBtMapping.skipBackSeconds * 1000L)
             .setSeekForwardIncrementMs(initialBtMapping.skipForwardSeconds * 1000L)
+            // 3-second rule for Prev: if position > 3000ms, seekToPrevious()
+            // restarts the current item instead of going to the previous one.
+            // Cross-app standard (Spotify, Apple Music, Pocket Casts, Media3).
+            .setMaxSeekToPreviousPositionMs(3000L)
             .build()
 
         // PREVIOUS_SYNC always seeks to the keyframe BEFORE the requested
@@ -551,6 +561,28 @@ class PlaybackService : MediaSessionService() {
         // Frame-rate strategy left at default. Forcing OFF on a Z Fold
         // 6 (1-120Hz adaptive panel) made things worse — the panel
         // can match content rate which is usually best.
+
+        // Cold-start sync: read pitch + speed + audio offset from
+        // DataStore synchronously and seed the player BEFORE first
+        // playback so the user doesn't hear unwanted pitch/speed for
+        // the first ~100 ms while the async flow collectors catch up.
+        // 200 ms timeout safety net; defaults applied on miss.
+        runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(200) {
+                    val pitch = settingsDataStore.pitchIndependent.first()
+                    val speed = settingsDataStore.playbackSpeed.first()
+                    player!!.playbackParameters = androidx.media3.common.PlaybackParameters(
+                        speed.coerceIn(0.25f, 4f),
+                        pitch.coerceIn(0.5f, 2f)
+                    )
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "AUDIO_FX",
+                        "cold-start seeded speed=$speed pitch=$pitch"
+                    )
+                }
+            }
+        }
 
         // §C14 — install per-scenario audio-focus policy.
         installAudioFocusPolicy()
@@ -1408,6 +1440,17 @@ class PlaybackService : MediaSessionService() {
             // (same package, signed identity) bypass the remap so the
             // on-screen prev/next behave as labelled.
             val isExternal = controller.packageName != packageName
+            // Log every external (BT / car / headset) command we receive
+            // BEFORE filtering. Captures the raw opcode + caller package
+            // so testers can see exactly what their car emits.
+            if (isExternal) {
+                com.powermediaplayer.diag.DiagLog.event(
+                    "BT_CMD",
+                    "cmd=$playerCommand pkg=${controller.packageName} " +
+                        "prevAct=${btMapping.prevAction} nextAct=${btMapping.nextAction} " +
+                        "skipBack=${btMapping.skipBackSeconds}s skipFwd=${btMapping.skipForwardSeconds}s"
+                )
+            }
             if (!isExternal) return super.onPlayerCommandRequest(session, controller, playerCommand)
 
             val player = session.player
@@ -1415,29 +1458,45 @@ class PlaybackService : MediaSessionService() {
             return when (playerCommand) {
                 Player.COMMAND_SEEK_TO_PREVIOUS,
                 Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "BT_CMD",
+                        "→ dispatch PREV pos=${player.currentPosition}ms action=${mapping.prevAction}"
+                    )
                     applyAction(player, mapping.prevAction, mapping.skipBackSeconds, isPrev = true)
                     SessionResult.RESULT_INFO_SKIPPED
                 }
                 Player.COMMAND_SEEK_TO_NEXT,
                 Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "BT_CMD",
+                        "→ dispatch NEXT pos=${player.currentPosition}ms action=${mapping.nextAction}"
+                    )
                     applyAction(player, mapping.nextAction, mapping.skipForwardSeconds, isPrev = false)
                     SessionResult.RESULT_INFO_SKIPPED
                 }
-                // AVRCP FAST_FORWARD / REWIND are semantically "seek by N
-                // seconds" (distinct from NEXT/PREV which navigate items),
-                // so they always go through SKIP_FORWARD / SKIP_BACK
-                // regardless of the user's prevAction / nextAction
-                // remapping. Some car head-units bind their forward / back
-                // keys to these instead of NEXT / PREV.
                 Player.COMMAND_SEEK_FORWARD -> {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "BT_CMD",
+                        "→ dispatch SEEK_FORWARD pos=${player.currentPosition}ms by=${mapping.skipForwardSeconds}s"
+                    )
                     applyAction(player, BluetoothMediaActions.SKIP_FORWARD, mapping.skipForwardSeconds, isPrev = false)
                     SessionResult.RESULT_INFO_SKIPPED
                 }
                 Player.COMMAND_SEEK_BACK -> {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "BT_CMD",
+                        "→ dispatch SEEK_BACK pos=${player.currentPosition}ms by=${mapping.skipBackSeconds}s"
+                    )
                     applyAction(player, BluetoothMediaActions.SKIP_BACK, mapping.skipBackSeconds, isPrev = true)
                     SessionResult.RESULT_INFO_SKIPPED
                 }
-                else -> @Suppress("DEPRECATION") super.onPlayerCommandRequest(session, controller, playerCommand)
+                else -> {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "BT_CMD",
+                        "→ unhandled cmd=$playerCommand passing through to Media3"
+                    )
+                    @Suppress("DEPRECATION") super.onPlayerCommandRequest(session, controller, playerCommand)
+                }
             }
         }
 
@@ -1551,14 +1610,14 @@ class PlaybackService : MediaSessionService() {
         when (action) {
             BluetoothMediaActions.PREV_TRACK -> {
                 crossfadeController.abort()
-                player.seekToPreviousMediaItem()
+                // seekToPrevious() honours maxSeekToPreviousPositionMs
+                // (3000ms): if > 3s into current item, restarts it;
+                // otherwise skips to the previous item. Standard pattern.
+                player.seekToPrevious()
             }
             BluetoothMediaActions.NEXT_TRACK -> {
-                // §B3 — abort any active crossfade when the user skips
-                // explicitly so the secondary doesn't keep ramping into
-                // the new track.
                 crossfadeController.abort()
-                player.seekToNextMediaItem()
+                player.seekToNext()
             }
             BluetoothMediaActions.SKIP_BACK -> {
                 // Route through the same cumulativeSkip path the in-app

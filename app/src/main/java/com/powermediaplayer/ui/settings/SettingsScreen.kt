@@ -127,6 +127,28 @@ fun SettingsScreen(
         )
         SettingsDivider()
 
+        // Diagnostic logging (opt-in). Off by default. When on, writes
+        // technical events (BT remote opcodes, audio-effect attach
+        // results, key lifecycle, crashes) to app-private external
+        // storage so testers can pull the file via adb or Files app.
+        DiagLogPicker(
+            enabled = uiState.diagLogEnabled,
+            path = viewModel.diagLogPath(),
+            bytes = viewModel.diagLogBytes(),
+            onToggle = { viewModel.setDiagLogEnabled(it) },
+            onClear = { viewModel.clearDiagLog() }
+        )
+        SettingsDivider()
+
+        BtVideoAudioOffsetRow(
+            valueMs = uiState.btVideoAudioOffsetMs,
+            onValueChange = { viewModel.setBtVideoAudioOffsetMs(it) }
+        )
+        SettingsDivider()
+
+        SmartHomePlaceholder()
+        SettingsDivider()
+
         // §D-2 Auto-hide controls
         // §D-2
         SettingsSectionHeader("Auto-hide controls")
@@ -1069,6 +1091,187 @@ private fun FontSizeScalePicker(
             text = "Current: " + "%.2f".format(current) + "×",
             style = MaterialTheme.typography.bodySmall,
             color = TealAccent
+        )
+    }
+}
+
+@Composable
+private fun DiagLogPicker(
+    enabled: Boolean,
+    path: String,
+    bytes: Long,
+    onToggle: (Boolean) -> Unit,
+    onClear: () -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Diagnostic logging",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Writes technical events (Bluetooth remote commands, audio effects, crashes) " +
+                        "to a file you can share. Off by default. No personal media titles or paths " +
+                        "are recorded.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = onToggle
+            )
+        }
+        if (enabled) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "File location:",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary
+            )
+            Text(
+                text = path,
+                style = MaterialTheme.typography.bodySmall,
+                color = TealAccent
+            )
+            Text(
+                text = "Current size: " + "%.1f".format(bytes / 1024.0) + " KB",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onClear) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = ErrorRed,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("Clear logs", color = ErrorRed)
+            }
+        }
+    }
+}
+
+/**
+ * Reusable slider row with a small RestartAlt reset icon to the right.
+ * The reset icon only renders when [value] != [default], keeping the
+ * row uncluttered at default state. Used across every slider in the
+ * app for consistent reset behaviour.
+ */
+@Composable
+fun ResetSliderRow(
+    label: String,
+    value: Float,
+    default: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    steps: Int = 0,
+    valueLabel: String? = null,
+    onValueChange: (Float) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                color = TextPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            if (valueLabel != null) {
+                Text(
+                    text = valueLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TealAccent
+                )
+                Spacer(Modifier.width(4.dp))
+            }
+            if (kotlin.math.abs(value - default) > 0.0001f) {
+                IconButton(
+                    onClick = { onValueChange(default) },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.RestartAlt,
+                        contentDescription = "Reset $label to default",
+                        tint = TealAccent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        Slider(
+            value = value.coerceIn(valueRange.start, valueRange.endInclusive),
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            steps = steps,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * Bluetooth audio-video offset slider for the Settings → Display
+ * section. ±1000 ms range, 10 ms steps, default 0. Used when watching
+ * video over Bluetooth speakers and the audio is noticeably ahead of
+ * or behind the picture.
+ */
+@Composable
+fun BtVideoAudioOffsetRow(
+    valueMs: Int,
+    onValueChange: (Int) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Text(
+            text = "Bluetooth video audio offset",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Text(
+            text = "If watching video over Bluetooth speakers / headphones, " +
+                "lip-sync may drift because Bluetooth adds latency. Slide " +
+                "right to delay the video (most common). Range ±1 second.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary
+        )
+        ResetSliderRow(
+            label = "Offset",
+            value = valueMs.toFloat(),
+            default = 0f,
+            valueRange = -1000f..1000f,
+            steps = 199, // 10 ms increments
+            valueLabel = "${valueMs} ms",
+            onValueChange = { onValueChange(it.toInt()) }
+        )
+    }
+}
+
+/**
+ * Smart-home integrations panel — Philips Hue + IFTTT. Both zero-cost
+ * at user side; details surface as the features land in subsequent
+ * versions. Placeholder for now so the Settings layout is final.
+ */
+@Composable
+fun SmartHomePlaceholder() {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Text(
+            text = "Smart home",
+            style = MaterialTheme.typography.titleSmall,
+            color = TealAccent
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Philips Hue and IFTTT integrations are on the roadmap. " +
+                "Both are free at user side — no subscriptions required. " +
+                "Hue will discover bridges on your local Wi-Fi; IFTTT " +
+                "will use webhooks you supply.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary
         )
     }
 }

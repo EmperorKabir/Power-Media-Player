@@ -31,6 +31,8 @@ class SettingsDataStore @Inject constructor(
         val HEADPHONE_EQ_PRESET_ID = longPreferencesKey("headphone_eq_preset_id")
         val THEME_ACCENT_HEX = stringPreferencesKey("theme_accent_hex")
         val FONT_SIZE_SCALE = floatPreferencesKey("font_size_scale")
+        val DIAG_LOG_ENABLED = booleanPreferencesKey("diag_log_enabled")
+        val BT_VIDEO_AUDIO_OFFSET_MS = intPreferencesKey("bt_video_audio_offset_ms")
         // §C13 — per-paired-device EQ preset map. Set of "addr|presetId".
         // Address-keyed because device names aren't stable; the BT MAC
         // is. presetId = -1 means "Don't auto-switch for this device".
@@ -760,6 +762,35 @@ class SettingsDataStore @Inject constructor(
     suspend fun setFontSizeScale(value: Float) {
         context.dataStore.edit { prefs ->
             prefs[Keys.FONT_SIZE_SCALE] = value.coerceIn(0.85f, 2.0f)
+        }
+    }
+
+    // Opt-in persistent file logger (see DiagLog). Off by default. When
+    // on, writes technical events (BT remote opcodes, audio-effect
+    // attach results, key lifecycle) to app-private external storage so
+    // testers can pull the file via adb or the system Files app.
+    val diagLogEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.DIAG_LOG_ENABLED] ?: false
+    }
+
+    suspend fun setDiagLogEnabled(value: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DIAG_LOG_ENABLED] = value
+        }
+    }
+
+    // Manual video audio-offset for Bluetooth playback. Positive ms =
+    // delay the video to catch up to the audio (typical BT). Negative
+    // ms = the opposite. Range ±1000 ms, default 0. Applied to the
+    // existing audio-delay path that the in-app Subtitle/Audio delay
+    // setting already uses, so no new audio renderer plumbing needed.
+    val btVideoAudioOffsetMs: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] ?: 0).coerceIn(-1000, 1000)
+    }
+
+    suspend fun setBtVideoAudioOffsetMs(value: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] = value.coerceIn(-1000, 1000)
         }
     }
 

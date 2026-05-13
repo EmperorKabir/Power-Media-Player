@@ -73,7 +73,9 @@ data class SettingsUiState(
     val coldStartResumeBackoffSec: Int = 5,
     val scheduledAlarms: List<com.powermediaplayer.alarm.AlarmRecord> = emptyList(),
     val themeAccentHex: String = "",
-    val fontSizeScale: Float = 1.0f
+    val fontSizeScale: Float = 1.0f,
+    val diagLogEnabled: Boolean = false,
+    val btVideoAudioOffsetMs: Int = 0
 )
 
 /**
@@ -159,7 +161,9 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.replayGainAutoScan,
             settingsDataStore.scheduledAlarms,
             settingsDataStore.themeAccentHex,
-            settingsDataStore.fontSizeScale
+            settingsDataStore.fontSizeScale,
+            settingsDataStore.diagLogEnabled,
+            settingsDataStore.btVideoAudioOffsetMs
         )
     ) { v ->
         SettingsUiState(
@@ -222,7 +226,9 @@ class SettingsViewModel @Inject constructor(
             replayGainAutoScan = v[56] as Boolean,
             scheduledAlarms = @Suppress("UNCHECKED_CAST") (v[57] as List<com.powermediaplayer.alarm.AlarmRecord>),
             themeAccentHex = v[58] as String,
-            fontSizeScale = v[59] as Float
+            fontSizeScale = v[59] as Float,
+            diagLogEnabled = v[60] as Boolean,
+            btVideoAudioOffsetMs = v[61] as Int
         )
     }.stateIn(
         scope = viewModelScope,
@@ -237,6 +243,21 @@ class SettingsViewModel @Inject constructor(
     fun setFontSizeScale(value: Float) {
         viewModelScope.launch { settingsDataStore.setFontSizeScale(value) }
     }
+
+    fun setDiagLogEnabled(value: Boolean) {
+        viewModelScope.launch { settingsDataStore.setDiagLogEnabled(value) }
+    }
+
+    fun setBtVideoAudioOffsetMs(value: Int) {
+        viewModelScope.launch { settingsDataStore.setBtVideoAudioOffsetMs(value) }
+    }
+
+    fun clearDiagLog() {
+        com.powermediaplayer.diag.DiagLog.clear()
+    }
+
+    fun diagLogPath(): String = com.powermediaplayer.diag.DiagLog.directoryPath()
+    fun diagLogBytes(): Long = com.powermediaplayer.diag.DiagLog.totalBytes()
 
     fun setVideoControlsHideSec(seconds: Int) {
         viewModelScope.launch { settingsDataStore.setVideoControlsHideSec(seconds) }

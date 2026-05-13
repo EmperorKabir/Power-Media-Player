@@ -42,6 +42,19 @@ fun BluetoothButton(modifier: Modifier = Modifier) {
     var sheetOpen by remember { mutableStateOf(false) }
     var enabledState by remember { mutableStateOf(BluetoothHelper.isEnabled(context)) }
     var permissionGranted by remember { mutableStateOf(BluetoothHelper.hasConnectPermission(context)) }
+    // Tri-state: off / on-but-no-A2DP-route / A2DP-routing-active.
+    // A2DP-active is the true "playing through Bluetooth" state.
+    val audioManager = remember {
+        context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+    }
+    var a2dpActive by remember { mutableStateOf(audioManager.isBluetoothA2dpOn) }
+    // Poll lightly so the icon updates as the user pairs / unpairs.
+    androidx.compose.runtime.LaunchedEffect(enabledState) {
+        while (true) {
+            a2dpActive = enabledState && audioManager.isBluetoothA2dpOn
+            kotlinx.coroutines.delay(2000)
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -66,9 +79,21 @@ fun BluetoothButton(modifier: Modifier = Modifier) {
         modifier = modifier
     ) {
         Icon(
-            imageVector = if (enabledState) Icons.Filled.Bluetooth else Icons.Filled.BluetoothDisabled,
-            contentDescription = "Bluetooth",
-            tint = if (enabledState) TealAccent else TextSecondary
+            imageVector = when {
+                a2dpActive -> Icons.Filled.BluetoothConnected
+                enabledState -> Icons.Filled.Bluetooth
+                else -> Icons.Filled.BluetoothDisabled
+            },
+            contentDescription = when {
+                a2dpActive -> "Bluetooth audio active"
+                enabledState -> "Bluetooth on, not routing audio"
+                else -> "Bluetooth off"
+            },
+            tint = when {
+                a2dpActive -> TealAccent
+                enabledState -> TealAccent.copy(alpha = 0.7f)
+                else -> TextSecondary
+            }
         )
     }
 

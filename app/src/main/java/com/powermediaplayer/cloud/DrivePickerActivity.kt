@@ -93,7 +93,14 @@ class DrivePickerActivity : ComponentActivity() {
             // for the Picker iframe to receive postMessage).
             val baseUrl = "https://drive-picker.local.invalid/"
             val html = """
-                <!DOCTYPE html><html><head><meta charset="utf-8"></head>
+                <!DOCTYPE html><html><head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+                <style>
+                  html, body { margin: 0; padding: 0; width: 100%; height: 100%;
+                               background: #000; overflow: hidden; }
+                </style>
+                </head>
                 <body><script>
                   window.__OAUTH_TOKEN__ = "${token.replace("\"", "\\\"")}";
                   window.__API_KEY__     = "${apiKey.replace("\"", "\\\"")}";
@@ -105,9 +112,38 @@ class DrivePickerActivity : ComponentActivity() {
                     onCancel: function () { window.PMP_PICKER_BRIDGE.onCancel(); },
                     onError:  function (m) { window.PMP_PICKER_BRIDGE.onError(m); }
                   };
-                  // Load and execute the asset HTML's <script> block.
-                  // (We can't iframe it because gapi.load requires
-                  // top-level access.)
+                  var pmpPicker = null;
+                  function pmpRebuildPicker() {
+                    try {
+                      var view = new google.picker.DocsView()
+                        .setIncludeFolders(true)
+                        .setSelectFolderEnabled(true)
+                        .setMimeTypes("application/vnd.google-apps.folder");
+                      pmpPicker = new google.picker.PickerBuilder()
+                        .addView(view)
+                        .setOAuthToken(window.__OAUTH_TOKEN__)
+                        .setDeveloperKey(window.__API_KEY__)
+                        .setAppId(window.__APP_ID__)
+                        .setSize(window.innerWidth, window.innerHeight)
+                        .setCallback(function (data) {
+                          var action = data[google.picker.Response.ACTION];
+                          if (action === google.picker.Action.PICKED) {
+                            var d = (data[google.picker.Response.DOCUMENTS] || [])[0];
+                            if (d) window.PMP_PICKER.onPicked(
+                              d[google.picker.Document.ID],
+                              d[google.picker.Document.NAME] || "Picked folder"
+                            );
+                          } else if (action === google.picker.Action.CANCEL) {
+                            window.PMP_PICKER.onCancel();
+                          }
+                        })
+                        .enableFeature(google.picker.Feature.NAV_HIDDEN)
+                        .build();
+                      pmpPicker.setVisible(true);
+                    } catch (e) {
+                      window.PMP_PICKER.onError("Picker init: " + e.message);
+                    }
+                  }
                   fetch("https://www.googleapis.com/")
                     .catch(function(){})
                     .finally(function() {
@@ -115,34 +151,13 @@ class DrivePickerActivity : ComponentActivity() {
                       s.src = "https://apis.google.com/js/api.js";
                       s.onload = function () {
                         gapi.load("picker", { callback: function () {
-                          try {
-                            var view = new google.picker.DocsView()
-                              .setIncludeFolders(true)
-                              .setSelectFolderEnabled(true)
-                              .setMimeTypes("application/vnd.google-apps.folder");
-                            var picker = new google.picker.PickerBuilder()
-                              .addView(view)
-                              .setOAuthToken(window.__OAUTH_TOKEN__)
-                              .setDeveloperKey(window.__API_KEY__)
-                              .setAppId(window.__APP_ID__)
-                              .setCallback(function (data) {
-                                var action = data[google.picker.Response.ACTION];
-                                if (action === google.picker.Action.PICKED) {
-                                  var d = (data[google.picker.Response.DOCUMENTS] || [])[0];
-                                  if (d) window.PMP_PICKER.onPicked(
-                                    d[google.picker.Document.ID],
-                                    d[google.picker.Document.NAME] || "Picked folder"
-                                  );
-                                } else if (action === google.picker.Action.CANCEL) {
-                                  window.PMP_PICKER.onCancel();
-                                }
-                              })
-                              .enableFeature(google.picker.Feature.NAV_HIDDEN)
-                              .build();
-                            picker.setVisible(true);
-                          } catch (e) {
-                            window.PMP_PICKER.onError("Picker init: " + e.message);
-                          }
+                          pmpRebuildPicker();
+                          // Re-render on configuration / fold changes so
+                          // the dialog always matches the WebView size.
+                          window.addEventListener("resize", function () {
+                            if (pmpPicker) { try { pmpPicker.dispose(); } catch(_) {} }
+                            pmpRebuildPicker();
+                          });
                         }});
                       };
                       s.onerror = function () {
