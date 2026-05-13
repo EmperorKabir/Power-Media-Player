@@ -209,7 +209,8 @@ fun SettingsScreen(
             "Auto-resume the last track when a BT audio device reconnects.",
             Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
         SliderRow("Bookmark replay context", "${uiState.bookmarkReplayContextSec} s",
-            uiState.bookmarkReplayContextSec.toFloat(), 0f..30f) { viewModel.setBookmarkReplayContextSec(it.toInt()) }
+            uiState.bookmarkReplayContextSec.toFloat(), 0f..30f,
+            default = 5f) { viewModel.setBookmarkReplayContextSec(it.toInt()) }
         Text(
             text = "Tap a bookmark and the seek lands a few seconds before the saved moment for context. 0 = exact.",
             style = MaterialTheme.typography.bodySmall,
@@ -217,7 +218,8 @@ fun SettingsScreen(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
         )
         SliderRow("Cold-start resume backoff", "${uiState.coldStartResumeBackoffSec} s",
-            uiState.coldStartResumeBackoffSec.toFloat(), 0f..30f) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
+            uiState.coldStartResumeBackoffSec.toFloat(), 0f..30f,
+            default = 5f) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
         Text(
             text = "When re-opening the app after a force-stop, rewind by this many seconds before resuming. Helpful for re-finding context in podcasts and audiobooks.",
             style = MaterialTheme.typography.bodySmall,
@@ -268,9 +270,11 @@ fun SettingsScreen(
             "When on, 5.1/7.1/Dolby/DTS audio bitstream is sent to a connected receiver / HDMI sink unchanged so it can decode itself. Off forces software downmix to stereo.",
             Icons.Filled.Speaker, uiState.passthroughAudio) { viewModel.setPassthroughAudio(it) }
         SliderRow("Volume boost", "+${uiState.volumeBoostMb / 100} dB",
-            uiState.volumeBoostMb.toFloat(), 0f..2000f) { viewModel.setVolumeBoost(it.toInt()) }
+            uiState.volumeBoostMb.toFloat(), 0f..2000f,
+            default = 0f) { viewModel.setVolumeBoost(it.toInt()) }
         SliderRow("Independent pitch", "${"%.2f".format(uiState.pitch)}×",
-            uiState.pitch, 0.5f..2.0f) { viewModel.setPitch(it) }
+            uiState.pitch, 0.5f..2.0f,
+            default = 1.0f) { viewModel.setPitch(it) }
         SettingsToggleItem("Reverse audio (local files)",
             "Play local files backwards. Cloud streams unsupported.",
             Icons.Filled.SwapHoriz, uiState.audioReverseLocal) { viewModel.setAudioReverseLocal(it) }
@@ -280,7 +284,8 @@ fun SettingsScreen(
         // §D-5
         SettingsSectionHeader("Crossfade")
         SliderRow("Crossfade", "${uiState.crossfadeMs} ms",
-            uiState.crossfadeMs.toFloat(), 0f..10_000f) { viewModel.setCrossfade(it.toInt()) }
+            uiState.crossfadeMs.toFloat(), 0f..10_000f,
+            default = 0f) { viewModel.setCrossfade(it.toInt()) }
         Text(
             text = "Master crossfade duration. Per-curve and per-trigger sub-toggles live on the Player tab's Crossfade panel.",
             style = MaterialTheme.typography.bodySmall,
@@ -321,7 +326,8 @@ fun SettingsScreen(
             )
         }
         SliderRow("Audio delay", "${uiState.audioDelayMs} ms",
-            uiState.audioDelayMs.toFloat(), -2000f..2000f) { viewModel.setAudioDelay(it.toInt()) }
+            uiState.audioDelayMs.toFloat(), -2000f..2000f,
+            default = 0f) { viewModel.setAudioDelay(it.toInt()) }
         SettingsDivider()
 
         // §D-7 Subtitles
@@ -358,7 +364,8 @@ fun SettingsScreen(
             )
         }
         SliderRow("Subtitle delay", "${uiState.subtitleDelayMs} ms",
-            uiState.subtitleDelayMs.toFloat(), -5000f..5000f) { viewModel.setSubtitleDelay(it.toInt()) }
+            uiState.subtitleDelayMs.toFloat(), -5000f..5000f,
+            default = 0f) { viewModel.setSubtitleDelay(it.toInt()) }
         SettingsDivider()
 
         // §D-8 Library
@@ -631,6 +638,7 @@ private fun SliderRow(
     valueLabel: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    default: Float? = null,
     onChange: (Float) -> Unit
 ) {
     var local by remember(value) { mutableStateOf(value) }
@@ -639,6 +647,25 @@ private fun SliderRow(
             Text(label, style = MaterialTheme.typography.titleSmall, color = TextPrimary,
                 modifier = Modifier.weight(1f))
             Text(valueLabel, style = MaterialTheme.typography.labelMedium, color = TealAccent)
+            // Reset-to-default icon. Only renders when a default is
+            // declared AND the current value differs from it. Matches
+            // ResetSliderRow's pattern for visual consistency.
+            if (default != null && kotlin.math.abs(local - default) > 0.0001f) {
+                IconButton(
+                    onClick = {
+                        local = default
+                        onChange(default)
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.RestartAlt,
+                        contentDescription = "Reset $label to default",
+                        tint = TealAccent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
         Slider(
             value = local,
@@ -1087,11 +1114,28 @@ private fun FontSizeScalePicker(
             )
         }
         Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Current: " + "%.2f".format(current) + "×",
-            style = MaterialTheme.typography.bodySmall,
-            color = TealAccent
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Current: " + "%.2f".format(current) + "×",
+                style = MaterialTheme.typography.bodySmall,
+                color = TealAccent,
+                modifier = Modifier.weight(1f)
+            )
+            // Reset to 1.0x default — only when away from default.
+            if (kotlin.math.abs(current - 1.0f) > 0.0001f) {
+                IconButton(
+                    onClick = { onChange(1.0f) },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.RestartAlt,
+                        contentDescription = "Reset font size to 1.00×",
+                        tint = TealAccent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
     }
 }
 
