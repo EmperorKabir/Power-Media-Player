@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tune
@@ -127,6 +128,43 @@ fun AudioEffectsButton(
                 // is re-encoded by the Bluetooth codec downstream so
                 // the reverb effect can be inaudible over BT.
                 if (s.reverbPreset != 0) {
+                    Spacer(Modifier.height(8.dp))
+                    // Wet/dry mix slider. Lets the user dial the reverb
+                    // back from "max wet" without losing the preset
+                    // character. Reset arrow appears when not at default
+                    // 1.0 (full wet).
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Reverb intensity",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "${(s.reverbWetMix * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TealAccent
+                        )
+                        if (kotlin.math.abs(s.reverbWetMix - 1.0f) > 0.0001f) {
+                            IconButton(
+                                onClick = { settingsVm.setReverbWetMix(1.0f); touch() },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.RestartAlt,
+                                    contentDescription = "Reset reverb intensity to 100%",
+                                    tint = TealAccent,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                    Slider(
+                        value = s.reverbWetMix.coerceIn(0f, 1f),
+                        onValueChange = { settingsVm.setReverbWetMix(it); touch() },
+                        valueRange = 0f..1f,
+                        steps = 19 // 5% increments
+                    )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "Reverb works on phone speaker and wired headphones. " +

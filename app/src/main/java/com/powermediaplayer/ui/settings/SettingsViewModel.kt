@@ -75,7 +75,8 @@ data class SettingsUiState(
     val themeAccentHex: String = "",
     val fontSizeScale: Float = 1.0f,
     val diagLogEnabled: Boolean = false,
-    val btVideoAudioOffsetMs: Int = 0
+    val btVideoAudioOffsetMs: Int = 0,
+    val reverbWetMix: Float = 1.0f
 )
 
 /**
@@ -163,7 +164,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.themeAccentHex,
             settingsDataStore.fontSizeScale,
             settingsDataStore.diagLogEnabled,
-            settingsDataStore.btVideoAudioOffsetMs
+            settingsDataStore.btVideoAudioOffsetMs,
+            settingsDataStore.reverbWetMix
         )
     ) { v ->
         SettingsUiState(
@@ -228,7 +230,8 @@ class SettingsViewModel @Inject constructor(
             themeAccentHex = v[58] as String,
             fontSizeScale = v[59] as Float,
             diagLogEnabled = v[60] as Boolean,
-            btVideoAudioOffsetMs = v[61] as Int
+            btVideoAudioOffsetMs = v[61] as Int,
+            reverbWetMix = v[62] as Float
         )
     }.stateIn(
         scope = viewModelScope,
@@ -250,6 +253,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setBtVideoAudioOffsetMs(value: Int) {
         viewModelScope.launch { settingsDataStore.setBtVideoAudioOffsetMs(value) }
+    }
+
+    fun setReverbWetMix(value: Float) {
+        viewModelScope.launch { settingsDataStore.setReverbWetMix(value) }
     }
 
     fun clearDiagLog() {

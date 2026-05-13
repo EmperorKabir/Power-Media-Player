@@ -33,6 +33,7 @@ class SettingsDataStore @Inject constructor(
         val FONT_SIZE_SCALE = floatPreferencesKey("font_size_scale")
         val DIAG_LOG_ENABLED = booleanPreferencesKey("diag_log_enabled")
         val BT_VIDEO_AUDIO_OFFSET_MS = intPreferencesKey("bt_video_audio_offset_ms")
+        val REVERB_WET_MIX = floatPreferencesKey("reverb_wet_mix")
         // §C13 — per-paired-device EQ preset map. Set of "addr|presetId".
         // Address-keyed because device names aren't stable; the BT MAC
         // is. presetId = -1 means "Don't auto-switch for this device".
@@ -791,6 +792,20 @@ class SettingsDataStore @Inject constructor(
     suspend fun setBtVideoAudioOffsetMs(value: Int) {
         context.dataStore.edit { prefs ->
             prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] = value.coerceIn(-1000, 1000)
+        }
+    }
+
+    // Reverb wet/dry mix — multiplies the EnvironmentalReverb reverbLevel
+    // a preset would otherwise apply. 0.0 = effect inaudible (dry only),
+    // 1.0 = full preset wetness (default). Lets the user dial back the
+    // intensity without giving up the preset's other characteristics.
+    val reverbWetMix: Flow<Float> = context.dataStore.data.map { prefs ->
+        (prefs[Keys.REVERB_WET_MIX] ?: 1.0f).coerceIn(0f, 1f)
+    }
+
+    suspend fun setReverbWetMix(value: Float) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.REVERB_WET_MIX] = value.coerceIn(0f, 1f)
         }
     }
 

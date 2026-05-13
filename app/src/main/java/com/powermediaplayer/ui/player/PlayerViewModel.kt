@@ -1571,8 +1571,18 @@ class PlayerViewModel @Inject constructor(
             er.reflectionsLevel = spec.reflectionsLevel
             er.density = spec.density
             er.diffusion = spec.diffusion
+            // Wet/dry mix — user-controllable via Settings (or the
+            // Audio Effects popup). 0.0 = dry only (effect inaudible),
+            // 1.0 = full preset wetness. Read synchronously from the
+            // already-cached DataStore to keep this binder-thread path
+            // off the IO dispatcher.
+            val wetMix = kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(50) {
+                    settingsDataStore.reverbWetMix.first()
+                }
+            } ?: 1.0f
             exoPlayer.setAuxEffectInfo(
-                androidx.media3.common.AuxEffectInfo(er.id, 1.0f)
+                androidx.media3.common.AuxEffectInfo(er.id, wetMix.coerceIn(0f, 1f))
             )
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
