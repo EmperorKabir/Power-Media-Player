@@ -122,6 +122,21 @@ fun AudioEffectsButton(
                         )
                     }
                 }
+                // Reverb routing guard. Android's EnvironmentalReverb
+                // attaches to the local audio chain; A2DP-routed audio
+                // is re-encoded by the Bluetooth codec downstream so
+                // the reverb effect can be inaudible over BT.
+                if (s.reverbPreset != 0) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Reverb works on phone speaker and wired headphones. " +
+                            "On some Bluetooth audio outputs the effect may be " +
+                            "bypassed by the BT codec — try wired output if you " +
+                            "can't hear it.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 if (isTrueMonoOutput) {
                     Text(

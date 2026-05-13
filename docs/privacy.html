@@ -30,7 +30,7 @@
 <body>
 
 <h1>Privacy Policy — Power Media Player</h1>
-<p class="meta">Last updated: 9 May 2026</p>
+<p class="meta">Last updated: 14 May 2026</p>
 
 <p>
   Power Media Player ("the App") is an offline-first audio and video player for Android, developed
@@ -103,6 +103,40 @@
   <li>If you enable enrichment in Settings, the App can look up missing track / artist / album / year / genre fields from <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a> and / or <a href="https://discogs.com" target="_blank" rel="noopener">Discogs</a>.</li>
   <li>Only the existing track title and (if present) artist are sent to those services. No personal identifiers leave your device.</li>
   <li>Lookup results are cached locally so the same query doesn't repeat the network call.</li>
+</ul>
+
+<h3>Audio fingerprinting via AcoustID (optional, off by default)</h3>
+<ul>
+  <li>When enrichment is enabled and embedded ID3 / MP4 / Vorbis tags are missing or unreliable, the App can identify a track by its <strong>acoustic fingerprint</strong> using the free <a href="https://acoustid.org" target="_blank" rel="noopener">AcoustID</a> service.</li>
+  <li>A short fingerprint (a numerical hash, <strong>not</strong> the audio itself) is sent to AcoustID alongside the App's API key (a non-sensitive rate-limit token).</li>
+  <li>AcoustID returns possible track / artist / album matches; the App caches the result locally.</li>
+  <li>No personal data, account information, or audio recordings leave your device.</li>
+  <li>Disable in Settings &rarr; Metadata enrichment if you prefer no third-party fingerprint lookups.</li>
+</ul>
+
+<h3>Philips Hue smart lighting (planned, optional)</h3>
+<ul>
+  <li>When you enable the Philips Hue integration in Settings &rarr; Smart home (planned for a future release), the App communicates with a Hue Bridge on your local Wi-Fi network only.</li>
+  <li>The App discovers Bridges via mDNS, pairs via Hue's physical Link-button flow, and stores the per-app username (pre-shared key) the Bridge issues. No Hue cloud account is required and no Hue credentials are needed.</li>
+  <li>Light commands (on/off, colour, brightness) and the real-time Entertainment-API audio-reactive stream (DTLS over UDP) travel directly between your phone and your Bridge on your LAN.</li>
+  <li>No Hue-related data is sent to the Developer or to any third party.</li>
+</ul>
+
+<h3>Webhooks (planned, optional)</h3>
+<ul>
+  <li>When you configure a Webhook URL in Settings &rarr; Smart home (planned for a future release), the App makes HTTPS <code>POST</code> requests to that URL when playback events occur (track-play, pause, skip).</li>
+  <li>The payload contains the current track title, artist, album, and playback state &mdash; only what is needed for automation rules.</li>
+  <li>The destination URL you supply determines where this data goes. You are in control of the destination. Common targets users configure: Home Assistant (self-hosted), Pipedream, n8n, Make.com, IFTTT Pro, Tasker.</li>
+  <li>You can also paste an inbound Webhook URL the App exposes &mdash; services can <code>POST</code> to it to send play / pause / skip commands to the App.</li>
+  <li>The Developer does not operate any of the receiving services and never sees Webhook payloads.</li>
+</ul>
+
+<h2>Encryption</h2>
+<ul>
+  <li>All OAuth tokens (Google Drive, Spotify, OpenSubtitles) and session keys are stored on your device in Android's <code>EncryptedSharedPreferences</code> (hardware-backed keystore).</li>
+  <li>Bookmarks, settings, smart playlists, playback history, and metadata caches live in app-private <code>DataStore</code> that no other app on the device can read.</li>
+  <li>All network requests (to Google, Spotify, OpenSubtitles, AcoustID, MusicBrainz, Discogs, podcast hosts, user-supplied Webhook URLs) use <strong>HTTPS</strong>. No plaintext HTTP.</li>
+  <li>There is no plaintext credential or personal-data file the App reads or writes.</li>
 </ul>
 
 <h2>Permissions</h2>

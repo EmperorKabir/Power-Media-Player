@@ -51,24 +51,19 @@ import com.powermediaplayer.ui.theme.TextSecondary
 import com.powermediaplayer.ui.theme.TextTertiary
 
 /**
- * #79 — direct cast-device switching.
+ * Combined Cast button — always visible, replaces the previous pair
+ * (CastButton + CastSwitcherButton). Tapping always opens the sheet:
  *
- * Stock [androidx.mediarouter.app.MediaRouteButton] behaviour: tap when
- * NO session is active opens the route chooser; tap when a session IS
- * active opens the controller dialog (current device + STOP). To switch
- * to a different device the user must STOP the current session, tap
- * again, then pick the new device — three taps minimum.
+ *   - When no session is active: sheet shows the device chooser
+ *     (every discovered Cast route). Picking a device starts a session
+ *   - When a session IS active: sheet shows the same chooser PLUS
+ *     a Stop Casting row at the bottom. Tapping a different device
+ *     transfers the session; tapping Stop ends it
  *
- * This component sits next to [CastButton] and exposes a one-tap
- * switcher. When no session is active it stays hidden so the standard
- * Cast button is the only entry. When a session IS active, the icon
- * lights up; tapping opens our own bottom sheet listing every Cast
- * route the system has discovered, with the current device highlighted
- * and a Stop entry. Picking a different route calls
- * `MediaRouter.selectRoute(...)`; the Cast SDK's SessionManager then
- * tears down the old session (our `onSessionEnding` handler clears
- * receiver media so it stops) and starts the new one (our
- * `onCastSessionAvailable` handler re-queues via switchPlayer).
+ * The icon changes state to match: CastConnected (teal solid) when a
+ * session is active, Cast (teal dim) when idle. Always tappable, never
+ * hidden. The earlier two-button layout (separate CastButton + Cast
+ * Switcher) was redundant — users couldn't tell them apart.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,8 +114,6 @@ fun CastSwitcherButton(
         onDispose { router.removeCallback(cb) }
     }
     val isCasting = !router.selectedRoute.isDefault
-    if (!isCasting) return // hidden until a session is active
-
     var sheetOpen by remember { mutableStateOf(false) }
 
     IconButton(
@@ -128,9 +121,9 @@ fun CastSwitcherButton(
         modifier = modifier.size(40.dp)
     ) {
         Icon(
-            imageVector = Icons.Filled.CastConnected,
-            contentDescription = "Switch cast device",
-            tint = TealAccent
+            imageVector = if (isCasting) Icons.Filled.CastConnected else Icons.Filled.Cast,
+            contentDescription = if (isCasting) "Cast (currently casting — tap to switch or stop)" else "Cast to a device",
+            tint = if (isCasting) TealAccent else TealAccent.copy(alpha = 0.7f)
         )
     }
 
@@ -146,7 +139,7 @@ fun CastSwitcherButton(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "Cast to a different device",
+                    text = if (isCasting) "Cast — switch device or stop" else "Cast to a device",
                     style = MaterialTheme.typography.titleMedium,
                     color = TealAccent
                 )
@@ -171,15 +164,17 @@ fun CastSwitcherButton(
                         )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                StopRow(
-                    onClick = {
-                        // Selecting the default route is the documented
-                        // way to end the cast session via MediaRouter.
-                        router.selectRoute(router.defaultRoute)
-                        sheetOpen = false
-                    }
-                )
+                // Stop Casting row only when an active session exists.
+                // When idle, just the device list is shown.
+                if (isCasting) {
+                    Spacer(Modifier.height(8.dp))
+                    StopRow(
+                        onClick = {
+                            router.selectRoute(router.defaultRoute)
+                            sheetOpen = false
+                        }
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
             }
         }

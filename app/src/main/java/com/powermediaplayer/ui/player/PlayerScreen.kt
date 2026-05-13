@@ -639,15 +639,10 @@ private fun OverlayContent(
             // to do with Spotify Connect (Spotify uses its own
             // Connect-device picker in the cloud Spotify section).
             if (!uiState.isSpotifyActive) {
-                // Greyed out when the queued media is a video format
-                // the default Cast Media Receiver cannot decode (MKV /
-                // AVI / MOV etc). Audio is always castable.
-                CastButton(
-                    modifier = Modifier.size(48.dp),
-                    enabled = uiState.isCurrentMediaCastable
-                )
-                // #79 — direct device-switch affordance, only visible
-                // while a session is active.
+                // Single combined Cast button. Tap opens the sheet —
+                // when idle: device chooser. When casting: chooser +
+                // Stop Casting row. Replaced the dual-button pattern
+                // (CastButton + CastSwitcherButton).
                 CastSwitcherButton(modifier = Modifier.size(48.dp))
             }
         }
@@ -881,7 +876,8 @@ private fun PlayerScreenExpanded(
                 )
                 BluetoothButton(modifier = Modifier.size(48.dp))
                 if (!uiState.isSpotifyActive) {
-                    CastButton(modifier = Modifier.size(48.dp))
+                    // Single combined Cast button (see Compact layout
+                    // comment above for the dual-button consolidation).
                     CastSwitcherButton(modifier = Modifier.size(48.dp))
                 }
             }
