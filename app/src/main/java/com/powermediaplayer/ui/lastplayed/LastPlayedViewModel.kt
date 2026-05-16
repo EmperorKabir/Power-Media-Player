@@ -8,11 +8,15 @@ import com.powermediaplayer.service.PlaybackConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -33,6 +37,16 @@ class LastPlayedViewModel @Inject constructor(
     @param:dagger.hilt.android.qualifiers.ApplicationContext
     private val context: android.content.Context
 ) : ViewModel() {
+
+    /**
+     * Transient user-visible messages emitted by failure paths in this
+     * VM (e.g. Spotify Connect has no active device, token expired).
+     * Collected by [LastPlayedScreen] and surfaced via SnackbarHost.
+     * `extraBufferCapacity = 4` so a rapid burst (token-expired + no-
+     * device + manual replay) doesn't drop the first emission.
+     */
+    private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     /**
      * §C7 — drop overrides when a row stops being pinned.
@@ -175,6 +189,17 @@ class LastPlayedViewModel @Inject constructor(
                             )
                         )
                     }
+                } else {
+                    // Surface the failure — previously this branch was
+                    // silent and the user landed on the Player screen
+                    // with stale local metadata. SpotifyProvider's
+                    // failure messages already discriminate "session
+                    // expired" from device-list errors; fall back to a
+                    // user-actionable hint when no message is attached.
+                    val msg = play?.exceptionOrNull()?.message
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "No active Spotify device — open Spotify on your phone or a speaker, then tap again"
+                    _messages.emit(msg)
                 }
             }
             return
@@ -192,32 +217,37 @@ class LastPlayedViewModel @Inject constructor(
         }
         val uri = runCatching { Uri.parse(item.mediaUri) }.getOrNull() ?: return
         val targetPos = atPositionMs ?: item.lastPositionMs
-        // Bug fix (user-reported "resume → chapter metadata gone on
-        // Harry Potter audiobook"): extractChaptersAsBundle() reads
-        // M4B chapter atoms off the file. Mirror what LibraryViewModel
-        // does for the start-index item so chapters survive the
-        // resume-from-Last-Played path.
-        val chapterExtras = runCatching {
-            com.powermediaplayer.util.M4bChapterParser
-                .extractChaptersAsBundle(context, uri)
-        }.getOrDefault(android.os.Bundle())
-        val mediaItem = androidx.media3.common.MediaItem.Builder()
-            .setMediaId(item.mediaUri)
-            .setUri(uri)
-            .setRequestMetadata(
-                androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                    .setMediaUri(uri).build()
-            )
-            .setMediaMetadata(
-                androidx.media3.common.MediaMetadata.Builder()
-                    .setTitle(item.title)
-                    .setArtist(item.subtitle)
-                    .setExtras(chapterExtras)
+        // M4bChapterParser opens MediaExtractor + walks the full MP4 box
+        // hierarchy synchronously. For multi-GB Drive-backed audiobooks
+        // accessed via content:// SAF this routinely blocked the Main
+        // thread > 5 s → ANR. Mirror LibraryViewModel.playSingle: build
+        // the MediaItem on Dispatchers.IO, then hop back to Main for
+        // the MediaController calls.
+        viewModelScope.launch {
+            val mediaItem = withContext(Dispatchers.IO) {
+                val chapterExtras = runCatching {
+                    com.powermediaplayer.util.M4bChapterParser
+                        .extractChaptersAsBundle(context, uri)
+                }.getOrDefault(android.os.Bundle())
+                androidx.media3.common.MediaItem.Builder()
+                    .setMediaId(item.mediaUri)
+                    .setUri(uri)
+                    .setRequestMetadata(
+                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                            .setMediaUri(uri).build()
+                    )
+                    .setMediaMetadata(
+                        androidx.media3.common.MediaMetadata.Builder()
+                            .setTitle(item.title)
+                            .setArtist(item.subtitle)
+                            .setExtras(chapterExtras)
+                            .build()
+                    )
                     .build()
-            )
-            .build()
-        playbackConnection.setMediaItems(listOf(mediaItem), 0)
-        playbackConnection.seekTo(targetPos)
+            }
+            playbackConnection.setMediaItems(listOf(mediaItem), 0)
+            playbackConnection.seekTo(targetPos)
+        }
         // Record a NEW session so the Recents list reflects this play
         // as its own row (the user-visible "A → B → A produces three
         // rows" contract).

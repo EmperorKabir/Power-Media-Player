@@ -62,6 +62,12 @@ fun LastPlayedScreen(
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    // Surface VM-side play-failure messages (e.g. Spotify Connect has no
+    // active device). Tap-to-play silently failing was the friend-reported
+    // "takes me to player screen but song doesn't load" bug.
+    LaunchedEffect(viewModel) {
+        viewModel.messages.collect { snackbar.showSnackbar(it) }
+    }
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<HistoryItem?>(null) }
     var contextFromRecents by remember { mutableStateOf(true) }

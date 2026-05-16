@@ -716,10 +716,25 @@ class PlayerViewModel @Inject constructor(
                     }
                 }
                 // Cold start: nothing loaded. Restore the recent LOCAL
-                // item paused, then adopt its session.
-                currentMediaUri == null && recent.source == "LOCAL" -> {
+                // or DRIVE item paused, then adopt its session.
+                // Drive (SAF content://) URIs survive process death via
+                // the persistable-URI grants taken when the picker / SAF
+                // tree was first authorised. Spotify is still skipped —
+                // Connect needs an active device chosen explicitly.
+                currentMediaUri == null && (recent.source == "LOCAL" || recent.source == "DRIVE") -> {
                     runCatching {
                         val uri = android.net.Uri.parse(recent.mediaUri)
+                        // Parser off-Main — for multi-GB Drive
+                        // audiobooks the synchronous MP4 box scan
+                        // routinely blocked the cold-start coroutine
+                        // > 5 s. Same fix shape as LastPlayedViewModel
+                        // .playLocalAt and LibraryViewModel.playSingle.
+                        val chapterExtras = withContext(Dispatchers.IO) {
+                            runCatching {
+                                com.powermediaplayer.util.M4bChapterParser
+                                    .extractChaptersAsBundle(context, uri)
+                            }.getOrDefault(android.os.Bundle())
+                        }
                         val item = androidx.media3.common.MediaItem.Builder()
                             .setMediaId(recent.mediaUri)
                             .setUri(uri)
@@ -731,6 +746,7 @@ class PlayerViewModel @Inject constructor(
                                 androidx.media3.common.MediaMetadata.Builder()
                                     .setTitle(recent.title)
                                     .setArtist(recent.subtitle)
+                                    .setExtras(chapterExtras)
                                     .build()
                             )
                             .build()
@@ -746,13 +762,14 @@ class PlayerViewModel @Inject constructor(
                         lastPlayedRepo.adoptSession(recent.id)
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
-                            "Cold-start restored '${recent.title}' @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id})"
+                            "Cold-start restored '${recent.title}' [src=${recent.source}] @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id})"
                         )
                     }
                 }
-                // Player has a different media OR a cloud item is
-                // restored externally — leave session null; the 5s tick
-                // will synthesise one if playback continues.
+                // Spotify recent / player has a different media — leave
+                // session null. Spotify needs an active Connect device,
+                // chosen by the user; the 5s tick will synthesise a
+                // session if playback continues from another entry path.
             }
         }
         // ReplayGain: when enabled, read REPLAYGAIN_TRACK_GAIN on each
