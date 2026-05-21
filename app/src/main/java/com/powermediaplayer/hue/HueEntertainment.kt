@@ -1,8 +1,11 @@
 package com.powermediaplayer.hue
 
+import android.content.Context
+import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import com.powermediaplayer.diag.DiagLog
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -60,7 +63,8 @@ import kotlin.math.min
 @Singleton
 class HueEntertainment @Inject constructor(
     private val settings: SettingsDataStore,
-    private val hueProvider: HueProvider
+    private val hueProvider: HueProvider,
+    @param:ApplicationContext private val appContext: Context
 ) {
     enum class ReactiveMode(val key: String) {
         OFF("off"),
@@ -234,6 +238,24 @@ class HueEntertainment @Inject constructor(
     private fun attachVisualizer(audioSessionId: Int) {
         if (audioSessionId == 0) {
             DiagLog.event("HUE", "Visualizer skipped — audioSessionId=0")
+            return
+        }
+        // Android 12+ gates the per-session Visualizer behind
+        // RECORD_AUDIO. Without the runtime grant the FFT returns
+        // zeros silently — the user sees lights cycle colour but no
+        // bass response. Detect + log so the cause is auditable;
+        // the streaming loop continues with brightness floor instead
+        // of crashing.
+        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            appContext, android.Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            DiagLog.event(
+                "HUE",
+                "Visualizer attach — RECORD_AUDIO not granted; lighting will cycle " +
+                    "colour but won't react to bass. Grant the permission in Settings " +
+                    "→ Apps → Power Media Player → Permissions → Microphone."
+            )
             return
         }
         val v = runCatching {

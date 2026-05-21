@@ -583,6 +583,41 @@ class CloudViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Pin the CURRENT cloud folder as an album to Last Played →
+     * Pinned (shared 10-cap). Snapshots every audio item visible in
+     * the folder right now; library churn on the bridge won't break
+     * the pin. Mirrors LibraryViewModel.pinAlbum's contract.
+     */
+    suspend fun pinCurrentFolderAsAlbum(): Result<Unit> {
+        val st = _uiState.value
+        val (_, label) = st.folderStack.lastOrNull() ?: (null to "Folder")
+        // Filter the current items to audio + skip folders.
+        val audioItems = st.items.filter {
+            !it.isFolder && it.mimeType.startsWith("audio/")
+        }
+        if (audioItems.isEmpty()) {
+            return Result.failure(
+                IllegalStateException("No audio files in this folder to pin")
+            )
+        }
+        val albumKey = "cloud|||${label.lowercase()}|||${audioItems.size}"
+        val tracks = audioItems.map {
+            com.powermediaplayer.data.repository.LastPlayedRepository.AlbumTrackToPin(
+                mediaUri = it.downloadUrl,
+                title = it.name,
+                durationMs = 0L
+            )
+        }
+        return lastPlayedRepo.pinAlbum(
+            albumKey = albumKey,
+            title = label,
+            artist = "",
+            artworkUri = null,
+            tracks = tracks
+        )
+    }
+
     fun rememberPickedDriveFolder(folderId: String, folderName: String) {
         viewModelScope.launch(Dispatchers.IO) {
             driveOAuthProvider.rememberPickedFolder(folderId, folderName)
