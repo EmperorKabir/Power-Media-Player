@@ -263,6 +263,15 @@ class HueEntertainment @Inject constructor(
             // band level. Smoothing prevents frame-to-frame whiplash
             // when the percentile stretch jumps between 0..1.
             val smoothedBandLevel = FloatArray(lightChannels.size)
+            // vc29.23 — per-channel BRIGHTNESS EMA (option H). Logs
+            // showed bri% jumping 40-80 pp between consecutive
+            // 1-second sample frames at s=1.0 = visible flashing on
+            // the Hue Play bars. Light EMA (alpha 0.35 ≈ 120 ms time
+            // constant at 25 Hz) tames the whiplash without making
+            // the bulbs feel sluggish — beat flashes still come
+            // through because they're large enough deltas to cross
+            // the EMA quickly.
+            val smoothedBri = FloatArray(lightChannels.size)
             while (isActive) {
                 // Increment the sequence ID byte (rolls over at 255).
                 // Some bridge firmware checks for monotonic sequencing
@@ -386,7 +395,12 @@ class HueEntertainment @Inject constructor(
                         val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
                         shapedBeat * beatSpan
                     } else 0f
-                    val combined = (baseFloor + dyn + beatTerm).coerceIn(0f, 1f)
+                    val combinedRaw = (baseFloor + dyn + beatTerm).coerceIn(0f, 1f)
+                    // vc29.23 — per-channel EMA on final brightness.
+                    val briAlpha = 0.35f
+                    smoothedBri[i] = smoothedBri[i] * (1f - briAlpha) +
+                        combinedRaw * briAlpha
+                    val combined = smoothedBri[i]
                     val xCie = (xy[0] * 65535).toInt().coerceIn(0, 65535)
                     val yCie = (xy[1] * 65535).toInt().coerceIn(0, 65535)
                     val bri = (combined * 65535).toInt().coerceIn(0, 65535)
