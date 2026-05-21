@@ -42,7 +42,13 @@ data class MediaFileInfo(
     val dateModified: Long,
     val isVideo: Boolean,
     val albumArtUri: Uri? = null
-)
+) {
+    // vc29.26 — cache the URI string once. Previously each LazyColumn
+    // row called `file.uri.toString()` twice per recomposition
+    // (`in favourites` + `in selected`), which on a 1000-track
+    // library was 2000 Uri.toString() allocations per scroll frame.
+    @Transient val uriStr: String = uri.toString()
+}
 
 /**
  * Sort modes available in the library. NAME uses locale-aware Collator

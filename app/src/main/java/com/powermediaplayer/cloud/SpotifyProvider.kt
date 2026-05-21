@@ -1001,7 +1001,10 @@ class SpotifyProvider @Inject constructor(
                     }
                 }
                 iter++
-                delay(if (iter < 10) 200 else 1000)
+                // vc29.26 — gentler initial-burst pacing (was 10×200ms
+                // for the first 2 s). 5×400ms still gives <0.5s metadata
+                // lag after Play but halves radio wake + DataStore reads.
+                delay(if (iter < 5) 400 else 1000)
             }
         }
     }
@@ -1203,6 +1206,12 @@ class SpotifyProvider @Inject constructor(
         Result.failure(e)
     }
 
+    /** vc29.26 — last serialized AuthState we wrote to disk. Used to
+     *  skip redundant DataStore writes (and their fsync) when the
+     *  access token didn't actually rotate. Over a long Spotify
+     *  session this saves ~3600 disk writes/hour. */
+    @Volatile private var lastSerializedAuthState: String? = null
+
     /**
      * Returns a fresh access token, refreshing if needed.
      */
@@ -1213,10 +1222,14 @@ class SpotifyProvider @Inject constructor(
             state.performActionWithFreshTokens(authService) { token, _, ex ->
                 if (token != null) {
                     val refreshed = state.jsonSerializeString()
-                    // Persist on the provider's pollScope (IO) — the
-                    // previous `runBlocking` blocked AppAuth's executor
-                    // and could deadlock against DataStore's actor.
-                    pollScope.launch { runCatching { tokenStore.write(refreshed) } }
+                    // vc29.26 — only write when the serialized state
+                    // actually changed (token rotated). Most calls
+                    // return the same access token because it's still
+                    // valid.
+                    if (refreshed != lastSerializedAuthState) {
+                        lastSerializedAuthState = refreshed
+                        pollScope.launch { runCatching { tokenStore.write(refreshed) } }
+                    }
                     _isLoggedIn.value = true
                     cont.resume(token)
                 } else {

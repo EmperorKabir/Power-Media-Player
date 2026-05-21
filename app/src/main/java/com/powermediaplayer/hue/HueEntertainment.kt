@@ -310,13 +310,15 @@ class HueEntertainment @Inject constructor(
                 // delay; auto-summing keeps the Hue slider stable
                 // across other offsets.
                 // vc29.25 — refresh cached sync-offset once per second.
+                // Per-leg runCatching preserves the previous default-on-
+                // partial-failure semantics (200 / 0 / 0). Perf delta vs
+                // single runCatching is negligible at 1 Hz read cadence.
                 if (now - lastSettingsReadMs > 1000L) {
                     lastSettingsReadMs = now
-                    cachedSyncOffsetMs = runCatching {
-                        settings.hueSyncOffsetMs.first() +
-                            settings.audioDelayMs.first() +
-                            settings.btVideoAudioOffsetMs.first()
-                    }.getOrDefault(200).coerceAtLeast(0)
+                    val hueOff = runCatching { settings.hueSyncOffsetMs.first() }.getOrDefault(200)
+                    val audOff = runCatching { settings.audioDelayMs.first() }.getOrDefault(0)
+                    val btOff = runCatching { settings.btVideoAudioOffsetMs.first() }.getOrDefault(0)
+                    cachedSyncOffsetMs = (hueOff + audOff + btOff).coerceAtLeast(0)
                 }
                 val syncOffsetMs = cachedSyncOffsetMs
                 val r = analyserProcessor.getSnapshotAt(syncOffsetMs)

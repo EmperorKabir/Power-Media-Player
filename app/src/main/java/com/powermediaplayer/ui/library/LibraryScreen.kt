@@ -83,7 +83,7 @@ fun LibraryScreen(
         )
     }
     contextItem?.let { item ->
-        val isFav = item.uri.toString() in uiState.favorites
+        val isFav = item.uriStr in uiState.favorites
         com.powermediaplayer.ui.player.components.TrackContextSheet(
             title = item.title,
             subtitle = item.artist.takeIf { it.isNotBlank() && it != "Unknown Artist" } ?: "",
@@ -595,8 +595,14 @@ fun LibraryScreen(
                 // files at the top of the list. Tapping a favourite
                 // plays it via the same path as the main list (single
                 // for video, queue for audio).
-                val favouriteFiles = remember(files, uiState.favorites) {
-                    files.filter { it.uri.toString() in uiState.favorites }
+                // vc29.26 — precompute Set<String> of favourite URIs and
+                // Set<String> of selected URIs once per change instead
+                // of per-row in MediaFileItem (was 500+ `Uri.toString()`
+                // allocations per recomposition on a large library).
+                val favouriteSet = uiState.favorites
+                val selectedSet = selectedUris
+                val favouriteFiles = remember(files, favouriteSet) {
+                    files.filter { it.uriStr in favouriteSet }
                 }
                 LazyColumn(
                     state = listState,
@@ -623,11 +629,11 @@ fun LibraryScreen(
                             MediaFileItem(
                                 file = file,
                                 isFavorite = true,
-                                isSelected = file.uri.toString() in selectedUris,
+                                isSelected = file.uriStr in selectedSet,
                                 multiSelectMode = multiSelectMode,
                                 onClick = {
                                     if (multiSelectMode) {
-                                        viewModel.toggleSelection(file.uri.toString())
+                                        viewModel.toggleSelection(file.uriStr)
                                     } else {
                                         if (file.isVideo) {
                                             viewModel.playSingle(file)
@@ -653,12 +659,12 @@ fun LibraryScreen(
                     itemsIndexed(files, key = { _, file -> file.id }) { index, file ->
                         MediaFileItem(
                             file = file,
-                            isFavorite = file.uri.toString() in uiState.favorites,
-                            isSelected = file.uri.toString() in selectedUris,
+                            isFavorite = file.uriStr in favouriteSet,
+                            isSelected = file.uriStr in selectedSet,
                             multiSelectMode = multiSelectMode,
                             onClick = {
                                 if (multiSelectMode) {
-                                    viewModel.toggleSelection(file.uri.toString())
+                                    viewModel.toggleSelection(file.uriStr)
                                 } else {
                                     // Videos play single; audio queues the
                                     // visible list as an album/audiobook so

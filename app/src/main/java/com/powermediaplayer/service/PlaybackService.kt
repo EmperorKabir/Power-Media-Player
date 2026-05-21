@@ -35,6 +35,8 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
@@ -987,16 +989,42 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
+        // vc29.26 — cache audio-focus policy. Eliminates 2 async + 2
+        // launch coroutines per AudioFocus event (which can fire
+        // rapidly during BT call ping-pong).
+        serviceScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.audioFocusOnCall,
+                settingsDataStore.audioFocusOnNotification,
+                settingsDataStore.audioFocusOnOtherMedia
+            ) { c, n, o -> Triple(c, n, o) }
+                .distinctUntilChanged()
+                .collect { (c, n, o) ->
+                    focusPolicyOnCall = c
+                    focusPolicyOnNotif = n
+                    focusPolicyOnOther = o
+                }
+        }
+
         // Hue Entertainment audio-reactive — single intensity-driven
         // path. When (paired + intensity > 0 + playback active) the
         // analyser feeds beat / band / BPM data into the DTLS stream.
         // No separate mode picker; the slider is the only control.
         serviceScope.launch {
-            val playingFlow = kotlinx.coroutines.flow.flow {
-                while (true) {
-                    emit(player?.isPlaying == true)
-                    kotlinx.coroutines.delay(500)
+            // vc29.26 — was a 500 ms polling tick forever. Replaced
+            // with an event-driven callbackFlow bound to ExoPlayer's
+            // Player.Listener so the CPU can actually sleep when not
+            // playing. Saves measurable battery on long idle periods.
+            val playingFlow = callbackFlow {
+                val p = player
+                trySend(p?.isPlaying == true)
+                val listener = object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        trySend(isPlaying)
+                    }
                 }
+                p?.addListener(listener)
+                awaitClose { p?.removeListener(listener) }
             }.distinctUntilChanged()
             kotlinx.coroutines.flow.combine(
                 settingsDataStore.hueReactiveIntensity,
@@ -1275,6 +1303,12 @@ class PlaybackService : MediaSessionService() {
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
     @Volatile private var pausedDueToFocus: Boolean = false
     @Volatile private var duckedDueToFocus: Boolean = false
+    // vc29.26 — audio-focus policy cached (was 2 async + 2 launch per
+    // event reading DataStore each time). Policy changes are rare; cache
+    // them via a single combine collector in onCreate.
+    @Volatile private var focusPolicyOnCall: String = "pause"
+    @Volatile private var focusPolicyOnNotif: String = "duck"
+    @Volatile private var focusPolicyOnOther: String = "pause"
 
     private fun installAudioFocusPolicy() {
         val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
@@ -1323,54 +1357,48 @@ class PlaybackService : MediaSessionService() {
             )
             return
         }
-        val policy = serviceScope.async {
-            when (change) {
-                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ->
-                    settingsDataStore.audioFocusOnCall.first()
-                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK ->
-                    settingsDataStore.audioFocusOnNotification.first()
-                android.media.AudioManager.AUDIOFOCUS_LOSS ->
-                    settingsDataStore.audioFocusOnOtherMedia.first()
-                else -> "gain"
-            }
+        // vc29.26 — synchronous read from cached @Volatile vars. No
+        // coroutine allocation per event; safe to run on the focus
+        // callback's own thread.
+        val choice = when (change) {
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> focusPolicyOnCall
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> focusPolicyOnNotif
+            android.media.AudioManager.AUDIOFOCUS_LOSS -> focusPolicyOnOther
+            else -> "gain"
         }
-        serviceScope.launch {
-            val choice = policy.await()
-            when (change) {
-                android.media.AudioManager.AUDIOFOCUS_GAIN -> {
-                    if (duckedDueToFocus) {
-                        runCatching { p.volume = 1.0f }
-                        duckedDueToFocus = false
-                    }
-                    if (pausedDueToFocus) {
-                        runCatching { p.play() }
-                        pausedDueToFocus = false
-                    }
-                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN applied")
+        when (change) {
+            android.media.AudioManager.AUDIOFOCUS_GAIN -> {
+                if (duckedDueToFocus) {
+                    runCatching { p.volume = 1.0f }
+                    duckedDueToFocus = false
                 }
-                android.media.AudioManager.AUDIOFOCUS_LOSS,
-                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
-                android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                    when (choice) {
-                        "pause" -> {
-                            if (p.isPlaying) {
-                                pausedDueToFocus = true
-                                runCatching { p.pause() }
-                            }
-                        }
-                        "duck" -> {
-                            duckedDueToFocus = true
-                            runCatching { p.volume = 0.3f }
-                        }
-                        // "continue" / "ignore" → do nothing.
-                        else -> {}
-                    }
-                    com.powermediaplayer.util.Diag.i(
-                        "PMP_DIAG",
-                        "AudioFocus loss=$change choice=$choice " +
-                            "paused=$pausedDueToFocus ducked=$duckedDueToFocus"
-                    )
+                if (pausedDueToFocus) {
+                    runCatching { p.play() }
+                    pausedDueToFocus = false
                 }
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN applied")
+            }
+            android.media.AudioManager.AUDIOFOCUS_LOSS,
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                when (choice) {
+                    "pause" -> {
+                        if (p.isPlaying) {
+                            pausedDueToFocus = true
+                            runCatching { p.pause() }
+                        }
+                    }
+                    "duck" -> {
+                        duckedDueToFocus = true
+                        runCatching { p.volume = 0.3f }
+                    }
+                    else -> {}
+                }
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "AudioFocus loss=$change choice=$choice " +
+                        "paused=$pausedDueToFocus ducked=$duckedDueToFocus"
+                )
             }
         }
     }

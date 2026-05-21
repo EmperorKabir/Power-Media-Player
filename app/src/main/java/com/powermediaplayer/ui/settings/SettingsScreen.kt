@@ -444,9 +444,12 @@ fun SettingsScreen(
         SettingsSectionHeader("Library")
         SettingsToggleItem(
             title = "Deep Scan",
-            description = "When enabled, reads the entire file header to find missing tags " +
-                    "in rare file types. This takes longer but finds more information like " +
-                    "album art, track numbers, and genre in files that other players can't read.",
+            description = "Reads the full file header (via MediaMetadataRetriever) " +
+                    "when you tap 'Refresh metadata' on individual tracks — finds " +
+                    "tags like artist / album / artwork that MediaStore's faster " +
+                    "index missed. The main library scan always uses the fast " +
+                    "MediaStore path regardless of this setting, so toggling " +
+                    "here doesn't change scan time.",
             icon = Icons.Filled.DocumentScanner,
             checked = uiState.useDeepScan,
             onCheckedChange = { viewModel.setDeepScan(it) }

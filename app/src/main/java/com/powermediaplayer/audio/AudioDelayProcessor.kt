@@ -44,6 +44,11 @@ class AudioDelayProcessor(
     private var readPos: Int = 0
     private var filled: Int = 0
     private var maxRingBytes: Int = 0
+    // vc29.26 — reused scratch buffer for inputBuffer.get(). Was
+    // ByteArray(inBytes) per call = ~50 allocs/sec at typical 20 ms
+    // ExoPlayer buffers. Grown on demand if the input ever exceeds
+    // the previous high-water mark.
+    private var copyScratch: ByteArray = ByteArray(0)
 
     override fun onConfigure(input: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (input.encoding != C.ENCODING_PCM_16BIT) return AudioProcessor.AudioFormat.NOT_SET
@@ -75,18 +80,17 @@ class AudioDelayProcessor(
             return
         }
 
-        // Pull contents into a contiguous local copy first to handle
-        // direct vs heap input buffers uniformly.
-        val src = ByteArray(inBytes)
-        inputBuffer.get(src)
+        // vc29.26 — reuse copyScratch; only resize if input grew.
+        if (copyScratch.size < inBytes) copyScratch = ByteArray(inBytes)
+        inputBuffer.get(copyScratch, 0, inBytes)
 
         // Write into ring (two-segment if it wraps).
         val tail = ring.size - writePos
         if (inBytes <= tail) {
-            System.arraycopy(src, 0, ring, writePos, inBytes)
+            System.arraycopy(copyScratch, 0, ring, writePos, inBytes)
         } else {
-            System.arraycopy(src, 0, ring, writePos, tail)
-            System.arraycopy(src, tail, ring, 0, inBytes - tail)
+            System.arraycopy(copyScratch, 0, ring, writePos, tail)
+            System.arraycopy(copyScratch, tail, ring, 0, inBytes - tail)
         }
         writePos = (writePos + inBytes) % ring.size
         filled += inBytes

@@ -266,11 +266,21 @@ class SettingsViewModel @Inject constructor(
             hueBridgeIp = v[71] as String,
             hueAppKey = v[72] as String
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = SettingsUiState()
-    )
+    }
+        // vc29.26 — drop duplicate emissions + conflate rapid bursts.
+        // The full uiState rebuilds on EVERY one of 73 DataStore flows;
+        // sliders writing back can fire 10+ values in quick succession.
+        // distinctUntilChanged elides re-emissions when the data class
+        // didn't actually change (data class equals is structural).
+        // conflate drops intermediate values so the UI only sees the
+        // latest state, eliminating mid-flight redrawn invalidations.
+        .distinctUntilChanged()
+        .conflate()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = SettingsUiState()
+        )
 
     fun setDeepScan(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setDeepScan(enabled) }
