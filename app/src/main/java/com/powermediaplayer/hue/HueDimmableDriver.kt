@@ -92,7 +92,17 @@ class HueDimmableDriver @Inject constructor(
                 "HUE",
                 "dimmable driver START intensity=$intensity lights=${dimmableLightIds.size}"
             )
-            val intensityF = (intensity / 100f).coerceIn(0.01f, 1f)
+            // Sensitivity-shaped curve — mirrors HueEntertainment so
+            // colour + dimmable lights swing together. See the
+            // commentary block in HueEntertainment for the rationale.
+            val s = (intensity / 100f).coerceIn(0.01f, 1f)
+            val gate = 0.45f * (1f - s)
+            val invGate = (1f - gate).coerceAtLeast(0.01f)
+            val dynSpan = 0.20f + s * 0.55f
+            val baseFloor = 0.15f + s * 0.20f
+            val beatGate = 0.65f * (1f - s)
+            val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
+            val beatSpan = 0.15f + s * 0.20f
             val perLightIntervalMs = 100L // 10 Hz/light advisory ceiling
             // Stagger writes across lights — light i fires offset by
             // (perLightInterval / count) so total per-second traffic
@@ -113,12 +123,21 @@ class HueDimmableDriver @Inject constructor(
                         settings.btVideoAudioOffsetMs.first()
                 }.getOrDefault(200)
                 val r = analyserProcessor.getSnapshotAt(syncOffset)
-                // Dimmable lights take a single brightness — combine
-                // dynamics + beat boost. No band-routing (no colour).
-                val beatBoost = if (r.beat) r.beatStrength else 0f
-                // Hue dimming uses 0..100 (not 0..65535 like the
-                // Entertainment stream's brightness u16).
-                val target = ((0.30f + r.dynamics * 0.40f + beatBoost * 0.30f) * intensityF * 100f)
+                // Dimmable lights take a single brightness value. Drive
+                // it from the bass-weighted RMS (same blend the
+                // COHERENT colour path uses) so the dimmable bulbs
+                // breathe together with the colour lights.
+                val bandAvg = (r.bands[0] * 0.50f + r.bands[1] * 0.80f +
+                    r.bands[2] * 0.40f + r.bands[3] * 0.30f +
+                    r.bands[4] * 0.20f + r.bands[5] * 0.15f) / 2.35f
+                val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
+                val dyn = (gatedBand * dynSpan).coerceAtMost(0.85f)
+                val beatTerm = if (r.beat && r.beatStrength >= beatGate)
+                    ((r.beatStrength - beatGate) / invBeatGate) * beatSpan
+                else 0f
+                // Hue dimming uses 0..100 (not the 0..65535 u16 of
+                // the Entertainment stream).
+                val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
                     .coerceIn(1f, 100f)
                 for ((idx, lid) in dimmableLightIds.withIndex()) {
                     if (now < deadlines[idx]) continue

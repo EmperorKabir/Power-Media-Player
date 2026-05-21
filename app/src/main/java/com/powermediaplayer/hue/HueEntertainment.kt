@@ -180,7 +180,28 @@ class HueEntertainment @Inject constructor(
             }
 
             // ── Stream loop ──────────────────────────────────────────
-            val intensityF = (intensity / 100f).coerceIn(0.01f, 1f)
+            // "Sensitivity" semantics (vc29.1):
+            //   The slider drives THREE coupled knobs so that low values
+            //   only let the biggest peaks reach the lights, while high
+            //   values let subtle note shifts through too:
+            //     1. gate          — band level below this is treated
+            //                        as silence (gated→0).
+            //     2. dynamic span  — post-gate range that maps onto the
+            //                        light's brightness swing.
+            //     3. beat gate     — minimum beatStrength that fires a
+            //                        bright flash.
+            //   Baseline brightness also rises with sensitivity so that
+            //   high-sensitivity scenes feel "alive" between peaks and
+            //   low-sensitivity scenes stay calm.
+            //   Property: intensity=0 still means OFF (handled above).
+            val s = (intensity / 100f).coerceIn(0.01f, 1f)
+            val gate = 0.45f * (1f - s)
+            val invGate = (1f - gate).coerceAtLeast(0.01f)
+            val dynSpan = 0.20f + s * 0.55f      // 0.20 → 0.75
+            val baseFloor = 0.15f + s * 0.20f    // 0.15 → 0.35
+            val beatGate = 0.65f * (1f - s)
+            val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
+            val beatSpan = 0.15f + s * 0.20f     // 0.15 → 0.35
             val frameMs = 40L  // 25 Hz
             // Palette cycle phase (radians); BPM-driven rotation rate.
             var palettePhase = 0.0
@@ -228,9 +249,6 @@ class HueEntertainment @Inject constructor(
                 palettePhase += (r.paletteHz * frameMs / 1000.0) * (2 * Math.PI)
                 if (palettePhase > 2 * Math.PI) palettePhase -= 2 * Math.PI
 
-                // Beat brightness pulse — short window after onset.
-                val beatBoost = if (r.beat) r.beatStrength else 0f
-
                 var off = headerSize
                 // COHERENT-mode pre-computed globals (same across lights
                 // in this frame; only positional palette offset shifts).
@@ -264,15 +282,16 @@ class HueEntertainment @Inject constructor(
                         palIdx = coherentPalIdx
                     }
                     val xy = palette[palIdx]
-                    // Brightness:
-                    //  - baseline: 25 % so lights stay visibly on
-                    //  - + band level × 50 % (continuous following)
-                    //  - + beat boost × 25 % (transient flash)
-                    //  scaled by user intensity.
-                    val base = 0.25f
-                    val dyn = bandLevel * 0.50f
-                    val beat = beatBoost * 0.25f
-                    val combined = ((base + dyn + beat) * intensityF).coerceIn(0f, 1f)
+                    // Apply sensitivity-shaped brightness curve.
+                    // Below the gate, the band is treated as silence
+                    // and contributes nothing; post-gate the signal is
+                    // re-normalised then mapped onto dynSpan.
+                    val gatedBand = ((bandLevel - gate) / invGate).coerceAtLeast(0f)
+                    val dyn = (gatedBand * dynSpan).coerceAtMost(0.85f)
+                    val beatTerm = if (r.beat && r.beatStrength >= beatGate)
+                        ((r.beatStrength - beatGate) / invBeatGate) * beatSpan
+                    else 0f
+                    val combined = (baseFloor + dyn + beatTerm).coerceIn(0f, 1f)
                     val xCie = (xy[0] * 65535).toInt().coerceIn(0, 65535)
                     val yCie = (xy[1] * 65535).toInt().coerceIn(0, 65535)
                     val bri = (combined * 65535).toInt().coerceIn(0, 65535)

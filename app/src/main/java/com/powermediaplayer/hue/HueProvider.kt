@@ -318,8 +318,13 @@ class HueProvider @Inject constructor(
         // Cheaper than full JSON: identify each top-level light by the
         // unique 36-char UUID pattern that immediately precedes the
         // "id_v1" field.
+        // NB: bridge light objects embed nested {} blocks (`owner`,
+        // `metadata`, `on`, `dimming`, ...) between `id` and `type`, so
+        // `[^{]*?` would never match. Use lazy `.*?` under
+        // DOT_MATCHES_ALL — the unique `"type":"light"` substring still
+        // terminates each block before the next light starts.
         val blockRegex = Regex(
-            """\{"id":"([0-9a-f-]{36})"[^{]*?"type":"light"""",
+            """\{"id":"([0-9a-f-]{36})".*?"type":"light"""",
             RegexOption.DOT_MATCHES_ALL
         )
         // Find each light's id position and slice between consecutive
@@ -376,7 +381,7 @@ class HueProvider @Inject constructor(
                     if (!resp.isSuccessful) return@runCatching
                     val text = resp.body?.string().orEmpty()
                     val blocks = Regex(
-                        """\{"id":"([0-9a-f-]{36})"[^{]*?"type":"room"""",
+                        """\{"id":"([0-9a-f-]{36})".*?"type":"room"""",
                         RegexOption.DOT_MATCHES_ALL
                     ).findAll(text).map { it.range.first }.toList()
                     for ((idx, s) in blocks.withIndex()) {
@@ -406,7 +411,7 @@ class HueProvider @Inject constructor(
                     if (!resp.isSuccessful) return@runCatching
                     val text = resp.body?.string().orEmpty()
                     val blocks = Regex(
-                        """\{"id":"([0-9a-f-]{36})"[^{]*?"type":"zone"""",
+                        """\{"id":"([0-9a-f-]{36})".*?"type":"zone"""",
                         RegexOption.DOT_MATCHES_ALL
                     ).findAll(text).map { it.range.first }.toList()
                     for ((idx, s) in blocks.withIndex()) {
@@ -435,7 +440,7 @@ class HueProvider @Inject constructor(
                     if (!resp.isSuccessful) return@runCatching
                     val text = resp.body?.string().orEmpty()
                     val blocks = Regex(
-                        """\{"id":"([0-9a-f-]{36})"[^{]*?"type":"entertainment_configuration"""",
+                        """\{"id":"([0-9a-f-]{36})".*?"type":"entertainment_configuration"""",
                         RegexOption.DOT_MATCHES_ALL
                     ).findAll(text).map { it.range.first }.toList()
                     for ((idx, s) in blocks.withIndex()) {
@@ -499,8 +504,12 @@ class HueProvider @Inject constructor(
                     if (!resp.isSuccessful) return@withContext emptyMap()
                     val text = resp.body?.string().orEmpty()
                     val out = mutableMapOf<String, String>()
+                    // "type":"entertainment" (with the trailing quote)
+                    // does not collide with "type":"entertainment_configuration"
+                    // because the latter has `_` after `entertainment`,
+                    // not `"`.
                     val blocks = Regex(
-                        """\{"id":"([0-9a-f-]{36})"[^{]*?"type":"entertainment"""",
+                        """\{"id":"([0-9a-f-]{36})".*?"type":"entertainment"""",
                         RegexOption.DOT_MATCHES_ALL
                     ).findAll(text).map { it.range.first }.toList()
                     for ((idx, s) in blocks.withIndex()) {
@@ -573,25 +582,27 @@ class HueProvider @Inject constructor(
                 return@withContext null
             }
             val devToEntService = deviceEntertainmentServices()
-            // Build channels array. Spread evenly around a unit circle
-            // at z = -1 (eye level, ring layout) per the user's
-            // green-light on point 2.
-            val channels = StringBuilder("[")
-            var channelId = 0
+            // Build the service_locations[] array. The Hue v2 bridge
+            // INFERS channels from this list — POSTing a "channels"
+            // field returns HTTP 400 "Property [channels] cannot be
+            // specified for this request type". Spread positions evenly
+            // around a unit circle at z = -1 (eye-level ring layout).
+            val sb = StringBuilder("[")
+            var serviceCount = 0
             for ((i, light) in eligible.withIndex()) {
                 val device = light.ownerDeviceId ?: continue
                 val entService = devToEntService[device] ?: continue
                 val angle = 2.0 * Math.PI * i / eligible.size
                 val x = "%.4f".format(kotlin.math.cos(angle).coerceIn(-1.0, 1.0))
                 val y = "%.4f".format(kotlin.math.sin(angle).coerceIn(-1.0, 1.0))
-                if (channels.length > 1) channels.append(',')
-                channels.append(
-                    """{"channel_id":$channelId,"position":{"x":$x,"y":$y,"z":-1.0},"members":[{"service":{"rid":"$entService","rtype":"entertainment"},"index":0}]}"""
+                if (sb.length > 1) sb.append(',')
+                sb.append(
+                    """{"service":{"rid":"$entService","rtype":"entertainment"},"positions":[{"x":$x,"y":$y,"z":-1.0}]}"""
                 )
-                channelId++
+                serviceCount++
             }
-            channels.append("]")
-            if (channelId == 0) {
+            sb.append("]")
+            if (serviceCount == 0) {
                 DiagLog.event(
                     "HUE",
                     "ensureEntertainmentConfig — area '${area.name}' eligible lights " +
@@ -603,7 +614,7 @@ class HueProvider @Inject constructor(
                 {"type":"entertainment_configuration",
                  "metadata":{"name":"PMP_Reactive_${area.name}"},
                  "configuration_type":"music",
-                 "channels":$channels}
+                 "locations":{"service_locations":$sb}}
             """.trimIndent()
             val req = Request.Builder()
                 .url("https://$ip/clip/v2/resource/entertainment_configuration")
@@ -616,12 +627,16 @@ class HueProvider @Inject constructor(
                     DiagLog.event(
                         "HUE",
                         "ensureEntertainmentConfig POST http=${resp.code} " +
-                            "for area='${area.name}' eligibleChannels=$channelId"
+                            "for area='${area.name}' services=$serviceCount " +
+                            "respPrefix=${text.take(200)}"
                     )
                     if (!resp.isSuccessful) return@withContext null
                     val newId = Regex(""""rid":"([0-9a-f-]{36})"""")
                         .find(text)?.groupValues?.getOrNull(1) ?: return@withContext null
-                    EnsuredArea(newId, (0 until channelId).toList())
+                    // Bridge auto-assigns channel ids — fetch them back
+                    // by GETing the new entertainment_configuration.
+                    val chs = entertainmentChannelIds(newId)
+                    EnsuredArea(newId, chs)
                 }
             }.getOrNull()
         }

@@ -489,29 +489,44 @@ class SettingsViewModel @Inject constructor(
     private val _hueAreas = MutableStateFlow<List<HueAreaSummary>>(emptyList())
     val hueAreas: StateFlow<List<HueAreaSummary>> = _hueAreas
 
+    // vc29 — observable so the Settings UI shows a spinner while
+    // listAreas/listAllLights are in flight (without it the Refresh
+    // tap had no visible effect, leaving users unsure whether the
+    // network call ran).
+    private val _isRefreshingHueAreas = MutableStateFlow(false)
+    val isRefreshingHueAreas: StateFlow<Boolean> = _isRefreshingHueAreas
+
     /** One-shot refresh of the area picker list. */
     fun refreshHueAreas() {
+        // Don't stack refreshes — the spinner stays up for the in-flight
+        // request and subsequent taps are no-ops until it completes.
+        if (_isRefreshingHueAreas.value) return
         viewModelScope.launch {
-            val lights = runCatching { hueProvider.listAllLights() }
-                .getOrDefault(emptyMap())
-            val areas = runCatching { hueProvider.listAreas() }
-                .getOrDefault(emptyList())
-            _hueAreas.value = areas.map { area ->
-                val b = hueProvider.classifyArea(area, lights)
-                val kindTok = when (area.kind) {
-                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ROOM -> "room"
-                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ZONE -> "zone"
-                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ENTERTAINMENT -> "ent"
+            _isRefreshingHueAreas.value = true
+            try {
+                val lights = runCatching { hueProvider.listAllLights() }
+                    .getOrDefault(emptyMap())
+                val areas = runCatching { hueProvider.listAreas() }
+                    .getOrDefault(emptyList())
+                _hueAreas.value = areas.map { area ->
+                    val b = hueProvider.classifyArea(area, lights)
+                    val kindTok = when (area.kind) {
+                        com.powermediaplayer.hue.HueProvider.HueArea.Kind.ROOM -> "room"
+                        com.powermediaplayer.hue.HueProvider.HueArea.Kind.ZONE -> "zone"
+                        com.powermediaplayer.hue.HueProvider.HueArea.Kind.ENTERTAINMENT -> "ent"
+                    }
+                    HueAreaSummary(
+                        key = "$kindTok:${area.id}",
+                        displayName = area.name,
+                        kind = area.kind,
+                        colour = b.colour.size,
+                        ambiance = b.ambiance.size,
+                        dimmable = b.dimmable.size,
+                        onoff = b.onoff.size
+                    )
                 }
-                HueAreaSummary(
-                    key = "$kindTok:${area.id}",
-                    displayName = area.name,
-                    kind = area.kind,
-                    colour = b.colour.size,
-                    ambiance = b.ambiance.size,
-                    dimmable = b.dimmable.size,
-                    onoff = b.onoff.size
-                )
+            } finally {
+                _isRefreshingHueAreas.value = false
             }
         }
     }

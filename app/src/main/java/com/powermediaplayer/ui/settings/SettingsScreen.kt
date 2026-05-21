@@ -181,6 +181,8 @@ fun SettingsScreen(
             syncOffsetMs = viewModel.settingsDataStore.hueSyncOffsetMs
                 .collectAsStateWithLifecycle(initialValue = 200).value,
             areas = viewModel.hueAreas.collectAsStateWithLifecycle().value,
+            isRefreshingAreas = viewModel.isRefreshingHueAreas
+                .collectAsStateWithLifecycle().value,
             selectedAreaKey = viewModel.settingsDataStore.hueSelectedArea
                 .collectAsStateWithLifecycle(initialValue = "").value,
             spreadBands = viewModel.settingsDataStore.hueSpreadBands
@@ -1499,6 +1501,7 @@ private fun HueSection(
     reactiveIntensity: Int,
     syncOffsetMs: Int,
     areas: List<SettingsViewModel.HueAreaSummary>,
+    isRefreshingAreas: Boolean,
     selectedAreaKey: String,
     spreadBands: Boolean,
     driveDimmable: Boolean,
@@ -1583,8 +1586,9 @@ private fun HueSection(
         Text(
             text = "Lights pulse with the music — bass kicks flash bright, " +
                 "treble runs cool blues, mids track melody. BPM drives the " +
-                "colour-cycle rate so transitions feel musical. Set the " +
-                "intensity below; 0 turns reactive lighting off.",
+                "colour-cycle rate so transitions feel musical. Sensitivity " +
+                "below sets how much of the audio reaches the lights; 0 " +
+                "turns reactive lighting off.",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -1619,14 +1623,31 @@ private fun HueSection(
                 color = TextPrimary,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onRefreshAreas) {
-                Text("Refresh", color = TealAccent)
+            if (isRefreshingAreas) {
+                CircularProgressIndicator(
+                    color = TealAccent,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier
+                        .size(18.dp)
+                        .padding(end = 8.dp)
+                )
+            }
+            TextButton(
+                onClick = onRefreshAreas,
+                enabled = !isRefreshingAreas
+            ) {
+                Text(
+                    text = if (isRefreshingAreas) "Refreshing…" else "Refresh",
+                    color = if (isRefreshingAreas) TextSecondary else TealAccent
+                )
             }
         }
         Text(
             text = "Pick a room or zone (or an existing Entertainment area). " +
-                "Only the lights inside your pick are addressed. Smart plugs " +
-                "are always left alone.",
+                "Only the lights inside your pick are addressed. The counts " +
+                "below split each bulb into one bucket only: 'colour' = full " +
+                "RGB; 'white (warm/cool)' = adjustable colour temperature; " +
+                "'white-only' = brightness only; smart plugs are ignored.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -1659,15 +1680,22 @@ private fun HueSection(
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (selected) TealAccent else TextPrimary
                         )
+                        // Buckets are mutually exclusive — a colour bulb
+                        // is NOT counted again under "white-only". Make
+                        // that explicit in the wording (the prior label
+                        // "dimmable" was ambiguous because every colour
+                        // bulb is also dimmable in the strict sense).
                         Text(
                             text = buildString {
-                                append("${a.colour} colour")
-                                if (a.ambiance > 0) append(", ${a.ambiance} ambiance")
-                                if (a.dimmable > 0) append(", ${a.dimmable} dimmable")
-                                if (a.onoff > 0) append(", ${a.onoff} plug${if (a.onoff > 1) "s" else ""}")
-                                if (a.colour + a.ambiance + a.dimmable + a.onoff == 0) {
-                                    append("no lights")
+                                val parts = mutableListOf<String>()
+                                if (a.colour > 0) parts += "${a.colour} colour"
+                                if (a.ambiance > 0) parts += "${a.ambiance} white (warm/cool)"
+                                if (a.dimmable > 0) parts += "${a.dimmable} white-only (brightness)"
+                                if (a.onoff > 0) {
+                                    parts += "${a.onoff} smart plug${if (a.onoff > 1) "s" else ""} (ignored)"
                                 }
+                                if (parts.isEmpty()) append("no lights")
+                                else append(parts.joinToString(" + "))
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
@@ -1737,7 +1765,7 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "Intensity",
+                text = "Sensitivity",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
                 modifier = Modifier.weight(1f)
@@ -1754,6 +1782,15 @@ private fun HueSection(
             valueRange = 0f..100f,
             steps = 9,
             modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        Text(
+            text = "0 = off. Low values (1-30) flash only on the biggest beats " +
+                "and stay calm between them. Mid (40-70) lets melody and " +
+                "drum hits pulse the lights too. High (80-100) tracks every " +
+                "subtle note shift — lights are almost always moving.",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
         // Sync offset: lights are driven from PCM samples we tap BEFORE
         // the speaker output buffer. Without compensation they'd flash
