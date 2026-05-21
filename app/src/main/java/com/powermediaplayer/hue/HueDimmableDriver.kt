@@ -199,6 +199,11 @@ class HueDimmableDriver @Inject constructor(
                 var lastSent = -1f
                 var lastDiagWindow = -1L
                 var nextDeadline = android.os.SystemClock.uptimeMillis()
+                // vc29.18 — smoothed band state for the group. Stops
+                // PCEN+stretch from snapping between 0..1 between PUTs;
+                // IKEA bulbs can absorb a 25-30 pp step but not 50+.
+                var smoothedBand = 0f
+                var lastTarget = 50f
                 while (isActive) {
                     val now = android.os.SystemClock.uptimeMillis()
                     if (now - lastSettingsReadMs > 2000L) {
@@ -240,7 +245,14 @@ class HueDimmableDriver @Inject constructor(
                         r.normalisedBands[1], r.normalisedBands[2],
                         r.normalisedBands[3], r.normalisedBands[4], r.normalisedBands[5]
                     )
-                    val bandAvg = rawAvg * (1f - s) + normAvg * s
+                    val rawEff = rawAvg * (1f - s) + normAvg * s
+                    // vc29.18 — anti-whiplash EMA. Smoothing strength
+                    // rises with sensitivity; at s=1.0 we trust the
+                    // smoothed value far more than raw frame because
+                    // PCEN+percentile output is volatile.
+                    val sBlend = (0.40f - s * 0.25f).coerceAtLeast(0.15f)
+                    smoothedBand = smoothedBand * (1f - sBlend) + rawEff * sBlend
+                    val bandAvg = smoothedBand
                     val effectiveBeatStrength =
                         r.beatStrength * (1f - s) + r.normalisedBeatStrength * s
                     val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
@@ -254,8 +266,23 @@ class HueDimmableDriver @Inject constructor(
                         val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
                         shapedBeat * beatSpan
                     } else 0f
-                    val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
+                    val rawTarget = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
                         .coerceIn(1f, 100f)
+                    // vc29.18 — slew limit. IKEA / Tradfri / GU10 can
+                    // physically follow ~30 pp/sec brightness change;
+                    // anything bigger and the bulb just settles on the
+                    // average and looks stuck. Allow native Hue to
+                    // slew faster (35 pp/sec). Other brands 25 pp/sec.
+                    val maxSlewPp = when {
+                        groupRateHz >= 2.0f -> 35f   // all-Hue
+                        groupRateHz <= 1.0f -> 25f   // IKEA-only / mixed
+                        else -> 30f
+                    }
+                    val target = rawTarget.coerceIn(
+                        lastTarget - maxSlewPp,
+                        lastTarget + maxSlewPp
+                    )
+                    lastTarget = target
                     val window = now / 1000L
                     if (window != lastDiagWindow) {
                         lastDiagWindow = window
@@ -263,8 +290,9 @@ class HueDimmableDriver @Inject constructor(
                             "HUE",
                             "dimmable group frame s=${"%.2f".format(s)} avgLag=${avgLatencyMs}ms " +
                                 "offset=${groupOffset}ms raw=${"%.2f".format(rawAvg)} " +
-                                "norm=${"%.2f".format(normAvg)} eff=${"%.2f".format(bandAvg)} " +
-                                "target=${"%.0f".format(target)}%"
+                                "norm=${"%.2f".format(normAvg)} rawEff=${"%.2f".format(rawEff)} " +
+                                "smoothed=${"%.2f".format(bandAvg)} " +
+                                "rawTarget=${"%.0f".format(rawTarget)}% target=${"%.0f".format(target)}%"
                         )
                     }
                     val delta = kotlin.math.abs(target - lastSent)

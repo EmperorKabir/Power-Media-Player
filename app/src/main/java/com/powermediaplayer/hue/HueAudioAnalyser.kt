@@ -262,7 +262,11 @@ class HueAudioAnalyser {
             }
         }
         result.bpm = lastBpm
-        result.paletteHz = (lastBpm / 60f / 4f).coerceIn(0.1f, 2.0f)
+        // vc29.18 — half-note rotation instead of quarter-note. Logs
+        // showed previous BPM/240 produced palette changes every
+        // ~220 ms at typical pop tempos = strobing. BPM/480 gives
+        // one colour every ~440 ms = musical without flicker.
+        result.paletteHz = (lastBpm / 60f / 8f).coerceIn(0.05f, 1.0f)
 
         return result
     }

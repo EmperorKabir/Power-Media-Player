@@ -259,6 +259,10 @@ class HueEntertainment @Inject constructor(
             writeHeader(frameBuf, area)
             var frameCount = 0L
             var seqId = 0
+            // vc29.18 — per-light EMA state on the post-PCEN effective
+            // band level. Smoothing prevents frame-to-frame whiplash
+            // when the percentile stretch jumps between 0..1.
+            val smoothedBandLevel = FloatArray(lightChannels.size)
             while (isActive) {
                 // Increment the sequence ID byte (rolls over at 255).
                 // Some bridge firmware checks for monotonic sequencing
@@ -321,6 +325,11 @@ class HueEntertainment @Inject constructor(
                 val diagBris = IntArray(lightChannels.size)
                 val diagPalIdxs = IntArray(lightChannels.size)
                 var diagCh0Bri = 0
+                // vc29.18 — anti-strobe EMA. Smoothing rises with
+                // sensitivity because high-s pulls in the volatile
+                // percentile-stretched signal. alpha = new-value
+                // weight; lower = more smoothing.
+                val smoothAlpha = (0.40f - s * 0.25f).coerceAtLeast(0.15f)
                 for ((i, ch) in lightChannels.withIndex()) {
                     val bandLevel: Float
                     val palIdx: Int
@@ -337,7 +346,10 @@ class HueEntertainment @Inject constructor(
                         val bIdx = 1 + (i % 5)
                         val rawBand = r.bands[bIdx]
                         val normBand = r.normalisedBands[bIdx]
-                        bandLevel = rawBand * (1f - sLerp) + normBand * sLerp
+                        val target = rawBand * (1f - sLerp) + normBand * sLerp
+                        smoothedBandLevel[i] = smoothedBandLevel[i] * (1f - smoothAlpha) +
+                            target * smoothAlpha
+                        bandLevel = smoothedBandLevel[i]
                         // Per-light palette offset — spread colour
                         // around the room so different lights show
                         // different colours simultaneously.
@@ -347,7 +359,11 @@ class HueEntertainment @Inject constructor(
                             .coerceIn(0, palette.size - 1)
                     } else {
                         // COHERENT — same colour across all lights.
-                        bandLevel = coherentBandAvg
+                        // Smooth via channel-0 slot (shared since all
+                        // lights use the same target).
+                        smoothedBandLevel[0] = smoothedBandLevel[0] * (1f - smoothAlpha) +
+                            coherentBandAvg * smoothAlpha
+                        bandLevel = smoothedBandLevel[0]
                         palIdx = coherentPalIdx
                     }
                     val xy = palette[palIdx]
