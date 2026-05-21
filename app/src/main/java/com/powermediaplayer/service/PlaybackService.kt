@@ -770,6 +770,23 @@ class PlaybackService : MediaSessionService() {
             )
         }
 
+        // vc29.27 — prime the audio-focus policy cache synchronously
+        // BEFORE registering the OS focus listener. Closes the cold-
+        // start window where an immediate focus loss event (e.g.
+        // ringing call ~50 ms after service onCreate) would otherwise
+        // use the @Volatile defaults instead of the user's stored
+        // overrides. withTimeoutOrNull(200) protects against an
+        // unresponsive DataStore actor.
+        kotlinx.coroutines.runBlocking {
+            runCatching {
+                kotlinx.coroutines.withTimeoutOrNull(200) {
+                    focusPolicyOnCall = settingsDataStore.audioFocusOnCall.first()
+                    focusPolicyOnNotif = settingsDataStore.audioFocusOnNotification.first()
+                    focusPolicyOnOther = settingsDataStore.audioFocusOnOtherMedia.first()
+                }
+            }
+        }
+
         // §C14 — install per-scenario audio-focus policy.
         installAudioFocusPolicy()
 

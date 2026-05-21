@@ -211,7 +211,11 @@ class SpotifyProvider @Inject constructor(
         // runBlocking — that was blocking the AppAuth executor and caused
         // the post-consent freeze).
         if (result.isSuccess) {
-            tokenStore.write(authState.jsonSerializeString())
+            val serialized = authState.jsonSerializeString()
+            tokenStore.write(serialized)
+            // vc29.27 — prime the debounce cache so the first refresh
+            // after sign-in doesn't redundantly re-write the same JSON.
+            lastSerializedAuthState = serialized
             _isLoggedIn.value = true
             com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.handleAuthResponse persisted token")
         }
@@ -231,6 +235,9 @@ class SpotifyProvider @Inject constructor(
         // sign-out.
         stopPlaybackPolling()
         tokenStore.write(null)
+        // vc29.27 — invalidate debounce cache so a subsequent sign-in
+        // with a fresh AuthState always writes to disk.
+        lastSerializedAuthState = null
         _isLoggedIn.value = false
         Result.success(Unit)
     }

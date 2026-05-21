@@ -60,6 +60,9 @@ class AudioDelayProcessor(
         maxRingBytes = (raw - raw % frameBytes).coerceAtLeast(frameBytes)
         ring = ByteArray(maxRingBytes + frameBytes)
         writePos = 0; readPos = 0; filled = 0
+        // vc29.27 — release any stale high-water scratch from a
+        // previous format. Re-grown lazily on first queueInput.
+        copyScratch = ByteArray(0)
         return input
     }
 

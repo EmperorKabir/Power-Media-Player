@@ -47,7 +47,10 @@ data class MediaFileInfo(
     // row called `file.uri.toString()` twice per recomposition
     // (`in favourites` + `in selected`), which on a 1000-track
     // library was 2000 Uri.toString() allocations per scroll frame.
-    @Transient val uriStr: String = uri.toString()
+    // No @Transient annotation needed — MediaFileInfo isn't Serializable
+    // / Parcelable, and body properties never participate in data
+    // class equals/hashCode/copy/componentN.
+    val uriStr: String = uri.toString()
 }
 
 /**
