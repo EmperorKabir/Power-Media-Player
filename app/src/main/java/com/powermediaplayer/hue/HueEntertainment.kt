@@ -162,13 +162,20 @@ class HueEntertainment @Inject constructor(
             var frameCount = 0L
             while (isActive) {
                 val now = android.os.SystemClock.uptimeMillis()
-                // Read the analyser snapshot, aged by the user's
-                // sync-offset (compensates for AudioTrack output buffer
-                // so lights align with the speaker output rather than
-                // running ahead of it).
-                val syncOffsetMs = runCatching {
-                    settings.hueSyncOffsetMs.first()
-                }.getOrDefault(200)
+                // Effective offset auto-sums the three legs that all
+                // shift audio time relative to the PCM tap:
+                //   hueSyncOffsetMs        — user-tunable headroom for
+                //                            speaker buffer + chain latency
+                //   audioDelayMs           — user slider on the audio chain
+                //   btVideoAudioOffsetMs   — BT lip-sync compensation
+                // If we only used hueSyncOffsetMs the user would have
+                // to re-tune Hue every time they changed BT or audio
+                // delay; auto-summing keeps the Hue slider stable
+                // across other offsets.
+                val hueOffset = runCatching { settings.hueSyncOffsetMs.first() }.getOrDefault(200)
+                val audioDelay = runCatching { settings.audioDelayMs.first() }.getOrDefault(0)
+                val btOffset = runCatching { settings.btVideoAudioOffsetMs.first() }.getOrDefault(0)
+                val syncOffsetMs = (hueOffset + audioDelay + btOffset).coerceAtLeast(0)
                 val r = analyserProcessor.getSnapshotAt(syncOffsetMs)
                 // Advance palette by BPM-driven Hz.
                 palettePhase += (r.paletteHz * frameMs / 1000.0) * (2 * Math.PI)

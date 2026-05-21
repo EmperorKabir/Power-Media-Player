@@ -1638,7 +1638,10 @@ private fun HueSection(
         Text(
             text = "Tune so light flashes line up with what you hear. " +
                 "Phone speaker / wired ~150-250 ms; Bluetooth A2DP " +
-                "~300-500 ms; USB-C DAC near 0 ms.",
+                "~300-500 ms; USB-C DAC near 0 ms. The app auto-adds " +
+                "your 'Audio delay' and 'BT video audio offset' values " +
+                "to this — adjust only this slider regardless of the " +
+                "others.",
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
