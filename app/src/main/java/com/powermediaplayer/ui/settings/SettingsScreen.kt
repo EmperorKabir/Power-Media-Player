@@ -1595,10 +1595,12 @@ private fun HueSection(
         )
         Text(
             text = "Lights pulse with the music — bass kicks flash bright, " +
-                "treble runs cool blues, mids track melody. BPM drives the " +
-                "colour-cycle rate so transitions feel musical. Sensitivity " +
-                "below sets how much of the audio reaches the lights; 0 " +
-                "turns reactive lighting off.",
+                "treble runs cool blues, mids track melody. The colour-cycle " +
+                "rate is BPM-driven so transitions feel musical, and rises " +
+                "with the slider below. Sensitivity controls both brightness " +
+                "swing and colour-shift speed: 0 turns reactive lighting off, " +
+                "low values feel calm + occasional, high values feel pulsing " +
+                "+ dramatic.",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -1882,10 +1884,16 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp)
         )
         Text(
-            text = "0 = off. Low values (1-30) flash only on the biggest beats " +
-                "and stay calm between them. Mid (40-70) lets melody and " +
-                "drum hits pulse the lights too. High (80-100) tracks every " +
-                "subtle note shift — lights are almost always moving.",
+            text = "0 = off. Low (1-30) feels ambient: white lights gently " +
+                "breathe, colours change every ~2 seconds, only the biggest " +
+                "beats flash. Mid (40-70) is melody-reactive: white lights " +
+                "swing with the bass, colours change ~once per second. High " +
+                "(80-100) is pulse-driven: white lights sit at a low " +
+                "baseline and JUMP on every transient (beats, drops, " +
+                "transitions), colours change ~twice per second. IKEA / " +
+                "Tradfri / GU10 bulbs have a hardware response limit and " +
+                "can lag the colour stream slightly at high values; native " +
+                "Hue bulbs keep up cleanly.",
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
