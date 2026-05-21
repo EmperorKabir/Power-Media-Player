@@ -174,10 +174,12 @@ fun SettingsScreen(
         HueSection(
             bridgeIp = uiState.hueBridgeIp,
             appKey = uiState.hueAppKey,
+            discoveredIp = viewModel.hueDiscoveredIp.collectAsStateWithLifecycle().value,
             pairStatus = viewModel.huePairStatus.collectAsStateWithLifecycle().value,
             reactiveMode = viewModel.settingsDataStore.hueReactiveMode
                 .collectAsStateWithLifecycle(initialValue = "off").value,
-            onPair = { viewModel.pairHueBridge() },
+            onDiscover = { viewModel.discoverHueBridge() },
+            onPair = { manualIp -> viewModel.completeHuePair(manualIp) },
             onUnpair = { viewModel.unpairHue() },
             onAllOn = { viewModel.setHueAll(true) },
             onAllOff = { viewModel.setHueAll(false) },
@@ -1478,9 +1480,11 @@ private fun WebhooksSection(
 private fun HueSection(
     bridgeIp: String,
     appKey: String,
+    discoveredIp: String,
     pairStatus: String,
     reactiveMode: String,
-    onPair: () -> Unit,
+    onDiscover: () -> Unit,
+    onPair: (String) -> Unit,
     onUnpair: () -> Unit,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
@@ -1488,13 +1492,15 @@ private fun HueSection(
     onReactiveMode: (com.powermediaplayer.hue.HueEntertainment.ReactiveMode) -> Unit
 ) {
     val paired = bridgeIp.isNotBlank() && appKey.isNotBlank()
+    var manualIp by rememberSaveable { mutableStateOf("") }
     SettingsSectionHeader("Philips Hue")
     Text(
         text = if (paired)
             "Paired with bridge $bridgeIp. Tap a scene to apply it to every light."
         else
-            "Pair with your Hue bridge to apply scene presets to your lights. " +
-                "Press the physical link button on the bridge, then tap Pair within 30 seconds.",
+            "To pair, two steps: (1) tap Discover so we find the bridge IP. " +
+                "(2) walk to the bridge, press the round button on top with the " +
+                "three lights, then tap Pair within 30 seconds.",
         style = MaterialTheme.typography.bodySmall,
         color = TextTertiary,
         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -1508,14 +1514,34 @@ private fun HueSection(
         )
     }
     if (!paired) {
+        // Manual IP override — for networks that block Philips' cloud
+        // N-UPnP discovery or for bridges not registered with the cloud.
+        // The Hue mobile app shows the bridge IP under Settings →
+        // Bridge → Network info.
+        OutlinedTextField(
+            value = manualIp,
+            onValueChange = { manualIp = it },
+            label = { Text("Bridge IP (optional — find in Hue app)") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 4.dp)
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.End
         ) {
-            TextButton(onClick = onPair) {
-                Text("Pair with bridge", color = TealAccent)
+            TextButton(onClick = onDiscover) {
+                Text("Discover", color = TealAccent)
+            }
+            Spacer(Modifier.width(8.dp))
+            TextButton(
+                onClick = { onPair(manualIp.trim()) },
+                enabled = manualIp.isNotBlank() || discoveredIp.isNotBlank()
+            ) {
+                Text("Pair", color = TealAccent)
             }
         }
     } else {

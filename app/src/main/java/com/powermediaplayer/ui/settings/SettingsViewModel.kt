@@ -357,27 +357,75 @@ class SettingsViewModel @Inject constructor(
     private val _huePairStatus = kotlinx.coroutines.flow.MutableStateFlow("")
     val huePairStatus: kotlinx.coroutines.flow.StateFlow<String> = _huePairStatus
 
-    /** Discover bridges + pair with the first one found. Requires the
-     *  user to have pressed the physical link button on the bridge in
-     *  the last ~30 seconds. */
-    fun pairHueBridge() {
+    /** IP of the discovered bridge held between Discover → Pair taps.
+     *  Empty until Discover succeeds; cleared when pair completes
+     *  (success or final give-up). */
+    private val _hueDiscoveredIp = kotlinx.coroutines.flow.MutableStateFlow("")
+    val hueDiscoveredIp: kotlinx.coroutines.flow.StateFlow<String> = _hueDiscoveredIp
+
+    /**
+     * Two-step pair flow — step 1 of 2.
+     * Find the bridge IP via Philips cloud N-UPnP. On success, hold the
+     * IP in [_hueDiscoveredIp] and show a clear instruction to press
+     * the physical button on the bridge. User then taps "Pair" which
+     * calls [completeHuePair] within the bridge's 30 s window.
+     *
+     * Why two steps: the bridge only accepts a pair request for 30 s
+     * AFTER its physical button is pressed. One-tap "discover + pair"
+     * always fires the pair POST before the user can read the
+     * instruction and walk to the bridge, so we always got the
+     * "link button not pressed" rejection.
+     */
+    fun discoverHueBridge() {
         viewModelScope.launch {
-            _huePairStatus.value = "Searching for bridge…"
+            _huePairStatus.value = "Searching for bridge on your Wi-Fi…"
             val bridges = hueProvider.discover()
             if (bridges.isEmpty()) {
-                _huePairStatus.value = "No Hue bridge found on this Wi-Fi"
+                _huePairStatus.value = "No bridge found on this Wi-Fi. " +
+                    "Check the phone and bridge are on the same network, " +
+                    "or enter the bridge IP manually below."
+                _hueDiscoveredIp.value = ""
                 return@launch
             }
             val first = bridges.first()
-            _huePairStatus.value = "Found bridge ${first.ip} — press link button now"
-            val key = hueProvider.pair(first.ip)
-            _huePairStatus.value = if (key != null) {
-                "Paired with bridge ${first.ip}"
+            _hueDiscoveredIp.value = first.ip
+            _huePairStatus.value = "Found bridge at ${first.ip}. " +
+                "Now press the round button on top of your Hue bridge " +
+                "(the one with the three lights), then tap Pair within 30 seconds."
+        }
+    }
+
+    /**
+     * Two-step pair flow — step 2 of 2.
+     * Called after the user has discovered the bridge AND pressed its
+     * physical button. Uses [_hueDiscoveredIp] (or [manualIp] if the
+     * user typed an IP). On bridge "link button not pressed" the
+     * status updates clearly so the user can press the button and
+     * retap without confusion.
+     */
+    fun completeHuePair(manualIp: String = "") {
+        viewModelScope.launch {
+            val ip = manualIp.ifBlank { _hueDiscoveredIp.value }
+            if (ip.isBlank()) {
+                _huePairStatus.value = "Tap Discover first, or type the bridge IP."
+                return@launch
+            }
+            _huePairStatus.value = "Pairing with $ip…"
+            val key = hueProvider.pair(ip)
+            if (key != null) {
+                _huePairStatus.value = "Paired with bridge $ip ✓"
+                _hueDiscoveredIp.value = ""
             } else {
-                "Pair failed — press the bridge link button, then tap Pair again"
+                _huePairStatus.value = "Bridge says button not pressed. " +
+                    "Press the round button on top of the bridge, then " +
+                    "tap Pair again within 30 seconds."
             }
         }
     }
+
+    /** Legacy entry point — keep for backward call sites; routes via the
+     *  new two-step path. */
+    fun pairHueBridge() = discoverHueBridge()
 
     fun applyHueScene(preset: com.powermediaplayer.hue.HueProvider.ScenePreset) {
         viewModelScope.launch {
