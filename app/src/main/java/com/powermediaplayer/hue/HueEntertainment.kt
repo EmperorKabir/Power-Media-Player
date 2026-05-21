@@ -276,6 +276,14 @@ class HueEntertainment @Inject constructor(
         val client = object : PSKTlsClient(crypto, pskIdentity) {
             override fun getSupportedVersions(): Array<ProtocolVersion> =
                 arrayOf(ProtocolVersion.DTLSv12)
+            // Hue bridge accepts ONLY TLS_PSK_WITH_AES_128_GCM_SHA256
+            // for Entertainment streaming. The BC PSKTlsClient default
+            // negotiates a broader cipher set; the bridge replies with
+            // handshake_failure(40) when we offer non-matching suites
+            // first. Constraining to the one suite is what makes the
+            // handshake go through.
+            override fun getSupportedCipherSuites(): IntArray =
+                intArrayOf(org.bouncycastle.tls.CipherSuite.TLS_PSK_WITH_AES_128_GCM_SHA256)
         }
         dtls = DTLSClientProtocol().connect(client, transport)
         DiagLog.event("HUE", "DTLS handshake OK (id len=${identityBytes.size} psk len=${psk.size})")
