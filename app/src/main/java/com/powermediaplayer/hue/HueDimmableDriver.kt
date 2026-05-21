@@ -156,7 +156,11 @@ class HueDimmableDriver @Inject constructor(
                 // result is far closer than the previous "lights
                 // freeze" failure mode.
                 val avgLatencyMs = dimmableLights.sumOf { it.latencyMs } / dimmableLights.size
-                val groupIntervalMs = 250L // 4 Hz total to the bridge
+                // vc29.10 — 2 Hz group PUT. Documented Hue v1 ceiling
+                // for grouped state is ~1 req/sec (library-wide 12/sec);
+                // 2 Hz stays close while still feeling reactive. Higher
+                // rates risk 429/503 + bridge buffer-full.
+                val groupIntervalMs = 500L
                 var lastSent = -1f
                 var lastDiagWindow = -1L
                 var nextDeadline = android.os.SystemClock.uptimeMillis()

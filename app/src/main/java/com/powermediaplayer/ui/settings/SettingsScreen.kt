@@ -1601,10 +1601,13 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
         Text(
-            text = "Needs an Entertainment area in your Hue mobile app " +
-                "(Settings → Entertainment areas → drag your lights in). " +
-                "No microphone permission needed — we read the audio from " +
-                "our own player's chain.",
+            text = "Works with any room or zone in your Hue app — the player " +
+                "auto-creates the Entertainment configuration the first time " +
+                "you pick one. Colour bulbs are streamed over Hue's low-latency " +
+                "Entertainment protocol; white-only bulbs are pulsed via a " +
+                "single group brightness command per cycle so the bridge stays " +
+                "comfortable even with many lights in the room. No microphone " +
+                "permission needed.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -1792,12 +1795,18 @@ private fun HueSection(
                     color = TextPrimary
                 )
                 Text(
-                    text = "Pulse brightness of dimmable bulbs (no colour) in time " +
-                        "with the music. 5 updates/sec per light over Hue's REST " +
-                        "API, auto-pauses for 0.5 s if the bridge ever returns " +
-                        "HTTP 503. Each bulb is timed by brand so native Hue " +
-                        "(~200 ms response) and slower IKEA TRÅDFRI / GU10 " +
-                        "(~430 ms) stay in sync. Smart plugs are never touched.",
+                    text = "Pulse brightness of white-only bulbs (no colour) in " +
+                        "time with the music. For rooms and zones the engine " +
+                        "sends a single group brightness command per cycle " +
+                        "(~4 commands/sec total) so the bridge stays well " +
+                        "under its rate limit even with many bulbs. The " +
+                        "command times itself to the average bulb-response " +
+                        "delay across the group (native Hue ~200 ms, IKEA " +
+                        "TRÅDFRI ~430 ms, Innr ~350 ms, Sengled ~380 ms, " +
+                        "OSRAM/Ledvance ~400 ms). If the bridge ever returns " +
+                        "5xx/429 we pause for 2.5 s to let it recover, and " +
+                        "we stop pulsing the moment the colour-stream drops " +
+                        "to avoid piling on. Smart plugs are never touched.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -1832,13 +1841,14 @@ private fun HueSection(
                 modifier = Modifier.padding(horizontal = 24.dp)
             )
             Text(
-                text = "Fine-tune only if white bulbs still feel off-beat after the " +
-                    "automatic brand detection. Negative values fire commands " +
-                    "earlier (compensates for very slow bulbs), positive values " +
-                    "fire them later. Default 'Auto' = 0 ms; this slider stacks " +
-                    "on top of each bulb's auto-detected delay (Hue ~200 ms, " +
-                    "IKEA ~430 ms, Innr ~350 ms, Sengled ~380 ms, OSRAM/Ledvance " +
-                    "~400 ms, etc.).",
+                text = "Fine-tune only if white bulbs still feel off-beat after " +
+                    "the automatic brand detection. Negative values fire " +
+                    "commands earlier (compensates for very slow bulbs), " +
+                    "positive values fire them later. Default 'Auto' = 0 ms; " +
+                    "this slider is added on top of each bulb's auto-detected " +
+                    "delay. For rooms and zones the offset is applied to the " +
+                    "group's average bulb delay; for Entertainment-area picks " +
+                    "(no group route) it's applied per bulb individually.",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextTertiary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
