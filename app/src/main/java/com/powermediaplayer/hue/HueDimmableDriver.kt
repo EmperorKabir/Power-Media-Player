@@ -295,11 +295,16 @@ class HueDimmableDriver @Inject constructor(
                     val onsetTarget = onsetBaseline +
                         onsetEnvelope * (onsetPeak - onsetBaseline)
 
-                    // Blend continuous + onset by s² so onset mode
-                    // dominates only at high sensitivity. At s=0.3
-                    // weight is only 0.09; at s=0.7 it's 0.49; at
-                    // s=1.0 it's 1.0 (pure onset).
-                    val onsetWeight = s * s
+                    // vc29.24 — onset blend floor 0.10 even at s=0
+                    // so low-sensitivity whites still get a small
+                    // onset contribution. Previously blendW=s² gave
+                    // 0.01 at s=0.10 → whites looked flat (15 pp
+                    // swing). New formula 0.10 + s² × 0.90 gives
+                    // 0.109 at s=0.10 (~22 pp swing) and still
+                    // 1.00 at s=1.00 (pure onset). The 10% baseline
+                    // adds gentle "breath" without overwhelming the
+                    // calm feel.
+                    val onsetWeight = 0.10f + s * s * 0.90f
                     val rawTarget = (continuousTarget * (1f - onsetWeight) +
                         onsetTarget * onsetWeight).coerceIn(1f, 100f)
                     // vc29.18 — slew limit. IKEA / Tradfri / GU10 can
@@ -430,7 +435,8 @@ class HueDimmableDriver @Inject constructor(
                         val attackVal = maxOf(onsetAttack, beatAttack)
                         onsetEnvPerLight[idx] = maxOf(onsetEnvPerLight[idx] * 0.35f, attackVal)
                         val onsetTarget = 25f + onsetEnvPerLight[idx] * 75f
-                        val onsetWeight = s * s
+                        // vc29.24 — see group-mode for rationale.
+                        val onsetWeight = 0.10f + s * s * 0.90f
                         val target = (continuousTarget * (1f - onsetWeight) +
                             onsetTarget * onsetWeight).coerceIn(1f, 100f)
                         if (idx == 0 && diagThisFrame == null) {
