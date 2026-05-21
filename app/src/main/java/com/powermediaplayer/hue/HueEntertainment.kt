@@ -204,9 +204,14 @@ class HueEntertainment @Inject constructor(
             //     band=0.2..0.5, not 0..1, so a linear map looked flat.
             //   - gate + beatGate fall to zero at high s so even tiny
             //     activity reaches the lights.
+            // vc29.4 — colour swing pinned to 30–100 % at max sensitivity.
+            //   Colour bulbs already convey movement through their XY
+            //   palette rotation, so the brightness sweep is narrower
+            //   than for white-only bulbs (those use the wider 5–100 %
+            //   spread in HueDimmableDriver).
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            val baseFloor = 0.55f - s * 0.10f     // 0.55 → 0.45
-            val dynSpan = 0.05f + s * 0.45f       // 0.05 → 0.50
+            val baseFloor = 0.60f - s * 0.30f     // 0.60 → 0.30
+            val dynSpan = 0.05f + s * 0.55f       // 0.05 → 0.60
             val curve = 1.0f - s * 0.6f           // 1.0 → 0.4 (sqrt-ish)
             val gate = 0.40f * (1f - s)           // 0.40 → 0
             val invGate = (1f - gate).coerceAtLeast(0.01f)

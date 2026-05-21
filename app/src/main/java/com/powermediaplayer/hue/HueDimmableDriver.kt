@@ -95,18 +95,20 @@ class HueDimmableDriver @Inject constructor(
             // Sensitivity-shaped curve — mirrors HueEntertainment so
             // colour + dimmable lights swing together. See the
             // commentary block in HueEntertainment for the rationale.
-            // vc29.3 — share the curve with HueEntertainment so colour
-            // and dimmable bulbs move together. See the commentary block
-            // there for the rationale of each constant.
+            // vc29.4 — white-only bulbs use a much wider swing than the
+            //   colour path (5–100 % at max sensitivity vs 30–100 % for
+            //   colour). The wider sweep is needed because white bulbs
+            //   can only express movement through brightness — they
+            //   have no colour channel to convey activity.
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            val baseFloor = 0.55f - s * 0.10f
-            val dynSpan = 0.05f + s * 0.45f
+            val baseFloor = 0.60f - s * 0.55f      // 0.60 → 0.05
+            val dynSpan = 0.05f + s * 0.85f        // 0.05 → 0.90
             val curve = 1.0f - s * 0.6f
             val gate = 0.40f * (1f - s)
             val invGate = (1f - gate).coerceAtLeast(0.01f)
             val beatGate = 0.65f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.05f + s * 0.30f
+            val beatSpan = 0.05f + s * 0.40f       // 0.05 → 0.45
             val perLightIntervalMs = 100L // 10 Hz/light advisory ceiling
             // Stagger writes across lights — light i fires offset by
             // (perLightInterval / count) so total per-second traffic
