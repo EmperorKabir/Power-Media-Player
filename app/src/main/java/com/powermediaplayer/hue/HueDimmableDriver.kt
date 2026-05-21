@@ -231,16 +231,25 @@ class HueDimmableDriver @Inject constructor(
                     val groupOffset =
                         (syncOffset - avgLatencyMs - userLagOverrideMs).coerceAtLeast(0)
                     val r = analyserProcessor.getSnapshotAt(groupOffset)
-                    val bandAvg = maxOf(
+                    // vc29.17 — lerp raw with PCEN+percentile-normalised
+                    // metric so high s gets dramatic swing on quiet music.
+                    val rawAvg = maxOf(
                         r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5]
                     )
+                    val normAvg = maxOf(
+                        r.normalisedBands[1], r.normalisedBands[2],
+                        r.normalisedBands[3], r.normalisedBands[4], r.normalisedBands[5]
+                    )
+                    val bandAvg = rawAvg * (1f - s) + normAvg * s
+                    val effectiveBeatStrength =
+                        r.beatStrength * (1f - s) + r.normalisedBeatStrength * s
                     val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
                     val shapedBand = if (gatedBand > 0f)
                         Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
                     else 0f
                     val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
-                    val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
-                        val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
+                    val beatTerm = if (r.beat && effectiveBeatStrength >= beatGate) {
+                        val gatedBeat = ((effectiveBeatStrength - beatGate) / invBeatGate)
                             .coerceAtLeast(0f)
                         val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
                         shapedBeat * beatSpan
@@ -253,7 +262,9 @@ class HueDimmableDriver @Inject constructor(
                         DiagLog.event(
                             "HUE",
                             "dimmable group frame s=${"%.2f".format(s)} avgLag=${avgLatencyMs}ms " +
-                                "offset=${groupOffset}ms bandAvg=${"%.2f".format(bandAvg)} target=${"%.0f".format(target)}%"
+                                "offset=${groupOffset}ms raw=${"%.2f".format(rawAvg)} " +
+                                "norm=${"%.2f".format(normAvg)} eff=${"%.2f".format(bandAvg)} " +
+                                "target=${"%.0f".format(target)}%"
                         )
                     }
                     val delta = kotlin.math.abs(target - lastSent)
@@ -319,16 +330,23 @@ class HueDimmableDriver @Inject constructor(
                         val perLightOffset =
                             (syncOffset - light.latencyMs - userLagOverrideMs).coerceAtLeast(0)
                         val r = analyserProcessor.getSnapshotAt(perLightOffset)
-                        val bandAvg = maxOf(
+                        val rawAvg = maxOf(
                             r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5]
                         )
+                        val normAvg = maxOf(
+                            r.normalisedBands[1], r.normalisedBands[2],
+                            r.normalisedBands[3], r.normalisedBands[4], r.normalisedBands[5]
+                        )
+                        val bandAvg = rawAvg * (1f - s) + normAvg * s
+                        val effectiveBeatStrength =
+                            r.beatStrength * (1f - s) + r.normalisedBeatStrength * s
                         val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
                         val shapedBand = if (gatedBand > 0f)
                             Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
                         else 0f
                         val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
-                        val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
-                            val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
+                        val beatTerm = if (r.beat && effectiveBeatStrength >= beatGate) {
+                            val gatedBeat = ((effectiveBeatStrength - beatGate) / invBeatGate)
                                 .coerceAtLeast(0f)
                             val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
                             shapedBeat * beatSpan

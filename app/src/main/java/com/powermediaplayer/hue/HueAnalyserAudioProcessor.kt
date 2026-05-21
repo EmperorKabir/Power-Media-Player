@@ -73,10 +73,13 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
     private data class TimedSnapshot(
         val uptimeMs: Long,
         val bands: FloatArray,
+        val normalisedBands: FloatArray,
         val beat: Boolean,
         val beatStrength: Float,
+        val normalisedBeatStrength: Float,
         val bpm: Float,
         val dynamics: Float,
+        val normalisedDynamics: Float,
         val paletteHz: Float
     )
 
@@ -106,10 +109,13 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
     private fun rebuildResult(s: TimedSnapshot): HueAudioAnalyser.Result {
         val r = HueAudioAnalyser.Result()
         System.arraycopy(s.bands, 0, r.bands, 0, 6)
+        System.arraycopy(s.normalisedBands, 0, r.normalisedBands, 0, 6)
         r.beat = s.beat
         r.beatStrength = s.beatStrength
+        r.normalisedBeatStrength = s.normalisedBeatStrength
         r.bpm = s.bpm
         r.dynamics = s.dynamics
+        r.normalisedDynamics = s.normalisedDynamics
         r.paletteHz = s.paletteHz
         return r
     }
@@ -237,10 +243,13 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
             ring[ringWrite] = TimedSnapshot(
                 uptimeMs = now,
                 bands = result.bands.copyOf(),
+                normalisedBands = result.normalisedBands.copyOf(),
                 beat = result.beat,
                 beatStrength = result.beatStrength,
+                normalisedBeatStrength = result.normalisedBeatStrength,
                 bpm = result.bpm,
                 dynamics = result.dynamics,
+                normalisedDynamics = result.normalisedDynamics,
                 paletteHz = result.paletteHz
             )
             ringWrite = (ringWrite + 1) % RING_SIZE

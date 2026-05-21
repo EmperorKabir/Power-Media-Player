@@ -308,12 +308,12 @@ class HueEntertainment @Inject constructor(
                         .coerceIn(0, palette.size - 1)
                 } else 0
                 val coherentBandAvg = if (mode == Mode.COHERENT) {
-                    // vc29.5 — use max of bands 1..5 instead of a
-                    // weighted average divided by 2.35. The old metric
-                    // capped at ~0.34 even on loud bass, which sat
-                    // permanently below the gate; max-of-bands tracks
-                    // the strongest in-band peak directly.
-                    maxOf(r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5])
+                    // vc29.17 — lerp raw max-of-bands with normalised
+                    // max-of-bands so high s gets full dynamic adaptation.
+                    val rawMax = maxOf(r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5])
+                    val normMax = maxOf(r.normalisedBands[1], r.normalisedBands[2],
+                        r.normalisedBands[3], r.normalisedBands[4], r.normalisedBands[5])
+                    rawMax * (1f - s) + normMax * s
                 } else 0f
                 // vc29.16 — capture per-channel brightness + palette
                 // index for every channel so the log shows full
@@ -324,12 +324,20 @@ class HueEntertainment @Inject constructor(
                 for ((i, ch) in lightChannels.withIndex()) {
                     val bandLevel: Float
                     val palIdx: Int
+                    // vc29.17 — lerp raw and PCEN+percentile-normalised
+                    // bands by sensitivity. Low s = raw (peaks-only feel),
+                    // high s = normalised (dramatic dynamic adaptation
+                    // even on quiet passages).
+                    val sLerp = s
                     if (mode == Mode.SPREAD) {
                         // Skip band 0 (sub-bass) — most consumer mixes
                         // have ~zero energy there, so a light wired
                         // to it would never animate. Use bands 1..5
                         // (bass / low-mid / mid / high-mid / treble).
-                        bandLevel = r.bands[1 + (i % 5)]
+                        val bIdx = 1 + (i % 5)
+                        val rawBand = r.bands[bIdx]
+                        val normBand = r.normalisedBands[bIdx]
+                        bandLevel = rawBand * (1f - sLerp) + normBand * sLerp
                         // Per-light palette offset — spread colour
                         // around the room so different lights show
                         // different colours simultaneously.
@@ -353,8 +361,13 @@ class HueEntertainment @Inject constructor(
                         Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
                     else 0f
                     val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
-                    val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
-                        val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
+                    // vc29.17 — lerp raw + normalised beat strength so
+                    // tracks with consistently weak beats still register
+                    // at high sensitivity.
+                    val effectiveBeatStrength =
+                        r.beatStrength * (1f - sLerp) + r.normalisedBeatStrength * sLerp
+                    val beatTerm = if (r.beat && effectiveBeatStrength >= beatGate) {
+                        val gatedBeat = ((effectiveBeatStrength - beatGate) / invBeatGate)
                             .coerceAtLeast(0f)
                         val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
                         shapedBeat * beatSpan
@@ -411,9 +424,11 @@ class HueEntertainment @Inject constructor(
                         "HUE",
                         "reactive frame s=${"%.2f".format(s)} mode=${mode.name} " +
                             "BPM=${"%.0f".format(r.bpm)} pHz=${"%.2f".format(r.paletteHz)} " +
-                            "dynamics=${"%.2f".format(r.dynamics)} " +
-                            "bands=" + r.bands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) } +
-                            " bri%=[$brisPct] palIdx=[$palStr] beat=${if (r.beat) "Y${"%.2f".format(r.beatStrength)}" else "n"}"
+                            "dyn=${"%.2f".format(r.dynamics)}/${"%.2f".format(r.normalisedDynamics)} " +
+                            "raw=" + r.bands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) } +
+                            " norm=" + r.normalisedBands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) } +
+                            " bri%=[$brisPct] palIdx=[$palStr] " +
+                            "beat=${if (r.beat) "Y${"%.2f".format(r.beatStrength)}/${"%.2f".format(r.normalisedBeatStrength)}" else "n"}"
                     )
                 }
                 delay(frameMs)
