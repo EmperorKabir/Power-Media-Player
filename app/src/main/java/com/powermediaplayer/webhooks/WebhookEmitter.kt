@@ -66,31 +66,69 @@ class WebhookEmitter @Inject constructor(
         scope.launch {
             val enabled = isEventEnabled(event)
             if (!enabled) return@launch
-            val url = settings.webhookUrl.first().trim()
-            if (url.isBlank()) return@launch
-            if (!(url.startsWith("https://") || url.startsWith("http://"))) {
-                DiagLog.event("WEBHOOK", "URL rejected (must start http/https): $url")
-                return@launch
-            }
-            val body = buildBody(event, mediaUri, positionMs, durationMs)
-            val req = Request.Builder()
-                .url(url)
-                .header("User-Agent", "PowerMediaPlayer/webhook")
-                .post(body.toRequestBody("application/json".toMediaTypeOrNull()))
-                .build()
+            doFire(event, mediaUri, positionMs, durationMs, isTest = false)
+        }
+    }
+
+    /**
+     * Synchronous test fire — sends one payload to the configured URL
+     * regardless of per-event toggles. Returns Result so the Settings
+     * "Test" button can surface the bridge's HTTP status to the user.
+     * Designed for one-shot validation, not the hot playback path.
+     */
+    suspend fun fireTestSync(): Result<Int> {
+        val url = settings.webhookUrl.first().trim()
+        if (url.isBlank()) return Result.failure(IllegalStateException("Set a URL first"))
+        if (!(url.startsWith("https://") || url.startsWith("http://"))) {
+            return Result.failure(IllegalStateException("URL must start https:// or http://"))
+        }
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
             runCatching {
+                val body = """{"event":"test","timestampMs":${System.currentTimeMillis()},""" +
+                    """"trackHash":"test","positionMs":0,"durationMs":0,"message":"Power Media Player test"}"""
+                val req = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "PowerMediaPlayer/webhook-test")
+                    .post(body.toRequestBody("application/json".toMediaTypeOrNull()))
+                    .build()
                 http.newCall(req).execute().use { resp ->
                     DiagLog.event(
                         "WEBHOOK",
-                        "POST ${event.key} url-prefix=${url.take(40)} http=${resp.code}"
+                        "test fire url-prefix=${url.take(40)} http=${resp.code}"
                     )
+                    resp.code
                 }
-            }.onFailure {
+            }
+        }
+    }
+
+    private suspend fun doFire(
+        event: Event, mediaUri: String?, positionMs: Long, durationMs: Long, isTest: Boolean
+    ) {
+        val url = settings.webhookUrl.first().trim()
+        if (url.isBlank()) return
+        if (!(url.startsWith("https://") || url.startsWith("http://"))) {
+            DiagLog.event("WEBHOOK", "URL rejected (must start http/https): $url")
+            return
+        }
+        val body = buildBody(event, mediaUri, positionMs, durationMs)
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", "PowerMediaPlayer/webhook")
+            .post(body.toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+        runCatching {
+            http.newCall(req).execute().use { resp ->
                 DiagLog.event(
                     "WEBHOOK",
-                    "POST ${event.key} FAILED: ${it.javaClass.simpleName}: ${it.message}"
+                    "POST ${event.key} url-prefix=${url.take(40)} http=${resp.code}"
                 )
             }
+        }.onFailure {
+            DiagLog.event(
+                "WEBHOOK",
+                "POST ${event.key} FAILED: ${it.javaClass.simpleName}: ${it.message}"
+            )
         }
     }
 

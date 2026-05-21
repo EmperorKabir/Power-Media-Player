@@ -715,6 +715,66 @@ fun CloudBrowserScreen(
                             }
                         }
                     }
+                    // "Pin this folder as album" — visible when the user is
+                    // inside a Drive folder (not at root) and the folder
+                    // contains at least one audio file. The Library tab
+                    // has its own pin-album entry via long-press; this
+                    // is the equivalent for Drive content where the
+                    // folder == album concept is most natural.
+                    val insideDriveFolder = uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE &&
+                        uiState.folderStack.size > 1
+                    val audioCount = uiState.items.count {
+                        !it.isFolder && it.mimeType.startsWith("audio/")
+                    }
+                    if (insideDriveFolder && audioCount > 0) {
+                        item(key = "pin_folder_as_album") {
+                            val folderLabel = uiState.folderStack.lastOrNull()?.second ?: "Folder"
+                            Surface(
+                                color = SurfaceElevated,
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        pickerScope.launch {
+                                            val ok = viewModel.pinCurrentFolderAsAlbum().isSuccess
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                if (ok)
+                                                    "Pinned '$folderLabel' ($audioCount tracks)"
+                                                else
+                                                    "Couldn't pin — favourites full or no audio in folder",
+                                                android.widget.Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Star,
+                                        contentDescription = null,
+                                        tint = TealAccent,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Pin this folder as album",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = TealAccent
+                                        )
+                                        Text(
+                                            "$audioCount tracks → Last Played → Pinned",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     itemsIndexed(uiState.items, key = { _, it -> "${it.sourceProvider}_${it.id}" }) { _, item ->
                         val isDriveFolder = item.isFolder &&
                             item.sourceProvider == CloudProviderType.GOOGLE_DRIVE

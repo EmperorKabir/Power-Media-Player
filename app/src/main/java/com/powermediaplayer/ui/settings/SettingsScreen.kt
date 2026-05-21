@@ -147,7 +147,7 @@ fun SettingsScreen(
         )
         SettingsDivider()
 
-        // Webhooks — v1: single URL, per-event toggles.
+        // Webhooks — v1: single URL, per-event toggles + Test button.
         WebhooksSection(
             url = uiState.webhookUrl,
             onUrlChange = { viewModel.setWebhookUrl(it) },
@@ -162,7 +162,9 @@ fun SettingsScreen(
             setResume = { viewModel.setWebhookOnResume(it) },
             setSkipNext = { viewModel.setWebhookOnSkipNext(it) },
             setSkipPrev = { viewModel.setWebhookOnSkipPrev(it) },
-            setEnd = { viewModel.setWebhookOnEnd(it) }
+            setEnd = { viewModel.setWebhookOnEnd(it) },
+            testStatus = viewModel.webhookTestStatus.collectAsStateWithLifecycle().value,
+            onTest = { viewModel.testWebhook() }
         )
         SettingsDivider()
 
@@ -1383,7 +1385,8 @@ private fun WebhooksSection(
     onSkipNext: Boolean, onSkipPrev: Boolean, onEnd: Boolean,
     setPlay: (Boolean) -> Unit, setPause: (Boolean) -> Unit,
     setResume: (Boolean) -> Unit, setSkipNext: (Boolean) -> Unit,
-    setSkipPrev: (Boolean) -> Unit, setEnd: (Boolean) -> Unit
+    setSkipPrev: (Boolean) -> Unit, setEnd: (Boolean) -> Unit,
+    testStatus: String, onTest: () -> Unit
 ) {
     var draft by rememberSaveable(url) { mutableStateOf(url) }
     SettingsSectionHeader("Webhooks")
@@ -1411,9 +1414,21 @@ private fun WebhooksSection(
             .padding(horizontal = 24.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.End
     ) {
+        TextButton(onClick = onTest) {
+            Text("Test", color = TealAccent)
+        }
+        Spacer(Modifier.width(8.dp))
         TextButton(onClick = { onUrlChange(draft) }) {
             Text("Save URL", color = TealAccent)
         }
+    }
+    if (testStatus.isNotBlank()) {
+        Text(
+            text = testStatus,
+            style = MaterialTheme.typography.bodySmall,
+            color = TealAccent,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
     }
     SettingsToggleItem(
         title = "Fire on track-play start",

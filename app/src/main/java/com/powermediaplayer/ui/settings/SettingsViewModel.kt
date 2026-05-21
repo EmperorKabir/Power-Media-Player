@@ -98,6 +98,7 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     val settingsDataStore: SettingsDataStore,
     private val hueProvider: com.powermediaplayer.hue.HueProvider,
+    private val webhookEmitter: com.powermediaplayer.webhooks.WebhookEmitter,
     private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector,
     val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao,
     private val spotifyTokenStore: com.powermediaplayer.cloud.SpotifyTokenStore,
@@ -331,6 +332,26 @@ class SettingsViewModel @Inject constructor(
         com.powermediaplayer.diag.DiagLog.ui("settings webhookOnEnd=$v")
         settingsDataStore.setWebhookOnEnd(v)
     }.let {}
+
+    private val _webhookTestStatus = kotlinx.coroutines.flow.MutableStateFlow("")
+    val webhookTestStatus: kotlinx.coroutines.flow.StateFlow<String> = _webhookTestStatus
+
+    /**
+     * Fire one synthetic webhook event to the configured URL so the
+     * user can confirm their endpoint accepts our payload shape. Result
+     * routed via [webhookTestStatus] — Settings screen surfaces under
+     * the URL field.
+     */
+    fun testWebhook() {
+        viewModelScope.launch {
+            _webhookTestStatus.value = "Sending test…"
+            val res = webhookEmitter.fireTestSync()
+            _webhookTestStatus.value = res.fold(
+                onSuccess = { code -> "Test sent — endpoint replied HTTP $code" },
+                onFailure = { "Test failed — ${it.message}" }
+            )
+        }
+    }
 
     // ── Hue v1 ─────────────────────────────────────────────────────
     private val _huePairStatus = kotlinx.coroutines.flow.MutableStateFlow("")
