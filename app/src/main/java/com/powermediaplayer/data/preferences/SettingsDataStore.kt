@@ -198,6 +198,34 @@ class SettingsDataStore @Inject constructor(
         // were. Range 0..30 s.
         val COLD_START_RESUME_BACKOFF_SEC = intPreferencesKey("cold_start_resume_backoff_sec")
 
+        // Low-latency audio buffer. When ON, the AudioTrackBufferSizeProvider
+        // returns the platform-minimum buffer size, which makes pitch / speed
+        // / effect changes audible sooner (~ 50-100 ms saved) at the cost of
+        // higher dropout risk under CPU load. Default OFF — keeps Media3's
+        // safety-multiplied default buffer.
+        val AUDIO_BUFFER_LOW_LATENCY = booleanPreferencesKey("audio_buffer_low_latency")
+
+        // Webhooks (v1 — single endpoint, per-event toggles). User
+        // supplies any HTTPS URL (typical: IFTTT / n8n / Home Assistant
+        // / Pushover / Google Apps Script); we fire-and-forget a JSON
+        // POST when the matching event happens during playback. Empty
+        // URL → no calls fired regardless of event toggles. All events
+        // default off — opt-in only.
+        val WEBHOOK_URL = stringPreferencesKey("webhook_url")
+        val WEBHOOK_ON_PLAY = booleanPreferencesKey("webhook_on_play")
+        val WEBHOOK_ON_PAUSE = booleanPreferencesKey("webhook_on_pause")
+        val WEBHOOK_ON_RESUME = booleanPreferencesKey("webhook_on_resume")
+        val WEBHOOK_ON_SKIP_NEXT = booleanPreferencesKey("webhook_on_skip_next")
+        val WEBHOOK_ON_SKIP_PREV = booleanPreferencesKey("webhook_on_skip_prev")
+        val WEBHOOK_ON_END = booleanPreferencesKey("webhook_on_end")
+
+        // Hue v1 — LAN-only pair / scene control. Bridge IP + app key
+        // are persisted from the pair flow. v2 will add audio-reactive
+        // streaming over the Entertainment API; the scene-preset path
+        // is what ships now.
+        val HUE_BRIDGE_IP = stringPreferencesKey("hue_bridge_ip")
+        val HUE_APP_KEY = stringPreferencesKey("hue_app_key")
+
         // §C14 — audio focus policy. Three independent settings for the
         // common interruption types. Defaults at first install:
         //  - Phone calls → Pause (always; can't safely play during call)
@@ -552,6 +580,33 @@ class SettingsDataStore @Inject constructor(
     val coldStartResumeBackoffSec: Flow<Int> = context.dataStore.data.map {
         it[Keys.COLD_START_RESUME_BACKOFF_SEC] ?: 5
     }
+
+    val audioBufferLowLatency: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUDIO_BUFFER_LOW_LATENCY] ?: false
+    }
+    suspend fun setAudioBufferLowLatency(v: Boolean) {
+        context.dataStore.edit { it[Keys.AUDIO_BUFFER_LOW_LATENCY] = v }
+    }
+
+    val webhookUrl: Flow<String> = context.dataStore.data.map { it[Keys.WEBHOOK_URL] ?: "" }
+    val webhookOnPlay: Flow<Boolean> = context.dataStore.data.map { it[Keys.WEBHOOK_ON_PLAY] ?: false }
+    val webhookOnPause: Flow<Boolean> = context.dataStore.data.map { it[Keys.WEBHOOK_ON_PAUSE] ?: false }
+    val webhookOnResume: Flow<Boolean> = context.dataStore.data.map { it[Keys.WEBHOOK_ON_RESUME] ?: false }
+    val webhookOnSkipNext: Flow<Boolean> = context.dataStore.data.map { it[Keys.WEBHOOK_ON_SKIP_NEXT] ?: false }
+    val webhookOnSkipPrev: Flow<Boolean> = context.dataStore.data.map { it[Keys.WEBHOOK_ON_SKIP_PREV] ?: false }
+    val webhookOnEnd: Flow<Boolean> = context.dataStore.data.map { it[Keys.WEBHOOK_ON_END] ?: false }
+    suspend fun setWebhookUrl(v: String) { context.dataStore.edit { it[Keys.WEBHOOK_URL] = v.trim() } }
+    suspend fun setWebhookOnPlay(v: Boolean) { context.dataStore.edit { it[Keys.WEBHOOK_ON_PLAY] = v } }
+    suspend fun setWebhookOnPause(v: Boolean) { context.dataStore.edit { it[Keys.WEBHOOK_ON_PAUSE] = v } }
+    suspend fun setWebhookOnResume(v: Boolean) { context.dataStore.edit { it[Keys.WEBHOOK_ON_RESUME] = v } }
+    suspend fun setWebhookOnSkipNext(v: Boolean) { context.dataStore.edit { it[Keys.WEBHOOK_ON_SKIP_NEXT] = v } }
+    suspend fun setWebhookOnSkipPrev(v: Boolean) { context.dataStore.edit { it[Keys.WEBHOOK_ON_SKIP_PREV] = v } }
+    suspend fun setWebhookOnEnd(v: Boolean) { context.dataStore.edit { it[Keys.WEBHOOK_ON_END] = v } }
+
+    val hueBridgeIp: Flow<String> = context.dataStore.data.map { it[Keys.HUE_BRIDGE_IP] ?: "" }
+    val hueAppKey: Flow<String> = context.dataStore.data.map { it[Keys.HUE_APP_KEY] ?: "" }
+    suspend fun setHueBridgeIp(v: String) { context.dataStore.edit { it[Keys.HUE_BRIDGE_IP] = v.trim() } }
+    suspend fun setHueAppKey(v: String) { context.dataStore.edit { it[Keys.HUE_APP_KEY] = v.trim() } }
     suspend fun setColdStartResumeBackoffSec(sec: Int) {
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }

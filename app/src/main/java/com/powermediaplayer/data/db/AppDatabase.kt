@@ -34,7 +34,10 @@ import com.powermediaplayer.data.db.entity.PlaybackStateEntity
 import com.powermediaplayer.data.db.entity.PodcastEpisodeEntity
 import com.powermediaplayer.data.db.entity.PodcastShowEntity
 import com.powermediaplayer.data.db.entity.ReplayGainEntity
+import com.powermediaplayer.data.db.entity.PinnedAlbumEntity
+import com.powermediaplayer.data.db.entity.PinnedAlbumTrackEntity
 import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
+import com.powermediaplayer.data.db.dao.PinnedAlbumDao
 
 /**
  * Main Room database for Power Media Player.
@@ -56,7 +59,9 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
         PodcastEpisodeEntity::class,
         ReplayGainEntity::class,
         OfflineCopyEntity::class,
-        EnrichmentCacheEntity::class
+        EnrichmentCacheEntity::class,
+        PinnedAlbumEntity::class,
+        PinnedAlbumTrackEntity::class
     ],
     // v5: PlaybackHistory + HistoryFavourite switched to autogen IDs;
     // added HistoryBookmark + FavouriteBookmark snapshot tables.
@@ -80,7 +85,10 @@ import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
     //      observeAll() query that orders by it.
     // v15: §C17 A11.4 — adds `enrichment_cache` table so repeat
     //      MusicBrainz / Discogs lookups skip the network.
-    version = 15,
+    // v16: Pinned albums — adds `pinned_albums` + `pinned_album_tracks`
+    //      tables. Shares the 10-pin cap with HistoryFavouriteEntity at
+    //      the repository layer.
+    version = 16,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -99,6 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun replayGainDao(): ReplayGainDao
     abstract fun offlineCopyDao(): OfflineCopyDao
     abstract fun enrichmentCacheDao(): EnrichmentCacheDao
+    abstract fun pinnedAlbumDao(): PinnedAlbumDao
 
     companion object {
         const val DATABASE_NAME = "power_media_player.db"
@@ -238,6 +247,44 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        /**
+         * v15→v16 — Pinned albums. Two tables joined by FK CASCADE so
+         * deleting an album drops its track snapshot atomically.
+         */
+        val MIGRATION_15_16: Migration = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS pinned_albums (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        albumKey TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        artworkUri TEXT,
+                        pinOrder INTEGER NOT NULL,
+                        pinnedAtMs INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_pinned_albums_pinOrder ON pinned_albums(pinOrder)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_pinned_albums_albumKey ON pinned_albums(albumKey)")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS pinned_album_tracks (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        albumId INTEGER NOT NULL,
+                        mediaUri TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        durationMs INTEGER NOT NULL,
+                        trackIndex INTEGER NOT NULL,
+                        FOREIGN KEY (albumId) REFERENCES pinned_albums(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_pinned_album_tracks_albumId ON pinned_album_tracks(albumId)")
             }
         }
 

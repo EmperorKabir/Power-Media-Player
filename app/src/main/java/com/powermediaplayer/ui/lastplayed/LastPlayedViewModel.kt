@@ -69,6 +69,61 @@ class LastPlayedViewModel @Inject constructor(
             initialValue = emptyList()
         )
 
+    /**
+     * Pinned albums — sibling section to pinned tracks. Shares the same
+     * 10-slot cap (enforced at the repository layer). Tap an album row
+     * to expand member tracks; tap a track to play that one.
+     */
+    val pinnedAlbums: StateFlow<List<LastPlayedRepository.PinnedAlbumItem>> =
+        repo.observePinnedAlbums().stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList()
+        )
+
+    fun observePinnedAlbumTracks(albumId: Long) = repo.observeAlbumTracks(albumId)
+
+    suspend fun pinAlbum(
+        albumKey: String,
+        title: String,
+        artist: String,
+        artworkUri: String?,
+        tracks: List<LastPlayedRepository.AlbumTrackToPin>
+    ): Boolean = repo.pinAlbum(albumKey, title, artist, artworkUri, tracks).isSuccess
+
+    fun unpinAlbum(albumId: Long) {
+        viewModelScope.launch(Dispatchers.IO) { repo.unpinAlbum(albumId) }
+    }
+
+    /** Tap a pinned-album track → play that single file. Reuses the
+     *  same MediaItem build path as playLocalAt for chapters parsing. */
+    fun playAlbumTrack(trackUri: String, title: String) {
+        val uri = runCatching { Uri.parse(trackUri) }.getOrNull() ?: return
+        viewModelScope.launch {
+            val mediaItem = withContext(Dispatchers.IO) {
+                val chapterExtras = runCatching {
+                    com.powermediaplayer.util.M4bChapterParser
+                        .extractChaptersAsBundle(context, uri)
+                }.getOrDefault(android.os.Bundle())
+                androidx.media3.common.MediaItem.Builder()
+                    .setMediaId(trackUri)
+                    .setUri(uri)
+                    .setRequestMetadata(
+                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                            .setMediaUri(uri).build()
+                    )
+                    .setMediaMetadata(
+                        androidx.media3.common.MediaMetadata.Builder()
+                            .setTitle(title)
+                            .setExtras(chapterExtras)
+                            .build()
+                    )
+                    .build()
+            }
+            playbackConnection.setMediaItems(listOf(mediaItem), 0)
+        }
+    }
+
     /** Pin a Recents row by its session id. False on full (10/10). */
     suspend fun pinSession(historyId: Long): Boolean = repo.pinSession(historyId).isSuccess
 
@@ -190,15 +245,29 @@ class LastPlayedViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    // Surface the failure — previously this branch was
-                    // silent and the user landed on the Player screen
-                    // with stale local metadata. SpotifyProvider's
-                    // failure messages already discriminate "session
-                    // expired" from device-list errors; fall back to a
-                    // user-actionable hint when no message is attached.
+                    // Surface the failure. Earlier this used a SharedFlow
+                    // routed to LastPlayedScreen's SnackbarHost, but the
+                    // caller has ALREADY navigated to the Player screen
+                    // by the time this branch fires (onNavigateToPlayer
+                    // runs synchronously before the IO coroutine
+                    // resolves). The snackbar host of the now-gone
+                    // LastPlayed screen never receives the message →
+                    // user sees nothing. Toast is system-level and
+                    // survives navigation; perfect for this signal.
                     val msg = play?.exceptionOrNull()?.message
                         ?.takeIf { it.isNotBlank() }
                         ?: "No active Spotify device — open Spotify on your phone or a speaker, then tap again"
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "SPOTIFY",
+                        "tap-fail toast → $msg"
+                    )
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context, msg, android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    // Keep emitting on _messages too so a future
+                    // app-wide snackbar can also catch it.
                     _messages.emit(msg)
                 }
             }

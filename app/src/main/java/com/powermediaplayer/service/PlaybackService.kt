@@ -84,6 +84,24 @@ class PlaybackService : MediaSessionService() {
     private var monoMixFlag: Boolean = false
     @Volatile
     private var audioDelayFlag: Int = 0
+    /**
+     * Subtitle delay in ms. Read by [com.powermediaplayer.subtitles
+     * .ShiftingSubtitleParserFactory] at parse-time and applied as a
+     * cue-time shift. Live drag of the slider re-prepares the current
+     * MediaItem so the parser re-runs with the new value (see the
+     * subtitleDelayMs collector in onCreate below).
+     */
+    @Volatile
+    private var subtitleDelayMsFlag: Int = 0
+
+    /**
+     * Read by the [DefaultAudioSink] AudioTrackBufferSizeProvider on
+     * each buffer-size negotiation. When true → request platform-minimum
+     * buffer (snappier pitch / speed / effect changes, higher dropout
+     * risk). When false → delegate to Media3's safety-multiplied default.
+     */
+    @Volatile
+    private var audioBufferLowLatencyFlag: Boolean = false
     @Volatile
     private var crossfadeMsFlag: Int = 0
     @Volatile private var crossfadeAlbumModeFlag: Boolean = true
@@ -99,6 +117,9 @@ class PlaybackService : MediaSessionService() {
 
     @javax.inject.Inject
     lateinit var mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository
+
+    @javax.inject.Inject
+    lateinit var webhookEmitter: com.powermediaplayer.webhooks.WebhookEmitter
 
     // §B3 — true 2-player crossfade engine (lazy: spins up the second
     // ExoPlayer only inside the pre-fade window, releases on completion).
@@ -329,6 +350,25 @@ class PlaybackService : MediaSessionService() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): androidx.media3.exoplayer.audio.AudioSink {
+                val defaultProvider = androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider.Builder().build()
+                // Low-latency provider — when the Settings toggle is
+                // on we return the platform-minimum buffer (snappier
+                // pitch / speed / effect changes; higher dropout risk).
+                // Anonymous-object form is the portable across Media3
+                // minor versions (some refactor the package between
+                // 1.5 / 1.6 / 1.7).
+                val lowLatencyProvider = object :
+                    androidx.media3.exoplayer.audio.DefaultAudioSink.AudioTrackBufferSizeProvider {
+                    override fun getBufferSizeInBytes(
+                        minBufferSizeInBytes: Int,
+                        encoding: Int,
+                        outputMode: Int,
+                        pcmFrameSize: Int,
+                        sampleRate: Int,
+                        bitrate: Int,
+                        maxAudioTrackPlaybackSpeed: Double
+                    ): Int = minBufferSizeInBytes
+                }
                 return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
@@ -338,6 +378,32 @@ class PlaybackService : MediaSessionService() {
                                 stereoTransformProcessor,
                                 audioDelayProcessor
                             )
+                    )
+                    .setAudioTrackBufferSizeProvider(
+                        object :
+                            androidx.media3.exoplayer.audio.DefaultAudioSink.AudioTrackBufferSizeProvider {
+                            override fun getBufferSizeInBytes(
+                                minBufferSizeInBytes: Int,
+                                encoding: Int,
+                                outputMode: Int,
+                                pcmFrameSize: Int,
+                                sampleRate: Int,
+                                bitrate: Int,
+                                maxAudioTrackPlaybackSpeed: Double
+                            ): Int = if (audioBufferLowLatencyFlag) {
+                                lowLatencyProvider.getBufferSizeInBytes(
+                                    minBufferSizeInBytes, encoding, outputMode,
+                                    pcmFrameSize, sampleRate, bitrate,
+                                    maxAudioTrackPlaybackSpeed
+                                )
+                            } else {
+                                defaultProvider.getBufferSizeInBytes(
+                                    minBufferSizeInBytes, encoding, outputMode,
+                                    pcmFrameSize, sampleRate, bitrate,
+                                    maxAudioTrackPlaybackSpeed
+                                )
+                            }
+                        }
                     )
                     .build()
             }
@@ -369,6 +435,46 @@ class PlaybackService : MediaSessionService() {
                 settingsDataStore.audioDelayMs,
                 settingsDataStore.btVideoAudioOffsetMs
             ) { a, b -> a + b }.collect { audioDelayFlag = it }
+        }
+        // Low-latency audio buffer flag — re-read by the
+        // AudioTrackBufferSizeProvider on every AudioTrack init.
+        serviceScope.launch {
+            settingsDataStore.audioBufferLowLatency
+                .distinctUntilChanged()
+                .collect {
+                    audioBufferLowLatencyFlag = it
+                    com.powermediaplayer.diag.DiagLog.settings(
+                        "audioBufferLowLatency → $it (applies on next AudioTrack init)"
+                    )
+                }
+        }
+        // Subtitle delay — flag is read by ShiftingSubtitleParserFactory
+        // at parse-time. Live changes need the parser to re-run, so we
+        // also force a re-prepare of the current MediaItem on each new
+        // value (rebuilds the SubtitleConfiguration round-trip). Skip
+        // re-prepare when nothing is loaded yet (cold start).
+        serviceScope.launch {
+            settingsDataStore.subtitleDelayMs
+                .distinctUntilChanged()
+                .collect { newDelayMs ->
+                    val prior = subtitleDelayMsFlag
+                    subtitleDelayMsFlag = newDelayMs
+                    if (prior == newDelayMs) return@collect
+                    val p = player ?: return@collect
+                    val current = p.currentMediaItem ?: return@collect
+                    val pos = p.currentPosition
+                    val playing = p.playWhenReady
+                    // Rebuild the queue with same item so the parser
+                    // re-runs with the new shift. setMediaItems triggers
+                    // re-extraction; seekTo restores position.
+                    runCatching {
+                        com.powermediaplayer.diag.DiagLog.player(
+                            "subtitle delay → ${newDelayMs}ms (re-preparing media item to apply)"
+                        )
+                        p.setMediaItem(current, pos)
+                        p.playWhenReady = playing
+                    }
+                }
         }
         // Crossfade slider — drives the volume-ramp coroutine
         // started below in onCreate after the player is built.
@@ -505,6 +611,18 @@ class PlaybackService : MediaSessionService() {
         val dataSourceFactory = DefaultDataSource.Factory(this, resolvingHttpFactory)
         val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
             .setDataSourceFactory(dataSourceFactory)
+            // Subtitle delay slider — previously persisted but never
+            // reached the cue stream. The ShiftingSubtitleParserFactory
+            // intercepts every CuesWithTiming emitted by the default
+            // parser and shifts startTimeUs by the current delay flag.
+            // Live changes take effect on the next subtitle reload
+            // (handled by the existing setSubtitleConfigurations path
+            // when the user adjusts the slider with a track loaded).
+            .setSubtitleParserFactory(
+                com.powermediaplayer.subtitles.ShiftingSubtitleParserFactory(
+                    delayMsSupplier = { subtitleDelayMsFlag }
+                )
+            )
 
         // LoadControl tuned for snappy local-file seeks:
         //  - maxBufferMs 120 s so far forward scrubs land inside buffered
@@ -659,6 +777,18 @@ class PlaybackService : MediaSessionService() {
                     else -> "UNKNOWN($playbackState)"
                 }
                 com.powermediaplayer.diag.DiagLog.player("state=$name")
+                // Webhook: track-end fires once when the player reaches
+                // STATE_ENDED. PLAY / PAUSE / RESUME / SKIP webhooks fire
+                // elsewhere on their natural events.
+                if (playbackState == Player.STATE_ENDED) {
+                    val p = player ?: return
+                    webhookEmitter.fire(
+                        com.powermediaplayer.webhooks.WebhookEmitter.Event.END,
+                        p.currentMediaItem?.mediaId,
+                        p.currentPosition,
+                        p.duration.coerceAtLeast(0L)
+                    )
+                }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 val p = player
@@ -680,6 +810,22 @@ class PlaybackService : MediaSessionService() {
                 com.powermediaplayer.diag.DiagLog.player(
                     "playWhenReady=$playWhenReady reason=$rname"
                 )
+                // Webhooks: pause vs resume only fire on USER-initiated
+                // changes — avoids firing for AUDIO_FOCUS_LOSS pauses
+                // (call, alarm) which the user didn't trigger.
+                if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
+                    val p = player ?: return
+                    val ev = if (playWhenReady)
+                        com.powermediaplayer.webhooks.WebhookEmitter.Event.RESUME
+                    else
+                        com.powermediaplayer.webhooks.WebhookEmitter.Event.PAUSE
+                    webhookEmitter.fire(
+                        ev,
+                        p.currentMediaItem?.mediaId,
+                        p.currentPosition,
+                        p.duration.coerceAtLeast(0L)
+                    )
+                }
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val rname = when (reason) {
@@ -692,6 +838,21 @@ class PlaybackService : MediaSessionService() {
                 com.powermediaplayer.diag.DiagLog.player(
                     "mediaItemTransition reason=$rname id=${com.powermediaplayer.diag.DiagLog.hash(mediaItem?.mediaId)}"
                 )
+                // Webhooks: new track started. PLAYLIST_CHANGED fires on
+                // both fresh tap-to-play AND on cold-start adopt. AUTO
+                // fires on advance to next item in queue. Both count as
+                // "play" event for downstream automations.
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED ||
+                    reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
+                ) {
+                    val p = player ?: return
+                    webhookEmitter.fire(
+                        com.powermediaplayer.webhooks.WebhookEmitter.Event.PLAY,
+                        mediaItem?.mediaId,
+                        0L,
+                        p.duration.coerceAtLeast(0L)
+                    )
+                }
             }
             override fun onPositionDiscontinuity(
                 oldPosition: Player.PositionInfo,
@@ -1960,6 +2121,17 @@ class PlaybackService : MediaSessionService() {
      * to the application looper internally, so no extra wrapping needed.
      */
     private fun applyAction(player: Player, action: String, seconds: Int, isPrev: Boolean) {
+        // Fire the matching webhook for external prev / next presses
+        // (BT remote / Android Auto). Each fire is gated by both the
+        // master URL + the per-event toggle inside WebhookEmitter, so
+        // this is cheap when no webhook is configured.
+        webhookEmitter.fire(
+            if (isPrev) com.powermediaplayer.webhooks.WebhookEmitter.Event.SKIP_PREV
+            else com.powermediaplayer.webhooks.WebhookEmitter.Event.SKIP_NEXT,
+            player.currentMediaItem?.mediaId,
+            player.currentPosition,
+            player.duration.coerceAtLeast(0L)
+        )
         when (action) {
             BluetoothMediaActions.PREV_TRACK -> {
                 crossfadeController.abort()

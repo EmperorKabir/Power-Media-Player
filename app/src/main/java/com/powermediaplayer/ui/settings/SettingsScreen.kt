@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -146,6 +147,40 @@ fun SettingsScreen(
         )
         SettingsDivider()
 
+        // Webhooks — v1: single URL, per-event toggles.
+        WebhooksSection(
+            url = uiState.webhookUrl,
+            onUrlChange = { viewModel.setWebhookUrl(it) },
+            onPlay = uiState.webhookOnPlay,
+            onPause = uiState.webhookOnPause,
+            onResume = uiState.webhookOnResume,
+            onSkipNext = uiState.webhookOnSkipNext,
+            onSkipPrev = uiState.webhookOnSkipPrev,
+            onEnd = uiState.webhookOnEnd,
+            setPlay = { viewModel.setWebhookOnPlay(it) },
+            setPause = { viewModel.setWebhookOnPause(it) },
+            setResume = { viewModel.setWebhookOnResume(it) },
+            setSkipNext = { viewModel.setWebhookOnSkipNext(it) },
+            setSkipPrev = { viewModel.setWebhookOnSkipPrev(it) },
+            setEnd = { viewModel.setWebhookOnEnd(it) }
+        )
+        SettingsDivider()
+
+        // Hue v1 — Bridge pair + on/off + scene presets. Entertainment
+        // API audio-reactive lighting is scaffolded but DEFERRED (see
+        // HueEntertainment.kt for the v2 plan).
+        HueSection(
+            bridgeIp = uiState.hueBridgeIp,
+            appKey = uiState.hueAppKey,
+            pairStatus = viewModel.huePairStatus.collectAsStateWithLifecycle().value,
+            onPair = { viewModel.pairHueBridge() },
+            onUnpair = { viewModel.unpairHue() },
+            onAllOn = { viewModel.setHueAll(true) },
+            onAllOff = { viewModel.setHueAll(false) },
+            onApplyScene = { viewModel.applyHueScene(it) }
+        )
+        SettingsDivider()
+
         SmartHomePlaceholder()
         SettingsDivider()
 
@@ -205,6 +240,15 @@ fun SettingsScreen(
         )
         SettingsToggleItem("Gapless playback", "Seamless transitions between tracks.",
             Icons.Filled.SkipNext, uiState.gaplessPlayback) { viewModel.setGapless(it) }
+        SettingsToggleItem(
+            title = "Low-latency audio buffer",
+            description = "Snappier pitch / speed / effect changes (~50-100 ms quicker " +
+                "to take effect). May cause brief glitches under CPU load. Apply by " +
+                "starting a track after toggling.",
+            icon = Icons.Filled.Speed,
+            checked = uiState.audioBufferLowLatency,
+            onCheckedChange = { viewModel.setAudioBufferLowLatency(it) }
+        )
         SettingsToggleItem("Resume on Bluetooth connect",
             "Auto-resume the last track when a BT audio device reconnects.",
             Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
@@ -1323,6 +1367,194 @@ fun SmartHomePlaceholder() {
                 "IFTTT Pro, Tasker, etc.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WebhooksSection(
+    url: String,
+    onUrlChange: (String) -> Unit,
+    onPlay: Boolean, onPause: Boolean, onResume: Boolean,
+    onSkipNext: Boolean, onSkipPrev: Boolean, onEnd: Boolean,
+    setPlay: (Boolean) -> Unit, setPause: (Boolean) -> Unit,
+    setResume: (Boolean) -> Unit, setSkipNext: (Boolean) -> Unit,
+    setSkipPrev: (Boolean) -> Unit, setEnd: (Boolean) -> Unit
+) {
+    var draft by rememberSaveable(url) { mutableStateOf(url) }
+    SettingsSectionHeader("Webhooks")
+    Text(
+        text = "Send an HTTP POST to your own endpoint when playback events " +
+            "happen. Works with IFTTT, n8n, Home Assistant, Pushover, Google " +
+            "Apps Script — anything that accepts a JSON body. Privacy: only an " +
+            "8-char track hash is sent, no titles or paths.",
+        style = MaterialTheme.typography.bodySmall,
+        color = TextTertiary,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+    )
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { draft = it },
+        label = { Text("Webhook URL (https://...)") },
+        singleLine = true,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp)
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.End
+    ) {
+        TextButton(onClick = { onUrlChange(draft) }) {
+            Text("Save URL", color = TealAccent)
+        }
+    }
+    SettingsToggleItem(
+        title = "Fire on track-play start",
+        description = "Sent when a new track begins playing.",
+        icon = Icons.Filled.PlayArrow,
+        checked = onPlay,
+        onCheckedChange = setPlay
+    )
+    SettingsToggleItem(
+        title = "Fire on pause",
+        description = "Sent when the user pauses (not when the system pauses).",
+        icon = Icons.Filled.Pause,
+        checked = onPause,
+        onCheckedChange = setPause
+    )
+    SettingsToggleItem(
+        title = "Fire on resume",
+        description = "Sent when the user resumes after a pause.",
+        icon = Icons.Filled.PlayCircle,
+        checked = onResume,
+        onCheckedChange = setResume
+    )
+    SettingsToggleItem(
+        title = "Fire on skip-next",
+        description = "Sent when next-track is pressed (in-app or BT remote).",
+        icon = Icons.Filled.SkipNext,
+        checked = onSkipNext,
+        onCheckedChange = setSkipNext
+    )
+    SettingsToggleItem(
+        title = "Fire on skip-previous",
+        description = "Sent when previous-track is pressed.",
+        icon = Icons.Filled.SkipPrevious,
+        checked = onSkipPrev,
+        onCheckedChange = setSkipPrev
+    )
+    SettingsToggleItem(
+        title = "Fire on track-end",
+        description = "Sent once when a track plays through to completion.",
+        icon = Icons.Filled.Stop,
+        checked = onEnd,
+        onCheckedChange = setEnd
+    )
+}
+
+@Composable
+private fun HueSection(
+    bridgeIp: String,
+    appKey: String,
+    pairStatus: String,
+    onPair: () -> Unit,
+    onUnpair: () -> Unit,
+    onAllOn: () -> Unit,
+    onAllOff: () -> Unit,
+    onApplyScene: (com.powermediaplayer.hue.HueProvider.ScenePreset) -> Unit
+) {
+    val paired = bridgeIp.isNotBlank() && appKey.isNotBlank()
+    SettingsSectionHeader("Philips Hue")
+    Text(
+        text = if (paired)
+            "Paired with bridge $bridgeIp. Tap a scene to apply it to every light."
+        else
+            "Pair with your Hue bridge to apply scene presets to your lights. " +
+                "Press the physical link button on the bridge, then tap Pair within 30 seconds.",
+        style = MaterialTheme.typography.bodySmall,
+        color = TextTertiary,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+    )
+    if (pairStatus.isNotBlank()) {
+        Text(
+            text = pairStatus,
+            style = MaterialTheme.typography.bodySmall,
+            color = TealAccent,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        )
+    }
+    if (!paired) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onPair) {
+                Text("Pair with bridge", color = TealAccent)
+            }
+        }
+    } else {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = false,
+                onClick = onAllOn,
+                label = { Text("All On") }
+            )
+            FilterChip(
+                selected = false,
+                onClick = onAllOff,
+                label = { Text("All Off") }
+            )
+            FilterChip(
+                selected = false,
+                onClick = onUnpair,
+                label = { Text("Unpair") }
+            )
+        }
+        // Scene presets.
+        com.powermediaplayer.hue.HueProvider.ScenePreset.values().forEach { preset ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onApplyScene(preset) }
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = preset.displayName,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = preset.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+                Icon(
+                    Icons.Filled.Lightbulb,
+                    contentDescription = "Apply",
+                    tint = TealAccent
+                )
+            }
+        }
+        Text(
+            text = "Audio-reactive lighting (Entertainment API) ships in a follow-up. " +
+                "v1 covers manual scene selection only.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
     }
 }

@@ -56,7 +56,8 @@ object AppModule {
                 AppDatabase.MIGRATION_11_12,
                 AppDatabase.MIGRATION_12_13,
                 AppDatabase.MIGRATION_13_14,
-                AppDatabase.MIGRATION_14_15
+                AppDatabase.MIGRATION_14_15,
+                AppDatabase.MIGRATION_15_16
             )
             .build()
     }
@@ -138,6 +139,12 @@ object AppModule {
     @Singleton
     fun provideEnrichmentCacheDao(database: AppDatabase): com.powermediaplayer.data.db.dao.EnrichmentCacheDao {
         return database.enrichmentCacheDao()
+    }
+
+    @Provides
+    @Singleton
+    fun providePinnedAlbumDao(database: AppDatabase): com.powermediaplayer.data.db.dao.PinnedAlbumDao {
+        return database.pinnedAlbumDao()
     }
 
     @Provides

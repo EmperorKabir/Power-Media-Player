@@ -99,6 +99,31 @@ class LibraryViewModel @Inject constructor(
     }
 
     /**
+     * Pin an album from the library view to the Last Played pinned
+     * section. Snapshots the member-track list at pin time so library
+     * churn doesn't break the pin.
+     *
+     * Returns Result<Unit> — caller surfaces failure (cap reached) via
+     * the existing snackbar host.
+     */
+    suspend fun pinAlbum(
+        albumKey: String,
+        title: String,
+        artist: String,
+        artworkUri: String?,
+        tracks: List<MediaFileInfo>
+    ): Result<Unit> {
+        val payload = tracks.map {
+            com.powermediaplayer.data.repository.LastPlayedRepository.AlbumTrackToPin(
+                mediaUri = it.uri.toString(),
+                title = it.title,
+                durationMs = it.duration
+            )
+        }
+        return lastPlayedRepo.pinAlbum(albumKey, title, artist, artworkUri, payload)
+    }
+
+    /**
      * §C7 — when the user unfavourites a row, drop any per-file
      * overrides we'd kept for it. The override-popup is starred-or-
      * pinned-only; once that gating disappears, the data should too.

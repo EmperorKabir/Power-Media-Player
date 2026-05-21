@@ -40,8 +40,110 @@ class LastPlayedRepository @Inject constructor(
     private val historyDao: PlaybackHistoryDao,
     private val favDao: HistoryFavouriteDao,
     private val historyBookmarkDao: HistoryBookmarkDao,
-    private val favouriteBookmarkDao: FavouriteBookmarkDao
+    private val favouriteBookmarkDao: FavouriteBookmarkDao,
+    private val pinnedAlbumDao: com.powermediaplayer.data.db.dao.PinnedAlbumDao
 ) {
+
+    /**
+     * UI-facing pinned-album shape. The user-visible behaviour is
+     * locked: tap row → expand tracks; tap track → play that one.
+     */
+    data class PinnedAlbumItem(
+        val id: Long,
+        val albumKey: String,
+        val title: String,
+        val artist: String,
+        val artworkUri: String?,
+        val pinOrder: Int,
+        val pinnedAtMs: Long,
+        val trackCount: Int
+    )
+
+    data class AlbumTrackToPin(
+        val mediaUri: String,
+        val title: String,
+        val durationMs: Long
+    )
+
+    /**
+     * Combined cap across track pins + album pins. Repository enforces
+     * a single shared limit so the user gets a stable promise: "you can
+     * pin up to 10 things, tracks or albums".
+     */
+    suspend fun pinSlotsUsed(): Int = favDao.count() + pinnedAlbumDao.count()
+
+    val PIN_CAP: Int = 10
+
+    fun observePinnedAlbums(): kotlinx.coroutines.flow.Flow<List<PinnedAlbumItem>> =
+        kotlinx.coroutines.flow.combine(
+            pinnedAlbumDao.observeAll(),
+            // re-emit on track changes so trackCount stays fresh.
+            kotlinx.coroutines.flow.flowOf(Unit)
+        ) { albums, _ ->
+            albums.map { a ->
+                val tracks = pinnedAlbumDao.snapshotTracks(a.id)
+                PinnedAlbumItem(
+                    id = a.id,
+                    albumKey = a.albumKey,
+                    title = a.title,
+                    artist = a.artist,
+                    artworkUri = a.artworkUri,
+                    pinOrder = a.pinOrder,
+                    pinnedAtMs = a.pinnedAtMs,
+                    trackCount = tracks.size
+                )
+            }
+        }
+
+    fun observeAlbumTracks(albumId: Long) =
+        pinnedAlbumDao.observeTracks(albumId)
+
+    suspend fun pinAlbum(
+        albumKey: String,
+        title: String,
+        artist: String,
+        artworkUri: String?,
+        tracks: List<AlbumTrackToPin>
+    ): Result<Unit> {
+        val used = pinSlotsUsed()
+        if (used >= PIN_CAP) {
+            return Result.failure(
+                IllegalStateException("Favourites full ($used/$PIN_CAP) — unpin one first")
+            )
+        }
+        val order = used // append to end
+        val albumId = pinnedAlbumDao.insert(
+            com.powermediaplayer.data.db.entity.PinnedAlbumEntity(
+                albumKey = albumKey,
+                title = title,
+                artist = artist,
+                artworkUri = artworkUri,
+                pinOrder = order,
+                pinnedAtMs = System.currentTimeMillis()
+            )
+        )
+        tracks.forEachIndexed { idx, t ->
+            pinnedAlbumDao.insertTrack(
+                com.powermediaplayer.data.db.entity.PinnedAlbumTrackEntity(
+                    albumId = albumId,
+                    mediaUri = t.mediaUri,
+                    title = t.title,
+                    durationMs = t.durationMs,
+                    trackIndex = idx
+                )
+            )
+        }
+        return Result.success(Unit)
+    }
+
+    suspend fun unpinAlbum(id: Long) {
+        pinnedAlbumDao.delete(id)
+        // Re-compact pinOrders so the next pin fills the lowest free slot.
+        val rest = pinnedAlbumDao.snapshot()
+        rest.forEachIndexed { idx, a ->
+            if (a.pinOrder != idx) pinnedAlbumDao.setOrder(a.id, idx)
+        }
+    }
 
     data class HistoryItem(
         val id: Long,                  // session id (NOT mediaUri)
@@ -186,8 +288,12 @@ class LastPlayedRepository @Inject constructor(
      * favourites tables. Returns Failure when 10 pins already exist.
      */
     suspend fun pinSession(historyId: Long): Result<Unit> {
-        val n = favDao.count()
-        if (n >= 10) return Result.failure(IllegalStateException("Favourites full (10/10)"))
+        // Shared cap with pinned albums: both compete for the same 10 slots.
+        val used = pinSlotsUsed()
+        if (used >= PIN_CAP) return Result.failure(
+            IllegalStateException("Favourites full ($used/$PIN_CAP)")
+        )
+        val n = favDao.count() // pin order within the favourites table
         val src = historyDao.get(historyId)
             ?: return Result.failure(IllegalStateException("Session $historyId not found"))
         val favId = favDao.insert(

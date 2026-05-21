@@ -59,6 +59,7 @@ fun LastPlayedScreen(
     viewModel: LastPlayedViewModel = hiltViewModel()
 ) {
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
+    val pinnedAlbums by viewModel.pinnedAlbums.collectAsStateWithLifecycle()
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -156,9 +157,33 @@ fun LastPlayedScreen(
                 )
             }
 
+            // Pinned albums sub-section — sister of pinned tracks,
+            // shares the 10-pin cap. Each row expands to reveal member
+            // tracks (locked design: tap row → expand, not auto-play).
+            if (pinnedAlbums.isNotEmpty()) {
+                SectionHeader(
+                    "Pinned albums " +
+                        "(${pinnedAlbums.size + pinned.size}/10)"
+                )
+                pinnedAlbums.forEach { album ->
+                    PinnedAlbumRow(
+                        album = album,
+                        tracksProvider = { viewModel.observePinnedAlbumTracks(album.id) },
+                        onPlayTrack = { trackUri, title ->
+                            viewModel.playAlbumTrack(trackUri, title)
+                            onNavigateToPlayer()
+                        },
+                        onUnpin = { viewModel.unpinAlbum(album.id) }
+                    )
+                }
+            }
+
             // Pinned section — drag-to-reorder.
             if (pinned.isNotEmpty()) {
-                SectionHeader("Pinned (${pinned.size}/10)")
+                SectionHeader(
+                    if (pinnedAlbums.isEmpty()) "Pinned (${pinned.size}/10)"
+                    else "Pinned tracks"
+                )
                 ReorderablePinnedList(
                     items = pinned,
                     onMove = { from, to ->
@@ -233,6 +258,114 @@ fun LastPlayedScreen(
                                 }
                             }
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun PinnedAlbumRow(
+    album: com.powermediaplayer.data.repository.LastPlayedRepository.PinnedAlbumItem,
+    tracksProvider: () -> Flow<List<com.powermediaplayer.data.db.entity.PinnedAlbumTrackEntity>>,
+    onPlayTrack: (String, String) -> Unit,
+    onUnpin: () -> Unit
+) {
+    var expanded by rememberSaveable(album.id) { mutableStateOf(false) }
+    val tracksFlow = remember(album.id) { tracksProvider() }
+    val tracks by tracksFlow.collectAsState(initial = emptyList())
+    Surface(
+        color = SurfaceElevated,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = { expanded = !expanded },
+                        onLongClick = onUnpin
+                    )
+                    .padding(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(OledBlack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (album.artworkUri != null) {
+                        coil3.compose.AsyncImage(
+                            model = album.artworkUri,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            Icons.Filled.MusicNote, contentDescription = null,
+                            tint = TealAccent, modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        album.title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "${album.artist}  •  ${album.trackCount} tracks",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Hide tracks" else "Show tracks",
+                    tint = TextSecondary
+                )
+            }
+            AnimatedVisibility(visible = expanded && tracks.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 56.dp, end = 12.dp, bottom = 8.dp)
+                ) {
+                    tracks.forEach { t ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPlayTrack(t.mediaUri, t.title) }
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = "Play this track",
+                                tint = TealAccent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                t.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }

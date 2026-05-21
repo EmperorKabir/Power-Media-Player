@@ -76,7 +76,18 @@ data class SettingsUiState(
     val fontSizeScale: Float = 1.0f,
     val diagLogEnabled: Boolean = false,
     val btVideoAudioOffsetMs: Int = 0,
-    val reverbWetMix: Float = 1.0f
+    val reverbWetMix: Float = 1.0f,
+    val audioBufferLowLatency: Boolean = false,
+    val webhookUrl: String = "",
+    val webhookOnPlay: Boolean = false,
+    val webhookOnPause: Boolean = false,
+    val webhookOnResume: Boolean = false,
+    val webhookOnSkipNext: Boolean = false,
+    val webhookOnSkipPrev: Boolean = false,
+    val webhookOnEnd: Boolean = false,
+    val hueBridgeIp: String = "",
+    val hueAppKey: String = "",
+    val huePairStatus: String = ""
 )
 
 /**
@@ -86,6 +97,7 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     val settingsDataStore: SettingsDataStore,
+    private val hueProvider: com.powermediaplayer.hue.HueProvider,
     private val audioOutputDetector: com.powermediaplayer.audio.AudioOutputDetector,
     val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao,
     private val spotifyTokenStore: com.powermediaplayer.cloud.SpotifyTokenStore,
@@ -165,7 +177,17 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.fontSizeScale,
             settingsDataStore.diagLogEnabled,
             settingsDataStore.btVideoAudioOffsetMs,
-            settingsDataStore.reverbWetMix
+            settingsDataStore.reverbWetMix,
+            settingsDataStore.audioBufferLowLatency,
+            settingsDataStore.webhookUrl,
+            settingsDataStore.webhookOnPlay,
+            settingsDataStore.webhookOnPause,
+            settingsDataStore.webhookOnResume,
+            settingsDataStore.webhookOnSkipNext,
+            settingsDataStore.webhookOnSkipPrev,
+            settingsDataStore.webhookOnEnd,
+            settingsDataStore.hueBridgeIp,
+            settingsDataStore.hueAppKey
         )
     ) { v ->
         SettingsUiState(
@@ -231,7 +253,17 @@ class SettingsViewModel @Inject constructor(
             fontSizeScale = v[59] as Float,
             diagLogEnabled = v[60] as Boolean,
             btVideoAudioOffsetMs = v[61] as Int,
-            reverbWetMix = v[62] as Float
+            reverbWetMix = v[62] as Float,
+            audioBufferLowLatency = v[63] as Boolean,
+            webhookUrl = v[64] as String,
+            webhookOnPlay = v[65] as Boolean,
+            webhookOnPause = v[66] as Boolean,
+            webhookOnResume = v[67] as Boolean,
+            webhookOnSkipNext = v[68] as Boolean,
+            webhookOnSkipPrev = v[69] as Boolean,
+            webhookOnEnd = v[70] as Boolean,
+            hueBridgeIp = v[71] as String,
+            hueAppKey = v[72] as String
         )
     }.stateIn(
         scope = viewModelScope,
@@ -256,7 +288,96 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setReverbWetMix(value: Float) {
-        viewModelScope.launch { settingsDataStore.setReverbWetMix(value) }
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui(
+                "settings reverbWetMix=${"%.3f".format(value)} (instant — AuxEffectInfo)"
+            )
+            settingsDataStore.setReverbWetMix(value)
+        }
+    }
+
+    fun setAudioBufferLowLatency(v: Boolean) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("settings audioBufferLowLatency=$v")
+            settingsDataStore.setAudioBufferLowLatency(v)
+        }
+    }
+
+    fun setWebhookUrl(v: String) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings webhookUrl=(set, len=${v.length})")
+        settingsDataStore.setWebhookUrl(v)
+    }.let {}
+    fun setWebhookOnPlay(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings webhookOnPlay=$v")
+        settingsDataStore.setWebhookOnPlay(v)
+    }.let {}
+    fun setWebhookOnPause(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings webhookOnPause=$v")
+        settingsDataStore.setWebhookOnPause(v)
+    }.let {}
+    fun setWebhookOnResume(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings webhookOnResume=$v")
+        settingsDataStore.setWebhookOnResume(v)
+    }.let {}
+    fun setWebhookOnSkipNext(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings webhookOnSkipNext=$v")
+        settingsDataStore.setWebhookOnSkipNext(v)
+    }.let {}
+    fun setWebhookOnSkipPrev(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings webhookOnSkipPrev=$v")
+        settingsDataStore.setWebhookOnSkipPrev(v)
+    }.let {}
+    fun setWebhookOnEnd(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings webhookOnEnd=$v")
+        settingsDataStore.setWebhookOnEnd(v)
+    }.let {}
+
+    // ── Hue v1 ─────────────────────────────────────────────────────
+    private val _huePairStatus = kotlinx.coroutines.flow.MutableStateFlow("")
+    val huePairStatus: kotlinx.coroutines.flow.StateFlow<String> = _huePairStatus
+
+    /** Discover bridges + pair with the first one found. Requires the
+     *  user to have pressed the physical link button on the bridge in
+     *  the last ~30 seconds. */
+    fun pairHueBridge() {
+        viewModelScope.launch {
+            _huePairStatus.value = "Searching for bridge…"
+            val bridges = hueProvider.discover()
+            if (bridges.isEmpty()) {
+                _huePairStatus.value = "No Hue bridge found on this Wi-Fi"
+                return@launch
+            }
+            val first = bridges.first()
+            _huePairStatus.value = "Found bridge ${first.ip} — press link button now"
+            val key = hueProvider.pair(first.ip)
+            _huePairStatus.value = if (key != null) {
+                "Paired with bridge ${first.ip}"
+            } else {
+                "Pair failed — press the bridge link button, then tap Pair again"
+            }
+        }
+    }
+
+    fun applyHueScene(preset: com.powermediaplayer.hue.HueProvider.ScenePreset) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("hue applyScene=${preset.name}")
+            hueProvider.applyScene(preset)
+        }
+    }
+
+    fun setHueAll(on: Boolean) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("hue setAll(on=$on)")
+            hueProvider.setAll(on)
+        }
+    }
+
+    fun unpairHue() {
+        viewModelScope.launch {
+            settingsDataStore.setHueAppKey("")
+            settingsDataStore.setHueBridgeIp("")
+            _huePairStatus.value = ""
+        }
     }
 
     fun clearDiagLog() {
@@ -290,7 +411,10 @@ class SettingsViewModel @Inject constructor(
     fun setCrossfadeEnabled(v: Boolean) =
         viewModelScope.launch { settingsDataStore.setCrossfadeEnabled(v) }.let { }
     fun setCrossfadeMs(v: Int) =
-        viewModelScope.launch { settingsDataStore.setCrossfadeMs(v) }.let { }
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("settings crossfadeMs=$v (applies on next track transition)")
+            settingsDataStore.setCrossfadeMs(v)
+        }.let { }
     fun setCrossfadeCurve(v: String) =
         viewModelScope.launch { settingsDataStore.setCrossfadeCurve(v) }.let { }
     fun setCrossfadeAlbumMode(v: Boolean) =
@@ -403,12 +527,33 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setBtSkipForwardSeconds(seconds) }
     }
 
-    fun setVideoFlipH(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoFlipH(v) }.let{}
-    fun setVideoFlipV(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoFlipV(v) }.let{}
-    fun setVideoBw(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoBw(v) }.let{}
-    fun setVideoSepia(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoSepia(v) }.let{}
-    fun setVideoInvert(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoInvert(v) }.let{}
-    fun setVideoRotation(d: Int) = viewModelScope.launch { settingsDataStore.setVideoRotation(d) }.let{}
+    // Video effects: applied per-frame in the GL surface (~16 ms floor
+    // at 60 Hz). Effectively instant — DataStore→Flow→@Volatile then
+    // next frame.
+    fun setVideoFlipH(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings videoFlipH=$v")
+        settingsDataStore.setVideoFlipH(v)
+    }.let{}
+    fun setVideoFlipV(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings videoFlipV=$v")
+        settingsDataStore.setVideoFlipV(v)
+    }.let{}
+    fun setVideoBw(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings videoBw=$v")
+        settingsDataStore.setVideoBw(v)
+    }.let{}
+    fun setVideoSepia(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings videoSepia=$v")
+        settingsDataStore.setVideoSepia(v)
+    }.let{}
+    fun setVideoInvert(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings videoInvert=$v")
+        settingsDataStore.setVideoInvert(v)
+    }.let{}
+    fun setVideoRotation(d: Int) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings videoRotation=${d}deg")
+        settingsDataStore.setVideoRotation(d)
+    }.let{}
     fun setAudioReverseLocal(v: Boolean) = viewModelScope.launch { settingsDataStore.setAudioReverseLocal(v) }.let{}
     fun setPitch(p: Float) = viewModelScope.launch {
         com.powermediaplayer.diag.DiagLog.ui("settings pitch=$p (Settings-side; routed via DataStore Flow)")

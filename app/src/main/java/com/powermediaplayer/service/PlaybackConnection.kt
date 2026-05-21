@@ -362,18 +362,24 @@ class PlaybackConnection @Inject constructor(
         controller?.setPlaybackParameters(PlaybackParameters(speed, pitch))
     }
 
-    /** Audio delay relative to video (ms; +/-). Implemented by adjusting
-     *  TrackSelectionParameters via the underlying player. We can't shift
-     *  audio precisely from MediaController, but we can apply per-track
-     *  selection overrides. For now this is a no-op placeholder + log so
-     *  the user-visible setting persists; full sync needs a custom audio
-     *  renderer pipeline. */
+    /**
+     * Audio delay is fed to AudioDelayProcessor through the
+     * service-side DataStore Flow collector (see PlaybackService
+     * onCreate `audioDelayFlag` watcher). This Connection-side function
+     * is kept for API parity with the UI sliders but is intentionally a
+     * no-op; the real path is DataStore → @Volatile → processor.
+     */
     fun setAudioDelayMs(ms: Int) {
-        com.powermediaplayer.util.Diag.i("PMP_DIAG", "audioDelayMs=$ms (logged; no-op until audio renderer)")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "audioDelayMs=$ms (applied via service-side processor)")
     }
-    /** Subtitle delay (ms; +/-). Same caveat as audio delay. */
+    /**
+     * Subtitle delay flows DataStore → @Volatile flag → ShiftingSubtitle
+     * ParserFactory at parse-time. Live changes also trigger a
+     * setMediaItem re-prepare in the service so the parser re-runs
+     * with the new shift.
+     */
     fun setSubtitleDelayMs(ms: Int) {
-        com.powermediaplayer.util.Diag.i("PMP_DIAG", "subtitleDelayMs=$ms (logged; no-op until subtitle pipeline)")
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "subtitleDelayMs=$ms (applied via service-side parser)")
     }
 
     fun setVolume(volume: Float) {
