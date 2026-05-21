@@ -104,9 +104,13 @@ class HueDimmableDriver @Inject constructor(
             val baseFloor = 0.60f - s * 0.55f      // 0.60 → 0.05
             val dynSpan = 0.05f + s * 0.85f        // 0.05 → 0.90
             val curve = 1.0f - s * 0.6f
-            val gate = 0.40f * (1f - s)
+            // vc29.5 — gate ceiling 0.20 (was 0.40). Logs showed the
+            // dimmable metric maxing around 0.25 even on loud bass, so
+            // the old gate of 0.40 at s=0 killed every signal. Mirrors
+            // the same fix in HueEntertainment.
+            val gate = 0.20f * (1f - s)
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.65f * (1f - s)
+            val beatGate = 0.40f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
             val beatSpan = 0.05f + s * 0.40f       // 0.05 → 0.45
             val perLightIntervalMs = 100L // 10 Hz/light advisory ceiling
@@ -130,13 +134,15 @@ class HueDimmableDriver @Inject constructor(
                         settings.btVideoAudioOffsetMs.first()
                 }.getOrDefault(200)
                 val r = analyserProcessor.getSnapshotAt(syncOffset)
-                // Dimmable lights take a single brightness value. Drive
-                // it from the bass-weighted RMS (same blend the
-                // COHERENT colour path uses) so the dimmable bulbs
-                // breathe together with the colour lights.
-                val bandAvg = (r.bands[0] * 0.50f + r.bands[1] * 0.80f +
-                    r.bands[2] * 0.40f + r.bands[3] * 0.30f +
-                    r.bands[4] * 0.20f + r.bands[5] * 0.15f) / 2.35f
+                // vc29.5 — use the max of bands 1..5 (bass / low-mid /
+                // mid / high-mid / treble) as the drive metric. The
+                // previous bass-weighted /2.35 average compressed any
+                // real-world signal to 0.10..0.25, which sat below the
+                // gate threshold permanently. Max-of-bands gives the
+                // engine the strongest in-band peak directly.
+                val bandAvg = maxOf(
+                    r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5]
+                )
                 val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
                 val shapedBand = if (gatedBand > 0f)
                     Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()

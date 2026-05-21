@@ -213,9 +213,16 @@ class HueEntertainment @Inject constructor(
             val baseFloor = 0.60f - s * 0.30f     // 0.60 → 0.30
             val dynSpan = 0.05f + s * 0.55f       // 0.05 → 0.60
             val curve = 1.0f - s * 0.6f           // 1.0 → 0.4 (sqrt-ish)
-            val gate = 0.40f * (1f - s)           // 0.40 → 0
+            // Gate ceiling lowered (was 0.40). Logs proved that even
+            // bass peaks rarely exceed 0.50 raw, so gate=0.40*(1-s)
+            // was killing every signal at low + mid sensitivity. New
+            // ceiling 0.20 lets typical bass hits pass at all but the
+            // very lowest sensitivity values.
+            val gate = 0.20f * (1f - s)           // 0.20 → 0
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.65f * (1f - s)
+            // Beat gate similarly relaxed — most detected beats have
+            // beatStrength 0.3–0.7 in the analyser.
+            val beatGate = 0.40f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
             val beatSpan = 0.05f + s * 0.30f      // 0.05 → 0.35
             val frameMs = 40L  // 25 Hz
@@ -274,12 +281,17 @@ class HueEntertainment @Inject constructor(
                         .coerceIn(0, palette.size - 1)
                 } else 0
                 val coherentBandAvg = if (mode == Mode.COHERENT) {
-                    // Bass-weighted RMS: low bands matter most for the
-                    // perceived energy. Result roughly in [0..1].
-                    (r.bands[0] * 0.50f + r.bands[1] * 0.80f +
-                        r.bands[2] * 0.40f + r.bands[3] * 0.30f +
-                        r.bands[4] * 0.20f + r.bands[5] * 0.15f) / 2.35f
+                    // vc29.5 — use max of bands 1..5 instead of a
+                    // weighted average divided by 2.35. The old metric
+                    // capped at ~0.34 even on loud bass, which sat
+                    // permanently below the gate; max-of-bands tracks
+                    // the strongest in-band peak directly.
+                    maxOf(r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5])
                 } else 0f
+                // Track the first channel's brightness for periodic
+                // diagnostics (proves our wire payload is actually
+                // varying rather than re-sending the same bytes).
+                var diagCh0Bri = 0
                 for ((i, ch) in lightChannels.withIndex()) {
                     val bandLevel: Float
                     val palIdx: Int
@@ -322,6 +334,7 @@ class HueEntertainment @Inject constructor(
                     val xCie = (xy[0] * 65535).toInt().coerceIn(0, 65535)
                     val yCie = (xy[1] * 65535).toInt().coerceIn(0, 65535)
                     val bri = (combined * 65535).toInt().coerceIn(0, 65535)
+                    if (i == 0) diagCh0Bri = bri
 
                     // v2 record: 1-byte channel id + 3 u16 BE values
                     frameBuf[off + 0] = ch.toByte()
@@ -357,10 +370,11 @@ class HueEntertainment @Inject constructor(
                 if (frameCount % 100L == 0L) {
                     DiagLog.event(
                         "HUE",
-                        "reactive frame BPM=${"%.0f".format(r.bpm)} " +
-                            "dynamics=${"%.2f".format(r.dynamics)} " +
-                            "syncOffset=${syncOffsetMs}ms bands=" +
-                            r.bands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }
+                        "reactive frame s=${"%.2f".format(s)} mode=${mode.name} " +
+                            "BPM=${"%.0f".format(r.bpm)} " +
+                            "dynamics=${"%.2f".format(r.dynamics)} bands=" +
+                            r.bands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) } +
+                            " ch0Bri=${(diagCh0Bri * 100 / 65535)}%"
                     )
                 }
                 delay(frameMs)

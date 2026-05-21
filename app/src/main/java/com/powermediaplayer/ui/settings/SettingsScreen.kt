@@ -1730,7 +1730,7 @@ private fun HueSection(
                 enabled = selectedAreaKey.isNotBlank(),
                 modifier = Modifier.weight(1f)
             ) {
-                Text("Disconnect area")
+                Text("Disconnect room/zone")
             }
             OutlinedButton(
                 onClick = onUnpair,
@@ -1740,7 +1740,7 @@ private fun HueSection(
             }
         }
         Text(
-            text = "'Disconnect area' clears your room/zone selection " +
+            text = "'Disconnect room/zone' clears your selection " +
                 "and stops streaming until you pick again. 'Unpair bridge' " +
                 "forgets the bridge entirely — you'll need to press the " +
                 "bridge button to re-pair.",
