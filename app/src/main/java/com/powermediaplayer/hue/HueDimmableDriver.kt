@@ -87,7 +87,14 @@ class HueDimmableDriver @Inject constructor(
      * the global syncOffset when reading PCM for it. Built by
      * [PlaybackService] using [HueProvider.fetchBulbLatencyProfiles].
      */
-    data class DimmableLight(val id: String, val latencyMs: Int)
+    data class DimmableLight(
+        val id: String,
+        val latencyMs: Int,
+        /** Per-bulb max safe PUT rate. The group cadence uses the
+         *  min across all members so the slowest bulb gates the
+         *  room. Defaults to 1 Hz when unknown. */
+        val maxSafeRateHz: Float = 1.0f
+    )
 
     /**
      * Start brightness-pulsing [dimmableLights]. When
@@ -174,14 +181,21 @@ class HueDimmableDriver @Inject constructor(
                 // result is far closer than the previous "lights
                 // freeze" failure mode.
                 val avgLatencyMs = dimmableLights.sumOf { it.latencyMs } / dimmableLights.size
-                // vc29.13 — dropped from 2 Hz (500 ms) to 1 Hz (1000 ms).
-                // IKEA Tradfri / GU10 bulbs QUEUE transitions instead
-                // of aborting in-flight ones (the way native Hue does),
-                // so anything faster than ~1 Hz piles up a backlog the
-                // bulb processes for tens of seconds after pause. 1 Hz
-                // is also right at the documented Hue v1 grouped state
-                // ceiling, so the bridge stays comfortable too.
-                val groupIntervalMs = 1000L
+                // vc29.14 — ADAPTIVE PUT cadence. Picks the slowest
+                // bulb's safe rate so the group never out-paces its
+                // weakest member. All-Hue group → 2 Hz (silky);
+                // any-IKEA → 1 Hz (queue-safe); mixed others →
+                // 1.5 Hz. Clamped 500..2000 ms.
+                val groupRateHz = dimmableLights.minOfOrNull { it.maxSafeRateHz } ?: 1.0f
+                val groupIntervalMs = (1000.0 / groupRateHz).toLong().coerceIn(500L, 2000L)
+                // Tighter delta filter at higher rates so we don't
+                // skip too many of the now-faster updates.
+                val deltaFilterPct = if (groupRateHz >= 2.0f) 3f else 5f
+                DiagLog.event(
+                    "HUE",
+                    "dimmable group cadence ${"%.1f".format(groupRateHz)} Hz " +
+                        "interval=${groupIntervalMs}ms deltaFilter=${"%.0f".format(deltaFilterPct)}%"
+                )
                 var lastSent = -1f
                 var lastDiagWindow = -1L
                 var nextDeadline = android.os.SystemClock.uptimeMillis()
@@ -231,11 +245,10 @@ class HueDimmableDriver @Inject constructor(
                         )
                     }
                     val delta = kotlin.math.abs(target - lastSent)
-                    // vc29.13 — bigger delta filter (5 %) so we only
-                    // PUT meaningful brightness changes. Eliminates
-                    // cosmetic micro-wobbles that would otherwise
-                    // contribute to the IKEA Zigbee queue build-up.
-                    if (lastSent < 0f || delta >= 5f) {
+                    // vc29.14 — delta filter adapts with cadence: 3 %
+                    // at >=2 Hz (smoother), 5 % at 1 Hz (more
+                    // queue-safe for IKEA).
+                    if (lastSent < 0f || delta >= deltaFilterPct) {
                         putGroupBrightness(ip, key, groupedLightId, target)
                         lastSent = target
                     }
@@ -244,10 +257,17 @@ class HueDimmableDriver @Inject constructor(
             } else {
                 // Per-light fallback (used when an Entertainment area
                 // is selected; rooms/zones go through group mode above).
-                // 1 Hz/light — slow enough for IKEA bulbs (which queue
-                // commands) to keep up without backing up. Faster paths
-                // were causing 20+ second post-pause settling.
-                val perLightIntervalMs = 1000L
+                // vc29.14 — per-light cadence still uses the min rate
+                // so a single IKEA bulb in the set caps the whole
+                // group at the slow path. Stagger keeps total bridge
+                // load comfortable.
+                val perLightRateHz = dimmableLights.minOfOrNull { it.maxSafeRateHz } ?: 1.0f
+                val perLightIntervalMs = (1000.0 / perLightRateHz).toLong().coerceIn(500L, 2000L)
+                val perLightDeltaPct = if (perLightRateHz >= 2.0f) 3f else 5f
+                DiagLog.event(
+                    "HUE",
+                    "dimmable per-light cadence ${"%.1f".format(perLightRateHz)} Hz interval=${perLightIntervalMs}ms"
+                )
                 val stagger = max(50L, perLightIntervalMs / dimmableLights.size.coerceAtLeast(1))
                 val deadlines = LongArray(dimmableLights.size)
                 val now0 = android.os.SystemClock.uptimeMillis()
@@ -298,7 +318,7 @@ class HueDimmableDriver @Inject constructor(
                                 "offset=${perLightOffset}ms bandAvg=${"%.2f".format(bandAvg)} target=${"%.0f".format(target)}%"
                         }
                         val delta = kotlin.math.abs(target - lastBri[idx])
-                        if (lastBri[idx] >= 0f && delta < 5f) {
+                        if (lastBri[idx] >= 0f && delta < perLightDeltaPct) {
                             deadlines[idx] = now + perLightIntervalMs
                             continue
                         }

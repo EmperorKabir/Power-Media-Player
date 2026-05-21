@@ -116,7 +116,25 @@ class HueProvider @Inject constructor(
     data class BulbLatencyProfile(
         val manufacturer: String,
         val productName: String,
-        val latencyMs: Int
+        val latencyMs: Int,
+        /**
+         * Empirically-derived max safe CLIP PUT rate per bulb family.
+         * Group cadence is the MIN of all bulbs in the group, so the
+         * slowest bulb's ceiling gates the room. Sources:
+         *   - Hue native: docs say 10 PUTs/s/light, ~1/s grouped state
+         *     on v1 (v2 likely higher); 2 Hz on groups is a safe band
+         *     well under per-light limits.
+         *   - IKEA TRÅDFRI: undocumented in vendor specs; community
+         *     reports converge on ~1 Hz to avoid Zigbee queue build-up
+         *     in early firmware. Confirmed in this app's diag logs.
+         *   - Innr / Sengled / GLEDOPTO / Aqara: standards-compliant
+         *     ZCL Level Control, 1.5–2 Hz is comfortable.
+         *   - OSRAM/Ledvance: older Lightify firmware variable; 1 Hz
+         *     safest.
+         *   - Tuya / unknown / blank manufacturer: variable firmware
+         *     quality, 1 Hz default.
+         */
+        val maxSafeRateHz: Float
     )
 
     /**
@@ -173,6 +191,28 @@ class HueProvider @Inject constructor(
         if (manufacturer.startsWith("_T") || manufacturer.isBlank()) return 450
         // Unknown brand → conservative.
         return 400
+    }
+
+    /**
+     * Per-bulb max safe CLIP PUT rate. See [BulbLatencyProfile.maxSafeRateHz]
+     * for source rationale.
+     */
+    private fun rateForBulb(
+        manufacturer: String,
+        productName: String,
+        modelId: String
+    ): Float {
+        val mfr = manufacturer.lowercase()
+        if ("signify" in mfr || "philips" in mfr || "hue" in productName.lowercase()) return 2.0f
+        if ("ikea" in mfr) return 1.0f
+        if ("innr" in mfr) return 1.5f
+        if ("sengled" in mfr) return 1.5f
+        if ("gledopto" in mfr) return 1.5f
+        if ("osram" in mfr || "ledvance" in mfr || "sylvania" in mfr) return 1.0f
+        if ("eve" in mfr) return 1.5f
+        if ("lumi" in mfr || "aqara" in mfr) return 1.5f
+        if (manufacturer.startsWith("_T") || manufacturer.isBlank()) return 1.0f
+        return 1.0f
     }
 
     /** Cap-tier breakdown for an area, surfaced in the Settings UI. */
@@ -630,7 +670,8 @@ class HueProvider @Inject constructor(
                         val meta = deviceMeta[deviceId] ?: continue
                         val (mfr, productName, modelId) = meta
                         val latency = latencyForBulb(mfr, productName, modelId)
-                        out[lid] = BulbLatencyProfile(mfr, productName, latency)
+                        val rateHz = rateForBulb(mfr, productName, modelId)
+                        out[lid] = BulbLatencyProfile(mfr, productName, latency, rateHz)
                         val brand = when {
                             "signify" in mfr.lowercase() ||
                                 "philips" in mfr.lowercase() -> "hue"

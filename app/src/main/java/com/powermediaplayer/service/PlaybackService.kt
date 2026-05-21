@@ -1085,9 +1085,11 @@ class PlaybackService : MediaSessionService() {
                             hueProvider.fetchBulbLatencyProfiles(dimmableIds)
                         }.getOrDefault(emptyMap())
                         val dimmableLights = dimmableIds.map { id ->
+                            val p = profiles[id]
                             com.powermediaplayer.hue.HueDimmableDriver.DimmableLight(
                                 id = id,
-                                latencyMs = profiles[id]?.latencyMs ?: 400
+                                latencyMs = p?.latencyMs ?: 400,
+                                maxSafeRateHz = p?.maxSafeRateHz ?: 1.0f
                             )
                         }
                         hueEntertainment.start(

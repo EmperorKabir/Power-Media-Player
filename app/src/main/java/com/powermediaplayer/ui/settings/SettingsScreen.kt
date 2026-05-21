@@ -1795,18 +1795,18 @@ private fun HueSection(
                     color = TextPrimary
                 )
                 Text(
-                    text = "Pulse brightness of white-only bulbs (no colour) in " +
-                        "time with the music. For rooms and zones the engine " +
-                        "sends a single group brightness command per cycle " +
-                        "(~4 commands/sec total) so the bridge stays well " +
-                        "under its rate limit even with many bulbs. The " +
-                        "command times itself to the average bulb-response " +
-                        "delay across the group (native Hue ~200 ms, IKEA " +
-                        "TRÅDFRI ~430 ms, Innr ~350 ms, Sengled ~380 ms, " +
-                        "OSRAM/Ledvance ~400 ms). If the bridge ever returns " +
-                        "5xx/429 we pause for 2.5 s to let it recover, and " +
-                        "we stop pulsing the moment the colour-stream drops " +
-                        "to avoid piling on. Smart plugs are never touched.",
+                    text = "Pulse brightness of white-only bulbs (no colour) " +
+                        "in time with the music. For rooms and zones the " +
+                        "engine sends one group brightness command per " +
+                        "cycle. The rate is set automatically by the slowest " +
+                        "bulb in the group: all-Hue groups run at 2 Hz, any-" +
+                        "IKEA at 1 Hz (their Zigbee firmware queues commands " +
+                        "instead of aborting), other brands 1.5 Hz. Commands " +
+                        "are sent as instant snaps (no transition smoothing) " +
+                        "so they can't pile up. If the bridge ever returns " +
+                        "5xx/429 we pause for 2.5 s, and we stop pulsing the " +
+                        "moment the colour stream drops. Smart plugs are " +
+                        "never touched.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
