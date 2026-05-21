@@ -51,6 +51,15 @@ class HueDimmableDriver @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var job: Job? = null
 
+    // Stashed bridge + group context — used by stop() to fire a
+    // single restore PUT so white bulbs snap back to full brightness
+    // when playback ends, instead of being left frozen at whatever
+    // the music's last commanded value was.
+    @Volatile private var restoreIp: String = ""
+    @Volatile private var restoreKey: String = ""
+    @Volatile private var restoreGroupId: String? = null
+    @Volatile private var restoreLightIds: List<String> = emptyList()
+
     private val http: okhttp3.OkHttpClient by lazy {
         // Reuse a permissive client (bridge cert is self-signed). The
         // standard HueProvider client could be injected but keeping
@@ -105,6 +114,10 @@ class HueDimmableDriver @Inject constructor(
             val ip = settings.hueBridgeIp.first()
             val key = settings.hueAppKey.first()
             if (ip.isBlank() || key.isBlank()) return@launch
+            restoreIp = ip
+            restoreKey = key
+            restoreGroupId = groupedLightId
+            restoreLightIds = dimmableLights.map { it.id }
             // Summarise latency bucket distribution so testers can
             // verify the manufacturer detection worked.
             val latencySummary = dimmableLights
@@ -128,22 +141,22 @@ class HueDimmableDriver @Inject constructor(
             //   can only express movement through brightness — they
             //   have no colour channel to convey activity.
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            // vc29.11 — widened low-sensitivity swing dramatically.
-            //   Logs proved IKEA GU10 / Tradfri bulbs sit at the end
-            //   of the Zigbee mesh with heavy internal smoothing; an
-            //   8 pp brightness window at sensitivity=10 was inside
-            //   their perceptual flat zone so they appeared frozen.
-            //   New floor / span gives a 40 pp swing at s=0.10 and a
-            //   95 pp swing at s=1.0 — slider sweeps from "noticeable"
-            //   to "dramatic" instead of from "frozen" to "subtle".
-            val baseFloor = 0.30f - s * 0.25f      // 0.30 → 0.05
-            val dynSpan = 0.50f + s * 0.40f        // 0.50 → 0.90
-            val curve = 0.70f - s * 0.30f          // 0.70 → 0.40
-            val gate = 0.05f * (1f - s)            // 0.05 → 0  (very low)
+            // vc29.12 — even more aggressive low-sensitivity swing.
+            //   vc29.11 produced ~30 pp swing at s=0.20 (50%-60% in
+            //   logs) which IKEA GU10s still barely registered. The
+            //   only way to overcome their internal smoothing is to
+            //   send bigger absolute brightness changes. New math
+            //   gives ~60 pp swing at s=0.10 and ~95 pp at s=1.0 —
+            //   the slider now controls how OFTEN big swings happen
+            //   rather than how big each swing is.
+            val baseFloor = 0.20f - s * 0.15f      // 0.20 → 0.05
+            val dynSpan = 0.60f + s * 0.30f        // 0.60 → 0.90
+            val curve = 0.50f - s * 0.10f          // 0.50 → 0.40
+            val gate = 0.03f * (1f - s)            // 0.03 → 0
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.20f * (1f - s)
+            val beatGate = 0.15f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.20f + s * 0.30f       // 0.20 → 0.50
+            val beatSpan = 0.30f + s * 0.20f       // 0.30 → 0.50
             // vc29.10 — settings reads cached once per loop (was 4 .first()
             // calls per iteration = wasteful DataStore churn). Loop reads
             // them once into locals and only refreshes every 2 s.
@@ -303,6 +316,56 @@ class HueDimmableDriver @Inject constructor(
         if (job == null) return
         job?.cancel()
         job = null
+        // vc29.12 — when playback stops, snap white bulbs back to
+        // 100 % so the room doesn't feel "stuck dim" at whatever the
+        // music's last commanded value happened to be. One group PUT
+        // (or per-light PUTs in the entertainment-area fallback) with
+        // a fast 300 ms transition.
+        val ip = restoreIp
+        val key = restoreKey
+        if (ip.isBlank() || key.isBlank()) return
+        val groupId = restoreGroupId
+        val lightIds = restoreLightIds
+        scope.launch {
+            runCatching {
+                if (groupId != null) {
+                    val body =
+                        """{"on":{"on":true},"dimming":{"brightness":100.0},"dynamics":{"duration":300}}"""
+                    val req = Request.Builder()
+                        .url("https://$ip/clip/v2/resource/grouped_light/$groupId")
+                        .header("hue-application-key", key)
+                        .put(body.toRequestBody("application/json".toMediaTypeOrNull()))
+                        .build()
+                    http.newCall(req).execute().use { resp ->
+                        DiagLog.event(
+                            "HUE",
+                            "dimmable RESTORE group http=${resp.code} group=${groupId.take(8)}"
+                        )
+                    }
+                } else {
+                    for (lid in lightIds) {
+                        val body =
+                            """{"on":{"on":true},"dimming":{"brightness":100.0},"dynamics":{"duration":300}}"""
+                        val req = Request.Builder()
+                            .url("https://$ip/clip/v2/resource/light/$lid")
+                            .header("hue-application-key", key)
+                            .put(body.toRequestBody("application/json".toMediaTypeOrNull()))
+                            .build()
+                        runCatching { http.newCall(req).execute().close() }
+                        kotlinx.coroutines.delay(100) // stay under bridge throughput cap
+                    }
+                    DiagLog.event(
+                        "HUE",
+                        "dimmable RESTORE per-light → ${lightIds.size} bulbs"
+                    )
+                }
+            }
+        }
+        // Clear stash so a stale start() doesn't reuse old context.
+        restoreIp = ""
+        restoreKey = ""
+        restoreGroupId = null
+        restoreLightIds = emptyList()
     }
 
     /**

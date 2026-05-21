@@ -216,19 +216,18 @@ class HueEntertainment @Inject constructor(
             //   than for white-only bulbs (those use the wider 5–100 %
             //   spread in HueDimmableDriver).
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            // vc29.11 — same widened-swing rework as HueDimmableDriver.
-            // Colour bulbs convey movement via XY palette rotation too,
-            // so their brightness sweep is narrower than dimmable's but
-            // still much wider than the previous flat band — 37 pp at
-            // s=0.10, 80 pp at s=1.0.
-            val baseFloor = 0.40f - s * 0.20f     // 0.40 → 0.20
-            val dynSpan = 0.35f + s * 0.45f       // 0.35 → 0.80
-            val curve = 0.70f - s * 0.30f         // 0.70 → 0.40
-            val gate = 0.05f * (1f - s)           // 0.05 → 0
+            // vc29.12 — wider colour swing in line with the dimmable
+            // rework. Colour bulbs still have palette rotation to
+            // convey activity but a wider brightness sweep makes the
+            // sensitivity slider feel more responsive across its range.
+            val baseFloor = 0.30f - s * 0.15f     // 0.30 → 0.15
+            val dynSpan = 0.50f + s * 0.35f       // 0.50 → 0.85
+            val curve = 0.50f - s * 0.10f         // 0.50 → 0.40
+            val gate = 0.03f * (1f - s)           // 0.03 → 0
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.20f * (1f - s)
+            val beatGate = 0.15f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.15f + s * 0.30f      // 0.15 → 0.45
+            val beatSpan = 0.20f + s * 0.30f      // 0.20 → 0.50
             val frameMs = 40L  // 25 Hz
             // Palette cycle phase (radians); BPM-driven rotation rate.
             var palettePhase = 0.0
