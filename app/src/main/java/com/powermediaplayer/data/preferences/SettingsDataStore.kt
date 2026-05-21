@@ -241,6 +241,11 @@ class SettingsDataStore @Inject constructor(
         // mode picker — there is one rich reactive mode whose
         // vividness is the slider value.
         val HUE_REACTIVE_INTENSITY = intPreferencesKey("hue_reactive_intensity")
+        // Compensates for the AudioTrack output buffer (~150–250 ms
+        // typical) so lights flash AT THE SAME TIME as bass kicks
+        // instead of leading them. Default 200 ms — user dials per
+        // room.
+        val HUE_SYNC_OFFSET_MS = intPreferencesKey("hue_sync_offset_ms")
 
         // §C14 — audio focus policy. Three independent settings for the
         // common interruption types. Defaults at first install:
@@ -631,6 +636,8 @@ class SettingsDataStore @Inject constructor(
     suspend fun setHueReactiveMode(v: String) { context.dataStore.edit { it[Keys.HUE_REACTIVE_MODE] = v } }
     val hueReactiveIntensity: Flow<Int> = context.dataStore.data.map { it[Keys.HUE_REACTIVE_INTENSITY] ?: 0 }
     suspend fun setHueReactiveIntensity(v: Int) { context.dataStore.edit { it[Keys.HUE_REACTIVE_INTENSITY] = v.coerceIn(0, 100) } }
+    val hueSyncOffsetMs: Flow<Int> = context.dataStore.data.map { it[Keys.HUE_SYNC_OFFSET_MS] ?: 200 }
+    suspend fun setHueSyncOffsetMs(v: Int) { context.dataStore.edit { it[Keys.HUE_SYNC_OFFSET_MS] = v.coerceIn(0, 1000) } }
     suspend fun setColdStartResumeBackoffSec(sec: Int) {
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }

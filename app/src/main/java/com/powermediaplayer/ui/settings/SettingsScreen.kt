@@ -178,13 +178,16 @@ fun SettingsScreen(
             pairStatus = viewModel.huePairStatus.collectAsStateWithLifecycle().value,
             reactiveIntensity = viewModel.settingsDataStore.hueReactiveIntensity
                 .collectAsStateWithLifecycle(initialValue = 0).value,
+            syncOffsetMs = viewModel.settingsDataStore.hueSyncOffsetMs
+                .collectAsStateWithLifecycle(initialValue = 200).value,
             onDiscover = { viewModel.discoverHueBridge() },
             onPair = { manualIp -> viewModel.completeHuePair(manualIp) },
             onUnpair = { viewModel.unpairHue() },
             onAllOn = { viewModel.setHueAll(true) },
             onAllOff = { viewModel.setHueAll(false) },
             onApplyScene = { viewModel.applyHueScene(it) },
-            onIntensity = { viewModel.setHueReactiveIntensity(it) }
+            onIntensity = { viewModel.setHueReactiveIntensity(it) },
+            onSyncOffset = { viewModel.setHueSyncOffsetMs(it) }
         )
         SettingsDivider()
 
@@ -1483,13 +1486,15 @@ private fun HueSection(
     discoveredIp: String,
     pairStatus: String,
     reactiveIntensity: Int,
+    syncOffsetMs: Int,
     onDiscover: () -> Unit,
     onPair: (String) -> Unit,
     onUnpair: () -> Unit,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
     onApplyScene: (com.powermediaplayer.hue.HueProvider.ScenePreset) -> Unit,
-    onIntensity: (Int) -> Unit
+    onIntensity: (Int) -> Unit,
+    onSyncOffset: (Int) -> Unit
 ) {
     val paired = bridgeIp.isNotBlank() && appKey.isNotBlank()
     var manualIp by rememberSaveable { mutableStateOf("") }
@@ -1564,7 +1569,16 @@ private fun HueSection(
         Text(
             text = "Needs an Entertainment area in your Hue mobile app " +
                 "(Settings → Entertainment areas → drag your lights in). " +
-                "Requires Microphone permission for the audio analyser.",
+                "No microphone permission needed — we read the audio from " +
+                "our own player's chain.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+        )
+        Text(
+            text = "Doesn't apply to Spotify Connect or Cast — those play " +
+                "audio on a remote device, so the analyser has nothing to " +
+                "see. Reactive lighting auto-pauses on those sources.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -1591,6 +1605,43 @@ private fun HueSection(
             valueRange = 0f..100f,
             steps = 9,
             modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        // Sync offset: lights are driven from PCM samples we tap BEFORE
+        // the speaker output buffer. Without compensation they'd flash
+        // ~200 ms ahead of the audio. Default 200 ms tuned for phone
+        // speaker + wired output; dial up to ~400-500 ms for BT A2DP
+        // (codec adds latency); dial down if your output is low-latency
+        // (USB-C DAC, Low-latency audio buffer toggle on).
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = "Light/sound sync offset",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${syncOffsetMs} ms",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TealAccent
+            )
+        }
+        Slider(
+            value = syncOffsetMs.toFloat(),
+            onValueChange = { onSyncOffset(it.toInt()) },
+            valueRange = 0f..1000f,
+            steps = 19, // 50ms increments
+            modifier = Modifier.padding(horizontal = 24.dp)
+        )
+        Text(
+            text = "Tune so light flashes line up with what you hear. " +
+                "Phone speaker / wired ~150-250 ms; Bluetooth A2DP " +
+                "~300-500 ms; USB-C DAC near 0 ms.",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
 
         // ── SECONDARY — basic Hue control (third-party-style) ──────

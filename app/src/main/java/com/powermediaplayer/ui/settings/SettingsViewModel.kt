@@ -466,6 +466,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setHueSyncOffsetMs(v: Int) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("hue syncOffsetMs=$v")
+            settingsDataStore.setHueSyncOffsetMs(v)
+        }
+    }
+
     fun clearDiagLog() {
         com.powermediaplayer.diag.DiagLog.clear()
     }

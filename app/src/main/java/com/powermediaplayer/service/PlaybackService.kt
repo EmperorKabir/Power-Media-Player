@@ -78,6 +78,15 @@ class PlaybackService : MediaSessionService() {
             delayMsSupplier = { audioDelayFlag }
         )
     }
+    /**
+     * §Hue — PCM tap for the audio-reactive lighting analyser. Hilt
+     * @Singleton so the same instance is shared with HueEntertainment
+     * (which reads analyser snapshots) and the audio chain (which
+     * feeds PCM samples in). No RECORD_AUDIO required — we process
+     * audio buffers we already own.
+     */
+    @javax.inject.Inject
+    lateinit var hueAnalyserProcessor: com.powermediaplayer.hue.HueAnalyserAudioProcessor
     @Volatile
     private var stereoFlipFlag: Boolean = false
     @Volatile
@@ -385,7 +394,11 @@ class PlaybackService : MediaSessionService() {
                         androidx.media3.exoplayer.audio.DefaultAudioSink
                             .DefaultAudioProcessorChain(
                                 stereoTransformProcessor,
-                                audioDelayProcessor
+                                audioDelayProcessor,
+                                // §Hue PCM tap — passes audio through;
+                                // exposes the latest FFT analyser
+                                // result for HueEntertainment to read.
+                                hueAnalyserProcessor
                             )
                     )
                     .setAudioTrackBufferSizeProvider(
@@ -991,18 +1004,22 @@ class PlaybackService : MediaSessionService() {
             ) { intensity, isPlaying -> intensity to isPlaying }
                 .distinctUntilChanged()
                 .collect { (intensity, isPlaying) ->
-                    if (intensity > 0 && isPlaying) {
-                        val asid = player?.audioSessionId ?: 0
-                        // Stream to channel ids 0..N-1 where N = light
-                        // count, capped at 10 (Hue Entertainment area
-                        // limit). Bridge maps channel ids to the lights
-                        // configured in the Entertainment area.
+                    // Spotify Connect + Cast — audio plays on a remote
+                    // device, not through our AudioProcessor chain, so
+                    // the PCM tap sees silence. Don't start the
+                    // reactive engine for those sources; the user sees
+                    // an explanatory note in Settings (the slider stays
+                    // ineffectual).
+                    val activePlayer = mediaSession?.player
+                    val isCast = activePlayer is androidx.media3.cast.CastPlayer
+                    val isSpotify = spotifyProvider.spotifyState.value != null
+                    if (intensity > 0 && isPlaying && !isCast && !isSpotify) {
                         val n = runCatching { hueProvider.listLightIds().size }
                             .getOrDefault(0)
                             .coerceAtMost(10)
                         val channels = (0 until n).toList()
                         if (channels.isNotEmpty()) {
-                            hueEntertainment.start(asid, intensity, channels)
+                            hueEntertainment.start(intensity, channels)
                         } else {
                             com.powermediaplayer.diag.DiagLog.event(
                                 "HUE",
@@ -1010,6 +1027,13 @@ class PlaybackService : MediaSessionService() {
                             )
                         }
                     } else {
+                        if (intensity > 0 && isPlaying && (isCast || isSpotify)) {
+                            com.powermediaplayer.diag.DiagLog.event(
+                                "HUE",
+                                "auto-start skipped — audio is on remote (isCast=$isCast isSpotify=$isSpotify); " +
+                                    "PCM tap sees silence on these sources"
+                            )
+                        }
                         hueEntertainment.stop()
                     }
                 }

@@ -1,12 +1,7 @@
 package com.powermediaplayer.hue
 
-import android.content.Context
-import android.content.pm.PackageManager
-import android.media.audiofx.Visualizer
-import android.os.SystemClock
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import com.powermediaplayer.diag.DiagLog
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -56,8 +51,9 @@ import kotlin.math.min
  *
  * Privacy / safety:
  *   - LAN-only DTLS. Self-signed bridge cert accepted (LAN IoT norm).
- *   - Visualizer needs RECORD_AUDIO at runtime; we log graceful
- *     degrade-to-colour-cycle when permission missing.
+ *   - No microphone permission required — audio is read from our own
+ *     ExoPlayer AudioProcessor chain via [HueAnalyserAudioProcessor],
+ *     not Android's audio-capture path.
  *   - Hue bridge enforces ~10 lights max per Entertainment area for
  *     latency reasons; we cap channels accordingly.
  */
@@ -65,7 +61,13 @@ import kotlin.math.min
 class HueEntertainment @Inject constructor(
     private val settings: SettingsDataStore,
     private val hueProvider: HueProvider,
-    @param:ApplicationContext private val appContext: Context
+    /**
+     * Same Hilt @Singleton as the one PlaybackService injects into the
+     * AudioProcessor chain. We READ the latest analyser snapshot from
+     * it at 25 Hz; PCM samples are fed in from the audio thread by
+     * Media3's processor pipeline. No microphone permission needed.
+     */
+    private val analyserProcessor: HueAnalyserAudioProcessor
 ) {
 
     /** Legacy v1 enum, retained because PlaybackService still references
@@ -82,23 +84,14 @@ class HueEntertainment @Inject constructor(
     @Volatile private var streamJob: Job? = null
     @Volatile private var dtls: DTLSTransport? = null
     @Volatile private var socket: DatagramSocket? = null
-    @Volatile private var visualizer: Visualizer? = null
     @Volatile private var areaId: String = ""
 
-    // Audio analyser is updated on the Visualizer callback thread; the
-    // stream loop reads the latest snapshot at 25 Hz.
-    private val analyser = HueAudioAnalyser()
-    @Volatile private var lastBands = FloatArray(6)
-    @Volatile private var lastBeatStrength: Float = 0f
-    @Volatile private var lastBeatExpiresMs: Long = 0L
-    @Volatile private var lastPaletteHz: Float = 1f
-    @Volatile private var lastDynamics: Float = 0f
-
     /**
-     * Begin streaming. [audioSessionId] is the ExoPlayer audio session
-     * id. [intensity] in [0..100]; 0 stops any current stream.
+     * Begin streaming. [intensity] in [0..100]; 0 stops any current
+     * stream. Audio data is read directly from the analyser audio
+     * processor — no audioSessionId / Visualizer needed.
      */
-    fun start(audioSessionId: Int, intensity: Int, lightChannels: List<Int>) {
+    fun start(intensity: Int, lightChannels: List<Int>) {
         if (intensity <= 0) {
             stop()
             return
@@ -142,7 +135,6 @@ class HueEntertainment @Inject constructor(
                 hueProvider.stopEntertainmentStream(area)
                 return@launch
             }
-            attachVisualizer(audioSessionId)
             DiagLog.event(
                 "HUE",
                 "entertainment.start RUNNING intensity=$intensity area=$area lights=${lightChannels.size}"
@@ -169,20 +161,26 @@ class HueEntertainment @Inject constructor(
             writeHeader(frameBuf, area)
             var frameCount = 0L
             while (isActive) {
-                val now = SystemClock.uptimeMillis()
-                // Advance palette by paletteHz (Hz of phase rotation).
-                palettePhase += (lastPaletteHz * frameMs / 1000.0) * (2 * Math.PI)
+                val now = android.os.SystemClock.uptimeMillis()
+                // Read the analyser snapshot, aged by the user's
+                // sync-offset (compensates for AudioTrack output buffer
+                // so lights align with the speaker output rather than
+                // running ahead of it).
+                val syncOffsetMs = runCatching {
+                    settings.hueSyncOffsetMs.first()
+                }.getOrDefault(200)
+                val r = analyserProcessor.getSnapshotAt(syncOffsetMs)
+                // Advance palette by BPM-driven Hz.
+                palettePhase += (r.paletteHz * frameMs / 1000.0) * (2 * Math.PI)
                 if (palettePhase > 2 * Math.PI) palettePhase -= 2 * Math.PI
 
-                // Beat brightness pulse — strong but short.
-                val onBeat = now < lastBeatExpiresMs
-                val beatBoost = if (onBeat) lastBeatStrength else 0f
+                // Beat brightness pulse — short window after onset.
+                val beatBoost = if (r.beat) r.beatStrength else 0f
 
                 var off = headerSize
                 for ((i, ch) in lightChannels.withIndex()) {
-                    // Route this light to one of the 6 bands.
                     val band = i % 6
-                    val bandLevel = lastBands[band]
+                    val bandLevel = r.bands[band]
                     // Per-light palette offset — spread the palette across
                     // the room so different lights show different colours.
                     val perLightOffset = (i.toDouble() / lightChannels.size) * (2 * Math.PI)
@@ -217,20 +215,20 @@ class HueEntertainment @Inject constructor(
                         DiagLog.event("HUE", "DTLS send failed: ${it.message} — stopping stream")
                         cancel()
                     }
-                // Periodic diag — once per ~4 s — so the user can see
-                // BPM tracking working.
+                // Periodic diag — once per ~4 s — so we can see BPM
+                // tracking working at runtime.
                 frameCount++
                 if (frameCount % 100L == 0L) {
                     DiagLog.event(
                         "HUE",
-                        "reactive frame BPM=${"%.0f".format(analyser.let { lastDynamics; analyserBpm() })} " +
-                            "dynamics=${"%.2f".format(lastDynamics)} bands=" +
-                            lastBands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }
+                        "reactive frame BPM=${"%.0f".format(r.bpm)} " +
+                            "dynamics=${"%.2f".format(r.dynamics)} " +
+                            "syncOffset=${syncOffsetMs}ms bands=" +
+                            r.bands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }
                     )
                 }
                 delay(frameMs)
             }
-            detachVisualizer()
             runCatching { dtls?.close() }
             runCatching { socket?.close() }
             hueProvider.stopEntertainmentStream(area)
@@ -238,16 +236,11 @@ class HueEntertainment @Inject constructor(
         }
     }
 
-    /** Cached BPM for the diag line — set on every analyser invoke. */
-    @Volatile private var lastBpmCache: Float = 120f
-    private fun analyserBpm(): Float = lastBpmCache
-
     fun stop() {
         if (streamJob == null) return
         DiagLog.event("HUE", "entertainment.stop() requested")
         streamJob?.cancel()
         streamJob = null
-        detachVisualizer()
         runCatching { dtls?.close() }
         runCatching { socket?.close() }
         dtls = null
@@ -280,73 +273,6 @@ class HueEntertainment @Inject constructor(
         dtls = DTLSClientProtocol().connect(client, transport)
         DiagLog.event("HUE", "DTLS handshake OK (id len=${identityBytes.size} psk len=${psk.size})")
         return true
-    }
-
-    // ── Visualizer plumbing ────────────────────────────────────────
-
-    private fun attachVisualizer(audioSessionId: Int) {
-        if (audioSessionId == 0) {
-            DiagLog.event("HUE", "Visualizer skipped — audioSessionId=0")
-            return
-        }
-        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
-            appContext, android.Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            DiagLog.event(
-                "HUE",
-                "Visualizer attach — RECORD_AUDIO not granted; lighting will cycle " +
-                    "colour but won't react to bass. Grant the permission in " +
-                    "Settings → Apps → Power Media Player → Permissions → Microphone."
-            )
-            return
-        }
-        analyser.reset()
-        val v = runCatching {
-            Visualizer(audioSessionId).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[1] // max — better resolution
-                setDataCaptureListener(
-                    object : Visualizer.OnDataCaptureListener {
-                        override fun onWaveFormDataCapture(
-                            visualizer: Visualizer?, waveform: ByteArray?, samplingRate: Int
-                        ) {}
-                        override fun onFftDataCapture(
-                            visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int
-                        ) {
-                            fft ?: return
-                            val sr = samplingRate / 1000 // Android passes Hz * 1000
-                            val r = analyser.process(fft, sr, SystemClock.uptimeMillis())
-                            // Snapshot for the stream loop. No locking;
-                            // each field is independently observed.
-                            System.arraycopy(r.bands, 0, lastBands, 0, 6)
-                            lastDynamics = r.dynamics
-                            lastPaletteHz = r.paletteHz
-                            lastBpmCache = r.bpm
-                            if (r.beat) {
-                                lastBeatStrength = r.beatStrength
-                                // Brief flash window — 120 ms.
-                                lastBeatExpiresMs = SystemClock.uptimeMillis() + 120L
-                            }
-                        }
-                    },
-                    Visualizer.getMaxCaptureRate() / 2, // hardware-cap divided
-                    /* waveform */ false,
-                    /* fft */ true
-                )
-                enabled = true
-            }
-        }.getOrElse {
-            DiagLog.event("HUE", "Visualizer attach failed: ${it.javaClass.simpleName}: ${it.message}")
-            null
-        }
-        visualizer = v
-    }
-
-    private fun detachVisualizer() {
-        runCatching {
-            visualizer?.apply { enabled = false; release() }
-        }
-        visualizer = null
     }
 
     // ── Wire-format helpers ────────────────────────────────────────
