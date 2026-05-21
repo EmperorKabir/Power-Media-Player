@@ -199,10 +199,8 @@ class HueDimmableDriver @Inject constructor(
                 var lastSent = -1f
                 var lastDiagWindow = -1L
                 var nextDeadline = android.os.SystemClock.uptimeMillis()
-                // vc29.18 — smoothed band state for the group. Stops
-                // PCEN+stretch from snapping between 0..1 between PUTs;
-                // IKEA bulbs can absorb a 25-30 pp step but not 50+.
-                var smoothedBand = 0f
+                // vc29.19 — analyser handles smoothing; only slew-limit
+                // state remains here for the IKEA-friendly per-PUT cap.
                 var lastTarget = 50f
                 while (isActive) {
                     val now = android.os.SystemClock.uptimeMillis()
@@ -245,14 +243,11 @@ class HueDimmableDriver @Inject constructor(
                         r.normalisedBands[1], r.normalisedBands[2],
                         r.normalisedBands[3], r.normalisedBands[4], r.normalisedBands[5]
                     )
-                    val rawEff = rawAvg * (1f - s) + normAvg * s
-                    // vc29.18 — anti-whiplash EMA. Smoothing strength
-                    // rises with sensitivity; at s=1.0 we trust the
-                    // smoothed value far more than raw frame because
-                    // PCEN+percentile output is volatile.
-                    val sBlend = (0.40f - s * 0.25f).coerceAtLeast(0.15f)
-                    smoothedBand = smoothedBand * (1f - sBlend) + rawEff * sBlend
-                    val bandAvg = smoothedBand
+                    // vc29.19 — engine EMA removed; analyser smooths
+                    // normalisedBands at source so the eff signal is
+                    // already stable here.
+                    val bandAvg = rawAvg * (1f - s) + normAvg * s
+                    val rawEff = bandAvg  // kept for diag
                     val effectiveBeatStrength =
                         r.beatStrength * (1f - s) + r.normalisedBeatStrength * s
                     val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
@@ -290,8 +285,7 @@ class HueDimmableDriver @Inject constructor(
                             "HUE",
                             "dimmable group frame s=${"%.2f".format(s)} avgLag=${avgLatencyMs}ms " +
                                 "offset=${groupOffset}ms raw=${"%.2f".format(rawAvg)} " +
-                                "norm=${"%.2f".format(normAvg)} rawEff=${"%.2f".format(rawEff)} " +
-                                "smoothed=${"%.2f".format(bandAvg)} " +
+                                "norm=${"%.2f".format(normAvg)} eff=${"%.2f".format(bandAvg)} " +
                                 "rawTarget=${"%.0f".format(rawTarget)}% target=${"%.0f".format(target)}%"
                         )
                     }

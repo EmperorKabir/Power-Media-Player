@@ -86,6 +86,15 @@ class HueAudioAnalyser {
     private var pctRingIdx = 0
     private var pctRingFilled = 0
 
+    // ── vc29.19 EMA on normalisedBands ──────────────────────────────
+    // The percentile-stretched output is intentionally volatile so it
+    // can flag novelty; that volatility looks like strobing on the
+    // lights. A light EMA here (alpha=0.55, ~3-frame time constant)
+    // gives a usable signal without the engine layer needing its own
+    // smoothing. Raw bands already EMA'd in the band-fill loop above.
+    private val normSmoothed = FloatArray(6)
+    private val NORM_EMA_ALPHA = 0.55f
+
     // ── vc29.17 adaptive-threshold onset state ──────────────────────
     // Flux history extended so we can compute a robust median + MAD.
     private val fluxHistory = FloatArray(FLUX_HISTORY_SIZE)
@@ -175,14 +184,19 @@ class HueAudioAnalyser {
         pctRingIdx = (pctRingIdx + 1) % PCT_RING_SIZE
         if (pctRingFilled < PCT_RING_SIZE) pctRingFilled++
 
-        // ── Percentile contrast stretch per band ───────────────────
-        // For each band, compute p10 and p95 over the current ring,
-        // then map the latest value into that range. Result in [0..1].
+        // ── Percentile contrast stretch per band + EMA ─────────────
+        // For each band, compute p10/p95 over the current ring, map
+        // the latest value into that range, then apply a light EMA
+        // to tame frame-to-frame flicker before publishing. The EMA
+        // is the only smoothing the engine layer needs.
         for (i in 0..5) {
             val (p10, p95) = percentile10And95(pctRing[i], pctRingFilled)
             val cur = pctRing[i][(pctRingIdx + PCT_RING_SIZE - 1) % PCT_RING_SIZE]
-            val span = (p95 - p10).coerceAtLeast(0.02f) // avoid div-by-zero on silence
-            result.normalisedBands[i] = ((cur - p10) / span).coerceIn(0f, 1f)
+            val span = (p95 - p10).coerceAtLeast(0.02f)
+            val stretched = ((cur - p10) / span).coerceIn(0f, 1f)
+            normSmoothed[i] = normSmoothed[i] * (1f - NORM_EMA_ALPHA) +
+                stretched * NORM_EMA_ALPHA
+            result.normalisedBands[i] = normSmoothed[i]
         }
 
         // Dynamics envelope (broadband RMS).
@@ -262,11 +276,14 @@ class HueAudioAnalyser {
             }
         }
         result.bpm = lastBpm
-        // vc29.18 — half-note rotation instead of quarter-note. Logs
-        // showed previous BPM/240 produced palette changes every
-        // ~220 ms at typical pop tempos = strobing. BPM/480 gives
-        // one colour every ~440 ms = musical without flicker.
-        result.paletteHz = (lastBpm / 60f / 8f).coerceIn(0.05f, 1.0f)
+        // vc29.19 — half-note rotation modulated by dynamics so the
+        // colour-change rate VARIES with the music's energy. Quiet
+        // moments rotate slow, peaks rotate faster. Multiplier
+        // 0.6..1.4 around the BPM/480 baseline; product clamped
+        // 0.05..1.2 Hz to keep extreme cases sane.
+        val basePalHz = lastBpm / 60f / 8f
+        val dynamicsMul = 0.6f + result.normalisedDynamics * 0.8f
+        result.paletteHz = (basePalHz * dynamicsMul).coerceIn(0.05f, 1.2f)
 
         return result
     }
