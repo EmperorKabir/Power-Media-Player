@@ -320,9 +320,14 @@ class HueAudioAnalyser {
         val tmp = FloatArray(filled)
         System.arraycopy(ring, 0, tmp, 0, filled)
         java.util.Arrays.sort(tmp)
-        val p10 = tmp[(filled * 10 / 100).coerceIn(0, filled - 1)]
-        val p95 = tmp[(filled * 95 / 100).coerceIn(0, filled - 1)]
-        return p10 to p95
+        // vc29.20 — narrowed window p20..p90 (was p10..p95). More
+        // aggressive bottom-stretching so quiet music maps to lower
+        // brightness; tighter top so peaks aren't pinned to 1.0 quite
+        // as often. Net effect on the IKEA dimmable group: deeper
+        // dips, less time spent at the 80-90 % "stuck" plateau.
+        val p20 = tmp[(filled * 20 / 100).coerceIn(0, filled - 1)]
+        val p90 = tmp[(filled * 90 / 100).coerceIn(0, filled - 1)]
+        return p20 to p90
     }
 
     /** Median absolute deviation — robust threshold component. */
