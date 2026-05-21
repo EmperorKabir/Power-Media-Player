@@ -1086,6 +1086,19 @@ class PlayerViewModel @Inject constructor(
     fun seekToChapter(index: Int) = playbackConnection.seekToChapterIndex(index)
 
     fun setPlaybackSpeed(speed: Float) {
+        // UI → audible latency for speed/pitch is dominated by two
+        // factors we can't shrink without risking dropouts:
+        //  (1) ExoPlayer's Sonic time-stretch processor must flush its
+        //      input buffer before a new ratio applies. Buffer is ~250 ms.
+        //  (2) When routed over A2DP the BT codec adds another ~100-300 ms
+        //      of encode/transport/decode latency on the HU side.
+        // The IPC + DataStore-persist legs of THIS path are already
+        // direct (controller.setPlaybackParameters fires immediately).
+        // Logged here so the request-time stamp lands in the diag log
+        // — pair with the next PLAYER state line to measure end-to-end.
+        com.powermediaplayer.diag.DiagLog.ui(
+            "slider speed → IPC=${"%.3f".format(speed)} (Sonic+A2DP buffers will add audible delay)"
+        )
         playbackConnection.setPlaybackSpeed(speed)
         // §C7 slim — persist per-file speed override so the next time
         // the user opens this track it resumes at the chosen speed.
@@ -1470,6 +1483,12 @@ class PlayerViewModel @Inject constructor(
     val pitch: StateFlow<Float> = _pitch.asStateFlow()
     fun setPitch(value: Float) {
         val clamped = value.coerceIn(0.5f, 2.0f)
+        // Pitch shares the Sonic processor + A2DP buffer with speed
+        // (see setPlaybackSpeed comment). Same inherent latency floor;
+        // direct IPC on this side already.
+        com.powermediaplayer.diag.DiagLog.ui(
+            "slider pitch → IPC=${"%.3f".format(clamped)} (Sonic+A2DP buffers will add audible delay)"
+        )
         _pitch.value = clamped
         // Re-apply current speed with new pitch (Media3 takes both in
         // PlaybackParameters). Read speed directly from the Player —
@@ -1870,7 +1889,9 @@ class PlayerViewModel @Inject constructor(
         return ext in CASTABLE_VIDEO_EXTENSIONS
     }
 
-    private companion object {
+    // `internal` rather than `private` so PlaybackConnection (same module)
+    // can call resetColdStartGuard() when the MediaController disconnects.
+    internal companion object {
         // Conservative whitelist matching the default Cast receiver's
         // documented support. .3gp / .3gpp omitted on purpose — receiver
         // support varies by device generation; keeping the list tight
@@ -1889,6 +1910,25 @@ class PlayerViewModel @Inject constructor(
          * after auto-resume.
          */
         val coldStartGuard = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /**
+         * Reset the cold-start guard so the next PlayerViewModel
+         * instance can re-attempt restore. Called by PlaybackConnection
+         * when the MediaController fires onDisconnected (Android killed
+         * the service while the process survived). Without this, the
+         * guard stays armed for the whole process lifetime and a
+         * service-restart leaves the UI looking at a stale/empty
+         * player even though the freshly-spawned service has no
+         * MediaItem to display.
+         */
+        fun resetColdStartGuard() {
+            if (coldStartGuard.compareAndSet(true, false)) {
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "cold-start",
+                    reason = "guard reset by PlaybackConnection (service disconnected)"
+                )
+            }
+        }
     }
 
     /**

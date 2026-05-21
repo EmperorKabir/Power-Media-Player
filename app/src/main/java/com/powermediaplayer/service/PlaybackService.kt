@@ -1785,7 +1785,8 @@ class PlaybackService : MediaSessionService() {
             val player = session.player
             return when (keyEvent.keyCode) {
                 android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS,
-                android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                android.view.KeyEvent.KEYCODE_MEDIA_REWIND,
+                android.view.KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> {
                     com.powermediaplayer.diag.DiagLog.bt(
                         "→ keyEvent PREV→applyAction action=${mapping.prevAction} " +
                             "skipBackSec=${mapping.skipBackSeconds} pos=${player.currentPosition}ms"
@@ -1794,13 +1795,24 @@ class PlaybackService : MediaSessionService() {
                     true
                 }
                 android.view.KeyEvent.KEYCODE_MEDIA_NEXT,
-                android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+                android.view.KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> {
                     com.powermediaplayer.diag.DiagLog.bt(
                         "→ keyEvent NEXT→applyAction action=${mapping.nextAction} " +
                             "skipFwdSec=${mapping.skipForwardSeconds} pos=${player.currentPosition}ms"
                     )
                     applyAction(player, mapping.nextAction, mapping.skipForwardSeconds, isPrev = false)
                     true
+                }
+                android.view.KeyEvent.KEYCODE_HEADSETHOOK -> {
+                    // Single-tap headset hook: most HUs and BT headsets
+                    // bind this to play/pause toggle. Let Media3 default
+                    // dispatcher handle it so the existing play/pause
+                    // flow + audio-focus rules apply unchanged.
+                    com.powermediaplayer.diag.DiagLog.bt(
+                        "→ keyEvent KEYCODE_HEADSETHOOK passthrough to Media3"
+                    )
+                    false
                 }
                 android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
                     // §C — gate auto-resume on BT reconnect against the

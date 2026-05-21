@@ -226,7 +226,13 @@ class PlaybackConnection @Inject constructor(
      * Connect to the PlaybackService. Call from Activity onCreate.
      */
     fun connect() {
-        if (controllerFuture != null) return
+        if (controllerFuture != null) {
+            com.powermediaplayer.diag.DiagLog.lifecycle(
+                "PlaybackConnection.connect() skipped — future already in flight"
+            )
+            return
+        }
+        com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackConnection.connect() START")
 
         val sessionToken = SessionToken(
             context,
@@ -234,6 +240,33 @@ class PlaybackConnection @Inject constructor(
         )
 
         controllerFuture = MediaController.Builder(context, sessionToken)
+            // Listener detects when the service-side session is lost
+            // (e.g. Android killed the service while our process
+            // survived). Without this hook the controller silently
+            // becomes a dead reference and the UI looks stuck because
+            // the cold-start guard never reset.
+            .setListener(object : androidx.media3.session.MediaController.Listener {
+                override fun onDisconnected(controller: androidx.media3.session.MediaController) {
+                    com.powermediaplayer.diag.DiagLog.lifecycle(
+                        "PlaybackConnection.onDisconnected — service-side session lost; " +
+                            "resetting cold-start guard + dropping local controller refs"
+                    )
+                    // Reset the cold-start guard so a subsequent
+                    // PlayerViewModel init (or the next Activity
+                    // onCreate -> connect()) can re-attempt restore
+                    // against the fresh service instance.
+                    com.powermediaplayer.ui.player.PlayerViewModel.resetColdStartGuard()
+                    // Local-side cleanup so the UI flips to the
+                    // disconnected state instead of acting on a stale
+                    // reference. The Activity's next onResume call
+                    // re-invokes connect() and a new controller builds.
+                    positionPollingJob?.cancel()
+                    this@PlaybackConnection.controller = null
+                    _playerFlow.value = null
+                    controllerFuture = null
+                    _isConnected.value = false
+                }
+            })
             .buildAsync()
 
         controllerFuture?.addListener({
@@ -244,8 +277,14 @@ class PlaybackConnection @Inject constructor(
                 setupPlayerListener()
                 startPositionPolling()
                 updatePlayerState()
+                com.powermediaplayer.diag.DiagLog.lifecycle(
+                    "PlaybackConnection.connect() SUCCESS controller=${controller != null}"
+                )
             } catch (e: Exception) {
                 _isConnected.value = false
+                com.powermediaplayer.diag.DiagLog.lifecycle(
+                    "PlaybackConnection.connect() FAILED: ${e.javaClass.simpleName}: ${e.message}"
+                )
             }
         }, MoreExecutors.directExecutor())
     }
@@ -254,6 +293,7 @@ class PlaybackConnection @Inject constructor(
      * Disconnect from the PlaybackService. Call from Activity onDestroy.
      */
     fun disconnect() {
+        com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackConnection.disconnect() called")
         positionPollingJob?.cancel()
         controllerFuture?.let {
             MediaController.releaseFuture(it)

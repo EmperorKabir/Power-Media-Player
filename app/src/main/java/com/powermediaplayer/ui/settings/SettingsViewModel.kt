@@ -410,14 +410,35 @@ class SettingsViewModel @Inject constructor(
     fun setVideoInvert(v: Boolean) = viewModelScope.launch { settingsDataStore.setVideoInvert(v) }.let{}
     fun setVideoRotation(d: Int) = viewModelScope.launch { settingsDataStore.setVideoRotation(d) }.let{}
     fun setAudioReverseLocal(v: Boolean) = viewModelScope.launch { settingsDataStore.setAudioReverseLocal(v) }.let{}
-    fun setPitch(p: Float) = viewModelScope.launch { settingsDataStore.setPitchIndependent(p) }.let{}
-    fun setVolumeBoost(mb: Int) = viewModelScope.launch { settingsDataStore.setVolumeBoostMb(mb) }.let{}
-    fun setSubtitleDelay(ms: Int) = viewModelScope.launch { settingsDataStore.setSubtitleDelayMs(ms) }.let{}
-    fun setAudioDelay(ms: Int) = viewModelScope.launch { settingsDataStore.setAudioDelayMs(ms) }.let{}
+    fun setPitch(p: Float) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings pitch=$p (Settings-side; routed via DataStore Flow)")
+        settingsDataStore.setPitchIndependent(p)
+    }.let{}
+    fun setVolumeBoost(mb: Int) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings volumeBoost=${mb}mB")
+        settingsDataStore.setVolumeBoostMb(mb)
+    }.let{}
+    fun setSubtitleDelay(ms: Int) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings subtitleDelay=${ms}ms")
+        settingsDataStore.setSubtitleDelayMs(ms)
+    }.let{}
+    fun setAudioDelay(ms: Int) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings audioDelay=${ms}ms")
+        settingsDataStore.setAudioDelayMs(ms)
+    }.let{}
     fun setGapless(v: Boolean) = viewModelScope.launch { settingsDataStore.setGaplessPlayback(v) }.let{}
-    fun setReverbPreset(p: Int) = viewModelScope.launch { settingsDataStore.setReverbPreset(p) }.let{}
-    fun setStereoFlip(v: Boolean) = viewModelScope.launch { settingsDataStore.setStereoFlip(v) }.let{}
-    fun setMonoMix(v: Boolean) = viewModelScope.launch { settingsDataStore.setMonoMix(v) }.let{}
+    fun setReverbPreset(p: Int) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings reverbPreset=$p")
+        settingsDataStore.setReverbPreset(p)
+    }.let{}
+    fun setStereoFlip(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings stereoFlip=$v")
+        settingsDataStore.setStereoFlip(v)
+    }.let{}
+    fun setMonoMix(v: Boolean) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings monoMix=$v")
+        settingsDataStore.setMonoMix(v)
+    }.let{}
     fun setPassthroughAudio(v: Boolean) = viewModelScope.launch { settingsDataStore.setPassthroughAudio(v) }.let{}
     fun setReplayGain(v: Boolean) = viewModelScope.launch { settingsDataStore.setReplayGainEnabled(v) }.let{}
     fun setCrossfade(ms: Int) = viewModelScope.launch { settingsDataStore.setCrossfadeMs(ms) }.let{}
