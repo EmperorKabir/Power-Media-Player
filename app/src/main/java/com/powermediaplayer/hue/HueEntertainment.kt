@@ -110,8 +110,14 @@ class HueEntertainment @Inject constructor(
     fun isStreaming(): Boolean = streamJob?.isActive == true
 
     /** Propagate a new sensitivity into both the colour stream and
-     *  the parallel dimmable driver without restarting either. */
+     *  the parallel dimmable driver without restarting either.
+     *  Logs the transition explicitly so post-test analysis can
+     *  correlate slider moves with light behaviour over time. */
     fun setIntensity(v: Int) {
+        val old = liveIntensity
+        if (old != v) {
+            DiagLog.event("HUE", "SENSITIVITY CHANGED $old → $v (streaming=${isStreaming()})")
+        }
         liveIntensity = v
         dimmableDriver.setIntensity(v)
     }
@@ -309,9 +315,11 @@ class HueEntertainment @Inject constructor(
                     // the strongest in-band peak directly.
                     maxOf(r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5])
                 } else 0f
-                // Track the first channel's brightness for periodic
-                // diagnostics (proves our wire payload is actually
-                // varying rather than re-sending the same bytes).
+                // vc29.16 — capture per-channel brightness + palette
+                // index for every channel so the log shows full
+                // colour-stream behaviour, not just channel 0.
+                val diagBris = IntArray(lightChannels.size)
+                val diagPalIdxs = IntArray(lightChannels.size)
                 var diagCh0Bri = 0
                 for ((i, ch) in lightChannels.withIndex()) {
                     val bandLevel: Float
@@ -356,6 +364,8 @@ class HueEntertainment @Inject constructor(
                     val yCie = (xy[1] * 65535).toInt().coerceIn(0, 65535)
                     val bri = (combined * 65535).toInt().coerceIn(0, 65535)
                     if (i == 0) diagCh0Bri = bri
+                    diagBris[i] = bri
+                    diagPalIdxs[i] = palIdx
 
                     // v2 record: 1-byte channel id + 3 u16 BE values
                     frameBuf[off + 0] = ch.toByte()
@@ -390,17 +400,20 @@ class HueEntertainment @Inject constructor(
                         "frame[0] size=${frameBuf.size} bytes hexHead=$hex"
                     )
                 }
-                // Periodic diag — once per ~4 s — so we can see BPM
-                // tracking working at runtime.
+                // vc29.16 — log every 25 frames (~1 s) with per-channel
+                // brightness + palette index so sensitivity sweeps can be
+                // correlated with actual light behaviour after the fact.
                 frameCount++
-                if (frameCount % 100L == 0L) {
+                if (frameCount % 25L == 0L) {
+                    val brisPct = diagBris.joinToString(",") { "${it * 100 / 65535}" }
+                    val palStr = diagPalIdxs.joinToString(",")
                     DiagLog.event(
                         "HUE",
                         "reactive frame s=${"%.2f".format(s)} mode=${mode.name} " +
-                            "BPM=${"%.0f".format(r.bpm)} " +
-                            "dynamics=${"%.2f".format(r.dynamics)} bands=" +
-                            r.bands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) } +
-                            " ch0Bri=${(diagCh0Bri * 100 / 65535)}%"
+                            "BPM=${"%.0f".format(r.bpm)} pHz=${"%.2f".format(r.paletteHz)} " +
+                            "dynamics=${"%.2f".format(r.dynamics)} " +
+                            "bands=" + r.bands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) } +
+                            " bri%=[$brisPct] palIdx=[$palStr] beat=${if (r.beat) "Y${"%.2f".format(r.beatStrength)}" else "n"}"
                     )
                 }
                 delay(frameMs)

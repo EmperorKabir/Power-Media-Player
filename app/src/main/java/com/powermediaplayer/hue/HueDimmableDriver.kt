@@ -247,7 +247,7 @@ class HueDimmableDriver @Inject constructor(
                     } else 0f
                     val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
                         .coerceIn(1f, 100f)
-                    val window = now / 2000L
+                    val window = now / 1000L
                     if (window != lastDiagWindow) {
                         lastDiagWindow = window
                         DiagLog.event(
@@ -349,7 +349,7 @@ class HueDimmableDriver @Inject constructor(
                         deadlines[idx] = now + perLightIntervalMs
                     }
                     if (diagThisFrame != null) {
-                        val window = android.os.SystemClock.uptimeMillis() / 2000L
+                        val window = android.os.SystemClock.uptimeMillis() / 1000L
                         if (window != lastDiagWindow) {
                             lastDiagWindow = window
                             DiagLog.event("HUE", "dimmable per-light frame $diagThisFrame")
@@ -455,30 +455,22 @@ class HueDimmableDriver @Inject constructor(
         runCatching {
             http.newCall(req).execute().use { resp ->
                 if (resp.code == 503 || resp.code == 429 || resp.code >= 500) {
-                    // vc29.10 — bigger backoff (2.5 s). Earlier 500 ms
-                    // backoff didn't give the bridge time to recover
-                    // and we ended up in a hammer-spiral.
                     backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
                 }
-                val now = android.os.SystemClock.uptimeMillis()
-                if (now - lastHttpDiagMs > 2000L) {
-                    lastHttpDiagMs = now
-                    DiagLog.event(
-                        "HUE",
-                        "dimmable GROUP PUT http=${resp.code} group=${groupId.take(8)} bri=${"%.1f".format(bri)}%"
-                    )
-                }
+                // vc29.16 — log EVERY group PUT (1 Hz cadence makes
+                // unthrottled logging trivial). Lets the post-test
+                // analyser correlate each PUT with the slider value.
+                DiagLog.event(
+                    "HUE",
+                    "dimmable GROUP PUT http=${resp.code} group=${groupId.take(8)} bri=${"%.1f".format(bri)}% s=${liveIntensity}"
+                )
             }
         }.onFailure {
             backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
-            val now = android.os.SystemClock.uptimeMillis()
-            if (now - lastHttpDiagMs > 2000L) {
-                lastHttpDiagMs = now
-                DiagLog.event(
-                    "HUE",
-                    "dimmable GROUP PUT FAILED group=${groupId.take(8)} err=${it.javaClass.simpleName}: ${it.message}"
-                )
-            }
+            DiagLog.event(
+                "HUE",
+                "dimmable GROUP PUT FAILED group=${groupId.take(8)} err=${it.javaClass.simpleName}: ${it.message}"
+            )
         }
     }
 
@@ -494,32 +486,23 @@ class HueDimmableDriver @Inject constructor(
         runCatching {
             http.newCall(req).execute().use { resp ->
                 if (resp.code == 503 || resp.code == 429 || resp.code >= 500) {
-                    // vc29.10 — 2.5 s backoff (was 500 ms). The
-                    // previous short window let us keep hammering a
-                    // already-dying bridge and pushed it past
-                    // recovery.
                     backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
                 }
-                val now = android.os.SystemClock.uptimeMillis()
-                if (now - lastHttpDiagMs > 2000L) {
-                    lastHttpDiagMs = now
-                    DiagLog.event(
-                        "HUE",
-                        "dimmable PUT sample http=${resp.code} light=${lightId.take(8)} bri=${"%.1f".format(bri)}%"
-                    )
-                }
-            }
-        }.onFailure {
-            // Treat timeouts the same way as 503 — bridge is choking.
-            backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
-            val now = android.os.SystemClock.uptimeMillis()
-            if (now - lastHttpDiagMs > 2000L) {
-                lastHttpDiagMs = now
+                // vc29.16 — log every per-light PUT (used only in the
+                // entertainment-area fallback, max ~13 lights × 1 Hz
+                // = 13 lines/sec which is still acceptable for an
+                // analysis-grade log).
                 DiagLog.event(
                     "HUE",
-                    "dimmable PUT FAILED light=${lightId.take(8)} err=${it.javaClass.simpleName}: ${it.message}"
+                    "dimmable PUT http=${resp.code} light=${lightId.take(8)} bri=${"%.1f".format(bri)}% s=${liveIntensity}"
                 )
             }
+        }.onFailure {
+            backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
+            DiagLog.event(
+                "HUE",
+                "dimmable PUT FAILED light=${lightId.take(8)} err=${it.javaClass.simpleName}: ${it.message}"
+            )
         }
     }
 }
