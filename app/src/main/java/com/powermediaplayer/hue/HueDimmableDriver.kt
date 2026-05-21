@@ -112,7 +112,19 @@ class HueDimmableDriver @Inject constructor(
             val beatGate = 0.30f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
             val beatSpan = 0.10f + s * 0.40f       // 0.10 → 0.50
-            val perLightIntervalMs = 100L // 10 Hz/light advisory ceiling
+            // vc29.7 — dropped from 100 ms (10 Hz) to 200 ms (5 Hz)
+            // per light. At 13 lights × 10 Hz we saw HTTP 503 +
+            // SocketTimeoutException from the bridge; the Zigbee mesh
+            // and IKEA bulbs can't keep up at that rate. 5 Hz × 13 =
+            // 65 PUTs/sec total, comfortably under the bridge's
+            // throughput limit.
+            val perLightIntervalMs = 200L
+            // vc29.7 — IKEA GU10 / Tradfri bulbs over the Hue bridge's
+            // Zigbee mesh take ~400 ms longer than native Hue (Play
+            // bars) to actually change brightness. To keep colour +
+            // white in sync, the dimmable driver reads PCM that's
+            // 400 ms newer than what DTLS reads.
+            val clipLatencyCompMs = 400
             // Stagger writes across lights — light i fires offset by
             // (perLightInterval / count) so total per-second traffic
             // distributes evenly across all lights.
@@ -132,7 +144,12 @@ class HueDimmableDriver @Inject constructor(
                         settings.audioDelayMs.first() +
                         settings.btVideoAudioOffsetMs.first()
                 }.getOrDefault(200)
-                val r = analyserProcessor.getSnapshotAt(syncOffset)
+                // Compensate for the CLIP path's extra ~400 ms of
+                // bridge + Zigbee + bulb-response latency relative to
+                // DTLS. Without this, IKEA bulbs trail Hue Play bars
+                // by ~0.5 s and the room feels disconnected.
+                val clipSyncOffset = (syncOffset - clipLatencyCompMs).coerceAtLeast(0)
+                val r = analyserProcessor.getSnapshotAt(clipSyncOffset)
                 // vc29.5 — use the max of bands 1..5 (bass / low-mid /
                 // mid / high-mid / treble) as the drive metric. The
                 // previous bass-weighted /2.35 average compressed any
@@ -168,6 +185,12 @@ class HueDimmableDriver @Inject constructor(
                             "gated=${"%.2f".format(gatedBand)} target=${"%.0f".format(target)}%"
                     )
                 }
+                // Honour any 503/timeout backoff before issuing more
+                // PUTs this loop iteration.
+                if (now < backoffUntilMs) {
+                    delay(50)
+                    continue
+                }
                 for ((idx, lid) in dimmableLightIds.withIndex()) {
                     if (now < deadlines[idx]) continue
                     val delta = kotlin.math.abs(target - lastBri[idx])
@@ -197,21 +220,28 @@ class HueDimmableDriver @Inject constructor(
 
     /**
      * Throttled diagnostic for HTTP response codes — we sample one
-     * PUT every ~5 s and log its outcome, just enough to spot bridge
-     * throttling (429) or per-light errors without flooding the log.
+     * PUT every ~2 s and log its outcome, just enough to spot bridge
+     * throttling (429 / 503) or per-light errors without flooding the
+     * log.
      */
     @Volatile private var lastHttpDiagMs: Long = 0L
 
+    /**
+     * Set when the bridge returns 503 (Service Unavailable). The main
+     * loop reads this and sleeps an extra slot before the next PUT
+     * round, giving the Zigbee mesh time to drain.
+     */
+    @Volatile internal var backoffUntilMs: Long = 0L
+
     private fun putBrightness(ip: String, key: String, lightId: String, bri: Float) {
-        // vc29.6 — explicit dynamics.duration:100 ms. Without it the
-        // bridge applies its default ~400 ms transition, which means
-        // every PUT smooths toward a target that's already been
-        // superseded by the next PUT. IKEA Tradfri / GU10 bulbs over
-        // the Hue bridge's Zigbee mesh exhibit this much worse than
-        // native Hue bulbs and end up nearly static even though our
-        // engine is sending varying targets.
+        // vc29.7 — dynamics.duration:200 ms matches the new 200 ms
+        // per-light PUT cadence. The bulb smoothly transitions toward
+        // each new target without overshooting before the next one
+        // arrives. Native Hue bulbs follow this cleanly; IKEA bulbs
+        // also benefit (the longer transition gives the Zigbee mesh
+        // time to deliver the command).
         val body =
-            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":100}}"""
+            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":200}}"""
         val req = Request.Builder()
             .url("https://$ip/clip/v2/resource/light/$lightId")
             .header("hue-application-key", key)
@@ -219,8 +249,13 @@ class HueDimmableDriver @Inject constructor(
             .build()
         runCatching {
             http.newCall(req).execute().use { resp ->
+                if (resp.code == 503 || resp.code == 429) {
+                    // Bridge is overloaded — pause all PUTs for 500 ms
+                    // so the request queue drains.
+                    backoffUntilMs = android.os.SystemClock.uptimeMillis() + 500
+                }
                 val now = android.os.SystemClock.uptimeMillis()
-                if (now - lastHttpDiagMs > 5000L) {
+                if (now - lastHttpDiagMs > 2000L) {
                     lastHttpDiagMs = now
                     DiagLog.event(
                         "HUE",
@@ -229,8 +264,10 @@ class HueDimmableDriver @Inject constructor(
                 }
             }
         }.onFailure {
+            // Treat timeouts the same way as 503 — bridge is choking.
+            backoffUntilMs = android.os.SystemClock.uptimeMillis() + 500
             val now = android.os.SystemClock.uptimeMillis()
-            if (now - lastHttpDiagMs > 5000L) {
+            if (now - lastHttpDiagMs > 2000L) {
                 lastHttpDiagMs = now
                 DiagLog.event(
                     "HUE",
