@@ -114,7 +114,7 @@ class HueEntertainment @Inject constructor(
     fun start(
         ensured: HueProvider.EnsuredArea,
         colourCount: Int,
-        dimmableLightIds: List<String>,
+        dimmableLights: List<HueDimmableDriver.DimmableLight>,
         intensity: Int
     ) {
         if (intensity <= 0) {
@@ -175,8 +175,8 @@ class HueEntertainment @Inject constructor(
             // no colour). Gated by the "drive dimmable" toggle; ONOFF
             // smart plugs are filtered out upstream in PlaybackService.
             val driveDim = runCatching { settings.hueDriveDimmable.first() }.getOrDefault(true)
-            if (driveDim && dimmableLightIds.isNotEmpty()) {
-                dimmableDriver.start(dimmableLightIds, intensity)
+            if (driveDim && dimmableLights.isNotEmpty()) {
+                dimmableDriver.start(dimmableLights, intensity)
             }
 
             // ── Stream loop ──────────────────────────────────────────

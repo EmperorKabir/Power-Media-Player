@@ -98,6 +98,77 @@ class HueProvider @Inject constructor(
         enum class Kind { ROOM, ZONE, ENTERTAINMENT }
     }
 
+    /**
+     * Per-bulb command-to-photon latency profile, used by the dimmable
+     * driver to time CLIP-REST PUTs so each bulb's brightness change
+     * lands in sync with what's hitting the speaker. The latency
+     * numbers below are empirical buckets — Philips publishes no
+     * official latency table for CLIP REST. They are conservative
+     * estimates per manufacturer / generation that we cross-checked
+     * against zigbee2mqtt's per-bulb response notes.
+     */
+    data class BulbLatencyProfile(
+        val manufacturer: String,
+        val productName: String,
+        val latencyMs: Int
+    )
+
+    /**
+     * Map a bulb's `manufacturer_name` + `product_name` + `model_id`
+     * to a typical command-to-photon latency in ms. Buckets keep the
+     * surface small while covering the bulbs people actually own.
+     * Default-unknown bucket is 400 ms — conservative; better to be
+     * slightly late than slightly early because early-firing lights
+     * look more visibly wrong than late-firing.
+     */
+    private fun latencyForBulb(
+        manufacturer: String,
+        productName: String,
+        modelId: String
+    ): Int {
+        val mfr = manufacturer.lowercase()
+        val pn = productName.lowercase()
+        val mid = modelId.uppercase()
+        // ── Philips / Signify (Hue) — generation-aware ──────────────
+        if ("signify" in mfr || "philips" in mfr || "hue" in pn) {
+            // Pre-2018 first-generation bulbs were noticeably slower.
+            if (mid in setOf("LCT001", "LCT002", "LCT003", "LWB004") ||
+                mid.startsWith("LLC")
+            ) return 280
+            // Gen3+ colour (LCT/LCA/LCG/LCB/LCL/LCS/LCX/LCP families).
+            if (mid.startsWith("LCT") || mid.startsWith("LCA") ||
+                mid.startsWith("LCG") || mid.startsWith("LCB") ||
+                mid.startsWith("LCL") || mid.startsWith("LCS") ||
+                mid.startsWith("LCX") || mid.startsWith("LCP")
+            ) return 180
+            // White / White Ambiance native dimmables.
+            if (mid.startsWith("LWB") || mid.startsWith("LWA") ||
+                mid.startsWith("LWE") || mid.startsWith("LWO") ||
+                mid.startsWith("LTW") || mid.startsWith("LTA") ||
+                mid.startsWith("LTG") || mid.startsWith("LTC")
+            ) return 200
+            return 200 // default Hue
+        }
+        // ── IKEA TRÅDFRI / STARKVIND / etc. ─────────────────────────
+        if ("ikea" in mfr) return 430
+        // ── Innr ─────────────────────────────────────────────────────
+        if ("innr" in mfr) return 350
+        // ── Sengled ─────────────────────────────────────────────────
+        if ("sengled" in mfr) return 380
+        // ── GLEDOPTO ────────────────────────────────────────────────
+        if ("gledopto" in mfr) return 350
+        // ── OSRAM / Ledvance / Sylvania (older Lightify slower) ─────
+        if ("osram" in mfr || "ledvance" in mfr || "sylvania" in mfr) return 400
+        // ── Eve ─────────────────────────────────────────────────────
+        if ("eve" in mfr) return 250
+        // ── Aqara / LUMI ────────────────────────────────────────────
+        if ("lumi" in mfr || "aqara" in mfr) return 350
+        // ── Tuya / AliExpress generic (manufacturer = _TZ* or blank) ─
+        if (manufacturer.startsWith("_T") || manufacturer.isBlank()) return 450
+        // Unknown brand → conservative.
+        return 400
+    }
+
     /** Cap-tier breakdown for an area, surfaced in the Settings UI. */
     data class AreaCapabilityBreakdown(
         val colour: List<LightInfo>,
@@ -482,6 +553,86 @@ class HueProvider @Inject constructor(
             }
         }
         return AreaCapabilityBreakdown(colour, ambiance, dimmable, onoff)
+    }
+
+    /**
+     * Fetch device-level metadata from the bridge and produce a per-
+     * light latency profile keyed by light id. Used by
+     * [HueDimmableDriver] to time each bulb's PCM read so a fast Hue
+     * native bulb fires later than a slow IKEA TRÅDFRI for the same
+     * audio moment, keeping mixed-brand rooms in sync.
+     *
+     * Returns an empty map on any failure — the driver falls back to
+     * a default latency, never blocks playback start.
+     */
+    suspend fun fetchBulbLatencyProfiles(lightIds: List<String>): Map<String, BulbLatencyProfile> {
+        if (lightIds.isEmpty()) return emptyMap()
+        val ip = settings.hueBridgeIp.first()
+        val key = settings.hueAppKey.first()
+        if (ip.isBlank() || key.isBlank()) return emptyMap()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val req = Request.Builder()
+                    .url("https://$ip/clip/v2/resource/device")
+                    .header("hue-application-key", key).get().build()
+                laxHttp.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@withContext emptyMap()
+                    val text = resp.body?.string().orEmpty()
+                    // Per-device blocks. Same lazy .*? pattern the
+                    // light/room/zone parsers use, anchored on the
+                    // unique terminating "type":"device" string.
+                    val deviceMeta = mutableMapOf<String, Triple<String, String, String>>()
+                    val blockStarts = Regex(
+                        """\{"id":"([0-9a-f-]{36})".*?"type":"device"""",
+                        RegexOption.DOT_MATCHES_ALL
+                    ).findAll(text).map { it.range.first }.toList()
+                    for ((idx, s) in blockStarts.withIndex()) {
+                        val e = if (idx + 1 < blockStarts.size) blockStarts[idx + 1] else text.length
+                        val slice = text.substring(s, e)
+                        val id = Regex("""^\{"id":"([0-9a-f-]{36})"""")
+                            .find(slice)?.groupValues?.getOrNull(1) ?: continue
+                        // product_data block is nested — scope the
+                        // field lookups to the chars after it so we
+                        // don't accidentally read a sibling block.
+                        val pdStart = slice.indexOf("\"product_data\"")
+                        val pdSlice = if (pdStart >= 0) slice.substring(pdStart) else slice
+                        val mfr = Regex(""""manufacturer_name":"([^"]+)"""")
+                            .find(pdSlice)?.groupValues?.getOrNull(1).orEmpty()
+                        val productName = Regex(""""product_name":"([^"]+)"""")
+                            .find(pdSlice)?.groupValues?.getOrNull(1).orEmpty()
+                        val modelId = Regex(""""model_id":"([^"]+)"""")
+                            .find(pdSlice)?.groupValues?.getOrNull(1).orEmpty()
+                        deviceMeta[id] = Triple(mfr, productName, modelId)
+                    }
+                    // Cross-reference with the light list to map
+                    // lightId → owner device → (mfr, product, model)
+                    // → latency.
+                    val lights = listAllLights()
+                    val out = mutableMapOf<String, BulbLatencyProfile>()
+                    val tally = mutableMapOf<String, Int>()
+                    for (lid in lightIds) {
+                        val deviceId = lights[lid]?.ownerDeviceId ?: continue
+                        val meta = deviceMeta[deviceId] ?: continue
+                        val (mfr, productName, modelId) = meta
+                        val latency = latencyForBulb(mfr, productName, modelId)
+                        out[lid] = BulbLatencyProfile(mfr, productName, latency)
+                        val brand = when {
+                            "signify" in mfr.lowercase() ||
+                                "philips" in mfr.lowercase() -> "hue"
+                            "ikea" in mfr.lowercase() -> "ikea"
+                            else -> "other"
+                        }
+                        tally[brand] = (tally[brand] ?: 0) + 1
+                    }
+                    DiagLog.event(
+                        "HUE",
+                        "fetchBulbLatencyProfiles → ${out.size} (" +
+                            tally.entries.joinToString { "${it.key}=${it.value}" } + ")"
+                    )
+                    out
+                }
+            }.getOrDefault(emptyMap())
+        }
     }
 
     /**

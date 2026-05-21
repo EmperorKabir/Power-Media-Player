@@ -560,6 +560,13 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setHueDriveDimmable(v) }
     }
 
+    fun setHueDimmableLagOffsetMs(v: Int) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("hue dimmableLagOffset=$v ms")
+            settingsDataStore.setHueDimmableLagOffsetMs(v)
+        }
+    }
+
     fun clearDiagLog() {
         com.powermediaplayer.diag.DiagLog.clear()
     }

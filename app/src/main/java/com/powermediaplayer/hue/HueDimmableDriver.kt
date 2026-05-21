@@ -74,12 +74,21 @@ class HueDimmableDriver @Inject constructor(
     }
 
     /**
-     * Start brightness-pulsing [dimmableLightIds] at up to 10 Hz per
-     * light. [intensity] in [0..100] follows the same convention as
-     * HueEntertainment. 0 stops the driver.
+     * One dimmable light plus the latency we should subtract from
+     * the global syncOffset when reading PCM for it. Built by
+     * [PlaybackService] using [HueProvider.fetchBulbLatencyProfiles].
      */
-    fun start(dimmableLightIds: List<String>, intensity: Int) {
-        if (intensity <= 0 || dimmableLightIds.isEmpty()) {
+    data class DimmableLight(val id: String, val latencyMs: Int)
+
+    /**
+     * Start brightness-pulsing [dimmableLights] at 5 Hz per light.
+     * Each entry carries its own latency so a native Hue dimmable
+     * (~200 ms) and an IKEA TRÅDFRI (~430 ms) sitting in the same
+     * room land in time with each other. [intensity] in [0..100]
+     * matches HueEntertainment's slider. 0 stops the driver.
+     */
+    fun start(dimmableLights: List<DimmableLight>, intensity: Int) {
+        if (intensity <= 0 || dimmableLights.isEmpty()) {
             stop()
             return
         }
@@ -88,9 +97,17 @@ class HueDimmableDriver @Inject constructor(
             val ip = settings.hueBridgeIp.first()
             val key = settings.hueAppKey.first()
             if (ip.isBlank() || key.isBlank()) return@launch
+            // Summarise latency bucket distribution so testers can
+            // verify the manufacturer detection worked.
+            val latencySummary = dimmableLights
+                .groupingBy { it.latencyMs }
+                .eachCount()
+                .entries
+                .sortedBy { it.key }
+                .joinToString { "${it.key}ms×${it.value}" }
             DiagLog.event(
                 "HUE",
-                "dimmable driver START intensity=$intensity lights=${dimmableLightIds.size}"
+                "dimmable driver START intensity=$intensity lights=${dimmableLights.size} latencies=$latencySummary"
             )
             // Sensitivity-shaped curve — mirrors HueEntertainment so
             // colour + dimmable lights swing together. See the
@@ -112,99 +129,84 @@ class HueDimmableDriver @Inject constructor(
             val beatGate = 0.30f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
             val beatSpan = 0.10f + s * 0.40f       // 0.10 → 0.50
-            // vc29.7 — dropped from 100 ms (10 Hz) to 200 ms (5 Hz)
-            // per light. At 13 lights × 10 Hz we saw HTTP 503 +
-            // SocketTimeoutException from the bridge; the Zigbee mesh
-            // and IKEA bulbs can't keep up at that rate. 5 Hz × 13 =
-            // 65 PUTs/sec total, comfortably under the bridge's
-            // throughput limit.
-            val perLightIntervalMs = 200L
-            // vc29.7 — IKEA GU10 / Tradfri bulbs over the Hue bridge's
-            // Zigbee mesh take ~400 ms longer than native Hue (Play
-            // bars) to actually change brightness. To keep colour +
-            // white in sync, the dimmable driver reads PCM that's
-            // 400 ms newer than what DTLS reads.
-            val clipLatencyCompMs = 400
+            val perLightIntervalMs = 200L  // 5 Hz/light = 65 PUTs/sec total for 13 lights
             // Stagger writes across lights — light i fires offset by
             // (perLightInterval / count) so total per-second traffic
             // distributes evenly across all lights.
-            val stagger = max(20L, perLightIntervalMs / dimmableLightIds.size.coerceAtLeast(1))
-            val deadlines = LongArray(dimmableLightIds.size)
+            val stagger = max(20L, perLightIntervalMs / dimmableLights.size.coerceAtLeast(1))
+            val deadlines = LongArray(dimmableLights.size)
             val now0 = android.os.SystemClock.uptimeMillis()
-            for (i in dimmableLightIds.indices) deadlines[i] = now0 + i * stagger
+            for (i in dimmableLights.indices) deadlines[i] = now0 + i * stagger
             // Track last sent value per light to skip near-duplicates.
-            val lastBri = FloatArray(dimmableLightIds.size) { -1f }
+            val lastBri = FloatArray(dimmableLights.size) { -1f }
             var lastDiagWindow = -1L
             while (isActive) {
                 val now = android.os.SystemClock.uptimeMillis()
-                // Read the analyser snapshot at the SAME offset the
-                // Entertainment loop uses — keeps light paths coherent.
                 val syncOffset = runCatching {
                     settings.hueSyncOffsetMs.first() +
                         settings.audioDelayMs.first() +
                         settings.btVideoAudioOffsetMs.first()
                 }.getOrDefault(200)
-                // Compensate for the CLIP path's extra ~400 ms of
-                // bridge + Zigbee + bulb-response latency relative to
-                // DTLS. Without this, IKEA bulbs trail Hue Play bars
-                // by ~0.5 s and the room feels disconnected.
-                val clipSyncOffset = (syncOffset - clipLatencyCompMs).coerceAtLeast(0)
-                val r = analyserProcessor.getSnapshotAt(clipSyncOffset)
-                // vc29.5 — use the max of bands 1..5 (bass / low-mid /
-                // mid / high-mid / treble) as the drive metric. The
-                // previous bass-weighted /2.35 average compressed any
-                // real-world signal to 0.10..0.25, which sat below the
-                // gate threshold permanently. Max-of-bands gives the
-                // engine the strongest in-band peak directly.
-                val bandAvg = maxOf(
-                    r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5]
-                )
-                val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
-                val shapedBand = if (gatedBand > 0f)
-                    Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
-                else 0f
-                val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
-                val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
-                    val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
-                        .coerceAtLeast(0f)
-                    val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
-                    shapedBeat * beatSpan
-                } else 0f
-                // Hue dimming uses 0..100 (not the 0..65535 u16 of
-                // the Entertainment stream).
-                val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
-                    .coerceIn(1f, 100f)
-                // Throttled diagnostic — surface the actual target +
-                // band so testers can see whether the engine is
-                // pinning at ceiling or genuinely varying.
-                if ((android.os.SystemClock.uptimeMillis() / 2000L) != lastDiagWindow) {
-                    lastDiagWindow = android.os.SystemClock.uptimeMillis() / 2000L
-                    DiagLog.event(
-                        "HUE",
-                        "dimmable frame s=${"%.2f".format(s)} bandAvg=${"%.2f".format(bandAvg)} " +
-                            "gated=${"%.2f".format(gatedBand)} target=${"%.0f".format(target)}%"
-                    )
-                }
+                // User can nudge every dimmable bulb earlier/later on
+                // top of the per-bulb auto-detected value. 0 = pure
+                // auto. Range coerced -300..+300 in DataStore.
+                val userLagOverrideMs = runCatching {
+                    settings.hueDimmableLagOffsetMs.first()
+                }.getOrDefault(0)
                 // Honour any 503/timeout backoff before issuing more
                 // PUTs this loop iteration.
                 if (now < backoffUntilMs) {
                     delay(50)
                     continue
                 }
-                for ((idx, lid) in dimmableLightIds.withIndex()) {
+                var diagThisFrame: String? = null
+                for ((idx, light) in dimmableLights.withIndex()) {
                     if (now < deadlines[idx]) continue
+                    // Per-bulb PCM read: each bulb is timed for its own
+                    // command-to-photon latency so native Hue + IKEA
+                    // sitting in the same room land in sync.
+                    val perLightOffset =
+                        (syncOffset - light.latencyMs - userLagOverrideMs).coerceAtLeast(0)
+                    val r = analyserProcessor.getSnapshotAt(perLightOffset)
+                    val bandAvg = maxOf(
+                        r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5]
+                    )
+                    val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
+                    val shapedBand = if (gatedBand > 0f)
+                        Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
+                    else 0f
+                    val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
+                    val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
+                        val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
+                            .coerceAtLeast(0f)
+                        val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
+                        shapedBeat * beatSpan
+                    } else 0f
+                    val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
+                        .coerceIn(1f, 100f)
+                    // Capture one sample for the throttled diag line
+                    // — first light in the loop wins.
+                    if (idx == 0 && diagThisFrame == null) {
+                        diagThisFrame = "s=${"%.2f".format(s)} lag=${light.latencyMs}+${userLagOverrideMs}ms " +
+                            "offset=${perLightOffset}ms bandAvg=${"%.2f".format(bandAvg)} " +
+                            "gated=${"%.2f".format(gatedBand)} target=${"%.0f".format(target)}%"
+                    }
                     val delta = kotlin.math.abs(target - lastBri[idx])
-                    // Skip near-duplicates — narrowed from 3 % to 1 %
-                    // because IKEA Tradfri / GU10 bulbs need every
-                    // small variation to escape their slow Zigbee
-                    // mesh smoothing.
                     if (lastBri[idx] >= 0f && delta < 1f) {
                         deadlines[idx] = now + perLightIntervalMs
                         continue
                     }
-                    putBrightness(ip, key, lid, target)
+                    putBrightness(ip, key, light.id, target)
                     lastBri[idx] = target
                     deadlines[idx] = now + perLightIntervalMs
+                }
+                // Throttled diag — once per 2s window.
+                if (diagThisFrame != null) {
+                    val window = android.os.SystemClock.uptimeMillis() / 2000L
+                    if (window != lastDiagWindow) {
+                        lastDiagWindow = window
+                        DiagLog.event("HUE", "dimmable frame $diagThisFrame")
+                    }
                 }
                 delay(30) // overall loop @ ~33 Hz
             }

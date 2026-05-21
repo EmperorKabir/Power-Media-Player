@@ -189,11 +189,14 @@ fun SettingsScreen(
                 .collectAsStateWithLifecycle(initialValue = true).value,
             driveDimmable = viewModel.settingsDataStore.hueDriveDimmable
                 .collectAsStateWithLifecycle(initialValue = true).value,
+            dimmableLagOffsetMs = viewModel.settingsDataStore.hueDimmableLagOffsetMs
+                .collectAsStateWithLifecycle(initialValue = 0).value,
             onRefreshAreas = { viewModel.refreshHueAreas() },
             onSelectArea = { viewModel.setHueSelectedArea(it) },
             onClearArea = { viewModel.clearHueSelectedArea() },
             onSpreadBands = { viewModel.setHueSpreadBands(it) },
             onDriveDimmable = { viewModel.setHueDriveDimmable(it) },
+            onDimmableLagOffset = { viewModel.setHueDimmableLagOffsetMs(it) },
             onDiscover = { viewModel.discoverHueBridge() },
             onPair = { manualIp -> viewModel.completeHuePair(manualIp) },
             onUnpair = { viewModel.unpairHue() },
@@ -1506,11 +1509,13 @@ private fun HueSection(
     selectedAreaKey: String,
     spreadBands: Boolean,
     driveDimmable: Boolean,
+    dimmableLagOffsetMs: Int,
     onRefreshAreas: () -> Unit,
     onSelectArea: (String) -> Unit,
     onClearArea: () -> Unit,
     onSpreadBands: (Boolean) -> Unit,
     onDriveDimmable: (Boolean) -> Unit,
+    onDimmableLagOffset: (Int) -> Unit,
     onDiscover: () -> Unit,
     onPair: (String) -> Unit,
     onUnpair: () -> Unit,
@@ -1788,13 +1793,56 @@ private fun HueSection(
                 )
                 Text(
                     text = "Pulse brightness of dimmable bulbs (no colour) in time " +
-                        "with the music. Uses Hue's REST API (≤ 10 updates/sec per " +
-                        "light). Smart plugs stay untouched either way.",
+                        "with the music. 5 updates/sec per light over Hue's REST " +
+                        "API, auto-pauses for 0.5 s if the bridge ever returns " +
+                        "HTTP 503. Each bulb is timed by brand so native Hue " +
+                        "(~200 ms response) and slower IKEA TRÅDFRI / GU10 " +
+                        "(~430 ms) stay in sync. Smart plugs are never touched.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
             }
             Switch(checked = driveDimmable, onCheckedChange = onDriveDimmable)
+        }
+
+        // ── Dimmable lag offset (only shown when Drive-dimmable is on) ──
+        if (driveDimmable) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "Dimmable lag offset",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = if (dimmableLagOffsetMs == 0) "Auto" else
+                        (if (dimmableLagOffsetMs > 0) "+" else "") + "${dimmableLagOffsetMs} ms",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TealAccent
+                )
+            }
+            Slider(
+                value = dimmableLagOffsetMs.toFloat(),
+                onValueChange = { onDimmableLagOffset(it.toInt()) },
+                valueRange = -300f..300f,
+                steps = 11,  // 50 ms increments
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
+            Text(
+                text = "Fine-tune only if white bulbs still feel off-beat after the " +
+                    "automatic brand detection. Negative values fire commands " +
+                    "earlier (compensates for very slow bulbs), positive values " +
+                    "fire them later. Default 'Auto' = 0 ms; this slider stacks " +
+                    "on top of each bulb's auto-detected delay (Hue ~200 ms, " +
+                    "IKEA ~430 ms, Innr ~350 ms, Sengled ~380 ms, OSRAM/Ledvance " +
+                    "~400 ms, etc.).",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+            )
         }
 
         Row(
@@ -1863,8 +1911,9 @@ private fun HueSection(
                 "Phone speaker / wired ~150-250 ms; Bluetooth A2DP " +
                 "~300-500 ms; USB-C DAC near 0 ms. The app auto-adds " +
                 "your 'Audio delay' and 'BT video audio offset' values " +
-                "to this — adjust only this slider regardless of the " +
-                "others.",
+                "to this. White-only bulbs subtract a brand-specific " +
+                "delay on top automatically — use the 'Dimmable lag " +
+                "offset' slider above to nudge only those if needed.",
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)

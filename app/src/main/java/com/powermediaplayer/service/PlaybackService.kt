@@ -1071,11 +1071,23 @@ class PlaybackService : MediaSessionService() {
                         // DIMMABLE-only lights ride the parallel CLIP
                         // REST driver; ONOFF smart plugs are excluded
                         // outright (user directive — they don't pulse).
+                        // Each bulb carries its own auto-detected
+                        // command-to-photon latency so native Hue +
+                        // IKEA / Tradfri / Innr / etc. stay in sync.
                         val dimmableIds = breakdown.dimmable.map { it.id }
+                        val profiles = runCatching {
+                            hueProvider.fetchBulbLatencyProfiles(dimmableIds)
+                        }.getOrDefault(emptyMap())
+                        val dimmableLights = dimmableIds.map { id ->
+                            com.powermediaplayer.hue.HueDimmableDriver.DimmableLight(
+                                id = id,
+                                latencyMs = profiles[id]?.latencyMs ?: 400
+                            )
+                        }
                         hueEntertainment.start(
                             cappedEnsured,
                             breakdown.colour.size,
-                            dimmableIds,
+                            dimmableLights,
                             intensity
                         )
                     } else {

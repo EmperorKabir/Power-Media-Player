@@ -263,6 +263,9 @@ class SettingsDataStore @Inject constructor(
         // parallel to the DTLS Entertainment stream via CLIP REST at
         // ≤10 Hz/light. ONOFF smart plugs are always excluded.
         val HUE_DRIVE_DIMMABLE = booleanPreferencesKey("hue_drive_dimmable")
+        // vc29.8 — global user offset added on top of each bulb's
+        // auto-detected manufacturer latency. -300..+300 ms.
+        val HUE_DIMMABLE_LAG_OFFSET_MS = intPreferencesKey("hue_dimmable_lag_offset_ms")
 
         // §C14 — audio focus policy. Three independent settings for the
         // common interruption types. Defaults at first install:
@@ -662,6 +665,12 @@ class SettingsDataStore @Inject constructor(
     suspend fun setHueSpreadBands(v: Boolean) { context.dataStore.edit { it[Keys.HUE_SPREAD_BANDS] = v } }
     val hueDriveDimmable: Flow<Boolean> = context.dataStore.data.map { it[Keys.HUE_DRIVE_DIMMABLE] ?: true }
     suspend fun setHueDriveDimmable(v: Boolean) { context.dataStore.edit { it[Keys.HUE_DRIVE_DIMMABLE] = v } }
+    val hueDimmableLagOffsetMs: Flow<Int> = context.dataStore.data.map {
+        (it[Keys.HUE_DIMMABLE_LAG_OFFSET_MS] ?: 0).coerceIn(-300, 300)
+    }
+    suspend fun setHueDimmableLagOffsetMs(v: Int) {
+        context.dataStore.edit { it[Keys.HUE_DIMMABLE_LAG_OFFSET_MS] = v.coerceIn(-300, 300) }
+    }
     suspend fun setColdStartResumeBackoffSec(sec: Int) {
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }
