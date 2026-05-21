@@ -197,8 +197,14 @@ class HueEntertainment @Inject constructor(
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
             val gate = 0.45f * (1f - s)
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val dynSpan = 0.20f + s * 0.55f      // 0.20 → 0.75
-            val baseFloor = 0.15f + s * 0.20f    // 0.15 → 0.35
+            // Variation happens ABOVE a high baseline so the lights
+            // never feel like they "dropped" when the stream took
+            // over — without this, lights that were sitting at 100 %
+            // before play crash to ~28 % the moment we start
+            // streaming, which feels broken.
+            val baseFloor = 0.55f + s * 0.15f    // 0.55 → 0.70
+            val dynSpan = 0.20f + s * 0.30f      // 0.20 → 0.50 (peaks
+            //                                       can still clip to 1.0)
             val beatGate = 0.65f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
             val beatSpan = 0.15f + s * 0.20f     // 0.15 → 0.35
@@ -268,7 +274,11 @@ class HueEntertainment @Inject constructor(
                     val bandLevel: Float
                     val palIdx: Int
                     if (mode == Mode.SPREAD) {
-                        bandLevel = r.bands[i % 6]
+                        // Skip band 0 (sub-bass) — most consumer mixes
+                        // have ~zero energy there, so a light wired
+                        // to it would never animate. Use bands 1..5
+                        // (bass / low-mid / mid / high-mid / treble).
+                        bandLevel = r.bands[1 + (i % 5)]
                         // Per-light palette offset — spread colour
                         // around the room so different lights show
                         // different colours simultaneously.

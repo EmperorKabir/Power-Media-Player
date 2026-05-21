@@ -98,8 +98,10 @@ class HueDimmableDriver @Inject constructor(
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
             val gate = 0.45f * (1f - s)
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val dynSpan = 0.20f + s * 0.55f
-            val baseFloor = 0.15f + s * 0.20f
+            // High baseline so dimmable bulbs don't crash-dim when the
+            // stream takes over (matches HueEntertainment vc29.2).
+            val baseFloor = 0.55f + s * 0.15f
+            val dynSpan = 0.20f + s * 0.30f
             val beatGate = 0.65f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
             val beatSpan = 0.15f + s * 0.20f
