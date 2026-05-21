@@ -286,7 +286,7 @@ class HueDimmableDriver @Inject constructor(
                     // Fast attack (jump up if new attack > envelope),
                     // slow decay (multiply by 0.55 per ~1s cycle ≈ 600
                     // ms half-life).
-                    onsetEnvelope = maxOf(onsetEnvelope * 0.55f, attackVal)
+                    onsetEnvelope = maxOf(onsetEnvelope * 0.35f, attackVal)
                     // Map envelope to brightness: low baseline (25%)
                     // + envelope * (peak 100% - baseline). When
                     // envelope is 0 → 25%; when envelope is 1.0 → 100%.
@@ -428,7 +428,7 @@ class HueDimmableDriver @Inject constructor(
                         val onsetAttack = (rise * 3.5f).coerceAtMost(1.0f)
                         val beatAttack = if (r.beat) effectiveBeatStrength else 0f
                         val attackVal = maxOf(onsetAttack, beatAttack)
-                        onsetEnvPerLight[idx] = maxOf(onsetEnvPerLight[idx] * 0.55f, attackVal)
+                        onsetEnvPerLight[idx] = maxOf(onsetEnvPerLight[idx] * 0.35f, attackVal)
                         val onsetTarget = 25f + onsetEnvPerLight[idx] * 75f
                         val onsetWeight = s * s
                         val target = (continuousTarget * (1f - onsetWeight) +

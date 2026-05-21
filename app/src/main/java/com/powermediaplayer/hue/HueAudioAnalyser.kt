@@ -276,14 +276,14 @@ class HueAudioAnalyser {
             }
         }
         result.bpm = lastBpm
-        // vc29.19 — half-note rotation modulated by dynamics so the
-        // colour-change rate VARIES with the music's energy. Quiet
-        // moments rotate slow, peaks rotate faster. Multiplier
-        // 0.6..1.4 around the BPM/480 baseline; product clamped
-        // 0.05..1.2 Hz to keep extreme cases sane.
-        val basePalHz = lastBpm / 60f / 8f
+        // vc29.22 — slower palette base. Logs showed even at s=0.10
+        // colours were changing every ~1.25 s which felt rapid. New
+        // base BPM/720 (was BPM/480) gives ~2-3 s/colour at low s
+        // and ~700 ms/colour at high s (combined with the engine's
+        // 0.5..1.5 sensitivity multiplier).
+        val basePalHz = lastBpm / 60f / 12f
         val dynamicsMul = 0.6f + result.normalisedDynamics * 0.8f
-        result.paletteHz = (basePalHz * dynamicsMul).coerceIn(0.05f, 1.2f)
+        result.paletteHz = (basePalHz * dynamicsMul).coerceIn(0.03f, 1.0f)
 
         return result
     }
