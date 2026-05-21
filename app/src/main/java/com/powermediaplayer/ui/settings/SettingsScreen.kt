@@ -180,6 +180,17 @@ fun SettingsScreen(
                 .collectAsStateWithLifecycle(initialValue = 0).value,
             syncOffsetMs = viewModel.settingsDataStore.hueSyncOffsetMs
                 .collectAsStateWithLifecycle(initialValue = 200).value,
+            areas = viewModel.hueAreas.collectAsStateWithLifecycle().value,
+            selectedAreaKey = viewModel.settingsDataStore.hueSelectedArea
+                .collectAsStateWithLifecycle(initialValue = "").value,
+            spreadBands = viewModel.settingsDataStore.hueSpreadBands
+                .collectAsStateWithLifecycle(initialValue = true).value,
+            driveDimmable = viewModel.settingsDataStore.hueDriveDimmable
+                .collectAsStateWithLifecycle(initialValue = true).value,
+            onRefreshAreas = { viewModel.refreshHueAreas() },
+            onSelectArea = { viewModel.setHueSelectedArea(it) },
+            onSpreadBands = { viewModel.setHueSpreadBands(it) },
+            onDriveDimmable = { viewModel.setHueDriveDimmable(it) },
             onDiscover = { viewModel.discoverHueBridge() },
             onPair = { manualIp -> viewModel.completeHuePair(manualIp) },
             onUnpair = { viewModel.unpairHue() },
@@ -1487,6 +1498,14 @@ private fun HueSection(
     pairStatus: String,
     reactiveIntensity: Int,
     syncOffsetMs: Int,
+    areas: List<SettingsViewModel.HueAreaSummary>,
+    selectedAreaKey: String,
+    spreadBands: Boolean,
+    driveDimmable: Boolean,
+    onRefreshAreas: () -> Unit,
+    onSelectArea: (String) -> Unit,
+    onSpreadBands: (Boolean) -> Unit,
+    onDriveDimmable: (Boolean) -> Unit,
     onDiscover: () -> Unit,
     onPair: (String) -> Unit,
     onUnpair: () -> Unit,
@@ -1496,6 +1515,10 @@ private fun HueSection(
     onIntensity: (Int) -> Unit,
     onSyncOffset: (Int) -> Unit
 ) {
+    // First open after pair → fetch the area list once.
+    LaunchedEffect(bridgeIp, appKey) {
+        if (bridgeIp.isNotBlank() && appKey.isNotBlank()) onRefreshAreas()
+    }
     val paired = bridgeIp.isNotBlank() && appKey.isNotBlank()
     var manualIp by rememberSaveable { mutableStateOf("") }
     SettingsSectionHeader("Philips Hue")
@@ -1583,6 +1606,132 @@ private fun HueSection(
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
+
+        // ── vc29 — area picker (Rooms + Zones + Entertainment areas) ─
+        Spacer(Modifier.height(8.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "Reactive lighting target",
+                style = MaterialTheme.typography.titleSmall,
+                color = TextPrimary,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onRefreshAreas) {
+                Text("Refresh", color = TealAccent)
+            }
+        }
+        Text(
+            text = "Pick a room or zone (or an existing Entertainment area). " +
+                "Only the lights inside your pick are addressed. Smart plugs " +
+                "are always left alone.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+        )
+        if (areas.isEmpty()) {
+            Text(
+                text = "No rooms / zones found yet — tap Refresh.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+            )
+        } else {
+            for (a in areas) {
+                val selected = a.key == selectedAreaKey
+                val kindLabel = when (a.kind) {
+                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ROOM -> "room"
+                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ZONE -> "zone"
+                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ENTERTAINMENT -> "entertainment"
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelectArea(a.key) }
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${a.displayName} ($kindLabel)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (selected) TealAccent else TextPrimary
+                        )
+                        Text(
+                            text = buildString {
+                                append("${a.colour} colour")
+                                if (a.ambiance > 0) append(", ${a.ambiance} ambiance")
+                                if (a.dimmable > 0) append(", ${a.dimmable} dimmable")
+                                if (a.onoff > 0) append(", ${a.onoff} plug${if (a.onoff > 1) "s" else ""}")
+                                if (a.colour + a.ambiance + a.dimmable + a.onoff == 0) {
+                                    append("no lights")
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                    if (selected) {
+                        Icon(
+                            Icons.Filled.CheckCircle,
+                            contentDescription = "Selected",
+                            tint = TealAccent
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Mode toggles ────────────────────────────────────────────
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Spread bands across colour lights",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "ON: each colour light handles a different audio band " +
+                        "(bass → reds, treble → blues) — wide spatial spectrum. " +
+                        "OFF: all colour lights show the same colour together — " +
+                        "unified feel. Auto-falls back to OFF if fewer than 3 " +
+                        "colour lights in the pick.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            }
+            Switch(checked = spreadBands, onCheckedChange = onSpreadBands)
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Drive white-only (dimmable) lights",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Pulse brightness of dimmable bulbs (no colour) in time " +
+                        "with the music. Uses Hue's REST API (≤ 10 updates/sec per " +
+                        "light). Smart plugs stay untouched either way.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            }
+            Switch(checked = driveDimmable, onCheckedChange = onDriveDimmable)
+        }
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)

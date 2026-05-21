@@ -67,8 +67,22 @@ class HueEntertainment @Inject constructor(
      * it at 25 Hz; PCM samples are fed in from the audio thread by
      * Media3's processor pipeline. No microphone permission needed.
      */
-    private val analyserProcessor: HueAnalyserAudioProcessor
+    private val analyserProcessor: HueAnalyserAudioProcessor,
+    private val dimmableDriver: HueDimmableDriver
 ) {
+
+    /** Streaming mode picked per-area based on colour-light count. */
+    enum class Mode {
+        /** ≥3 COLOUR lights: each light maps to one of the 6 audio
+         *  bands; bass → reds, mid → greens, treble → blues, with a
+         *  per-light palette offset spreading the colour wave around
+         *  the room. */
+        SPREAD,
+        /** <3 COLOUR lights: all colour lights show the same XY+
+         *  brightness at any moment, BPM-timed colour wave. Feels
+         *  coherent across mixed-type areas. */
+        COHERENT
+    }
 
     /** Legacy v1 enum, retained because PlaybackService still references
      *  it; mapped onto the new intensity-only model so call sites don't
@@ -87,11 +101,22 @@ class HueEntertainment @Inject constructor(
     @Volatile private var areaId: String = ""
 
     /**
-     * Begin streaming. [intensity] in [0..100]; 0 stops any current
-     * stream. Audio data is read directly from the analyser audio
-     * processor — no audioSessionId / Visualizer needed.
+     * Begin streaming the audio-reactive lighting against [ensured].
+     * - [ensured] is the entertainment_configuration to stream into,
+     *   plus the channel ids that make up its colour/ambiance set
+     *   (HueProvider.ensureEntertainmentConfigForArea).
+     * - [colourCount] tells us whether to use SPREAD or COHERENT mode.
+     * - [dimmableLightIds] are white-only lights driven in parallel by
+     *   HueDimmableDriver at ≤10 Hz per light. ONOFF smart plugs are
+     *   excluded by the caller.
+     * - [intensity] 0..100; 0 stops any current stream.
      */
-    fun start(intensity: Int, lightChannels: List<Int>) {
+    fun start(
+        ensured: HueProvider.EnsuredArea,
+        colourCount: Int,
+        dimmableLightIds: List<String>,
+        intensity: Int
+    ) {
         if (intensity <= 0) {
             stop()
             return
@@ -108,24 +133,17 @@ class HueEntertainment @Inject constructor(
                 DiagLog.event("HUE", "entertainment.start — missing creds")
                 return@launch
             }
-            val area = hueProvider.firstEntertainmentAreaId() ?: run {
+            val area = ensured.areaId
+            val lightChannels = ensured.channelIds
+            if (lightChannels.isEmpty()) {
                 DiagLog.event(
                     "HUE",
-                    "entertainment.start — no entertainment_configuration. " +
-                        "Open the Hue app → Settings → Entertainment areas → " +
-                        "create one (drag your lights into it). Then come back."
+                    "entertainment.start — ensured area has 0 channels; can't stream"
                 )
                 return@launch
             }
             areaId = area
             settings.setHueEntertainmentId(area)
-            // (Removed pre-stream setAll(on) — it called the global
-            // /light listing and turned on EVERY light on the bridge,
-            // not just the ones in the entertainment area. That was a
-            // scope-violation bug. We now trust the user to have the
-            // entertainment-area lights on before starting; if they're
-            // off, the bridge silently ignores the frames for those
-            // lights and the user can flip them on in the Hue app.)
             val started = hueProvider.startEntertainmentStream(area)
             if (!started) {
                 DiagLog.event("HUE", "entertainment.start — bridge refused streaming PUT")
@@ -142,10 +160,24 @@ class HueEntertainment @Inject constructor(
                 hueProvider.stopEntertainmentStream(area)
                 return@launch
             }
+            // Mode decision: SPREAD when there are enough colour lights
+            // to give each band a slot AND the user toggle agrees;
+            // COHERENT otherwise. COHERENT looks more unified across
+            // mixed-tier areas; SPREAD shows the spectrum spatially.
+            val spreadToggle = runCatching { settings.hueSpreadBands.first() }.getOrDefault(true)
+            val mode = if (colourCount >= 3 && spreadToggle) Mode.SPREAD else Mode.COHERENT
             DiagLog.event(
                 "HUE",
-                "entertainment.start RUNNING intensity=$intensity area=$area lights=${lightChannels.size}"
+                "entertainment.start RUNNING intensity=$intensity area=$area " +
+                    "channels=${lightChannels.size} colour=$colourCount mode=${mode.name}"
             )
+            // Parallel CLIP-REST driver for DIMMABLE lights (white-only,
+            // no colour). Gated by the "drive dimmable" toggle; ONOFF
+            // smart plugs are filtered out upstream in PlaybackService.
+            val driveDim = runCatching { settings.hueDriveDimmable.first() }.getOrDefault(true)
+            if (driveDim && dimmableLightIds.isNotEmpty()) {
+                dimmableDriver.start(dimmableLightIds, intensity)
+            }
 
             // ── Stream loop ──────────────────────────────────────────
             val intensityF = (intensity / 100f).coerceIn(0.01f, 1f)
@@ -200,14 +232,37 @@ class HueEntertainment @Inject constructor(
                 val beatBoost = if (r.beat) r.beatStrength else 0f
 
                 var off = headerSize
+                // COHERENT-mode pre-computed globals (same across lights
+                // in this frame; only positional palette offset shifts).
+                val coherentPalIdx = if (mode == Mode.COHERENT) {
+                    val phase = palettePhase.rem(2 * Math.PI)
+                    ((phase / (2 * Math.PI)) * palette.size).toInt()
+                        .coerceIn(0, palette.size - 1)
+                } else 0
+                val coherentBandAvg = if (mode == Mode.COHERENT) {
+                    // Bass-weighted RMS: low bands matter most for the
+                    // perceived energy. Result roughly in [0..1].
+                    (r.bands[0] * 0.50f + r.bands[1] * 0.80f +
+                        r.bands[2] * 0.40f + r.bands[3] * 0.30f +
+                        r.bands[4] * 0.20f + r.bands[5] * 0.15f) / 2.35f
+                } else 0f
                 for ((i, ch) in lightChannels.withIndex()) {
-                    val band = i % 6
-                    val bandLevel = r.bands[band]
-                    // Per-light palette offset — spread the palette across
-                    // the room so different lights show different colours.
-                    val perLightOffset = (i.toDouble() / lightChannels.size) * (2 * Math.PI)
-                    val phase = (palettePhase + perLightOffset).rem(2 * Math.PI)
-                    val palIdx = ((phase / (2 * Math.PI)) * palette.size).toInt().coerceIn(0, palette.size - 1)
+                    val bandLevel: Float
+                    val palIdx: Int
+                    if (mode == Mode.SPREAD) {
+                        bandLevel = r.bands[i % 6]
+                        // Per-light palette offset — spread colour
+                        // around the room so different lights show
+                        // different colours simultaneously.
+                        val perLightOffset = (i.toDouble() / lightChannels.size) * (2 * Math.PI)
+                        val phase = (palettePhase + perLightOffset).rem(2 * Math.PI)
+                        palIdx = ((phase / (2 * Math.PI)) * palette.size).toInt()
+                            .coerceIn(0, palette.size - 1)
+                    } else {
+                        // COHERENT — same colour across all lights.
+                        bandLevel = coherentBandAvg
+                        palIdx = coherentPalIdx
+                    }
                     val xy = palette[palIdx]
                     // Brightness:
                     //  - baseline: 25 % so lights stay visibly on
@@ -276,6 +331,9 @@ class HueEntertainment @Inject constructor(
         DiagLog.event("HUE", "entertainment.stop() requested")
         streamJob?.cancel()
         streamJob = null
+        // Stop the parallel dimmable driver too — keeps the two paths
+        // started + stopped together.
+        dimmableDriver.stop()
         runCatching { dtls?.close() }
         runCatching { socket?.close() }
         dtls = null

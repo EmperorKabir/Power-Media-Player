@@ -246,6 +246,23 @@ class SettingsDataStore @Inject constructor(
         // instead of leading them. Default 200 ms — user dials per
         // room.
         val HUE_SYNC_OFFSET_MS = intPreferencesKey("hue_sync_offset_ms")
+        // vc29 — user-picked area for reactive lighting. Stored as
+        // composite "<kind>:<uuid>" where kind ∈ {room, zone, ent}. The
+        // bridge has distinct REST endpoints for rooms vs zones vs
+        // entertainment_configurations; this prefix tells the resolver
+        // which list to look in. Empty string → fall back to the first
+        // entertainment_configuration on the bridge (legacy behaviour).
+        val HUE_SELECTED_AREA_KEY = stringPreferencesKey("hue_selected_area")
+        // vc29 — SPREAD-vs-COHERENT mode toggle. When ON (default) and
+        // the picked area has ≥3 COLOUR lights, each band maps to its
+        // own light. When OFF (or fewer than 3 colour lights) all
+        // colour lights show the same XY+brightness — feels unified
+        // across mixed-tier areas.
+        val HUE_SPREAD_BANDS = booleanPreferencesKey("hue_spread_bands")
+        // vc29 — drive DIMMABLE (white-only, no colour) lights in
+        // parallel to the DTLS Entertainment stream via CLIP REST at
+        // ≤10 Hz/light. ONOFF smart plugs are always excluded.
+        val HUE_DRIVE_DIMMABLE = booleanPreferencesKey("hue_drive_dimmable")
 
         // §C14 — audio focus policy. Three independent settings for the
         // common interruption types. Defaults at first install:
@@ -638,6 +655,13 @@ class SettingsDataStore @Inject constructor(
     suspend fun setHueReactiveIntensity(v: Int) { context.dataStore.edit { it[Keys.HUE_REACTIVE_INTENSITY] = v.coerceIn(0, 100) } }
     val hueSyncOffsetMs: Flow<Int> = context.dataStore.data.map { it[Keys.HUE_SYNC_OFFSET_MS] ?: 200 }
     suspend fun setHueSyncOffsetMs(v: Int) { context.dataStore.edit { it[Keys.HUE_SYNC_OFFSET_MS] = v.coerceIn(0, 1000) } }
+    // vc29 picker + mode toggles.
+    val hueSelectedArea: Flow<String> = context.dataStore.data.map { it[Keys.HUE_SELECTED_AREA_KEY] ?: "" }
+    suspend fun setHueSelectedArea(v: String) { context.dataStore.edit { it[Keys.HUE_SELECTED_AREA_KEY] = v.trim() } }
+    val hueSpreadBands: Flow<Boolean> = context.dataStore.data.map { it[Keys.HUE_SPREAD_BANDS] ?: true }
+    suspend fun setHueSpreadBands(v: Boolean) { context.dataStore.edit { it[Keys.HUE_SPREAD_BANDS] = v } }
+    val hueDriveDimmable: Flow<Boolean> = context.dataStore.data.map { it[Keys.HUE_DRIVE_DIMMABLE] ?: true }
+    suspend fun setHueDriveDimmable(v: Boolean) { context.dataStore.edit { it[Keys.HUE_DRIVE_DIMMABLE] = v } }
     suspend fun setColdStartResumeBackoffSec(sec: Int) {
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }

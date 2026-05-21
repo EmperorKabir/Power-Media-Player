@@ -473,6 +473,64 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // vc29 — area picker. Each entry exposes the area's id + kind +
+    // capability tier counts so the UI can show e.g.
+    // "Living Area (room) — 8 colour, 4 ambiance, 4 dimmable, 2 plugs".
+    data class HueAreaSummary(
+        val key: String,        // "<kind>:<uuid>" composite for DataStore
+        val displayName: String,
+        val kind: com.powermediaplayer.hue.HueProvider.HueArea.Kind,
+        val colour: Int,
+        val ambiance: Int,
+        val dimmable: Int,
+        val onoff: Int
+    )
+
+    private val _hueAreas = MutableStateFlow<List<HueAreaSummary>>(emptyList())
+    val hueAreas: StateFlow<List<HueAreaSummary>> = _hueAreas
+
+    /** One-shot refresh of the area picker list. */
+    fun refreshHueAreas() {
+        viewModelScope.launch {
+            val lights = runCatching { hueProvider.listAllLights() }
+                .getOrDefault(emptyMap())
+            val areas = runCatching { hueProvider.listAreas() }
+                .getOrDefault(emptyList())
+            _hueAreas.value = areas.map { area ->
+                val b = hueProvider.classifyArea(area, lights)
+                val kindTok = when (area.kind) {
+                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ROOM -> "room"
+                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ZONE -> "zone"
+                    com.powermediaplayer.hue.HueProvider.HueArea.Kind.ENTERTAINMENT -> "ent"
+                }
+                HueAreaSummary(
+                    key = "$kindTok:${area.id}",
+                    displayName = area.name,
+                    kind = area.kind,
+                    colour = b.colour.size,
+                    ambiance = b.ambiance.size,
+                    dimmable = b.dimmable.size,
+                    onoff = b.onoff.size
+                )
+            }
+        }
+    }
+
+    fun setHueSelectedArea(key: String) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("hue selectedArea=$key")
+            settingsDataStore.setHueSelectedArea(key)
+        }
+    }
+
+    fun setHueSpreadBands(v: Boolean) {
+        viewModelScope.launch { settingsDataStore.setHueSpreadBands(v) }
+    }
+
+    fun setHueDriveDimmable(v: Boolean) {
+        viewModelScope.launch { settingsDataStore.setHueDriveDimmable(v) }
+    }
+
     fun clearDiagLog() {
         com.powermediaplayer.diag.DiagLog.clear()
     }

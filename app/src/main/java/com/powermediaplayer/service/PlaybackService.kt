@@ -1014,25 +1014,70 @@ class PlaybackService : MediaSessionService() {
                     val isCast = activePlayer is androidx.media3.cast.CastPlayer
                     val isSpotify = spotifyProvider.spotifyState.value != null
                     if (intensity > 0 && isPlaying && !isCast && !isSpotify) {
-                        // Fetch the channel IDs configured INSIDE the
-                        // entertainment area, not just any light on the
-                        // bridge. Wrong IDs => bridge accepts packets
-                        // silently but routes them to nothing visible.
-                        val areaId = runCatching {
-                            hueProvider.firstEntertainmentAreaId()
-                        }.getOrNull()
-                        val channels = if (areaId != null) {
-                            hueProvider.entertainmentChannelIds(areaId)
-                                .take(10) // bridge enforces <= 10
-                        } else emptyList()
-                        if (channels.isNotEmpty()) {
-                            hueEntertainment.start(intensity, channels)
-                        } else {
+                        // vc29 — resolve the user-picked area (room /
+                        // zone / entertainment) from DataStore. The
+                        // composite key is "<kind>:<uuid>" so we don't
+                        // need a second roundtrip just to know what
+                        // kind to look up. Empty → legacy fallback to
+                        // the first entertainment area.
+                        val pickedKey = runCatching {
+                            settingsDataStore.hueSelectedArea.first()
+                        }.getOrDefault("")
+                        val areas = runCatching { hueProvider.listAreas() }
+                            .getOrDefault(emptyList())
+                        val picked = if (pickedKey.isNotBlank()) {
+                            val sep = pickedKey.indexOf(':')
+                            val kindTok = pickedKey.substring(0, sep.coerceAtLeast(0))
+                            val uuid = if (sep >= 0) pickedKey.substring(sep + 1) else pickedKey
+                            val kind = when (kindTok) {
+                                "room" -> com.powermediaplayer.hue.HueProvider.HueArea.Kind.ROOM
+                                "zone" -> com.powermediaplayer.hue.HueProvider.HueArea.Kind.ZONE
+                                "ent" -> com.powermediaplayer.hue.HueProvider.HueArea.Kind.ENTERTAINMENT
+                                else -> null
+                            }
+                            areas.firstOrNull { it.id == uuid && (kind == null || it.kind == kind) }
+                        } else null
+                        // Fallback: first entertainment area if user
+                        // hasn't picked yet — preserves vc28 behaviour
+                        // for already-paired installs.
+                        val area = picked
+                            ?: areas.firstOrNull { it.kind == com.powermediaplayer.hue.HueProvider.HueArea.Kind.ENTERTAINMENT }
+                        if (area == null) {
                             com.powermediaplayer.diag.DiagLog.event(
                                 "HUE",
-                                "auto-start skipped — entertainment area has no channels (area=$areaId)"
+                                "auto-start skipped — no area picked and no entertainment areas on bridge"
                             )
+                            return@collect
                         }
+                        val lights = runCatching { hueProvider.listAllLights() }
+                            .getOrDefault(emptyMap())
+                        val breakdown = hueProvider.classifyArea(area, lights)
+                        val ensured = runCatching {
+                            hueProvider.ensureEntertainmentConfigForArea(area, breakdown)
+                        }.getOrNull()
+                        if (ensured == null || ensured.channelIds.isEmpty()) {
+                            com.powermediaplayer.diag.DiagLog.event(
+                                "HUE",
+                                "auto-start skipped — could not ensure entertainment config " +
+                                    "for area='${area.name}' (kind=${area.kind} colour=${breakdown.colour.size} " +
+                                    "ambiance=${breakdown.ambiance.size})"
+                            )
+                            return@collect
+                        }
+                        val cappedChannels = ensured.channelIds.take(10) // bridge enforces ≤10
+                        val cappedEnsured = com.powermediaplayer.hue.HueProvider.EnsuredArea(
+                            ensured.areaId, cappedChannels
+                        )
+                        // DIMMABLE-only lights ride the parallel CLIP
+                        // REST driver; ONOFF smart plugs are excluded
+                        // outright (user directive — they don't pulse).
+                        val dimmableIds = breakdown.dimmable.map { it.id }
+                        hueEntertainment.start(
+                            cappedEnsured,
+                            breakdown.colour.size,
+                            dimmableIds,
+                            intensity
+                        )
                     } else {
                         if (intensity > 0 && isPlaying && (isCast || isSpotify)) {
                             com.powermediaplayer.diag.DiagLog.event(
