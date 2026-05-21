@@ -2,6 +2,7 @@ package com.powermediaplayer.diag
 
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import com.powermediaplayer.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,9 +11,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * Opt-in persistent file logger for evidence-gathering during dev/testing.
@@ -20,30 +23,55 @@ import java.util.Locale
  * Design:
  *  - Disabled by default. Enabled via Settings → Diagnostic logging.
  *  - When enabled, writes time-stamped lines to
- *    {externalFilesDir}/diag/log-current.txt — rotated to log-prev.txt
- *    when it exceeds [MAX_FILE_BYTES]. Keeps exactly 2 files (~10 MB
- *    total worst case).
+ *    {externalFilesDir}/diag/log-current.txt — rotated through
+ *    log-prev-1.txt … log-prev-3.txt when it exceeds [MAX_FILE_BYTES].
+ *    Total worst-case footprint ~200 MB across 4 files.
  *  - File location is app-private external storage:
  *    /storage/emulated/0/Android/data/com.powermediaplayer/files/diag/
  *    Visible to the user via the system Files app + `adb pull` without
  *    requiring runtime permissions on Android 10+.
  *  - Writes happen on a single IO coroutine fed by a Channel, so call
  *    sites never block the main thread.
- *  - Never logs media titles / file paths / user-identifying content.
- *    Log opcodes, timings, session IDs, build info only.
+ *  - Privacy: titles, mediaUris and other potentially identifying
+ *    strings should be passed through [hash] before logging — hash
+ *    keeps cross-event correlation possible without leaking content.
+ *
+ * Format of each line:
+ *   YYYY-MM-DD HH:MM:SS.sss [sess=ABC123 +uptimeMs] TAG: msg
+ *
+ * - `sess`     — short hex token assigned on first init(). Lets a log
+ *                reader trivially group lines from the same process,
+ *                vital after a process kill / restart mid-session.
+ * - `uptimeMs` — millis since process start (NOT since boot). Useful
+ *                when correlating closely-spaced events where the
+ *                wall-clock has 1 ms quantisation.
+ *
+ * Backward-compatible helper [event] preserves the original
+ * "TAG: msg" body shape so existing call sites need no edits; new
+ * structured helpers ([bt], [route], [player], [lifecycle], [ui],
+ * [settings], [dec]) standardise the body as key=value pairs for
+ * reliable parsing on the consumer side.
  */
 object DiagLog {
 
-    private const val MAX_FILE_BYTES = 5L * 1024L * 1024L // 5 MB
+    private const val MAX_FILE_BYTES = 50L * 1024L * 1024L // 50 MB per file
+    private const val ROTATION_DEPTH = 3 // keep prev-1, prev-2, prev-3
     private const val DIR_NAME = "diag"
     private const val CURRENT = "log-current.txt"
-    private const val PREV = "log-prev.txt"
 
     @Volatile
     private var enabled: Boolean = false
 
     @Volatile
     private var dir: File? = null
+
+    /** Short token identifying this process start. Reset on each [init]. */
+    @Volatile
+    private var sessionToken: String = "boot"
+
+    /** Process start time (uptime). All "+ms" deltas reference this. */
+    @Volatile
+    private var startUptimeMs: Long = 0L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val channel = Channel<String>(capacity = Channel.UNLIMITED)
@@ -69,9 +97,19 @@ object DiagLog {
             val base = context.getExternalFilesDir(null) ?: context.filesDir
             dir = File(base, DIR_NAME).apply { mkdirs() }
         }
+        sessionToken = UUID.randomUUID().toString().take(8)
+        startUptimeMs = SystemClock.uptimeMillis()
         enabled = initiallyEnabled
         if (initiallyEnabled) {
-            event("DiagLog", "init enabled=true buildVersion=${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) device=${Build.MANUFACTURER}/${Build.MODEL} android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT}")
+            // Header line distinguishes a new process start from a
+            // continuation of the previous log on the same file.
+            event(
+                "SESSION",
+                "── start sess=$sessionToken build=${BuildConfig.VERSION_NAME}" +
+                    " (vc${BuildConfig.VERSION_CODE}) device=${Build.MANUFACTURER}/${Build.MODEL}" +
+                    " android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT}" +
+                    " abi=${Build.SUPPORTED_ABIS.firstOrNull() ?: "?"} ──"
+            )
         }
     }
 
@@ -79,10 +117,9 @@ object DiagLog {
         val was = enabled
         enabled = v
         if (v && !was) {
-            event("DiagLog", "enabled at runtime")
+            event("SESSION", "logger enabled at runtime")
         } else if (!v && was) {
-            // Final breadcrumb before going quiet.
-            event("DiagLog", "disabled at runtime")
+            event("SESSION", "logger disabled at runtime")
         }
     }
 
@@ -95,24 +132,78 @@ object DiagLog {
     fun event(tag: String, msg: String) {
         if (!enabled) return
         val now = System.currentTimeMillis()
-        val line = "${dateFmt.format(Date(now))} ${timeFmt.format(Date(now))} $tag: $msg"
+        val upMs = SystemClock.uptimeMillis() - startUptimeMs
+        val line = "${dateFmt.format(Date(now))} ${timeFmt.format(Date(now))} " +
+            "[sess=$sessionToken +${upMs}ms] $tag: $msg"
         runCatching { channel.trySend(line) }
     }
 
-    /** Erase both log files. */
-    fun clear() {
-        runCatching {
-            File(dir, CURRENT).delete()
-            File(dir, PREV).delete()
-        }
-        if (enabled) event("DiagLog", "cleared")
+    // ── Structured event helpers ─────────────────────────────────────
+    //
+    // Each helper renders the body as `key1=value1 key2=value2 …` so
+    // a log consumer (you, future me, or a grep) can parse without
+    // ambiguity. Keep the same tag prefix family across the codebase
+    // so filtering on a single token (e.g. BT) catches the lot.
+
+    /** Bluetooth / AVRCP / media-button events. */
+    fun bt(msg: String) = event("BT", msg)
+
+    /** Audio routing changes (BT, headphones, wired, speaker). */
+    fun route(msg: String) = event("ROUTE", msg)
+
+    /** Player state / error / item-transition. */
+    fun player(msg: String) = event("PLAYER", msg)
+
+    /** App / Activity / Service lifecycle. */
+    fun lifecycle(msg: String) = event("LIFECYCLE", msg)
+
+    /** User-visible UI actions (taps, navigation). */
+    fun ui(msg: String) = event("UI", msg)
+
+    /** Settings reads at start, writes mid-session. */
+    fun settings(msg: String) = event("SETTINGS", msg)
+
+    /**
+     * "Decision" — explains WHY a branch was taken or skipped.
+     * The reason field is the most useful field at debug time —
+     * always include it.
+     */
+    fun dec(branch: String, reason: String) = event("DEC", "branch=$branch reason=$reason")
+
+    /**
+     * Hash a string (URI / title / package) to a short hex token. Same
+     * input always produces same token, so events referencing the
+     * "same" content are correlatable without exposing the content
+     * itself. Returned token is 8 hex chars (64 bits) — collision-free
+     * for a session.
+     */
+    fun hash(s: String?): String {
+        if (s.isNullOrEmpty()) return "null"
+        val md = MessageDigest.getInstance("SHA-256")
+        val bytes = md.digest(s.toByteArray(Charsets.UTF_8))
+        val sb = StringBuilder(8)
+        for (i in 0 until 4) sb.append("%02x".format(bytes[i]))
+        return sb.toString()
     }
 
-    /** Total bytes currently held across both files. */
+    /** Erase every log file in the rotation. */
+    fun clear() {
+        runCatching {
+            val d = dir ?: return@runCatching
+            File(d, CURRENT).delete()
+            for (i in 1..ROTATION_DEPTH) File(d, "log-prev-$i.txt").delete()
+        }
+        if (enabled) event("SESSION", "cleared")
+    }
+
+    /** Total bytes currently held across every file in the rotation. */
     fun totalBytes(): Long {
-        val d = dir ?: return 0
-        return (File(d, CURRENT).takeIf { it.exists() }?.length() ?: 0L) +
-            (File(d, PREV).takeIf { it.exists() }?.length() ?: 0L)
+        val d = dir ?: return 0L
+        var total = (File(d, CURRENT).takeIf { it.exists() }?.length() ?: 0L)
+        for (i in 1..ROTATION_DEPTH) {
+            total += File(d, "log-prev-$i.txt").takeIf { it.exists() }?.length() ?: 0L
+        }
+        return total
     }
 
     /** Path the user should be told to retrieve. */
@@ -122,10 +213,16 @@ object DiagLog {
         val d = dir ?: return
         val cur = File(d, CURRENT)
         if (cur.exists() && cur.length() >= MAX_FILE_BYTES) {
-            // Rotate.
-            val prev = File(d, PREV)
-            if (prev.exists()) prev.delete()
-            cur.renameTo(prev)
+            // Cascade rotation: prev-2 → prev-3, prev-1 → prev-2, cur → prev-1.
+            // Oldest file (prev-ROTATION_DEPTH before promotion) is dropped.
+            val oldest = File(d, "log-prev-$ROTATION_DEPTH.txt")
+            if (oldest.exists()) oldest.delete()
+            for (i in ROTATION_DEPTH downTo 2) {
+                val from = File(d, "log-prev-${i - 1}.txt")
+                val to = File(d, "log-prev-$i.txt")
+                if (from.exists()) from.renameTo(to)
+            }
+            cur.renameTo(File(d, "log-prev-1.txt"))
         }
         FileWriter(cur, true).use { w ->
             w.append(line).append('\n')

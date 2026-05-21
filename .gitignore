@@ -16,3 +16,5 @@ dbg*.png
 screen.png
 ui-dump.xml
 screen-picker.png
+# Top-level diag/ holds pulled phone logs — never the source package.
+/diag/

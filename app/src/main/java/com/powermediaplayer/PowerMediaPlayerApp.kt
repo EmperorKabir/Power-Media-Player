@@ -53,6 +53,7 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider {
             runBlocking { settingsDataStore.diagLogEnabled.first() }
         }.getOrDefault(false)
         DiagLog.init(this, startEnabled)
+        DiagLog.lifecycle("PowerMediaPlayerApp.onCreate (process start)")
         // Live-track future toggle changes.
         appScope.launch {
             settingsDataStore.diagLogEnabled.collect { DiagLog.setEnabled(it) }

@@ -35,6 +35,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -261,9 +262,40 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /**
+     * Registered in onCreate, unregistered in onDestroy. Fires whenever
+     * Android routes audio to a different device (BT connect/disconnect,
+     * headphones plug, speaker fallback). Lets the log reader correlate
+     * "playback resumed" events with the routing change that triggered
+     * them, which is the only way to tell a BT-reconnect resume from a
+     * notification-tap resume.
+     */
+    private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
+
+    /** Friendly name for an AudioDeviceInfo.TYPE_* int. */
+    private fun audioDeviceTypeName(t: Int): String = when (t) {
+        android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "SPEAKER"
+        android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "EARPIECE"
+        android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET -> "WIRED_HEADSET"
+        android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "WIRED_HEADPHONES"
+        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "BT_SCO"
+        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BT_A2DP"
+        android.media.AudioDeviceInfo.TYPE_HDMI -> "HDMI"
+        android.media.AudioDeviceInfo.TYPE_USB_DEVICE -> "USB"
+        android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> "USB_HEADSET"
+        android.media.AudioDeviceInfo.TYPE_USB_ACCESSORY -> "USB_ACCESSORY"
+        android.media.AudioDeviceInfo.TYPE_BUS -> "BUS"
+        16 /* TYPE_TELEPHONY */ -> "TELEPHONY"
+        18 /* TYPE_BUILTIN_MIC */ -> "BUILTIN_MIC"
+        27 /* TYPE_REMOTE_SUBMIX */ -> "REMOTE_SUBMIX"
+        29 /* TYPE_DOCK */ -> "DOCK"
+        else -> "TYPE_$t"
+    }
+
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackService.onCreate START")
 
         // Configure renderers honouring the user's Settings → Software/
         // Hardware decoding toggle. Read with a 200 ms timeout so a
@@ -566,22 +598,34 @@ class PlaybackService : MediaSessionService() {
         // DataStore synchronously and seed the player BEFORE first
         // playback so the user doesn't hear unwanted pitch/speed for
         // the first ~100 ms while the async flow collectors catch up.
-        // 200 ms timeout safety net; defaults applied on miss.
-        runCatching {
+        // 600 ms timeout safety net (raised from 200 ms — friend
+        // reported "half a second of un-pitched audio" on cold start;
+        // DataStore cold reads can take 300–500 ms under load and were
+        // missing the 200 ms window). Defaults applied on miss.
+        val seedStartMs = android.os.SystemClock.uptimeMillis()
+        val seedOk = runCatching {
             kotlinx.coroutines.runBlocking {
-                kotlinx.coroutines.withTimeoutOrNull(200) {
+                kotlinx.coroutines.withTimeoutOrNull(600) {
                     val pitch = settingsDataStore.pitchIndependent.first()
                     val speed = settingsDataStore.playbackSpeed.first()
                     player!!.playbackParameters = androidx.media3.common.PlaybackParameters(
                         speed.coerceIn(0.25f, 4f),
                         pitch.coerceIn(0.5f, 2f)
                     )
-                    com.powermediaplayer.diag.DiagLog.event(
-                        "AUDIO_FX",
-                        "cold-start seeded speed=$speed pitch=$pitch"
+                    com.powermediaplayer.diag.DiagLog.player(
+                        "cold-start seeded speed=$speed pitch=$pitch " +
+                            "in=${android.os.SystemClock.uptimeMillis() - seedStartMs}ms"
                     )
+                    true
                 }
             }
+        }.getOrNull() == true
+        if (!seedOk) {
+            com.powermediaplayer.diag.DiagLog.player(
+                "cold-start seed TIMED OUT after " +
+                    "${android.os.SystemClock.uptimeMillis() - seedStartMs}ms — " +
+                    "playback may start at defaults until DataStore catches up"
+            )
         }
 
         // §C14 — install per-scenario audio-focus policy.
@@ -599,6 +643,173 @@ class PlaybackService : MediaSessionService() {
         // forces the factor back to 1.0 immediately so the slider
         // value is always honoured live.
         startCrossfadeController()
+
+        // ── Diagnostic Player.Listener ──────────────────────────────
+        // Independent listener (separate from the crossfade one above)
+        // so changing logging volume / detail later doesn't risk
+        // touching the crossfade engine. Every line goes through DiagLog
+        // which is a no-op when the user toggle is off — zero cost.
+        player?.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                val name = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> "READY"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "UNKNOWN($playbackState)"
+                }
+                com.powermediaplayer.diag.DiagLog.player("state=$name")
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                val p = player
+                com.powermediaplayer.diag.DiagLog.player(
+                    "isPlaying=$isPlaying pos=${p?.currentPosition}ms " +
+                        "playWhenReady=${p?.playWhenReady} mediaId=${com.powermediaplayer.diag.DiagLog.hash(p?.currentMediaItem?.mediaId)}"
+                )
+            }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                val rname = when (reason) {
+                    Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST -> "USER"
+                    Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS -> "AUDIO_FOCUS_LOSS"
+                    Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY -> "AUDIO_BECOMING_NOISY"
+                    Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE -> "REMOTE"
+                    Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM -> "END_OF_ITEM"
+                    Player.PLAY_WHEN_READY_CHANGE_REASON_SUPPRESSED_TOO_LONG -> "SUPPRESSED_TOO_LONG"
+                    else -> "REASON_$reason"
+                }
+                com.powermediaplayer.diag.DiagLog.player(
+                    "playWhenReady=$playWhenReady reason=$rname"
+                )
+            }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val rname = when (reason) {
+                    Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> "REPEAT"
+                    Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> "AUTO"
+                    Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> "SEEK"
+                    Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> "PLAYLIST_CHANGED"
+                    else -> "REASON_$reason"
+                }
+                com.powermediaplayer.diag.DiagLog.player(
+                    "mediaItemTransition reason=$rname id=${com.powermediaplayer.diag.DiagLog.hash(mediaItem?.mediaId)}"
+                )
+            }
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                val rname = when (reason) {
+                    Player.DISCONTINUITY_REASON_AUTO_TRANSITION -> "AUTO_TRANSITION"
+                    Player.DISCONTINUITY_REASON_SEEK -> "SEEK"
+                    Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT -> "SEEK_ADJUSTMENT"
+                    Player.DISCONTINUITY_REASON_SKIP -> "SKIP"
+                    Player.DISCONTINUITY_REASON_REMOVE -> "REMOVE"
+                    Player.DISCONTINUITY_REASON_INTERNAL -> "INTERNAL"
+                    else -> "REASON_$reason"
+                }
+                com.powermediaplayer.diag.DiagLog.player(
+                    "discontinuity reason=$rname from=${oldPosition.positionMs}ms to=${newPosition.positionMs}ms"
+                )
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                com.powermediaplayer.diag.DiagLog.player(
+                    "ERROR code=${error.errorCode} name=${error.errorCodeName} msg=${error.message}"
+                )
+            }
+        })
+
+        // ── Audio device routing callback ───────────────────────────
+        // No permission required (in contrast to BluetoothA2dp profile
+        // listening which needs BLUETOOTH_CONNECT on API 31+). Fires on
+        // every routing change: BT connect/disconnect, headphones plug/
+        // unplug, speaker fallback, USB audio, Cast Audio.
+        runCatching {
+            val am = getSystemService(android.media.AudioManager::class.java)
+            audioDeviceCallback = object : android.media.AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    addedDevices?.forEach { d ->
+                        com.powermediaplayer.diag.DiagLog.route(
+                            "device+ type=${audioDeviceTypeName(d.type)} name='${d.productName}' " +
+                                "id=${d.id} sink=${d.isSink} src=${d.isSource}"
+                        )
+                    }
+                }
+                override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    removedDevices?.forEach { d ->
+                        com.powermediaplayer.diag.DiagLog.route(
+                            "device- type=${audioDeviceTypeName(d.type)} name='${d.productName}' " +
+                                "id=${d.id} sink=${d.isSink} src=${d.isSource}"
+                        )
+                    }
+                }
+            }
+            am?.registerAudioDeviceCallback(audioDeviceCallback, null)
+            // Snapshot the initial routing state so a single car-test
+            // log shows the device set the user started with.
+            am?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)?.forEach { d ->
+                com.powermediaplayer.diag.DiagLog.route(
+                    "device0 type=${audioDeviceTypeName(d.type)} " +
+                        "name='${d.productName}' id=${d.id}"
+                )
+            }
+        }.onFailure {
+            com.powermediaplayer.diag.DiagLog.lifecycle("AudioDeviceCallback register failed: ${it.message}")
+        }
+
+        // ── Settings snapshot ───────────────────────────────────────
+        // One-shot dump of every BT-relevant setting at service start so
+        // the log reader knows the user's configuration before any
+        // events fire. Reads have already happened above for pitch/speed/
+        // sw-decoding/bt-mapping — re-read here only to log atomically.
+        serviceScope.launch {
+            runCatching {
+                val snap = StringBuilder("snapshot ")
+                snap.append("prevAct=").append(settingsDataStore.btPrevAction.first()).append(' ')
+                snap.append("nextAct=").append(settingsDataStore.btNextAction.first()).append(' ')
+                snap.append("skipBack=").append(settingsDataStore.btSkipBackSeconds.first()).append("s ")
+                snap.append("skipFwd=").append(settingsDataStore.btSkipForwardSeconds.first()).append("s ")
+                snap.append("resumeOnBt=").append(settingsDataStore.resumeOnBt.first()).append(' ')
+                snap.append("headphoneAutoplay=").append(settingsDataStore.headphonePlugAutoplay.first()).append(' ')
+                snap.append("btVideoAudioOffsetMs=").append(settingsDataStore.btVideoAudioOffsetMs.first()).append(' ')
+                snap.append("coldStartBackoffSec=").append(settingsDataStore.coldStartResumeBackoffSec.first()).append(' ')
+                snap.append("stopOnTaskRemoved=").append(settingsDataStore.stopOnTaskRemoved.first()).append(' ')
+                snap.append("speed=").append(settingsDataStore.playbackSpeed.first()).append(' ')
+                snap.append("pitch=").append(settingsDataStore.pitchIndependent.first())
+                com.powermediaplayer.diag.DiagLog.settings(snap.toString())
+            }.onFailure {
+                com.powermediaplayer.diag.DiagLog.settings("snapshot failed: ${it.message}")
+            }
+        }
+
+        // ── BT-mapping change watcher ──────────────────────────────
+        // Logs every change to the four BT-mapping settings so the test
+        // log shows when the user switched prev/next remap mid-session.
+        serviceScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.btPrevAction,
+                settingsDataStore.btNextAction,
+                settingsDataStore.btSkipBackSeconds,
+                settingsDataStore.btSkipForwardSeconds
+            ) { prev, next, back, fwd ->
+                "prev=$prev next=$next back=${back}s fwd=${fwd}s"
+            }.distinctUntilChanged().collect {
+                com.powermediaplayer.diag.DiagLog.settings("BT-mapping change → $it")
+            }
+        }
+        // Also log resumeOnBt + headphoneAutoplay flips so we know when
+        // the user toggled them relative to a BT connect event.
+        serviceScope.launch {
+            settingsDataStore.resumeOnBt.distinctUntilChanged().collect {
+                com.powermediaplayer.diag.DiagLog.settings("resumeOnBt → $it")
+            }
+        }
+        serviceScope.launch {
+            settingsDataStore.headphonePlugAutoplay.distinctUntilChanged().collect {
+                com.powermediaplayer.diag.DiagLog.settings("headphoneAutoplay → $it")
+            }
+        }
+
+        com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackService.onCreate DONE")
 
         // Create session activity intent for notification tap
         val sessionActivityIntent = PendingIntent.getActivity(
@@ -1327,6 +1538,10 @@ class PlaybackService : MediaSessionService() {
             }
         }.getOrDefault(false)
         val player = mediaSession?.player
+        com.powermediaplayer.diag.DiagLog.lifecycle(
+            "PlaybackService.onTaskRemoved stopUncond=$stopUnconditionally " +
+                "playWhenReady=${player?.playWhenReady} itemCount=${player?.mediaItemCount}"
+        )
         if (stopUnconditionally) {
             player?.stop()
             stopSelf()
@@ -1340,6 +1555,11 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackService.onDestroy")
+        audioDeviceCallback?.let {
+            runCatching { getSystemService(android.media.AudioManager::class.java)?.unregisterAudioDeviceCallback(it) }
+        }
+        audioDeviceCallback = null
         serviceScope.cancel()
         stopCastRelay()
         headphonePlugReceiver?.let { runCatching { unregisterReceiver(it) } }
@@ -1496,6 +1716,127 @@ class PlaybackService : MediaSessionService() {
                         "→ unhandled cmd=$playerCommand passing through to Media3"
                     )
                     @Suppress("DEPRECATION") super.onPlayerCommandRequest(session, controller, playerCommand)
+                }
+            }
+        }
+
+        /**
+         * Direct interception of raw `KeyEvent.KEYCODE_MEDIA_*` events
+         * delivered by the Bluetooth stack / car HU before Media3's
+         * default dispatcher converts them to `Player.COMMAND_SEEK_TO_*`.
+         *
+         * Why this exists:
+         * - Media3 ≥ 1.2.0 added this hook specifically to let apps
+         *   intercept media-button KeyEvents (confirmed via Context7
+         *   query against /androidx/media — 1.2.0 release notes).
+         * - On a 2016 BMW F30 (and presumably most older AVRCP HUs)
+         *   the steering-wheel prev/next buttons arrive as raw
+         *   `KeyEvent.KEYCODE_MEDIA_PREVIOUS/NEXT` via the BT key path.
+         *   Media3's default handler turns these into
+         *   `seekToPreviousMediaItem()` / `seekToNextMediaItem()`
+         *   DIRECTLY on the Player — NEVER routing them through
+         *   `onPlayerCommandRequest`. So our prev/next remap was inert
+         *   for KeyEvent-style cars.
+         * - In a 7-minute test session this file's `onPlayerCommandRequest`
+         *   logged ONE cmd (cmd=15 = SET_REPEAT_MODE) and zero seek/prev/
+         *   next opcodes despite dozens of button presses → ironclad
+         *   evidence that the KeyEvent path is the active route.
+         *
+         * Behaviour:
+         * - In-app controllers (samePackage) → pass through (return false).
+         *   The on-screen prev/next still call `seekToPrevious()` etc.
+         *   directly via PlaybackConnection; we don't want to remap THOSE.
+         * - External controllers (com.android.bluetooth, com.google.
+         *   android.projection.gearhead, …) → log the raw KeyEvent, then:
+         *     • PREVIOUS / REWIND  → applyAction(prevAction, skipBackSeconds)
+         *     • NEXT / FAST_FORWARD → applyAction(nextAction, skipForwardSeconds)
+         *     • PLAY  → gated by resumeOnBt setting (swallow if off)
+         *     • everything else → return false (let Media3 default fire)
+         *
+         * Returning true tells Media3 we handled it. Returning false
+         * tells it to run its standard dispatch.
+         */
+        @OptIn(UnstableApi::class)
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controllerInfo: MediaSession.ControllerInfo,
+            intent: Intent
+        ): Boolean {
+            val keyEvent = @Suppress("DEPRECATION") (intent.getParcelableExtra(
+                Intent.EXTRA_KEY_EVENT
+            ) as? android.view.KeyEvent) ?: return false
+            // Only act on key-DOWN; key-UP arrives ~50 ms later and
+            // would otherwise double-fire the action.
+            if (keyEvent.action != android.view.KeyEvent.ACTION_DOWN) return false
+            val pkg = controllerInfo.packageName
+            val isExternal = pkg != packageName
+            val mapping = btMapping
+            com.powermediaplayer.diag.DiagLog.bt(
+                "keyEvent code=${keyEvent.keyCode} keyName=${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} " +
+                    "pkg=$pkg external=$isExternal repeat=${keyEvent.repeatCount} " +
+                    "prevAct=${mapping.prevAction} nextAct=${mapping.nextAction} " +
+                    "skipBack=${mapping.skipBackSeconds}s skipFwd=${mapping.skipForwardSeconds}s"
+            )
+            // In-app source: pass through. The Activity-side controller
+            // dispatches direct Player calls anyway; this branch only
+            // catches anything routed by mistake through KeyEvents.
+            if (!isExternal) return false
+
+            val player = session.player
+            return when (keyEvent.keyCode) {
+                android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                    com.powermediaplayer.diag.DiagLog.bt(
+                        "→ keyEvent PREV→applyAction action=${mapping.prevAction} " +
+                            "skipBackSec=${mapping.skipBackSeconds} pos=${player.currentPosition}ms"
+                    )
+                    applyAction(player, mapping.prevAction, mapping.skipBackSeconds, isPrev = true)
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_MEDIA_NEXT,
+                android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                    com.powermediaplayer.diag.DiagLog.bt(
+                        "→ keyEvent NEXT→applyAction action=${mapping.nextAction} " +
+                            "skipFwdSec=${mapping.skipForwardSeconds} pos=${player.currentPosition}ms"
+                    )
+                    applyAction(player, mapping.nextAction, mapping.skipForwardSeconds, isPrev = false)
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                    // §C — gate auto-resume on BT reconnect against the
+                    // user's "Resume on Bluetooth connect" toggle. The
+                    // KeyEvent arrives when the BMW HU re-establishes
+                    // A2DP after ignition and the car media controller
+                    // re-issues a play request. Snapshot synchronously
+                    // — DataStore reads off the binder thread will block.
+                    val allow = runCatching {
+                        kotlinx.coroutines.runBlocking {
+                            kotlinx.coroutines.withTimeoutOrNull(150) {
+                                settingsDataStore.resumeOnBt.first()
+                            }
+                        }
+                    }.getOrNull() ?: false
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "BT-PLAY",
+                        reason = if (allow) "resumeOnBt=true → allowing play" else
+                            "resumeOnBt=false → swallowing play KeyEvent"
+                    )
+                    if (allow) false else true // false = let Media3 dispatch; true = swallow
+                }
+                android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                android.view.KeyEvent.KEYCODE_MEDIA_PAUSE,
+                android.view.KeyEvent.KEYCODE_MEDIA_STOP -> {
+                    // Pause / stop / toggle — let Media3 dispatch normally.
+                    com.powermediaplayer.diag.DiagLog.bt(
+                        "→ keyEvent ${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} passthrough to Media3"
+                    )
+                    false
+                }
+                else -> {
+                    com.powermediaplayer.diag.DiagLog.bt(
+                        "→ keyEvent ${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} unhandled — passthrough"
+                    )
+                    false
                 }
             }
         }

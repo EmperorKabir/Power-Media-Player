@@ -63,10 +63,24 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         MainActivityHolder.set(this)
+        com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity.onResume")
+    }
+
+    override fun onStart() {
+        super.onStart()
+        com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity.onStart")
+    }
+
+    override fun onStop() {
+        super.onStop()
+        com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity.onStop isFinishing=$isFinishing")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.powermediaplayer.diag.DiagLog.lifecycle(
+            "MainActivity.onCreate savedState=${savedInstanceState != null}"
+        )
         // §C20 — first-launch deep-link extra (the widget tap path).
         intent.getStringExtra(
             com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB
@@ -170,6 +184,9 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        com.powermediaplayer.diag.DiagLog.lifecycle(
+            "MainActivity.onDestroy isFinishing=$isFinishing"
+        )
         if (isFinishing) {
             playbackConnection.disconnect()
         }

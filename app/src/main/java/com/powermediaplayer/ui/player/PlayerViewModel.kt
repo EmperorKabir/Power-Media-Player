@@ -691,18 +691,49 @@ class PlayerViewModel @Inject constructor(
             // playing — bug: videos opened via auto-resume immediately
             // paused on launch. compareAndSet is atomic + thread-safe
             // and shared across every VM instance in the same process.
-            if (!coldStartGuard.compareAndSet(false, true)) return@launch
+            if (!coldStartGuard.compareAndSet(false, true)) {
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "cold-start", reason = "guard-already-fired (other VM instance won)"
+                )
+                return@launch
+            }
             kotlinx.coroutines.delay(800) // wait for service connection
-            // Don't clobber an active Spotify mirror.
-            if (spotifyProvider.spotifyState.value != null) return@launch
-            // Defensive: if a session is already adopted (e.g. user
-            // tapped a Library row in the 800 ms grace window) skip.
-            if (lastPlayedRepo.currentSessionId.value != null) return@launch
+            if (spotifyProvider.spotifyState.value != null) {
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "cold-start", reason = "spotify-mirror-active → skip"
+                )
+                return@launch
+            }
+            if (lastPlayedRepo.currentSessionId.value != null) {
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "cold-start",
+                    reason = "session-already-adopted by Library/Cloud/LastPlayed tap → skip"
+                )
+                return@launch
+            }
             val recent = withContext(Dispatchers.IO) {
                 runCatching { lastPlayedRepo.mostRecent() }.getOrNull()
-            } ?: return@launch
-            val player = playbackConnection.getPlayer() ?: return@launch
+            }
+            if (recent == null) {
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "cold-start", reason = "no-recent-row → nothing to restore"
+                )
+                return@launch
+            }
+            val player = playbackConnection.getPlayer()
+            if (player == null) {
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "cold-start", reason = "player-null after 800ms grace → skip"
+                )
+                return@launch
+            }
             val currentMediaUri = player.currentMediaItem?.mediaId
+            com.powermediaplayer.diag.DiagLog.dec(
+                branch = "cold-start",
+                reason = "evaluating: currentMediaUri=${com.powermediaplayer.diag.DiagLog.hash(currentMediaUri)} " +
+                    "recent.source=${recent.source} recent.id=${recent.id} " +
+                    "recent.uri=${com.powermediaplayer.diag.DiagLog.hash(recent.mediaUri)}"
+            )
             when {
                 // Notification-tap resume: player already has the
                 // matching item loaded. Adopt session, don't reload.
