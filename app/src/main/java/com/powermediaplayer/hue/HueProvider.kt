@@ -93,7 +93,13 @@ class HueProvider @Inject constructor(
         val id: String,
         val kind: Kind,
         val name: String,
-        val lightIds: List<String>
+        val lightIds: List<String>,
+        /** grouped_light service id for this area — present on rooms
+         *  and zones, absent on entertainment areas. Lets the
+         *  dimmable driver send ONE brightness PUT for the whole
+         *  group instead of per-light, which keeps the bridge from
+         *  drowning under high light counts. */
+        val groupedLightId: String? = null
     ) {
         enum class Kind { ROOM, ZONE, ENTERTAINMENT }
     }
@@ -469,7 +475,13 @@ class HueProvider @Inject constructor(
                                 .findAll(ch).map { it.groupValues[1] }.toList()
                         }.orEmpty()
                         val lightsHere = deviceIds.flatMap { d -> deviceToLights[d].orEmpty() }
-                        out.add(HueArea(id, HueArea.Kind.ROOM, name, lightsHere))
+                        // Rooms expose a grouped_light service; extract
+                        // the rid so the dimmable driver can use it
+                        // instead of per-light PUTs.
+                        val groupedLight = Regex(
+                            """"rid":"([0-9a-f-]{36})","rtype":"grouped_light""""
+                        ).find(slice)?.groupValues?.getOrNull(1)
+                        out.add(HueArea(id, HueArea.Kind.ROOM, name, lightsHere, groupedLight))
                     }
                 }
             }
@@ -496,7 +508,10 @@ class HueProvider @Inject constructor(
                         val lightIds = Regex(
                             """"rid":"([0-9a-f-]{36})","rtype":"light""""
                         ).findAll(slice).map { it.groupValues[1] }.toList()
-                        out.add(HueArea(id, HueArea.Kind.ZONE, name, lightIds))
+                        val groupedLight = Regex(
+                            """"rid":"([0-9a-f-]{36})","rtype":"grouped_light""""
+                        ).find(slice)?.groupValues?.getOrNull(1)
+                        out.add(HueArea(id, HueArea.Kind.ZONE, name, lightIds, groupedLight))
                     }
                 }
             }

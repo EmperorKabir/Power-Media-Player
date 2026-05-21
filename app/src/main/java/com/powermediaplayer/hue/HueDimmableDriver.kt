@@ -81,13 +81,21 @@ class HueDimmableDriver @Inject constructor(
     data class DimmableLight(val id: String, val latencyMs: Int)
 
     /**
-     * Start brightness-pulsing [dimmableLights] at 5 Hz per light.
-     * Each entry carries its own latency so a native Hue dimmable
-     * (~200 ms) and an IKEA TRÅDFRI (~430 ms) sitting in the same
-     * room land in time with each other. [intensity] in [0..100]
+     * Start brightness-pulsing [dimmableLights]. When
+     * [groupedLightId] is non-null (rooms + zones have one), the
+     * driver issues ONE brightness PUT per cycle to the group —
+     * this is ~13× lighter on the bridge than per-light PUTs and
+     * was the only way to stop the bridge from refusing DTLS
+     * frames under sustained load. Per-light fallback is retained
+     * at a slower 2 Hz/light for entertainment-area picks that
+     * don't expose a grouped_light. [intensity] in [0..100]
      * matches HueEntertainment's slider. 0 stops the driver.
      */
-    fun start(dimmableLights: List<DimmableLight>, intensity: Int) {
+    fun start(
+        dimmableLights: List<DimmableLight>,
+        intensity: Int,
+        groupedLightId: String? = null
+    ) {
         if (intensity <= 0 || dimmableLights.isEmpty()) {
             stop()
             return
@@ -105,9 +113,11 @@ class HueDimmableDriver @Inject constructor(
                 .entries
                 .sortedBy { it.key }
                 .joinToString { "${it.key}ms×${it.value}" }
+            val routing = if (groupedLightId != null) "group(${groupedLightId.take(8)})" else "per-light"
             DiagLog.event(
                 "HUE",
-                "dimmable driver START intensity=$intensity lights=${dimmableLights.size} latencies=$latencySummary"
+                "dimmable driver START intensity=$intensity lights=${dimmableLights.size} " +
+                    "latencies=$latencySummary routing=$routing"
             )
             // Sensitivity-shaped curve — mirrors HueEntertainment so
             // colour + dimmable lights swing together. See the
@@ -129,45 +139,47 @@ class HueDimmableDriver @Inject constructor(
             val beatGate = 0.30f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
             val beatSpan = 0.10f + s * 0.40f       // 0.10 → 0.50
-            val perLightIntervalMs = 200L  // 5 Hz/light = 65 PUTs/sec total for 13 lights
-            // Stagger writes across lights — light i fires offset by
-            // (perLightInterval / count) so total per-second traffic
-            // distributes evenly across all lights.
-            val stagger = max(20L, perLightIntervalMs / dimmableLights.size.coerceAtLeast(1))
-            val deadlines = LongArray(dimmableLights.size)
-            val now0 = android.os.SystemClock.uptimeMillis()
-            for (i in dimmableLights.indices) deadlines[i] = now0 + i * stagger
-            // Track last sent value per light to skip near-duplicates.
-            val lastBri = FloatArray(dimmableLights.size) { -1f }
-            var lastDiagWindow = -1L
-            while (isActive) {
-                val now = android.os.SystemClock.uptimeMillis()
-                val syncOffset = runCatching {
-                    settings.hueSyncOffsetMs.first() +
-                        settings.audioDelayMs.first() +
-                        settings.btVideoAudioOffsetMs.first()
-                }.getOrDefault(200)
-                // User can nudge every dimmable bulb earlier/later on
-                // top of the per-bulb auto-detected value. 0 = pure
-                // auto. Range coerced -300..+300 in DataStore.
-                val userLagOverrideMs = runCatching {
-                    settings.hueDimmableLagOffsetMs.first()
-                }.getOrDefault(0)
-                // Honour any 503/timeout backoff before issuing more
-                // PUTs this loop iteration.
-                if (now < backoffUntilMs) {
-                    delay(50)
-                    continue
-                }
-                var diagThisFrame: String? = null
-                for ((idx, light) in dimmableLights.withIndex()) {
-                    if (now < deadlines[idx]) continue
-                    // Per-bulb PCM read: each bulb is timed for its own
-                    // command-to-photon latency so native Hue + IKEA
-                    // sitting in the same room land in sync.
-                    val perLightOffset =
-                        (syncOffset - light.latencyMs - userLagOverrideMs).coerceAtLeast(0)
-                    val r = analyserProcessor.getSnapshotAt(perLightOffset)
+            // vc29.10 — settings reads cached once per loop (was 4 .first()
+            // calls per iteration = wasteful DataStore churn). Loop reads
+            // them once into locals and only refreshes every 2 s.
+            var lastSettingsReadMs = 0L
+            var syncOffset = 200
+            var userLagOverrideMs = 0
+
+            if (groupedLightId != null) {
+                // Group mode — ONE PUT per cycle to the room/zone's
+                // grouped_light. Bridge load goes from N×5 Hz to 1×~5 Hz
+                // total; this is what stops the bridge from refusing
+                // DTLS frames under sustained load. Per-bulb latency is
+                // averaged across the dimmable set; perfect sync per-
+                // bulb is sacrificed for stability, but the visual
+                // result is far closer than the previous "lights
+                // freeze" failure mode.
+                val avgLatencyMs = dimmableLights.sumOf { it.latencyMs } / dimmableLights.size
+                val groupIntervalMs = 250L // 4 Hz total to the bridge
+                var lastSent = -1f
+                var lastDiagWindow = -1L
+                var nextDeadline = android.os.SystemClock.uptimeMillis()
+                while (isActive) {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (now - lastSettingsReadMs > 2000L) {
+                        lastSettingsReadMs = now
+                        syncOffset = runCatching {
+                            settings.hueSyncOffsetMs.first() +
+                                settings.audioDelayMs.first() +
+                                settings.btVideoAudioOffsetMs.first()
+                        }.getOrDefault(200)
+                        userLagOverrideMs = runCatching {
+                            settings.hueDimmableLagOffsetMs.first()
+                        }.getOrDefault(0)
+                    }
+                    if (now < backoffUntilMs || now < nextDeadline) {
+                        delay(25)
+                        continue
+                    }
+                    val groupOffset =
+                        (syncOffset - avgLatencyMs - userLagOverrideMs).coerceAtLeast(0)
+                    val r = analyserProcessor.getSnapshotAt(groupOffset)
                     val bandAvg = maxOf(
                         r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5]
                     )
@@ -184,31 +196,95 @@ class HueDimmableDriver @Inject constructor(
                     } else 0f
                     val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
                         .coerceIn(1f, 100f)
-                    // Capture one sample for the throttled diag line
-                    // — first light in the loop wins.
-                    if (idx == 0 && diagThisFrame == null) {
-                        diagThisFrame = "s=${"%.2f".format(s)} lag=${light.latencyMs}+${userLagOverrideMs}ms " +
-                            "offset=${perLightOffset}ms bandAvg=${"%.2f".format(bandAvg)} " +
-                            "gated=${"%.2f".format(gatedBand)} target=${"%.0f".format(target)}%"
-                    }
-                    val delta = kotlin.math.abs(target - lastBri[idx])
-                    if (lastBri[idx] >= 0f && delta < 1f) {
-                        deadlines[idx] = now + perLightIntervalMs
-                        continue
-                    }
-                    putBrightness(ip, key, light.id, target)
-                    lastBri[idx] = target
-                    deadlines[idx] = now + perLightIntervalMs
-                }
-                // Throttled diag — once per 2s window.
-                if (diagThisFrame != null) {
-                    val window = android.os.SystemClock.uptimeMillis() / 2000L
+                    val window = now / 2000L
                     if (window != lastDiagWindow) {
                         lastDiagWindow = window
-                        DiagLog.event("HUE", "dimmable frame $diagThisFrame")
+                        DiagLog.event(
+                            "HUE",
+                            "dimmable group frame s=${"%.2f".format(s)} avgLag=${avgLatencyMs}ms " +
+                                "offset=${groupOffset}ms bandAvg=${"%.2f".format(bandAvg)} target=${"%.0f".format(target)}%"
+                        )
                     }
+                    val delta = kotlin.math.abs(target - lastSent)
+                    if (lastSent < 0f || delta >= 1f) {
+                        putGroupBrightness(ip, key, groupedLightId, target)
+                        lastSent = target
+                    }
+                    nextDeadline = now + groupIntervalMs
                 }
-                delay(30) // overall loop @ ~33 Hz
+            } else {
+                // Per-light fallback (used when an Entertainment area
+                // is selected; rooms/zones go through group mode above).
+                // 2 Hz/light — slower than vc29.7's 5 Hz to give the
+                // bridge breathing room.
+                val perLightIntervalMs = 500L
+                val stagger = max(50L, perLightIntervalMs / dimmableLights.size.coerceAtLeast(1))
+                val deadlines = LongArray(dimmableLights.size)
+                val now0 = android.os.SystemClock.uptimeMillis()
+                for (i in dimmableLights.indices) deadlines[i] = now0 + i * stagger
+                val lastBri = FloatArray(dimmableLights.size) { -1f }
+                var lastDiagWindow = -1L
+                while (isActive) {
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (now - lastSettingsReadMs > 2000L) {
+                        lastSettingsReadMs = now
+                        syncOffset = runCatching {
+                            settings.hueSyncOffsetMs.first() +
+                                settings.audioDelayMs.first() +
+                                settings.btVideoAudioOffsetMs.first()
+                        }.getOrDefault(200)
+                        userLagOverrideMs = runCatching {
+                            settings.hueDimmableLagOffsetMs.first()
+                        }.getOrDefault(0)
+                    }
+                    if (now < backoffUntilMs) {
+                        delay(50)
+                        continue
+                    }
+                    var diagThisFrame: String? = null
+                    for ((idx, light) in dimmableLights.withIndex()) {
+                        if (now < deadlines[idx]) continue
+                        val perLightOffset =
+                            (syncOffset - light.latencyMs - userLagOverrideMs).coerceAtLeast(0)
+                        val r = analyserProcessor.getSnapshotAt(perLightOffset)
+                        val bandAvg = maxOf(
+                            r.bands[1], r.bands[2], r.bands[3], r.bands[4], r.bands[5]
+                        )
+                        val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
+                        val shapedBand = if (gatedBand > 0f)
+                            Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
+                        else 0f
+                        val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
+                        val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
+                            val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
+                                .coerceAtLeast(0f)
+                            val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
+                            shapedBeat * beatSpan
+                        } else 0f
+                        val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
+                            .coerceIn(1f, 100f)
+                        if (idx == 0 && diagThisFrame == null) {
+                            diagThisFrame = "s=${"%.2f".format(s)} lag=${light.latencyMs}+${userLagOverrideMs}ms " +
+                                "offset=${perLightOffset}ms bandAvg=${"%.2f".format(bandAvg)} target=${"%.0f".format(target)}%"
+                        }
+                        val delta = kotlin.math.abs(target - lastBri[idx])
+                        if (lastBri[idx] >= 0f && delta < 1f) {
+                            deadlines[idx] = now + perLightIntervalMs
+                            continue
+                        }
+                        putBrightness(ip, key, light.id, target)
+                        lastBri[idx] = target
+                        deadlines[idx] = now + perLightIntervalMs
+                    }
+                    if (diagThisFrame != null) {
+                        val window = android.os.SystemClock.uptimeMillis() / 2000L
+                        if (window != lastDiagWindow) {
+                            lastDiagWindow = window
+                            DiagLog.event("HUE", "dimmable per-light frame $diagThisFrame")
+                        }
+                    }
+                    delay(60) // overall loop @ ~16 Hz (lighter)
+                }
             }
             DiagLog.event("HUE", "dimmable driver STOPPED")
         }
@@ -235,6 +311,51 @@ class HueDimmableDriver @Inject constructor(
      */
     @Volatile internal var backoffUntilMs: Long = 0L
 
+    /**
+     * Group brightness PUT — one HTTP call affects every member of
+     * the room/zone's grouped_light. Hue's docs state that lights
+     * currently locked by an active entertainment_configuration
+     * silently ignore CLIP brightness commands, so the colour bulbs
+     * (driven by our DTLS path) are unaffected.
+     */
+    private fun putGroupBrightness(ip: String, key: String, groupId: String, bri: Float) {
+        val body =
+            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":200}}"""
+        val req = Request.Builder()
+            .url("https://$ip/clip/v2/resource/grouped_light/$groupId")
+            .header("hue-application-key", key)
+            .put(body.toRequestBody("application/json".toMediaTypeOrNull()))
+            .build()
+        runCatching {
+            http.newCall(req).execute().use { resp ->
+                if (resp.code == 503 || resp.code == 429 || resp.code >= 500) {
+                    // vc29.10 — bigger backoff (2.5 s). Earlier 500 ms
+                    // backoff didn't give the bridge time to recover
+                    // and we ended up in a hammer-spiral.
+                    backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
+                }
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - lastHttpDiagMs > 2000L) {
+                    lastHttpDiagMs = now
+                    DiagLog.event(
+                        "HUE",
+                        "dimmable GROUP PUT http=${resp.code} group=${groupId.take(8)} bri=${"%.1f".format(bri)}%"
+                    )
+                }
+            }
+        }.onFailure {
+            backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - lastHttpDiagMs > 2000L) {
+                lastHttpDiagMs = now
+                DiagLog.event(
+                    "HUE",
+                    "dimmable GROUP PUT FAILED group=${groupId.take(8)} err=${it.javaClass.simpleName}: ${it.message}"
+                )
+            }
+        }
+    }
+
     private fun putBrightness(ip: String, key: String, lightId: String, bri: Float) {
         // vc29.7 — dynamics.duration:200 ms matches the new 200 ms
         // per-light PUT cadence. The bulb smoothly transitions toward
@@ -251,10 +372,12 @@ class HueDimmableDriver @Inject constructor(
             .build()
         runCatching {
             http.newCall(req).execute().use { resp ->
-                if (resp.code == 503 || resp.code == 429) {
-                    // Bridge is overloaded — pause all PUTs for 500 ms
-                    // so the request queue drains.
-                    backoffUntilMs = android.os.SystemClock.uptimeMillis() + 500
+                if (resp.code == 503 || resp.code == 429 || resp.code >= 500) {
+                    // vc29.10 — 2.5 s backoff (was 500 ms). The
+                    // previous short window let us keep hammering a
+                    // already-dying bridge and pushed it past
+                    // recovery.
+                    backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
                 }
                 val now = android.os.SystemClock.uptimeMillis()
                 if (now - lastHttpDiagMs > 2000L) {
@@ -267,7 +390,7 @@ class HueDimmableDriver @Inject constructor(
             }
         }.onFailure {
             // Treat timeouts the same way as 503 — bridge is choking.
-            backoffUntilMs = android.os.SystemClock.uptimeMillis() + 500
+            backoffUntilMs = android.os.SystemClock.uptimeMillis() + 2500
             val now = android.os.SystemClock.uptimeMillis()
             if (now - lastHttpDiagMs > 2000L) {
                 lastHttpDiagMs = now

@@ -96,6 +96,11 @@ class HueEntertainment @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var streamJob: Job? = null
+
+    /** True while a DTLS stream is up. Used by PlaybackService to
+     *  short-circuit redundant bridge queries when the flow tuple
+     *  re-emits but the stream is already running. */
+    fun isStreaming(): Boolean = streamJob?.isActive == true
     @Volatile private var dtls: DTLSTransport? = null
     @Volatile private var socket: DatagramSocket? = null
     @Volatile private var areaId: String = ""
@@ -115,7 +120,8 @@ class HueEntertainment @Inject constructor(
         ensured: HueProvider.EnsuredArea,
         colourCount: Int,
         dimmableLights: List<HueDimmableDriver.DimmableLight>,
-        intensity: Int
+        intensity: Int,
+        groupedLightId: String? = null
     ) {
         if (intensity <= 0) {
             stop()
@@ -176,7 +182,7 @@ class HueEntertainment @Inject constructor(
             // smart plugs are filtered out upstream in PlaybackService.
             val driveDim = runCatching { settings.hueDriveDimmable.first() }.getOrDefault(true)
             if (driveDim && dimmableLights.isNotEmpty()) {
-                dimmableDriver.start(dimmableLights, intensity)
+                dimmableDriver.start(dimmableLights, intensity, groupedLightId)
             }
 
             // ── Stream loop ──────────────────────────────────────────
@@ -345,7 +351,12 @@ class HueEntertainment @Inject constructor(
                 }
                 runCatching { dtls?.send(frameBuf, 0, frameBuf.size) }
                     .onFailure {
-                        DiagLog.event("HUE", "DTLS send failed: ${it.message} — stopping stream")
+                        DiagLog.event("HUE", "DTLS send failed: ${it.message} — stopping stream + dimmable")
+                        // vc29.10 — when the bridge refuses our DTLS
+                        // datagrams it's almost always saturated.
+                        // Continuing the dimmable PUTs on top would
+                        // pile on more requests and prevent recovery.
+                        dimmableDriver.stop()
                         cancel()
                     }
                 // One-shot dump of the first frame so a future debug

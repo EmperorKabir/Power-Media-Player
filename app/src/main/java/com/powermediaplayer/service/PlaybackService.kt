@@ -1014,6 +1014,12 @@ class PlaybackService : MediaSessionService() {
                     val isCast = activePlayer is androidx.media3.cast.CastPlayer
                     val isSpotify = spotifyProvider.spotifyState.value != null
                     if (intensity > 0 && isPlaying && !isCast && !isSpotify) {
+                        // vc29.10 — skip the whole bridge query chain
+                        // (listAreas / listAllLights / ensureConfig /
+                        // fetchProfiles) if a stream is already up.
+                        // Without this guard, every isPlaying flicker
+                        // triggers ~4 unnecessary HTTPS calls.
+                        if (hueEntertainment.isStreaming()) return@collect
                         // vc29 — resolve the user-picked area (room /
                         // zone / entertainment) from DataStore. The
                         // composite key is "<kind>:<uuid>" so we don't
@@ -1088,7 +1094,8 @@ class PlaybackService : MediaSessionService() {
                             cappedEnsured,
                             breakdown.colour.size,
                             dimmableLights,
-                            intensity
+                            intensity,
+                            area.groupedLightId
                         )
                     } else {
                         if (intensity > 0 && isPlaying && (isCast || isSpotify)) {
