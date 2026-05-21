@@ -174,11 +174,14 @@ class HueDimmableDriver @Inject constructor(
                 // result is far closer than the previous "lights
                 // freeze" failure mode.
                 val avgLatencyMs = dimmableLights.sumOf { it.latencyMs } / dimmableLights.size
-                // vc29.10 — 2 Hz group PUT. Documented Hue v1 ceiling
-                // for grouped state is ~1 req/sec (library-wide 12/sec);
-                // 2 Hz stays close while still feeling reactive. Higher
-                // rates risk 429/503 + bridge buffer-full.
-                val groupIntervalMs = 500L
+                // vc29.13 — dropped from 2 Hz (500 ms) to 1 Hz (1000 ms).
+                // IKEA Tradfri / GU10 bulbs QUEUE transitions instead
+                // of aborting in-flight ones (the way native Hue does),
+                // so anything faster than ~1 Hz piles up a backlog the
+                // bulb processes for tens of seconds after pause. 1 Hz
+                // is also right at the documented Hue v1 grouped state
+                // ceiling, so the bridge stays comfortable too.
+                val groupIntervalMs = 1000L
                 var lastSent = -1f
                 var lastDiagWindow = -1L
                 var nextDeadline = android.os.SystemClock.uptimeMillis()
@@ -228,7 +231,11 @@ class HueDimmableDriver @Inject constructor(
                         )
                     }
                     val delta = kotlin.math.abs(target - lastSent)
-                    if (lastSent < 0f || delta >= 1f) {
+                    // vc29.13 — bigger delta filter (5 %) so we only
+                    // PUT meaningful brightness changes. Eliminates
+                    // cosmetic micro-wobbles that would otherwise
+                    // contribute to the IKEA Zigbee queue build-up.
+                    if (lastSent < 0f || delta >= 5f) {
                         putGroupBrightness(ip, key, groupedLightId, target)
                         lastSent = target
                     }
@@ -237,9 +244,10 @@ class HueDimmableDriver @Inject constructor(
             } else {
                 // Per-light fallback (used when an Entertainment area
                 // is selected; rooms/zones go through group mode above).
-                // 2 Hz/light — slower than vc29.7's 5 Hz to give the
-                // bridge breathing room.
-                val perLightIntervalMs = 500L
+                // 1 Hz/light — slow enough for IKEA bulbs (which queue
+                // commands) to keep up without backing up. Faster paths
+                // were causing 20+ second post-pause settling.
+                val perLightIntervalMs = 1000L
                 val stagger = max(50L, perLightIntervalMs / dimmableLights.size.coerceAtLeast(1))
                 val deadlines = LongArray(dimmableLights.size)
                 val now0 = android.os.SystemClock.uptimeMillis()
@@ -290,7 +298,7 @@ class HueDimmableDriver @Inject constructor(
                                 "offset=${perLightOffset}ms bandAvg=${"%.2f".format(bandAvg)} target=${"%.0f".format(target)}%"
                         }
                         val delta = kotlin.math.abs(target - lastBri[idx])
-                        if (lastBri[idx] >= 0f && delta < 1f) {
+                        if (lastBri[idx] >= 0f && delta < 5f) {
                             deadlines[idx] = now + perLightIntervalMs
                             continue
                         }
@@ -330,7 +338,7 @@ class HueDimmableDriver @Inject constructor(
             runCatching {
                 if (groupId != null) {
                     val body =
-                        """{"on":{"on":true},"dimming":{"brightness":100.0},"dynamics":{"duration":300}}"""
+                        """{"on":{"on":true},"dimming":{"brightness":100.0},"dynamics":{"duration":200}}"""
                     val req = Request.Builder()
                         .url("https://$ip/clip/v2/resource/grouped_light/$groupId")
                         .header("hue-application-key", key)
@@ -345,7 +353,7 @@ class HueDimmableDriver @Inject constructor(
                 } else {
                     for (lid in lightIds) {
                         val body =
-                            """{"on":{"on":true},"dimming":{"brightness":100.0},"dynamics":{"duration":300}}"""
+                            """{"on":{"on":true},"dimming":{"brightness":100.0},"dynamics":{"duration":200}}"""
                         val req = Request.Builder()
                             .url("https://$ip/clip/v2/resource/light/$lid")
                             .header("hue-application-key", key)
@@ -391,8 +399,12 @@ class HueDimmableDriver @Inject constructor(
      * (driven by our DTLS path) are unaffected.
      */
     private fun putGroupBrightness(ip: String, key: String, groupId: String, bri: Float) {
+        // vc29.13 — duration:0 (no transition) instead of 200 ms.
+        // Each PUT becomes an instant snap. IKEA bulbs can't queue a
+        // transition that doesn't exist, so the post-pause backlog
+        // collapses to zero.
         val body =
-            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":200}}"""
+            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":0}}"""
         val req = Request.Builder()
             .url("https://$ip/clip/v2/resource/grouped_light/$groupId")
             .header("hue-application-key", key)
@@ -429,14 +441,9 @@ class HueDimmableDriver @Inject constructor(
     }
 
     private fun putBrightness(ip: String, key: String, lightId: String, bri: Float) {
-        // vc29.7 — dynamics.duration:200 ms matches the new 200 ms
-        // per-light PUT cadence. The bulb smoothly transitions toward
-        // each new target without overshooting before the next one
-        // arrives. Native Hue bulbs follow this cleanly; IKEA bulbs
-        // also benefit (the longer transition gives the Zigbee mesh
-        // time to deliver the command).
+        // vc29.13 — duration:0. See putGroupBrightness for rationale.
         val body =
-            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":200}}"""
+            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":0}}"""
         val req = Request.Builder()
             .url("https://$ip/clip/v2/resource/light/$lightId")
             .header("hue-application-key", key)
