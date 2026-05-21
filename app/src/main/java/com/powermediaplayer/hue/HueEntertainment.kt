@@ -194,20 +194,25 @@ class HueEntertainment @Inject constructor(
             //   high-sensitivity scenes feel "alive" between peaks and
             //   low-sensitivity scenes stay calm.
             //   Property: intensity=0 still means OFF (handled above).
+            // Sensitivity-shaped curve (vc29.3):
+            //   - baseFloor drops slightly as s rises so high-s frames
+            //     have headroom to swing; low-s frames feel calm + bright.
+            //   - dynSpan grows steeply with s so the brightness swing is
+            //     visibly different across the slider.
+            //   - power-curve (sub-linear at high s) lifts small band
+            //     signals — necessary because most music sits around
+            //     band=0.2..0.5, not 0..1, so a linear map looked flat.
+            //   - gate + beatGate fall to zero at high s so even tiny
+            //     activity reaches the lights.
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            val gate = 0.45f * (1f - s)
+            val baseFloor = 0.55f - s * 0.10f     // 0.55 → 0.45
+            val dynSpan = 0.05f + s * 0.45f       // 0.05 → 0.50
+            val curve = 1.0f - s * 0.6f           // 1.0 → 0.4 (sqrt-ish)
+            val gate = 0.40f * (1f - s)           // 0.40 → 0
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            // Variation happens ABOVE a high baseline so the lights
-            // never feel like they "dropped" when the stream took
-            // over — without this, lights that were sitting at 100 %
-            // before play crash to ~28 % the moment we start
-            // streaming, which feels broken.
-            val baseFloor = 0.55f + s * 0.15f    // 0.55 → 0.70
-            val dynSpan = 0.20f + s * 0.30f      // 0.20 → 0.50 (peaks
-            //                                       can still clip to 1.0)
             val beatGate = 0.65f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.15f + s * 0.20f     // 0.15 → 0.35
+            val beatSpan = 0.05f + s * 0.30f      // 0.05 → 0.35
             val frameMs = 40L  // 25 Hz
             // Palette cycle phase (radians); BPM-driven rotation rate.
             var palettePhase = 0.0
@@ -295,12 +300,19 @@ class HueEntertainment @Inject constructor(
                     // Apply sensitivity-shaped brightness curve.
                     // Below the gate, the band is treated as silence
                     // and contributes nothing; post-gate the signal is
-                    // re-normalised then mapped onto dynSpan.
+                    // re-normalised, power-shaped (boosts small values
+                    // at high sensitivity), then mapped onto dynSpan.
                     val gatedBand = ((bandLevel - gate) / invGate).coerceAtLeast(0f)
-                    val dyn = (gatedBand * dynSpan).coerceAtMost(0.85f)
-                    val beatTerm = if (r.beat && r.beatStrength >= beatGate)
-                        ((r.beatStrength - beatGate) / invBeatGate) * beatSpan
+                    val shapedBand = if (gatedBand > 0f)
+                        Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
                     else 0f
+                    val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
+                    val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
+                        val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
+                            .coerceAtLeast(0f)
+                        val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
+                        shapedBeat * beatSpan
+                    } else 0f
                     val combined = (baseFloor + dyn + beatTerm).coerceIn(0f, 1f)
                     val xCie = (xy[0] * 65535).toInt().coerceIn(0, 65535)
                     val yCie = (xy[1] * 65535).toInt().coerceIn(0, 65535)

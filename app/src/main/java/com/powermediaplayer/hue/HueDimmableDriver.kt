@@ -95,16 +95,18 @@ class HueDimmableDriver @Inject constructor(
             // Sensitivity-shaped curve — mirrors HueEntertainment so
             // colour + dimmable lights swing together. See the
             // commentary block in HueEntertainment for the rationale.
+            // vc29.3 — share the curve with HueEntertainment so colour
+            // and dimmable bulbs move together. See the commentary block
+            // there for the rationale of each constant.
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            val gate = 0.45f * (1f - s)
+            val baseFloor = 0.55f - s * 0.10f
+            val dynSpan = 0.05f + s * 0.45f
+            val curve = 1.0f - s * 0.6f
+            val gate = 0.40f * (1f - s)
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            // High baseline so dimmable bulbs don't crash-dim when the
-            // stream takes over (matches HueEntertainment vc29.2).
-            val baseFloor = 0.55f + s * 0.15f
-            val dynSpan = 0.20f + s * 0.30f
             val beatGate = 0.65f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.15f + s * 0.20f
+            val beatSpan = 0.05f + s * 0.30f
             val perLightIntervalMs = 100L // 10 Hz/light advisory ceiling
             // Stagger writes across lights — light i fires offset by
             // (perLightInterval / count) so total per-second traffic
@@ -115,6 +117,7 @@ class HueDimmableDriver @Inject constructor(
             for (i in dimmableLightIds.indices) deadlines[i] = now0 + i * stagger
             // Track last sent value per light to skip near-duplicates.
             val lastBri = FloatArray(dimmableLightIds.size) { -1f }
+            var lastDiagWindow = -1L
             while (isActive) {
                 val now = android.os.SystemClock.uptimeMillis()
                 // Read the analyser snapshot at the SAME offset the
@@ -133,14 +136,31 @@ class HueDimmableDriver @Inject constructor(
                     r.bands[2] * 0.40f + r.bands[3] * 0.30f +
                     r.bands[4] * 0.20f + r.bands[5] * 0.15f) / 2.35f
                 val gatedBand = ((bandAvg - gate) / invGate).coerceAtLeast(0f)
-                val dyn = (gatedBand * dynSpan).coerceAtMost(0.85f)
-                val beatTerm = if (r.beat && r.beatStrength >= beatGate)
-                    ((r.beatStrength - beatGate) / invBeatGate) * beatSpan
+                val shapedBand = if (gatedBand > 0f)
+                    Math.pow(gatedBand.toDouble(), curve.toDouble()).toFloat()
                 else 0f
+                val dyn = (shapedBand * dynSpan).coerceAtMost(0.85f)
+                val beatTerm = if (r.beat && r.beatStrength >= beatGate) {
+                    val gatedBeat = ((r.beatStrength - beatGate) / invBeatGate)
+                        .coerceAtLeast(0f)
+                    val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
+                    shapedBeat * beatSpan
+                } else 0f
                 // Hue dimming uses 0..100 (not the 0..65535 u16 of
                 // the Entertainment stream).
                 val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
                     .coerceIn(1f, 100f)
+                // Throttled diagnostic — surface the actual target +
+                // band so testers can see whether the engine is
+                // pinning at ceiling or genuinely varying.
+                if ((android.os.SystemClock.uptimeMillis() / 2000L) != lastDiagWindow) {
+                    lastDiagWindow = android.os.SystemClock.uptimeMillis() / 2000L
+                    DiagLog.event(
+                        "HUE",
+                        "dimmable frame s=${"%.2f".format(s)} bandAvg=${"%.2f".format(bandAvg)} " +
+                            "gated=${"%.2f".format(gatedBand)} target=${"%.0f".format(target)}%"
+                    )
+                }
                 for ((idx, lid) in dimmableLightIds.withIndex()) {
                     if (now < deadlines[idx]) continue
                     val delta = kotlin.math.abs(target - lastBri[idx])

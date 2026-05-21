@@ -191,6 +191,7 @@ fun SettingsScreen(
                 .collectAsStateWithLifecycle(initialValue = true).value,
             onRefreshAreas = { viewModel.refreshHueAreas() },
             onSelectArea = { viewModel.setHueSelectedArea(it) },
+            onClearArea = { viewModel.clearHueSelectedArea() },
             onSpreadBands = { viewModel.setHueSpreadBands(it) },
             onDriveDimmable = { viewModel.setHueDriveDimmable(it) },
             onDiscover = { viewModel.discoverHueBridge() },
@@ -1507,6 +1508,7 @@ private fun HueSection(
     driveDimmable: Boolean,
     onRefreshAreas: () -> Unit,
     onSelectArea: (String) -> Unit,
+    onClearArea: () -> Unit,
     onSpreadBands: (Boolean) -> Unit,
     onDriveDimmable: (Boolean) -> Unit,
     onDiscover: () -> Unit,
@@ -1711,6 +1713,41 @@ private fun HueSection(
                 }
             }
         }
+
+        // ── Connection controls ─────────────────────────────────────
+        // Surfaced near the picker so leaving an area / unpairing the
+        // bridge doesn't require digging through the basic-controls
+        // section. Disconnecting an area also forces sensitivity to 0
+        // so playback doesn't keep streaming silently.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onClearArea,
+                enabled = selectedAreaKey.isNotBlank(),
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Disconnect area")
+            }
+            OutlinedButton(
+                onClick = onUnpair,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Unpair bridge")
+            }
+        }
+        Text(
+            text = "'Disconnect area' clears your room/zone selection " +
+                "and stops streaming until you pick again. 'Unpair bridge' " +
+                "forgets the bridge entirely — you'll need to press the " +
+                "bridge button to re-pair.",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+        )
 
         // ── Mode toggles ────────────────────────────────────────────
         Row(

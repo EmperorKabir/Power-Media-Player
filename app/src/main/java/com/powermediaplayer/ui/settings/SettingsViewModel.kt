@@ -448,7 +448,21 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.setHueClientKey("")
             settingsDataStore.setHueEntertainmentId("")
             settingsDataStore.setHueReactiveMode("off")
+            // Also stop the engine immediately + drop the area pick +
+            // intensity so we don't try to resume against a now-blank
+            // config the next time playback starts.
+            settingsDataStore.setHueReactiveIntensity(0)
+            settingsDataStore.setHueSelectedArea("")
+            _hueAreas.value = emptyList()
             _huePairStatus.value = ""
+        }
+    }
+
+    /** Clear the picked area without unpairing the bridge. */
+    fun clearHueSelectedArea() {
+        viewModelScope.launch {
+            settingsDataStore.setHueSelectedArea("")
+            settingsDataStore.setHueReactiveIntensity(0)
         }
     }
 
