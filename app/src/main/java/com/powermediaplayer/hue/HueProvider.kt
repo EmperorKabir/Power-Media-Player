@@ -709,10 +709,22 @@ class HueProvider @Inject constructor(
                 return@withContext EnsuredArea(area.id, chs)
             }
             // (2) try to reuse existing entertainment area by name.
+            //   The bridge caps entertainment_configuration.metadata.name
+            //   at 32 chars (json-schema maxLength). "PMP_Reactive_"
+            //   prefix (13 chars) leaves only 19 for the area name,
+            //   so e.g. "Kitchen & Living Room" hits the wall. The
+            //   new naming scheme uses a 4-char "PMP_" prefix and
+            //   truncates the composed result to 32 chars. The
+            //   legacy "PMP_Reactive_<short>" form is still matched
+            //   so previously-created configs (e.g. PMP_Reactive_Testo)
+            //   get reused instead of duplicated.
+            val composedName = "PMP_${area.name}".take(32)
+            val legacyName = "PMP_Reactive_${area.name}"
             val existing = listAreas().firstOrNull {
                 it.kind == HueArea.Kind.ENTERTAINMENT &&
                     (it.name == area.name ||
-                        it.name == "PMP_Reactive_${area.name}")
+                        it.name == composedName ||
+                        it.name == legacyName)
             }
             if (existing != null) {
                 val chs = entertainmentChannelIds(existing.id)
@@ -761,9 +773,11 @@ class HueProvider @Inject constructor(
                 )
                 return@withContext null
             }
+            // metadata.name has a 32-char ceiling; use the truncated
+            // short form computed above so any area name fits.
             val body = """
                 {"type":"entertainment_configuration",
-                 "metadata":{"name":"PMP_Reactive_${area.name}"},
+                 "metadata":{"name":"$composedName"},
                  "configuration_type":"music",
                  "locations":{"service_locations":$sb}}
             """.trimIndent()
