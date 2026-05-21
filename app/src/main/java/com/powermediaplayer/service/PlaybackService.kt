@@ -1019,7 +1019,14 @@ class PlaybackService : MediaSessionService() {
                         // fetchProfiles) if a stream is already up.
                         // Without this guard, every isPlaying flicker
                         // triggers ~4 unnecessary HTTPS calls.
-                        if (hueEntertainment.isStreaming()) return@collect
+                        // vc29.15 — but DO propagate the new
+                        // sensitivity so slider moves during playback
+                        // actually take effect. The engine reads
+                        // liveIntensity each frame.
+                        if (hueEntertainment.isStreaming()) {
+                            hueEntertainment.setIntensity(intensity)
+                            return@collect
+                        }
                         // vc29 — resolve the user-picked area (room /
                         // zone / entertainment) from DataStore. The
                         // composite key is "<kind>:<uuid>" so we don't

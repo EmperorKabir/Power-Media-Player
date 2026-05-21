@@ -97,10 +97,24 @@ class HueEntertainment @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var streamJob: Job? = null
 
+    /** Live-updatable sensitivity. Slider changes during playback
+     *  set this; the streaming loop re-reads it every frame and
+     *  recomputes the swing constants. vc29.15 fix — previously
+     *  `s` was captured once at start() and never refreshed, so
+     *  moving the slider mid-playback did nothing. */
+    @Volatile private var liveIntensity: Int = 0
+
     /** True while a DTLS stream is up. Used by PlaybackService to
      *  short-circuit redundant bridge queries when the flow tuple
      *  re-emits but the stream is already running. */
     fun isStreaming(): Boolean = streamJob?.isActive == true
+
+    /** Propagate a new sensitivity into both the colour stream and
+     *  the parallel dimmable driver without restarting either. */
+    fun setIntensity(v: Int) {
+        liveIntensity = v
+        dimmableDriver.setIntensity(v)
+    }
     @Volatile private var dtls: DTLSTransport? = null
     @Volatile private var socket: DatagramSocket? = null
     @Volatile private var areaId: String = ""
@@ -215,19 +229,11 @@ class HueEntertainment @Inject constructor(
             //   palette rotation, so the brightness sweep is narrower
             //   than for white-only bulbs (those use the wider 5–100 %
             //   spread in HueDimmableDriver).
-            val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            // vc29.12 — wider colour swing in line with the dimmable
-            // rework. Colour bulbs still have palette rotation to
-            // convey activity but a wider brightness sweep makes the
-            // sensitivity slider feel more responsive across its range.
-            val baseFloor = 0.30f - s * 0.15f     // 0.30 → 0.15
-            val dynSpan = 0.50f + s * 0.35f       // 0.50 → 0.85
-            val curve = 0.50f - s * 0.10f         // 0.50 → 0.40
-            val gate = 0.03f * (1f - s)           // 0.03 → 0
-            val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.15f * (1f - s)
-            val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.20f + s * 0.30f      // 0.20 → 0.50
+            // vc29.15 — swing constants computed per-frame from
+            // liveIntensity inside the while loop below so the
+            // slider responds live. Seed liveIntensity from the
+            // initial start() argument.
+            liveIntensity = intensity
             val frameMs = 40L  // 25 Hz
             // Palette cycle phase (radians); BPM-driven rotation rate.
             var palettePhase = 0.0
@@ -256,6 +262,18 @@ class HueEntertainment @Inject constructor(
                 frameBuf[11] = seqId.toByte()
                 seqId = (seqId + 1) and 0xFF
                 val now = android.os.SystemClock.uptimeMillis()
+                // vc29.15 — re-derive sensitivity each frame from
+                // liveIntensity (set by setIntensity()) so slider
+                // moves during playback take effect immediately.
+                val s = (liveIntensity / 100f).coerceIn(0.01f, 1f)
+                val baseFloor = 0.30f - s * 0.15f
+                val dynSpan = 0.50f + s * 0.35f
+                val curve = 0.50f - s * 0.10f
+                val gate = 0.03f * (1f - s)
+                val invGate = (1f - gate).coerceAtLeast(0.01f)
+                val beatGate = 0.15f * (1f - s)
+                val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
+                val beatSpan = 0.20f + s * 0.30f
                 // Effective offset auto-sums the three legs that all
                 // shift audio time relative to the PCM tap:
                 //   hueSyncOffsetMs        — user-tunable headroom for

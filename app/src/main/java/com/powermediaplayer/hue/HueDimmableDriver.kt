@@ -51,6 +51,17 @@ class HueDimmableDriver @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var job: Job? = null
 
+    /** Live-updatable sensitivity. vc29.15 fix — was previously
+     *  captured once at start() and never refreshed, so slider
+     *  moves during playback were ignored. */
+    @Volatile private var liveIntensity: Int = 0
+
+    /** Apply a new sensitivity to the running driver without
+     *  restarting it. Called by HueEntertainment.setIntensity(). */
+    fun setIntensity(v: Int) {
+        liveIntensity = v
+    }
+
     // Stashed bridge + group context — used by stop() to fire a
     // single restore PUT so white bulbs snap back to full brightness
     // when playback ends, instead of being left frozen at whatever
@@ -148,22 +159,11 @@ class HueDimmableDriver @Inject constructor(
             //   can only express movement through brightness — they
             //   have no colour channel to convey activity.
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            // vc29.12 — even more aggressive low-sensitivity swing.
-            //   vc29.11 produced ~30 pp swing at s=0.20 (50%-60% in
-            //   logs) which IKEA GU10s still barely registered. The
-            //   only way to overcome their internal smoothing is to
-            //   send bigger absolute brightness changes. New math
-            //   gives ~60 pp swing at s=0.10 and ~95 pp at s=1.0 —
-            //   the slider now controls how OFTEN big swings happen
-            //   rather than how big each swing is.
-            val baseFloor = 0.20f - s * 0.15f      // 0.20 → 0.05
-            val dynSpan = 0.60f + s * 0.30f        // 0.60 → 0.90
-            val curve = 0.50f - s * 0.10f          // 0.50 → 0.40
-            val gate = 0.03f * (1f - s)            // 0.03 → 0
-            val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.15f * (1f - s)
-            val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.30f + s * 0.20f       // 0.30 → 0.50
+            // vc29.15 — swing constants computed per-frame from
+            // liveIntensity inside the inner loops below so slider
+            // moves during playback take effect immediately. Seed
+            // liveIntensity from the initial start() argument.
+            liveIntensity = intensity
             // vc29.10 — settings reads cached once per loop (was 4 .first()
             // calls per iteration = wasteful DataStore churn). Loop reads
             // them once into locals and only refreshes every 2 s.
@@ -216,6 +216,18 @@ class HueDimmableDriver @Inject constructor(
                         delay(25)
                         continue
                     }
+                    // vc29.15 — live sensitivity. Recompute the swing
+                    // constants each iteration so slider moves take
+                    // effect within one PUT cycle.
+                    val s = (liveIntensity / 100f).coerceIn(0.01f, 1f)
+                    val baseFloor = 0.20f - s * 0.15f
+                    val dynSpan = 0.60f + s * 0.30f
+                    val curve = 0.50f - s * 0.10f
+                    val gate = 0.03f * (1f - s)
+                    val invGate = (1f - gate).coerceAtLeast(0.01f)
+                    val beatGate = 0.15f * (1f - s)
+                    val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
+                    val beatSpan = 0.30f + s * 0.20f
                     val groupOffset =
                         (syncOffset - avgLatencyMs - userLagOverrideMs).coerceAtLeast(0)
                     val r = analyserProcessor.getSnapshotAt(groupOffset)
@@ -291,6 +303,16 @@ class HueDimmableDriver @Inject constructor(
                         delay(50)
                         continue
                     }
+                    // vc29.15 — live sensitivity recompute (per-light path).
+                    val s = (liveIntensity / 100f).coerceIn(0.01f, 1f)
+                    val baseFloor = 0.20f - s * 0.15f
+                    val dynSpan = 0.60f + s * 0.30f
+                    val curve = 0.50f - s * 0.10f
+                    val gate = 0.03f * (1f - s)
+                    val invGate = (1f - gate).coerceAtLeast(0.01f)
+                    val beatGate = 0.15f * (1f - s)
+                    val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
+                    val beatSpan = 0.30f + s * 0.20f
                     var diagThisFrame: String? = null
                     for ((idx, light) in dimmableLights.withIndex()) {
                         if (now < deadlines[idx]) continue
