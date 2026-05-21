@@ -128,17 +128,22 @@ class HueDimmableDriver @Inject constructor(
             //   can only express movement through brightness — they
             //   have no colour channel to convey activity.
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            // vc29.6 — widened low-s dynSpan so even sensitivity=10
-            // produces a visible swing on IKEA Tradfri / GU10 bulbs
-            // that smooth aggressively over their Zigbee mesh.
-            val baseFloor = 0.50f - s * 0.45f      // 0.50 → 0.05
-            val dynSpan = 0.25f + s * 0.65f        // 0.25 → 0.90
-            val curve = 1.0f - s * 0.6f
-            val gate = 0.10f * (1f - s)            // 0.10 → 0 (was 0.20)
+            // vc29.11 — widened low-sensitivity swing dramatically.
+            //   Logs proved IKEA GU10 / Tradfri bulbs sit at the end
+            //   of the Zigbee mesh with heavy internal smoothing; an
+            //   8 pp brightness window at sensitivity=10 was inside
+            //   their perceptual flat zone so they appeared frozen.
+            //   New floor / span gives a 40 pp swing at s=0.10 and a
+            //   95 pp swing at s=1.0 — slider sweeps from "noticeable"
+            //   to "dramatic" instead of from "frozen" to "subtle".
+            val baseFloor = 0.30f - s * 0.25f      // 0.30 → 0.05
+            val dynSpan = 0.50f + s * 0.40f        // 0.50 → 0.90
+            val curve = 0.70f - s * 0.30f          // 0.70 → 0.40
+            val gate = 0.05f * (1f - s)            // 0.05 → 0  (very low)
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.30f * (1f - s)
+            val beatGate = 0.20f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.10f + s * 0.40f       // 0.10 → 0.50
+            val beatSpan = 0.20f + s * 0.30f       // 0.20 → 0.50
             // vc29.10 — settings reads cached once per loop (was 4 .first()
             // calls per iteration = wasteful DataStore churn). Loop reads
             // them once into locals and only refreshes every 2 s.
