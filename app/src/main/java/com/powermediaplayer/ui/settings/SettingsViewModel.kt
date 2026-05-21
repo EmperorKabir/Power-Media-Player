@@ -459,6 +459,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setHueReactiveIntensity(v: Int) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("hue reactiveIntensity=$v")
+            settingsDataStore.setHueReactiveIntensity(v)
+        }
+    }
+
     fun clearDiagLog() {
         com.powermediaplayer.diag.DiagLog.clear()
     }

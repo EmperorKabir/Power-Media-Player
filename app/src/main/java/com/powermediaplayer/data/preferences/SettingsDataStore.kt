@@ -237,6 +237,10 @@ class SettingsDataStore @Inject constructor(
         // could let them pick later; v1 = first area found.
         val HUE_ENTERTAINMENT_ID = stringPreferencesKey("hue_entertainment_id")
         val HUE_REACTIVE_MODE = stringPreferencesKey("hue_reactive_mode")
+        // Intensity 0..100. 0 = audio-reactive off. Replaces the v1
+        // mode picker — there is one rich reactive mode whose
+        // vividness is the slider value.
+        val HUE_REACTIVE_INTENSITY = intPreferencesKey("hue_reactive_intensity")
 
         // §C14 — audio focus policy. Three independent settings for the
         // common interruption types. Defaults at first install:
@@ -625,6 +629,8 @@ class SettingsDataStore @Inject constructor(
     suspend fun setHueClientKey(v: String) { context.dataStore.edit { it[Keys.HUE_CLIENT_KEY] = v.trim() } }
     suspend fun setHueEntertainmentId(v: String) { context.dataStore.edit { it[Keys.HUE_ENTERTAINMENT_ID] = v.trim() } }
     suspend fun setHueReactiveMode(v: String) { context.dataStore.edit { it[Keys.HUE_REACTIVE_MODE] = v } }
+    val hueReactiveIntensity: Flow<Int> = context.dataStore.data.map { it[Keys.HUE_REACTIVE_INTENSITY] ?: 0 }
+    suspend fun setHueReactiveIntensity(v: Int) { context.dataStore.edit { it[Keys.HUE_REACTIVE_INTENSITY] = v.coerceIn(0, 100) } }
     suspend fun setColdStartResumeBackoffSec(sec: Int) {
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }

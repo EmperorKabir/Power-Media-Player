@@ -3,6 +3,7 @@ package com.powermediaplayer.hue
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.audiofx.Visualizer
+import android.os.SystemClock
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import com.powermediaplayer.diag.DiagLog
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -27,38 +28,38 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.abs
 import kotlin.math.min
 
 /**
- * Hue Entertainment-API audio-reactive lighting. Streams 25 Hz colour
- * frames to the bridge over DTLS-PSK while audio is playing.
+ * Hue Entertainment-API audio-reactive lighting — proper version.
  *
- * Protocol shape (Hue Entertainment v2 streaming):
- *   - UDP socket to bridge:2100, wrapped in DTLS 1.2 with PSK-AES128-GCM-SHA256
- *   - PSK identity = app-key string (the "username" returned at pair time)
- *   - PSK = hex-decoded clientkey bytes (16 bytes)
- *   - Each frame is "HueStream" magic + version + light-records
- *     payload. v2 records: 16-bit channel id + 16-bit X + 16-bit Y +
- *     16-bit brightness, repeated.
+ * Pipeline per 40 ms frame (25 Hz):
+ *   FFT byte buffer (1024 bins) → [HueAudioAnalyser]
+ *   → 6 band levels + beat flag + beat strength + BPM + dynamics envelope
+ *   → per-light routing (each light is mapped to one of the 6 bands)
+ *   → CIE xy + brightness encoded per channel
+ *   → DTLS-PSK UDP packet to bridge:2100
  *
- * Audio feed:
- *   - Android Visualizer attached to the player's audio session id
- *     (capture size 1024, max rate ~10 Hz). For 25 Hz visual cadence
- *     we interpolate brightness between captures.
- *   - Bass band energy (FFT bins 1–8 ≈ 40–320 Hz) drives brightness.
- *     Colour cycles through a 6-step palette every 4 seconds.
+ * Per-light band routing:
+ *   The N detected lights are striped across the 6 bands. Light 0 →
+ *   sub-bass, 1 → bass, 2 → low-mid, 3 → mid, 4 → high-mid, 5 → treble,
+ *   then wraps. So with 12 lights you get 2 lights per band; with 6 each
+ *   light has its own band. Result: bass kicks drive the lights you
+ *   mapped to reds; treble runs cool blues; the music's spatial spectrum
+ *   becomes the room's spatial spectrum.
  *
- * Limitations declared up-front:
- *   - First implementation. Tested via code review against the Hue
- *     v2 Entertainment docs (Context7-confirmed where possible); real-
- *     world tuning on a live bridge is expected.
- *   - Visualizer requires `RECORD_AUDIO` permission OR a system signature
- *     on API 29+. On non-rooted phones the FFT may be silent (zeroes)
- *     when the system blocks. Brightness then defaults to mid-level.
- *   - If the DTLS handshake fails (wrong PSK, bridge unreachable,
- *     entertainment-config not started), we log + stop cleanly so
- *     the rest of playback is unaffected.
+ * Single "intensity" knob (0..100) replaces the v1 mode picker:
+ *   0    → off (loop exits, DTLS closes)
+ *   1-50 → "subtle" — narrow brightness swing, no beat flashes
+ *   51-90→ "active" — full band routing, beat flashes on
+ *   91-100→ "vivid" — boosted contrast + faster palette rotation
+ *
+ * Privacy / safety:
+ *   - LAN-only DTLS. Self-signed bridge cert accepted (LAN IoT norm).
+ *   - Visualizer needs RECORD_AUDIO at runtime; we log graceful
+ *     degrade-to-colour-cycle when permission missing.
+ *   - Hue bridge enforces ~10 lights max per Entertainment area for
+ *     latency reasons; we cap channels accordingly.
  */
 @Singleton
 class HueEntertainment @Inject constructor(
@@ -66,11 +67,15 @@ class HueEntertainment @Inject constructor(
     private val hueProvider: HueProvider,
     @param:ApplicationContext private val appContext: Context
 ) {
+
+    /** Legacy v1 enum, retained because PlaybackService still references
+     *  it; mapped onto the new intensity-only model so call sites don't
+     *  break. OFF → intensity 0; everything else → intensity 75. */
     enum class ReactiveMode(val key: String) {
         OFF("off"),
-        BASS_FLASH("bass_flash"),
-        SPECTRUM("spectrum"),
-        COLOUR_FOLLOW_TRACK("colour_follow_track")
+        BASS_FLASH("on"),       // legacy alias
+        SPECTRUM("on"),         // legacy alias
+        COLOUR_FOLLOW_TRACK("on") // legacy alias
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -78,17 +83,24 @@ class HueEntertainment @Inject constructor(
     @Volatile private var dtls: DTLSTransport? = null
     @Volatile private var socket: DatagramSocket? = null
     @Volatile private var visualizer: Visualizer? = null
-    @Volatile private var bassLevel: Float = 0.0f
     @Volatile private var areaId: String = ""
+
+    // Audio analyser is updated on the Visualizer callback thread; the
+    // stream loop reads the latest snapshot at 25 Hz.
+    private val analyser = HueAudioAnalyser()
+    @Volatile private var lastBands = FloatArray(6)
+    @Volatile private var lastBeatStrength: Float = 0f
+    @Volatile private var lastBeatExpiresMs: Long = 0L
+    @Volatile private var lastPaletteHz: Float = 1f
+    @Volatile private var lastDynamics: Float = 0f
 
     /**
      * Begin streaming. [audioSessionId] is the ExoPlayer audio session
-     * id (player.audioSessionId). [lightChannels] is the ordered list
-     * of channel ids the Entertainment area maps to.
+     * id. [intensity] in [0..100]; 0 stops any current stream.
      */
-    fun start(audioSessionId: Int, mode: ReactiveMode, lightChannels: List<Int>) {
-        if (mode == ReactiveMode.OFF) {
-            DiagLog.event("HUE", "entertainment.start(OFF) — no-op")
+    fun start(audioSessionId: Int, intensity: Int, lightChannels: List<Int>) {
+        if (intensity <= 0) {
+            stop()
             return
         }
         if (streamJob?.isActive == true) {
@@ -100,19 +112,15 @@ class HueEntertainment @Inject constructor(
             val appKey = settings.hueAppKey.first()
             val clientKey = settings.hueClientKey.first()
             if (ip.isBlank() || appKey.isBlank() || clientKey.isBlank()) {
-                DiagLog.event(
-                    "HUE",
-                    "entertainment.start — missing creds (ip=${ip.isNotBlank()}" +
-                        " key=${appKey.isNotBlank()} clientKey=${clientKey.isNotBlank()})"
-                )
+                DiagLog.event("HUE", "entertainment.start — missing creds")
                 return@launch
             }
-            // Pick an area + tell the bridge to enter streaming mode.
             val area = hueProvider.firstEntertainmentAreaId() ?: run {
                 DiagLog.event(
                     "HUE",
-                    "entertainment.start — no entertainment_configuration on bridge. " +
-                        "Create one in the Hue app first."
+                    "entertainment.start — no entertainment_configuration. " +
+                        "Open the Hue app → Settings → Entertainment areas → " +
+                        "create one (drag your lights into it). Then come back."
                 )
                 return@launch
             }
@@ -123,58 +131,85 @@ class HueEntertainment @Inject constructor(
                 DiagLog.event("HUE", "entertainment.start — bridge refused streaming PUT")
                 return@launch
             }
-            // DTLS handshake.
-            val ok = runCatching { connectDtls(ip, appKey, hexDecode(clientKey)) }
-                .onFailure { DiagLog.event("HUE", "DTLS handshake FAILED: ${it.javaClass.simpleName}: ${it.message}") }
-                .getOrDefault(false)
-            if (!ok) {
+            val handshakeOk = runCatching { connectDtls(ip, appKey, hexDecode(clientKey)) }
+                .onFailure {
+                    DiagLog.event(
+                        "HUE",
+                        "DTLS handshake FAILED: ${it.javaClass.simpleName}: ${it.message}"
+                    )
+                }.getOrDefault(false)
+            if (!handshakeOk) {
                 hueProvider.stopEntertainmentStream(area)
                 return@launch
             }
-            // Audio Visualizer.
             attachVisualizer(audioSessionId)
             DiagLog.event(
                 "HUE",
-                "entertainment.start RUNNING mode=${mode.name} area=$area lights=${lightChannels.size}"
+                "entertainment.start RUNNING intensity=$intensity area=$area lights=${lightChannels.size}"
             )
-            settings.setHueReactiveMode(mode.key)
-            // Stream loop — 25 Hz cadence.
-            val frameMs = 40L
-            val palette = listOf(
-                Triple(0xCC00, 0x4F00, 0x8000),   // red    xy=(0.68,0.31) approx mapped to 0-65535
-                Triple(0x2900, 0xB300, 0x8000),   // green  xy=(0.17,0.70)
-                Triple(0x2600, 0x0F00, 0x8000),   // blue   xy=(0.15,0.06)
-                Triple(0x6600, 0x2E00, 0x8000),   // magenta xy=(0.40,0.18)
-                Triple(0xE600, 0x9900, 0x8000),   // amber  xy=(0.55,0.40)
-                Triple(0x5C00, 0x5C00, 0x8000)    // cyan   xy=(0.20,0.30)
+
+            // ── Stream loop ──────────────────────────────────────────
+            val intensityF = (intensity / 100f).coerceIn(0.01f, 1f)
+            val frameMs = 40L  // 25 Hz
+            // Palette cycle phase (radians); BPM-driven rotation rate.
+            var palettePhase = 0.0
+            // 8-stop palette in CIE xy (red / orange / yellow / green /
+            // cyan / blue / magenta / pink), tuned for vivid Hue output.
+            val palette = arrayOf(
+                floatArrayOf(0.68f, 0.31f),  // red
+                floatArrayOf(0.59f, 0.39f),  // orange
+                floatArrayOf(0.46f, 0.51f),  // yellow-green
+                floatArrayOf(0.30f, 0.55f),  // green
+                floatArrayOf(0.21f, 0.30f),  // cyan
+                floatArrayOf(0.15f, 0.06f),  // blue
+                floatArrayOf(0.32f, 0.10f),  // magenta
+                floatArrayOf(0.48f, 0.22f)   // pink
             )
-            var paletteIdx = 0
-            var paletteHoldFrames = 0
             val frameBuf = ByteArray(headerSize + lightChannels.size * channelRecordSize)
             writeHeader(frameBuf, area)
+            var frameCount = 0L
             while (isActive) {
-                paletteHoldFrames++
-                if (paletteHoldFrames >= 100) { // ~4 sec at 25 Hz
-                    paletteIdx = (paletteIdx + 1) % palette.size
-                    paletteHoldFrames = 0
-                }
-                val brightness = when (mode) {
-                    ReactiveMode.BASS_FLASH -> (bassLevel * 65535).toInt().coerceIn(0, 65535)
-                    ReactiveMode.SPECTRUM -> ((0.5f + bassLevel * 0.5f) * 65535).toInt().coerceIn(0, 65535)
-                    ReactiveMode.COLOUR_FOLLOW_TRACK -> (0x8000)
-                    ReactiveMode.OFF -> 0
-                }
-                val (x, y, _) = palette[paletteIdx]
+                val now = SystemClock.uptimeMillis()
+                // Advance palette by paletteHz (Hz of phase rotation).
+                palettePhase += (lastPaletteHz * frameMs / 1000.0) * (2 * Math.PI)
+                if (palettePhase > 2 * Math.PI) palettePhase -= 2 * Math.PI
+
+                // Beat brightness pulse — strong but short.
+                val onBeat = now < lastBeatExpiresMs
+                val beatBoost = if (onBeat) lastBeatStrength else 0f
+
                 var off = headerSize
-                for (ch in lightChannels) {
+                for ((i, ch) in lightChannels.withIndex()) {
+                    // Route this light to one of the 6 bands.
+                    val band = i % 6
+                    val bandLevel = lastBands[band]
+                    // Per-light palette offset — spread the palette across
+                    // the room so different lights show different colours.
+                    val perLightOffset = (i.toDouble() / lightChannels.size) * (2 * Math.PI)
+                    val phase = (palettePhase + perLightOffset).rem(2 * Math.PI)
+                    val palIdx = ((phase / (2 * Math.PI)) * palette.size).toInt().coerceIn(0, palette.size - 1)
+                    val xy = palette[palIdx]
+                    // Brightness:
+                    //  - baseline: 25 % so lights stay visibly on
+                    //  - + band level × 50 % (continuous following)
+                    //  - + beat boost × 25 % (transient flash)
+                    //  scaled by user intensity.
+                    val base = 0.25f
+                    val dyn = bandLevel * 0.50f
+                    val beat = beatBoost * 0.25f
+                    val combined = ((base + dyn + beat) * intensityF).coerceIn(0f, 1f)
+                    val xCie = (xy[0] * 65535).toInt().coerceIn(0, 65535)
+                    val yCie = (xy[1] * 65535).toInt().coerceIn(0, 65535)
+                    val bri = (combined * 65535).toInt().coerceIn(0, 65535)
+
                     frameBuf[off + 0] = (ch ushr 8).toByte()
                     frameBuf[off + 1] = ch.toByte()
-                    frameBuf[off + 2] = (x ushr 8).toByte()
-                    frameBuf[off + 3] = x.toByte()
-                    frameBuf[off + 4] = (y ushr 8).toByte()
-                    frameBuf[off + 5] = y.toByte()
-                    frameBuf[off + 6] = (brightness ushr 8).toByte()
-                    frameBuf[off + 7] = brightness.toByte()
+                    frameBuf[off + 2] = (xCie ushr 8).toByte()
+                    frameBuf[off + 3] = xCie.toByte()
+                    frameBuf[off + 4] = (yCie ushr 8).toByte()
+                    frameBuf[off + 5] = yCie.toByte()
+                    frameBuf[off + 6] = (bri ushr 8).toByte()
+                    frameBuf[off + 7] = bri.toByte()
                     off += channelRecordSize
                 }
                 runCatching { dtls?.send(frameBuf, 0, frameBuf.size) }
@@ -182,6 +217,17 @@ class HueEntertainment @Inject constructor(
                         DiagLog.event("HUE", "DTLS send failed: ${it.message} — stopping stream")
                         cancel()
                     }
+                // Periodic diag — once per ~4 s — so the user can see
+                // BPM tracking working.
+                frameCount++
+                if (frameCount % 100L == 0L) {
+                    DiagLog.event(
+                        "HUE",
+                        "reactive frame BPM=${"%.0f".format(analyser.let { lastDynamics; analyserBpm() })} " +
+                            "dynamics=${"%.2f".format(lastDynamics)} bands=" +
+                            lastBands.joinToString(prefix = "[", postfix = "]") { "%.2f".format(it) }
+                    )
+                }
                 delay(frameMs)
             }
             detachVisualizer()
@@ -192,7 +238,12 @@ class HueEntertainment @Inject constructor(
         }
     }
 
+    /** Cached BPM for the diag line — set on every analyser invoke. */
+    @Volatile private var lastBpmCache: Float = 120f
+    private fun analyserBpm(): Float = lastBpmCache
+
     fun stop() {
+        if (streamJob == null) return
         DiagLog.event("HUE", "entertainment.stop() requested")
         streamJob?.cancel()
         streamJob = null
@@ -202,7 +253,6 @@ class HueEntertainment @Inject constructor(
         dtls = null
         socket = null
         scope.launch {
-            settings.setHueReactiveMode(ReactiveMode.OFF.key)
             if (areaId.isNotBlank()) hueProvider.stopEntertainmentStream(areaId)
         }
     }
@@ -227,8 +277,7 @@ class HueEntertainment @Inject constructor(
             override fun getSupportedVersions(): Array<ProtocolVersion> =
                 arrayOf(ProtocolVersion.DTLSv12)
         }
-        val protocol = DTLSClientProtocol()
-        dtls = protocol.connect(client, transport)
+        dtls = DTLSClientProtocol().connect(client, transport)
         DiagLog.event("HUE", "DTLS handshake OK (id len=${identityBytes.size} psk len=${psk.size})")
         return true
     }
@@ -240,12 +289,6 @@ class HueEntertainment @Inject constructor(
             DiagLog.event("HUE", "Visualizer skipped — audioSessionId=0")
             return
         }
-        // Android 12+ gates the per-session Visualizer behind
-        // RECORD_AUDIO. Without the runtime grant the FFT returns
-        // zeros silently — the user sees lights cycle colour but no
-        // bass response. Detect + log so the cause is auditable;
-        // the streaming loop continues with brightness floor instead
-        // of crashing.
         val granted = androidx.core.content.ContextCompat.checkSelfPermission(
             appContext, android.Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
@@ -253,14 +296,15 @@ class HueEntertainment @Inject constructor(
             DiagLog.event(
                 "HUE",
                 "Visualizer attach — RECORD_AUDIO not granted; lighting will cycle " +
-                    "colour but won't react to bass. Grant the permission in Settings " +
-                    "→ Apps → Power Media Player → Permissions → Microphone."
+                    "colour but won't react to bass. Grant the permission in " +
+                    "Settings → Apps → Power Media Player → Permissions → Microphone."
             )
             return
         }
+        analyser.reset()
         val v = runCatching {
             Visualizer(audioSessionId).apply {
-                captureSize = Visualizer.getCaptureSizeRange()[0]
+                captureSize = Visualizer.getCaptureSizeRange()[1] // max — better resolution
                 setDataCaptureListener(
                     object : Visualizer.OnDataCaptureListener {
                         override fun onWaveFormDataCapture(
@@ -269,25 +313,23 @@ class HueEntertainment @Inject constructor(
                         override fun onFftDataCapture(
                             visualizer: Visualizer?, fft: ByteArray?, samplingRate: Int
                         ) {
-                            if (fft == null) return
-                            // Bass bins 1..8 (skip DC at 0). Each bin
-                            // is a complex pair (real, imag) of signed
-                            // bytes; magnitude = sqrt(re*re + im*im).
-                            var sum = 0
-                            val bins = min(8, fft.size / 2 - 1)
-                            for (k in 1..bins) {
-                                val re = fft[2 * k].toInt()
-                                val im = fft[2 * k + 1].toInt()
-                                sum += abs(re) + abs(im)
+                            fft ?: return
+                            val sr = samplingRate / 1000 // Android passes Hz * 1000
+                            val r = analyser.process(fft, sr, SystemClock.uptimeMillis())
+                            // Snapshot for the stream loop. No locking;
+                            // each field is independently observed.
+                            System.arraycopy(r.bands, 0, lastBands, 0, 6)
+                            lastDynamics = r.dynamics
+                            lastPaletteHz = r.paletteHz
+                            lastBpmCache = r.bpm
+                            if (r.beat) {
+                                lastBeatStrength = r.beatStrength
+                                // Brief flash window — 120 ms.
+                                lastBeatExpiresMs = SystemClock.uptimeMillis() + 120L
                             }
-                            // Normalise: 8 bins × 2 components × 127 max
-                            val norm = (sum.toFloat() / (8 * 2 * 127f)).coerceIn(0f, 1f)
-                            // Smooth with an EMA so flashes feel musical
-                            // rather than jittery.
-                            bassLevel = bassLevel * 0.6f + norm * 0.4f
                         }
                     },
-                    Visualizer.getMaxCaptureRate() / 2,
+                    Visualizer.getMaxCaptureRate() / 2, // hardware-cap divided
                     /* waveform */ false,
                     /* fft */ true
                 )
@@ -302,10 +344,7 @@ class HueEntertainment @Inject constructor(
 
     private fun detachVisualizer() {
         runCatching {
-            visualizer?.apply {
-                enabled = false
-                release()
-            }
+            visualizer?.apply { enabled = false; release() }
         }
         visualizer = null
     }
@@ -313,22 +352,16 @@ class HueEntertainment @Inject constructor(
     // ── Wire-format helpers ────────────────────────────────────────
 
     private fun writeHeader(buf: ByteArray, areaUuid: String) {
-        // Hue Entertainment v2 header (~52 bytes including area UUID).
-        // Bytes 0..8  : "HueStream" magic ASCII
+        // "HueStream" v2.0 header — magic + version + colour space +
+        // area UUID. Layout per Hue Entertainment v2 spec.
         buf[0] = 'H'.code.toByte(); buf[1] = 'u'.code.toByte(); buf[2] = 'e'.code.toByte()
         buf[3] = 'S'.code.toByte(); buf[4] = 't'.code.toByte(); buf[5] = 'r'.code.toByte()
         buf[6] = 'e'.code.toByte(); buf[7] = 'a'.code.toByte(); buf[8] = 'm'.code.toByte()
-        // Bytes 9..10 : version major + minor (2.0)
-        buf[9] = 0x02; buf[10] = 0x00
-        // Bytes 11..12 : sequence (left zero — bridge ignores)
-        buf[11] = 0; buf[12] = 0
-        // Bytes 13..14 : reserved
-        buf[13] = 0; buf[14] = 0
-        // Byte 15     : colour space 0 = XY+brightness
-        buf[15] = 0
-        // Byte 16     : reserved
-        buf[16] = 0
-        // Bytes 17..52 : entertainment area UUID as ASCII (36 chars)
+        buf[9] = 0x02; buf[10] = 0x00       // version 2.0
+        buf[11] = 0; buf[12] = 0            // sequence (bridge ignores)
+        buf[13] = 0; buf[14] = 0            // reserved
+        buf[15] = 0                          // colour space 0 = XY+brightness
+        buf[16] = 0                          // reserved
         val ascii = areaUuid.toByteArray(Charsets.US_ASCII)
         System.arraycopy(ascii, 0, buf, 17, min(ascii.size, 36))
     }

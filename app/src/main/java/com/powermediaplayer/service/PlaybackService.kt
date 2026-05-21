@@ -974,10 +974,10 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
-        // Hue Entertainment audio-reactive — start when (mode != off
-        // AND playback is active); stop otherwise. The lighting follows
-        // playback automatically so the user doesn't need to flip a
-        // separate switch when starting a track.
+        // Hue Entertainment audio-reactive — single intensity-driven
+        // path. When (paired + intensity > 0 + playback active) the
+        // analyser feeds beat / band / BPM data into the DTLS stream.
+        // No separate mode picker; the slider is the only control.
         serviceScope.launch {
             val playingFlow = kotlinx.coroutines.flow.flow {
                 while (true) {
@@ -986,30 +986,28 @@ class PlaybackService : MediaSessionService() {
                 }
             }.distinctUntilChanged()
             kotlinx.coroutines.flow.combine(
-                settingsDataStore.hueReactiveMode,
+                settingsDataStore.hueReactiveIntensity,
                 playingFlow
-            ) { mode, isPlaying -> mode to isPlaying }
+            ) { intensity, isPlaying -> intensity to isPlaying }
                 .distinctUntilChanged()
-                .collect { (mode, isPlaying) ->
-                    val reactiveMode = runCatching {
-                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode
-                            .valueOf(mode.uppercase())
-                    }.getOrDefault(
-                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode.OFF
-                    )
-                    if (reactiveMode != com.powermediaplayer.hue.HueEntertainment.ReactiveMode.OFF &&
-                        isPlaying
-                    ) {
+                .collect { (intensity, isPlaying) ->
+                    if (intensity > 0 && isPlaying) {
                         val asid = player?.audioSessionId ?: 0
-                        // For v1: stream to channel ids 0..N-1 where N
-                        // = light count. Bridge maps these to the
-                        // entertainment area's configured slots.
+                        // Stream to channel ids 0..N-1 where N = light
+                        // count, capped at 10 (Hue Entertainment area
+                        // limit). Bridge maps channel ids to the lights
+                        // configured in the Entertainment area.
                         val n = runCatching { hueProvider.listLightIds().size }
                             .getOrDefault(0)
-                            .coerceAtMost(20)
+                            .coerceAtMost(10)
                         val channels = (0 until n).toList()
                         if (channels.isNotEmpty()) {
-                            hueEntertainment.start(asid, reactiveMode, channels)
+                            hueEntertainment.start(asid, intensity, channels)
+                        } else {
+                            com.powermediaplayer.diag.DiagLog.event(
+                                "HUE",
+                                "auto-start skipped — no lights known to bridge"
+                            )
                         }
                     } else {
                         hueEntertainment.stop()
