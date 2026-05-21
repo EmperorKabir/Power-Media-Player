@@ -67,6 +67,9 @@ data class TrackContextActions(
     val onSaveOffline: (() -> Unit)? = null,
     val onRemoveOffline: (() -> Unit)? = null,
     val onDelete: (() -> Unit)? = null,
+    /** Pin every track of this album to the Last Played → Pinned list.
+     *  Shared 10-cap enforced at the repository layer. */
+    val onPinAlbum: (() -> Unit)? = null,
 )
 
 /**
@@ -156,6 +159,9 @@ fun TrackContextSheet(
             }
             actions.onOverrideVideo?.let {
                 Item(Icons.Filled.VideocamOff, "Override video effects", onClick = it)
+            }
+            actions.onPinAlbum?.let {
+                Item(Icons.Filled.Star, "Pin this album", onClick = it)
             }
             actions.onShare?.let {
                 Item(Icons.Filled.Share, "Share", onClick = it)

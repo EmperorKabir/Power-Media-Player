@@ -173,11 +173,14 @@ fun SettingsScreen(
             bridgeIp = uiState.hueBridgeIp,
             appKey = uiState.hueAppKey,
             pairStatus = viewModel.huePairStatus.collectAsStateWithLifecycle().value,
+            reactiveMode = viewModel.settingsDataStore.hueReactiveMode
+                .collectAsStateWithLifecycle(initialValue = "off").value,
             onPair = { viewModel.pairHueBridge() },
             onUnpair = { viewModel.unpairHue() },
             onAllOn = { viewModel.setHueAll(true) },
             onAllOff = { viewModel.setHueAll(false) },
-            onApplyScene = { viewModel.applyHueScene(it) }
+            onApplyScene = { viewModel.applyHueScene(it) },
+            onReactiveMode = { viewModel.setHueReactiveMode(it) }
         )
         SettingsDivider()
 
@@ -1461,11 +1464,13 @@ private fun HueSection(
     bridgeIp: String,
     appKey: String,
     pairStatus: String,
+    reactiveMode: String,
     onPair: () -> Unit,
     onUnpair: () -> Unit,
     onAllOn: () -> Unit,
     onAllOff: () -> Unit,
-    onApplyScene: (com.powermediaplayer.hue.HueProvider.ScenePreset) -> Unit
+    onApplyScene: (com.powermediaplayer.hue.HueProvider.ScenePreset) -> Unit,
+    onReactiveMode: (com.powermediaplayer.hue.HueEntertainment.ReactiveMode) -> Unit
 ) {
     val paired = bridgeIp.isNotBlank() && appKey.isNotBlank()
     SettingsSectionHeader("Philips Hue")
@@ -1550,11 +1555,40 @@ private fun HueSection(
             }
         }
         Text(
-            text = "Audio-reactive lighting (Entertainment API) ships in a follow-up. " +
-                "v1 covers manual scene selection only.",
+            text = "Audio-reactive lighting (Entertainment API): pick a mode below " +
+                "to flash lights with the music. Requires an entertainment area on " +
+                "the bridge — create one in the Hue app first (Settings → Entertainment).",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
+        com.powermediaplayer.hue.HueEntertainment.ReactiveMode.values().forEach { mode ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onReactiveMode(mode) }
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = when (mode) {
+                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode.OFF ->
+                            "Audio-reactive: Off"
+                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode.BASS_FLASH ->
+                            "Bass flash"
+                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode.SPECTRUM ->
+                            "Spectrum"
+                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode.COLOUR_FOLLOW_TRACK ->
+                            "Colour follows track"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (reactiveMode == mode.key) TealAccent else TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                if (reactiveMode == mode.key) {
+                    Icon(Icons.Filled.Check, contentDescription = null, tint = TealAccent)
+                }
+            }
+        }
     }
 }

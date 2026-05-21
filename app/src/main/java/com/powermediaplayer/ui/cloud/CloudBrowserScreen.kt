@@ -71,6 +71,29 @@ fun CloudBrowserScreen(
         viewModel.refreshIfStale()
     }
 
+    // Refresh on every screen-resume (Compose ON_RESUME). Fixes the
+    // user-reported bug: "when adding a file or folder from Google
+    // Drive, it just stays on the sign-in screen but doesn't refresh
+    // to show the added stuff." Adds + remove flow:
+    //   - User taps "Sign in to Drive" → driveOAuthLauncher → external
+    //     OAuth picker / Account chooser activity launches
+    //   - User completes / cancels / returns
+    //   - Our Activity → onResume fires
+    //   - Composable observes the resume + forces refresh
+    // Same hook also catches:
+    //   - User adding files via Drive web in another tab then returning
+    //   - User toggling Spotify on another device
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.forceRefresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     contextItem?.let { item ->
         val isSpotify = item.sourceProvider == CloudProviderType.SPOTIFY
         val isDriveTrack = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
@@ -178,6 +201,13 @@ fun CloudBrowserScreen(
                 viewModel.rememberPickedDriveFolder(id, name)
             }
         }
+        // Always refresh whatever the result — covers (a) user picked
+        // a FILE not a folder (returns to us with no extras), (b) user
+        // cancelled out, (c) the WebView Picker JS errored. Without
+        // this force, the screen kept stale state and the user reported
+        // "stays on the sign-in screen" even though sign-in actually
+        // succeeded.
+        viewModel.forceRefresh()
     }
 
     val pickerScope = rememberCoroutineScope()
@@ -197,6 +227,12 @@ fun CloudBrowserScreen(
                     )
                 }
             }
+            // Force refresh regardless — covers the user who signs in
+            // but is then routed away (e.g. Picker fails to launch, or
+            // user backs out before the Picker WebView renders). The
+            // sign-in itself still succeeded; the cards should reflect
+            // the new logged-in state.
+            viewModel.forceRefresh()
         }
     }
 

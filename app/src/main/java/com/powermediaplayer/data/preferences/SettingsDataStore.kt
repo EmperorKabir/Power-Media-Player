@@ -225,6 +225,18 @@ class SettingsDataStore @Inject constructor(
         // is what ships now.
         val HUE_BRIDGE_IP = stringPreferencesKey("hue_bridge_ip")
         val HUE_APP_KEY = stringPreferencesKey("hue_app_key")
+        // 32-byte hex PSK returned alongside the app key during pair
+        // (via the generateclientkey flag). Required by the
+        // Entertainment-API DTLS-PSK handshake. Plain DataStore — the
+        // key only controls lights on the local network; we already
+        // accept untrusted bridge certs anyway.
+        val HUE_CLIENT_KEY = stringPreferencesKey("hue_client_key")
+        // Entertainment area UUID to stream to. Captured on first
+        // stream-start (we fetch /clip/v2/resource/entertainment_
+        // configuration and pick the first area). User-visible UI
+        // could let them pick later; v1 = first area found.
+        val HUE_ENTERTAINMENT_ID = stringPreferencesKey("hue_entertainment_id")
+        val HUE_REACTIVE_MODE = stringPreferencesKey("hue_reactive_mode")
 
         // §C14 — audio focus policy. Three independent settings for the
         // common interruption types. Defaults at first install:
@@ -605,8 +617,14 @@ class SettingsDataStore @Inject constructor(
 
     val hueBridgeIp: Flow<String> = context.dataStore.data.map { it[Keys.HUE_BRIDGE_IP] ?: "" }
     val hueAppKey: Flow<String> = context.dataStore.data.map { it[Keys.HUE_APP_KEY] ?: "" }
+    val hueClientKey: Flow<String> = context.dataStore.data.map { it[Keys.HUE_CLIENT_KEY] ?: "" }
+    val hueEntertainmentId: Flow<String> = context.dataStore.data.map { it[Keys.HUE_ENTERTAINMENT_ID] ?: "" }
+    val hueReactiveMode: Flow<String> = context.dataStore.data.map { it[Keys.HUE_REACTIVE_MODE] ?: "off" }
     suspend fun setHueBridgeIp(v: String) { context.dataStore.edit { it[Keys.HUE_BRIDGE_IP] = v.trim() } }
     suspend fun setHueAppKey(v: String) { context.dataStore.edit { it[Keys.HUE_APP_KEY] = v.trim() } }
+    suspend fun setHueClientKey(v: String) { context.dataStore.edit { it[Keys.HUE_CLIENT_KEY] = v.trim() } }
+    suspend fun setHueEntertainmentId(v: String) { context.dataStore.edit { it[Keys.HUE_ENTERTAINMENT_ID] = v.trim() } }
+    suspend fun setHueReactiveMode(v: String) { context.dataStore.edit { it[Keys.HUE_REACTIVE_MODE] = v } }
     suspend fun setColdStartResumeBackoffSec(sec: Int) {
         context.dataStore.edit { it[Keys.COLD_START_RESUME_BACKOFF_SEC] = sec.coerceIn(0, 30) }
     }

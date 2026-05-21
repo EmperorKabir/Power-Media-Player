@@ -1162,6 +1162,20 @@ class SpotifyProvider @Inject constructor(
         simplePut(token, "https://api.spotify.com/v1/me/player/seek?position_ms=$positionMs")
     }
 
+    /**
+     * Resume the current track on the active Connect device without
+     * changing what's queued. Used by the BT-PLAY-key route in
+     * PlaybackService so the car PLAY/RESUME button revives a paused
+     * Connect session. Spotify's PUT /me/player/play with no body
+     * resumes the current item; passing a body would re-queue.
+     */
+    suspend fun resume(): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired")
+        )
+        simplePut(token, "https://api.spotify.com/v1/me/player/play")
+    }
+
     private fun simplePut(token: String, url: String): Result<Unit> {
         val req = Request.Builder()
             .url(url)

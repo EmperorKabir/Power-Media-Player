@@ -376,7 +376,17 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsDataStore.setHueAppKey("")
             settingsDataStore.setHueBridgeIp("")
+            settingsDataStore.setHueClientKey("")
+            settingsDataStore.setHueEntertainmentId("")
+            settingsDataStore.setHueReactiveMode("off")
             _huePairStatus.value = ""
+        }
+    }
+
+    fun setHueReactiveMode(mode: com.powermediaplayer.hue.HueEntertainment.ReactiveMode) {
+        viewModelScope.launch {
+            com.powermediaplayer.diag.DiagLog.ui("hue reactiveMode=${mode.key}")
+            settingsDataStore.setHueReactiveMode(mode.key)
         }
     }
 

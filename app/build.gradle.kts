@@ -27,7 +27,7 @@ android {
         applicationId = "com.powermediaplayer"
         minSdk = 30
         targetSdk = 35
-        versionCode = 22
+        versionCode = 23
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -147,7 +147,14 @@ android {
                 "META-INF/NOTICE.txt",
                 "META-INF/notice.txt",
                 "META-INF/INDEX.LIST",
-                "META-INF/*.kotlin_module"
+                "META-INF/*.kotlin_module",
+                // BouncyCastle 1.78.1 ships duplicate OSGi manifests
+                // across its jdk18on artefacts (bctls + bcprov +
+                // bcutil). We don't ship as an OSGi bundle so the
+                // manifests are noise; excluding them lets the merge
+                // step pass cleanly.
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                "META-INF/versions/9/OSGI-INF/**"
             )
         }
     }
@@ -245,6 +252,12 @@ dependencies {
     implementation("net.openid:appauth:0.11.1")
     // OkHttp: Spotify + Drive REST HTTP client.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // BouncyCastle TLS — DTLS-PSK for the Philips Hue Entertainment API
+    // (audio-reactive lighting). The bridge's UDP entertainment endpoint
+    // requires DTLS 1.2 with pre-shared key, which Android's stock JSSE
+    // does not expose for UDP. bctls bundles a UDP-capable DTLS stack.
+    implementation("org.bouncycastle:bctls-jdk18on:1.78.1")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
     // NanoHTTPD: tiny embedded HTTP server (~50KB) used to relay
     // local / SAF / Drive content to Cast receivers. Receiver fetches
     // http://<phone-LAN-IP>:<port>/<token> from the local network; the

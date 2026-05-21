@@ -124,13 +124,22 @@ class HueProvider @Inject constructor(
                 val text = resp.body?.string().orEmpty()
                 DiagLog.event("HUE", "pair http=${resp.code} body-prefix=${text.take(100)}")
                 if (resp.code !in 200..299) return@withContext null
-                // Parse `"username":"abc..."` from the success object.
+                // Parse `"username":"abc..."` + `"clientkey":"hex..."`
+                // (clientkey is the 32-byte hex PSK required for the
+                // Entertainment-API DTLS handshake; we requested it via
+                // the generateclientkey flag in the POST body).
                 val keyMatch = Regex("\"username\"\\s*:\\s*\"([^\"]+)\"").find(text)
+                val clientKeyMatch = Regex("\"clientkey\"\\s*:\\s*\"([^\"]+)\"").find(text)
                 if (keyMatch != null) {
                     val key = keyMatch.groupValues[1]
+                    val clientKey = clientKeyMatch?.groupValues?.getOrNull(1).orEmpty()
                     settings.setHueBridgeIp(ip)
                     settings.setHueAppKey(key)
-                    DiagLog.event("HUE", "paired with bridge at $ip (key len=${key.length})")
+                    if (clientKey.isNotBlank()) settings.setHueClientKey(clientKey)
+                    DiagLog.event(
+                        "HUE",
+                        "paired with bridge at $ip (key len=${key.length} clientkey len=${clientKey.length})"
+                    )
                     return@withContext key
                 }
                 // Common "link button not pressed" path.
@@ -200,6 +209,81 @@ class HueProvider @Inject constructor(
                 DiagLog.event("HUE", "listLightIds FAILED: ${it.javaClass.simpleName}")
                 emptyList()
             }
+        }
+    }
+
+    /**
+     * Fetch the first entertainment_configuration UUID from the bridge.
+     * v1 picks the first area; a future Settings UI can let the user
+     * choose. Returns null if the user has no Entertainment area set
+     * up on the bridge (the Hue mobile app creates them).
+     */
+    suspend fun firstEntertainmentAreaId(): String? {
+        val ip = settings.hueBridgeIp.first()
+        val key = settings.hueAppKey.first()
+        if (ip.isBlank() || key.isBlank()) return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val req = Request.Builder()
+                    .url("https://$ip/clip/v2/resource/entertainment_configuration")
+                    .header("hue-application-key", key)
+                    .get()
+                    .build()
+                laxHttp.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@withContext null
+                    val text = resp.body?.string().orEmpty()
+                    val first = Regex("\"id\"\\s*:\\s*\"([0-9a-f-]{36})\"")
+                        .find(text)?.groupValues?.getOrNull(1)
+                    DiagLog.event("HUE", "firstEntertainmentAreaId → ${first ?: "(none)"}")
+                    first
+                }
+            }.getOrNull()
+        }
+    }
+
+    /** Start the bridge's entertainment stream for the given area. */
+    suspend fun startEntertainmentStream(areaId: String): Boolean {
+        val ip = settings.hueBridgeIp.first()
+        val key = settings.hueAppKey.first()
+        if (ip.isBlank() || key.isBlank()) return false
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val body = """{"action":"start"}""".toRequestBody(
+                    "application/json".toMediaTypeOrNull()
+                )
+                val req = Request.Builder()
+                    .url("https://$ip/clip/v2/resource/entertainment_configuration/$areaId")
+                    .header("hue-application-key", key)
+                    .put(body)
+                    .build()
+                laxHttp.newCall(req).execute().use { resp ->
+                    DiagLog.event("HUE", "startEntertainmentStream http=${resp.code}")
+                    resp.isSuccessful
+                }
+            }.getOrDefault(false)
+        }
+    }
+
+    /** Stop the entertainment stream. Allows the bridge to free DTLS. */
+    suspend fun stopEntertainmentStream(areaId: String): Boolean {
+        val ip = settings.hueBridgeIp.first()
+        val key = settings.hueAppKey.first()
+        if (ip.isBlank() || key.isBlank()) return false
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val body = """{"action":"stop"}""".toRequestBody(
+                    "application/json".toMediaTypeOrNull()
+                )
+                val req = Request.Builder()
+                    .url("https://$ip/clip/v2/resource/entertainment_configuration/$areaId")
+                    .header("hue-application-key", key)
+                    .put(body)
+                    .build()
+                laxHttp.newCall(req).execute().use { resp ->
+                    DiagLog.event("HUE", "stopEntertainmentStream http=${resp.code}")
+                    resp.isSuccessful
+                }
+            }.getOrDefault(false)
         }
     }
 

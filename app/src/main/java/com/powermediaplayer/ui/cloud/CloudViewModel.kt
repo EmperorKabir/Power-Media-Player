@@ -177,6 +177,47 @@ class CloudViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Bypass-the-stale-threshold refresh. Called from
+     * (a) every picker-launcher return — guarantees the screen reflects
+     *     whatever happened in the picker (file picked, folder picked,
+     *     user cancelled, picker errored).
+     * (b) the ON_RESUME lifecycle observer in the Cloud screen — covers
+     *     returning to the tab after adding files via Drive web in a
+     *     different app, OAuth flow completing in a Custom Tab, etc.
+     *
+     * Also re-pulls the driveLoggedIn / spotifyLoggedIn flags so the
+     * provider cards swap from "Sign in" to "Sign out" promptly after
+     * any external OAuth flow returns.
+     */
+    fun forceRefresh() {
+        lastCloudRefreshMs = System.currentTimeMillis()
+        viewModelScope.launch(Dispatchers.IO) {
+            // Pull the current sign-in state from each provider so the
+            // cards swap from "Sign in" to "Sign out" promptly after an
+            // external OAuth flow returns.
+            val drive = driveOAuthProvider.isLoggedIn.value
+            _uiState.update { it.copy(driveLoggedIn = drive) }
+        }
+        val st = _uiState.value
+        when (st.activeProvider) {
+            com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE -> {
+                val (id, label) = st.folderStack.lastOrNull() ?: (null to "Root")
+                browseDrive(id, label)
+            }
+            com.powermediaplayer.cloud.CloudProviderType.SPOTIFY -> browseSpotify()
+            else -> {
+                // At top-level provider selection: if Drive is signed
+                // in + has picked folders, deep-link straight to the
+                // populated state so the user doesn't see the empty
+                // sign-in cards while we know the data is there.
+                if (driveOAuthProvider.isLoggedIn.value) {
+                    browseDrive(null, "Root")
+                }
+            }
+        }
+    }
+
     private suspend fun evictOfflineLruIfOverLimit() {
         val limit = settingsDataStore.offlineStorageLimitBytes.first()
         if (limit <= 0) return

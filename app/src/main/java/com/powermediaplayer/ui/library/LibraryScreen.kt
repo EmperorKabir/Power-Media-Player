@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -45,6 +46,7 @@ fun LibraryScreen(
     val multiSelectMode by viewModel.multiSelectMode.collectAsStateWithLifecycle()
     val selectedUris by viewModel.selectedUris.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<MediaFileInfo?>(null) }
     var pendingDelete by remember { mutableStateOf<MediaFileInfo?>(null) }
@@ -115,6 +117,34 @@ fun LibraryScreen(
                 } else null,
                 onOverrideVideo = if (isFav && item.isVideo) {
                     { overrideTarget = item; contextItem = null }
+                } else null,
+                onPinAlbum = if (item.album.isNotBlank() && !item.isVideo) {
+                    {
+                        // Snapshot every audio track that shares this
+                        // album + artist key from the current library
+                        // state. Album disambiguated by artist so
+                        // same-titled compilations stay distinct.
+                        val members = uiState.audioFiles.filter {
+                            it.album == item.album && it.artist == item.artist
+                        }.sortedWith(compareBy({ it.album }, { it.title }))
+                        val albumKey = "${item.artist.lowercase()}|||${item.album.lowercase()}"
+                        scope.launch {
+                            val ok = viewModel.pinAlbum(
+                                albumKey = albumKey,
+                                title = item.album,
+                                artist = item.artist,
+                                artworkUri = item.albumArtUri?.toString(),
+                                tracks = members
+                            ).isSuccess
+                            android.widget.Toast.makeText(
+                                context,
+                                if (ok) "Pinned '${item.album}' (${members.size} tracks)"
+                                else "Favourites full — unpin one first",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                        contextItem = null
+                    }
                 } else null,
                 onShare = {
                     val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {

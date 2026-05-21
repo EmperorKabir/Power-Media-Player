@@ -121,6 +121,15 @@ class PlaybackService : MediaSessionService() {
     @javax.inject.Inject
     lateinit var webhookEmitter: com.powermediaplayer.webhooks.WebhookEmitter
 
+    @javax.inject.Inject
+    lateinit var spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
+
+    @javax.inject.Inject
+    lateinit var hueEntertainment: com.powermediaplayer.hue.HueEntertainment
+
+    @javax.inject.Inject
+    lateinit var hueProvider: com.powermediaplayer.hue.HueProvider
+
     // §B3 — true 2-player crossfade engine (lazy: spins up the second
     // ExoPlayer only inside the pre-fade window, releases on completion).
     private val crossfadeController by lazy {
@@ -963,6 +972,49 @@ class PlaybackService : MediaSessionService() {
             settingsDataStore.resumeOnBt.distinctUntilChanged().collect {
                 com.powermediaplayer.diag.DiagLog.settings("resumeOnBt → $it")
             }
+        }
+
+        // Hue Entertainment audio-reactive — start when (mode != off
+        // AND playback is active); stop otherwise. The lighting follows
+        // playback automatically so the user doesn't need to flip a
+        // separate switch when starting a track.
+        serviceScope.launch {
+            val playingFlow = kotlinx.coroutines.flow.flow {
+                while (true) {
+                    emit(player?.isPlaying == true)
+                    kotlinx.coroutines.delay(500)
+                }
+            }.distinctUntilChanged()
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.hueReactiveMode,
+                playingFlow
+            ) { mode, isPlaying -> mode to isPlaying }
+                .distinctUntilChanged()
+                .collect { (mode, isPlaying) ->
+                    val reactiveMode = runCatching {
+                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode
+                            .valueOf(mode.uppercase())
+                    }.getOrDefault(
+                        com.powermediaplayer.hue.HueEntertainment.ReactiveMode.OFF
+                    )
+                    if (reactiveMode != com.powermediaplayer.hue.HueEntertainment.ReactiveMode.OFF &&
+                        isPlaying
+                    ) {
+                        val asid = player?.audioSessionId ?: 0
+                        // For v1: stream to channel ids 0..N-1 where N
+                        // = light count. Bridge maps these to the
+                        // entertainment area's configured slots.
+                        val n = runCatching { hueProvider.listLightIds().size }
+                            .getOrDefault(0)
+                            .coerceAtMost(20)
+                        val channels = (0 until n).toList()
+                        if (channels.isNotEmpty()) {
+                            hueEntertainment.start(asid, reactiveMode, channels)
+                        }
+                    } else {
+                        hueEntertainment.stop()
+                    }
+                }
         }
         serviceScope.launch {
             settingsDataStore.headphonePlugAutoplay.distinctUntilChanged().collect {
@@ -1999,11 +2051,35 @@ class PlaybackService : MediaSessionService() {
                 android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
                 android.view.KeyEvent.KEYCODE_MEDIA_PAUSE,
                 android.view.KeyEvent.KEYCODE_MEDIA_STOP -> {
-                    // Pause / stop / toggle — let Media3 dispatch normally.
-                    com.powermediaplayer.diag.DiagLog.bt(
-                        "→ keyEvent ${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} passthrough to Media3"
-                    )
-                    false
+                    // When the Spotify mirror is active, route to
+                    // Spotify Connect so the car-stereo PAUSE button
+                    // actually pauses the song on the Connect device
+                    // (Media3's default just pauses our silent mirror
+                    // Player, leaving the user's audio playing).
+                    if (spotifyProvider.spotifyState.value != null) {
+                        com.powermediaplayer.diag.DiagLog.bt(
+                            "→ keyEvent ${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} routed to Spotify Connect (mirror active)"
+                        )
+                        serviceScope.launch {
+                            runCatching {
+                                val playing = spotifyProvider.spotifyState.value?.isPlaying == true
+                                when (keyEvent.keyCode) {
+                                    android.view.KeyEvent.KEYCODE_MEDIA_PAUSE,
+                                    android.view.KeyEvent.KEYCODE_MEDIA_STOP ->
+                                        spotifyProvider.pause()
+                                    android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ->
+                                        if (playing) spotifyProvider.pause()
+                                        else spotifyProvider.resume()
+                                }
+                            }
+                        }
+                        true
+                    } else {
+                        com.powermediaplayer.diag.DiagLog.bt(
+                            "→ keyEvent ${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} passthrough to Media3"
+                        )
+                        false
+                    }
                 }
                 else -> {
                     com.powermediaplayer.diag.DiagLog.bt(
@@ -2132,6 +2208,49 @@ class PlaybackService : MediaSessionService() {
             player.currentPosition,
             player.duration.coerceAtLeast(0L)
         )
+        // Spotify mirror routing — when the user is listening on a
+        // Spotify Connect device, the LOCAL ExoPlayer is silent (it
+        // mirrors metadata only). Driving player.seekToPrevious() etc.
+        // would change nothing audible; the user's actual playback
+        // continues unaffected on the Connect target. Route prev /
+        // next / skip-back / skip-forward via SpotifyProvider so the
+        // BT remote in the car actually moves the song.
+        if (spotifyProvider.spotifyState.value != null) {
+            com.powermediaplayer.diag.DiagLog.bt(
+                "applyAction routed to Spotify Connect (mirror active) action=$action sec=$seconds isPrev=$isPrev"
+            )
+            serviceScope.launch {
+                runCatching {
+                    when (action) {
+                        BluetoothMediaActions.PREV_TRACK -> spotifyProvider.skipPrevious()
+                        BluetoothMediaActions.NEXT_TRACK -> spotifyProvider.skipNext()
+                        BluetoothMediaActions.SKIP_BACK -> {
+                            // Skip-back N seconds = seek to (currentPos - N*1000).
+                            // Spotify polling gives us currentPos via spotifyState.
+                            val pos = spotifyProvider.spotifyState.value?.positionMs ?: 0L
+                            val target = (pos - seconds * 1000L).coerceAtLeast(0L)
+                            spotifyProvider.seekTo(target)
+                        }
+                        BluetoothMediaActions.SKIP_FORWARD -> {
+                            val pos = spotifyProvider.spotifyState.value?.positionMs ?: 0L
+                            val target = pos + seconds * 1000L
+                            spotifyProvider.seekTo(target)
+                        }
+                        BluetoothMediaActions.RESTART_TRACK ->
+                            spotifyProvider.seekTo(0L)
+                        BluetoothMediaActions.PREV_CHAPTER ->
+                            spotifyProvider.skipPrevious()
+                        BluetoothMediaActions.NEXT_CHAPTER ->
+                            spotifyProvider.skipNext()
+                    }
+                }.onFailure {
+                    com.powermediaplayer.diag.DiagLog.bt(
+                        "Spotify-routed action FAILED: ${it.javaClass.simpleName}: ${it.message}"
+                    )
+                }
+            }
+            return
+        }
         when (action) {
             BluetoothMediaActions.PREV_TRACK -> {
                 crossfadeController.abort()
