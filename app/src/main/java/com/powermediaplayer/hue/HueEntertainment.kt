@@ -210,21 +210,18 @@ class HueEntertainment @Inject constructor(
             //   than for white-only bulbs (those use the wider 5–100 %
             //   spread in HueDimmableDriver).
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            val baseFloor = 0.60f - s * 0.30f     // 0.60 → 0.30
-            val dynSpan = 0.05f + s * 0.55f       // 0.05 → 0.60
+            // vc29.6 — widened dynSpan at low s so sensitivity=10
+            // already shows a visible brightness swing (was 13 % swing
+            // room, now 30 %). Sensitivity=100 still pins peaks at
+            // 100 % via clamping.
+            val baseFloor = 0.55f - s * 0.25f     // 0.55 → 0.30
+            val dynSpan = 0.30f + s * 0.35f       // 0.30 → 0.65
             val curve = 1.0f - s * 0.6f           // 1.0 → 0.4 (sqrt-ish)
-            // Gate ceiling lowered (was 0.40). Logs proved that even
-            // bass peaks rarely exceed 0.50 raw, so gate=0.40*(1-s)
-            // was killing every signal at low + mid sensitivity. New
-            // ceiling 0.20 lets typical bass hits pass at all but the
-            // very lowest sensitivity values.
-            val gate = 0.20f * (1f - s)           // 0.20 → 0
+            val gate = 0.10f * (1f - s)           // 0.10 → 0
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            // Beat gate similarly relaxed — most detected beats have
-            // beatStrength 0.3–0.7 in the analyser.
-            val beatGate = 0.40f * (1f - s)
+            val beatGate = 0.30f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.05f + s * 0.30f      // 0.05 → 0.35
+            val beatSpan = 0.10f + s * 0.30f      // 0.10 → 0.40
             val frameMs = 40L  // 25 Hz
             // Palette cycle phase (radians); BPM-driven rotation rate.
             var palettePhase = 0.0

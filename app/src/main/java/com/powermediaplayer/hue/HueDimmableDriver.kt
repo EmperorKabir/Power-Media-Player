@@ -101,18 +101,17 @@ class HueDimmableDriver @Inject constructor(
             //   can only express movement through brightness — they
             //   have no colour channel to convey activity.
             val s = (intensity / 100f).coerceIn(0.01f, 1f)
-            val baseFloor = 0.60f - s * 0.55f      // 0.60 → 0.05
-            val dynSpan = 0.05f + s * 0.85f        // 0.05 → 0.90
+            // vc29.6 — widened low-s dynSpan so even sensitivity=10
+            // produces a visible swing on IKEA Tradfri / GU10 bulbs
+            // that smooth aggressively over their Zigbee mesh.
+            val baseFloor = 0.50f - s * 0.45f      // 0.50 → 0.05
+            val dynSpan = 0.25f + s * 0.65f        // 0.25 → 0.90
             val curve = 1.0f - s * 0.6f
-            // vc29.5 — gate ceiling 0.20 (was 0.40). Logs showed the
-            // dimmable metric maxing around 0.25 even on loud bass, so
-            // the old gate of 0.40 at s=0 killed every signal. Mirrors
-            // the same fix in HueEntertainment.
-            val gate = 0.20f * (1f - s)
+            val gate = 0.10f * (1f - s)            // 0.10 → 0 (was 0.20)
             val invGate = (1f - gate).coerceAtLeast(0.01f)
-            val beatGate = 0.40f * (1f - s)
+            val beatGate = 0.30f * (1f - s)
             val invBeatGate = (1f - beatGate).coerceAtLeast(0.01f)
-            val beatSpan = 0.05f + s * 0.40f       // 0.05 → 0.45
+            val beatSpan = 0.10f + s * 0.40f       // 0.10 → 0.50
             val perLightIntervalMs = 100L // 10 Hz/light advisory ceiling
             // Stagger writes across lights — light i fires offset by
             // (perLightInterval / count) so total per-second traffic
@@ -172,9 +171,11 @@ class HueDimmableDriver @Inject constructor(
                 for ((idx, lid) in dimmableLightIds.withIndex()) {
                     if (now < deadlines[idx]) continue
                     val delta = kotlin.math.abs(target - lastBri[idx])
-                    // Skip if change is below 3% — saves an HTTP call
-                    // for cosmetic no-ops.
-                    if (lastBri[idx] >= 0f && delta < 3f) {
+                    // Skip near-duplicates — narrowed from 3 % to 1 %
+                    // because IKEA Tradfri / GU10 bulbs need every
+                    // small variation to escape their slow Zigbee
+                    // mesh smoothing.
+                    if (lastBri[idx] >= 0f && delta < 1f) {
                         deadlines[idx] = now + perLightIntervalMs
                         continue
                     }
@@ -194,19 +195,48 @@ class HueDimmableDriver @Inject constructor(
         job = null
     }
 
+    /**
+     * Throttled diagnostic for HTTP response codes — we sample one
+     * PUT every ~5 s and log its outcome, just enough to spot bridge
+     * throttling (429) or per-light errors without flooding the log.
+     */
+    @Volatile private var lastHttpDiagMs: Long = 0L
+
     private fun putBrightness(ip: String, key: String, lightId: String, bri: Float) {
-        val body = """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}}}"""
+        // vc29.6 — explicit dynamics.duration:100 ms. Without it the
+        // bridge applies its default ~400 ms transition, which means
+        // every PUT smooths toward a target that's already been
+        // superseded by the next PUT. IKEA Tradfri / GU10 bulbs over
+        // the Hue bridge's Zigbee mesh exhibit this much worse than
+        // native Hue bulbs and end up nearly static even though our
+        // engine is sending varying targets.
+        val body =
+            """{"on":{"on":true},"dimming":{"brightness":${"%.1f".format(bri)}},"dynamics":{"duration":100}}"""
         val req = Request.Builder()
             .url("https://$ip/clip/v2/resource/light/$lightId")
             .header("hue-application-key", key)
             .put(body.toRequestBody("application/json".toMediaTypeOrNull()))
             .build()
         runCatching {
-            http.newCall(req).execute().use { /* discard body */ }
+            http.newCall(req).execute().use { resp ->
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - lastHttpDiagMs > 5000L) {
+                    lastHttpDiagMs = now
+                    DiagLog.event(
+                        "HUE",
+                        "dimmable PUT sample http=${resp.code} light=${lightId.take(8)} bri=${"%.1f".format(bri)}%"
+                    )
+                }
+            }
+        }.onFailure {
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - lastHttpDiagMs > 5000L) {
+                lastHttpDiagMs = now
+                DiagLog.event(
+                    "HUE",
+                    "dimmable PUT FAILED light=${lightId.take(8)} err=${it.javaClass.simpleName}: ${it.message}"
+                )
+            }
         }
-        // Don't log per-PUT — at 10 Hz across many lights this would
-        // dominate the log. The driver's start/stop lines + the
-        // Entertainment-loop diag give enough signal at 4-second
-        // cadence.
     }
 }
