@@ -202,6 +202,14 @@ class HueDimmableDriver @Inject constructor(
                 // vc29.19 — analyser handles smoothing; only slew-limit
                 // state remains here for the IKEA-friendly per-PUT cap.
                 var lastTarget = 50f
+                // vc29.21 — onset-driven envelope for Option C. Peak-
+                // follower with fast attack + slow decay so quiet
+                // passages return to baseline and transients pulse the
+                // bulbs up to peak. Used at high sensitivity to replace
+                // the continuous bandAvg target so IKEA bulbs visibly
+                // PULSE on beats instead of sitting at 85 % mean.
+                var onsetEnvelope = 0f       // current envelope value [0..1]
+                var lastBandForDelta = 0f    // for delta-on-rise detection
                 while (isActive) {
                     val now = android.os.SystemClock.uptimeMillis()
                     if (now - lastSettingsReadMs > 2000L) {
@@ -261,8 +269,39 @@ class HueDimmableDriver @Inject constructor(
                         val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
                         shapedBeat * beatSpan
                     } else 0f
-                    val rawTarget = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
+                    val continuousTarget = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
                         .coerceIn(1f, 100f)
+
+                    // ── vc29.21 Option C: onset-driven target ────────
+                    // Peak-follower: envelope rises FAST on rising
+                    // bandAvg or beat detection, decays slowly back to
+                    // a low baseline. At high sensitivity this REPLACES
+                    // the continuous target so bulbs visibly pulse on
+                    // each transient instead of sitting at mean ≈ 87 %.
+                    val rise = (bandAvg - lastBandForDelta).coerceAtLeast(0f)
+                    lastBandForDelta = bandAvg
+                    val onsetAttack = (rise * 3.5f).coerceAtMost(1.0f) // amplify deltas
+                    val beatAttack = if (r.beat) effectiveBeatStrength else 0f
+                    val attackVal = maxOf(onsetAttack, beatAttack)
+                    // Fast attack (jump up if new attack > envelope),
+                    // slow decay (multiply by 0.55 per ~1s cycle ≈ 600
+                    // ms half-life).
+                    onsetEnvelope = maxOf(onsetEnvelope * 0.55f, attackVal)
+                    // Map envelope to brightness: low baseline (25%)
+                    // + envelope * (peak 100% - baseline). When
+                    // envelope is 0 → 25%; when envelope is 1.0 → 100%.
+                    val onsetBaseline = 25f
+                    val onsetPeak = 100f
+                    val onsetTarget = onsetBaseline +
+                        onsetEnvelope * (onsetPeak - onsetBaseline)
+
+                    // Blend continuous + onset by s² so onset mode
+                    // dominates only at high sensitivity. At s=0.3
+                    // weight is only 0.09; at s=0.7 it's 0.49; at
+                    // s=1.0 it's 1.0 (pure onset).
+                    val onsetWeight = s * s
+                    val rawTarget = (continuousTarget * (1f - onsetWeight) +
+                        onsetTarget * onsetWeight).coerceIn(1f, 100f)
                     // vc29.18 — slew limit. IKEA / Tradfri / GU10 can
                     // physically follow ~30 pp/sec brightness change;
                     // anything bigger and the bulb just settles on the
@@ -286,6 +325,10 @@ class HueDimmableDriver @Inject constructor(
                             "dimmable group frame s=${"%.2f".format(s)} avgLag=${avgLatencyMs}ms " +
                                 "offset=${groupOffset}ms raw=${"%.2f".format(rawAvg)} " +
                                 "norm=${"%.2f".format(normAvg)} eff=${"%.2f".format(bandAvg)} " +
+                                "onsetEnv=${"%.2f".format(onsetEnvelope)} " +
+                                "cont=${"%.0f".format(continuousTarget)}% " +
+                                "onset=${"%.0f".format(onsetTarget)}% " +
+                                "blendW=${"%.2f".format(onsetWeight)} " +
                                 "rawTarget=${"%.0f".format(rawTarget)}% target=${"%.0f".format(target)}%"
                         )
                     }
@@ -309,6 +352,9 @@ class HueDimmableDriver @Inject constructor(
                 val perLightRateHz = dimmableLights.minOfOrNull { it.maxSafeRateHz } ?: 1.0f
                 val perLightIntervalMs = (1000.0 / perLightRateHz).toLong().coerceIn(500L, 2000L)
                 val perLightDeltaPct = if (perLightRateHz >= 2.0f) 3f else 5f
+                // vc29.21 — per-light onset envelope (one per bulb)
+                val onsetEnvPerLight = FloatArray(dimmableLights.size)
+                val lastBandPerLight = FloatArray(dimmableLights.size)
                 DiagLog.event(
                     "HUE",
                     "dimmable per-light cadence ${"%.1f".format(perLightRateHz)} Hz interval=${perLightIntervalMs}ms"
@@ -373,8 +419,20 @@ class HueDimmableDriver @Inject constructor(
                             val shapedBeat = Math.pow(gatedBeat.toDouble(), curve.toDouble()).toFloat()
                             shapedBeat * beatSpan
                         } else 0f
-                        val target = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
+                        val continuousTarget = ((baseFloor + dyn + beatTerm).coerceIn(0f, 1f) * 100f)
                             .coerceIn(1f, 100f)
+                        // vc29.21 — per-light onset envelope mirroring
+                        // group-mode logic.
+                        val rise = (bandAvg - lastBandPerLight[idx]).coerceAtLeast(0f)
+                        lastBandPerLight[idx] = bandAvg
+                        val onsetAttack = (rise * 3.5f).coerceAtMost(1.0f)
+                        val beatAttack = if (r.beat) effectiveBeatStrength else 0f
+                        val attackVal = maxOf(onsetAttack, beatAttack)
+                        onsetEnvPerLight[idx] = maxOf(onsetEnvPerLight[idx] * 0.55f, attackVal)
+                        val onsetTarget = 25f + onsetEnvPerLight[idx] * 75f
+                        val onsetWeight = s * s
+                        val target = (continuousTarget * (1f - onsetWeight) +
+                            onsetTarget * onsetWeight).coerceIn(1f, 100f)
                         if (idx == 0 && diagThisFrame == null) {
                             diagThisFrame = "s=${"%.2f".format(s)} lag=${light.latencyMs}+${userLagOverrideMs}ms " +
                                 "offset=${perLightOffset}ms bandAvg=${"%.2f".format(bandAvg)} target=${"%.0f".format(target)}%"

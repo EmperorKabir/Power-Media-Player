@@ -299,12 +299,14 @@ class HueEntertainment @Inject constructor(
                 val btOffset = runCatching { settings.btVideoAudioOffsetMs.first() }.getOrDefault(0)
                 val syncOffsetMs = (hueOffset + audioDelay + btOffset).coerceAtLeast(0)
                 val r = analyserProcessor.getSnapshotAt(syncOffsetMs)
-                // vc29.20 — couple palette rotation rate to sensitivity
-                // so colour-shift speed scales with the slider together
-                // with brightness swing. Low s = calm/slow colour change,
-                // high s = fast colour change. Multiplier 0.7..1.3
-                // chosen empirically to avoid strobing at the top end.
-                val palSensMul = 0.7f + s * 0.6f
+                // vc29.21 — steeper palette coupling (Option E). Multi-
+                // plier 0.5..1.5 (was 0.7..1.3). The 2× spread between
+                // low and high s makes the rotation-rate difference
+                // perceptually obvious — colours visibly creep at s=10,
+                // sprint at s=100. Per-test data showed the previous
+                // 0.7..1.3 range produced a barely-perceptible 460→960
+                // ms colour-change interval gap.
+                val palSensMul = 0.5f + s * 1.0f
                 palettePhase += (r.paletteHz * palSensMul * frameMs / 1000.0) * (2 * Math.PI)
                 if (palettePhase > 2 * Math.PI) palettePhase -= 2 * Math.PI
 
