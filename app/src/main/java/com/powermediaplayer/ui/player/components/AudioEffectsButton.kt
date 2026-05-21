@@ -36,6 +36,12 @@ import com.powermediaplayer.ui.theme.TextSecondary
 fun AudioEffectsButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** True when the Spotify Connect mirror is the active source.
+     *  Pitch / speed / reverb / EQ / stereo flip / mono mix / volume
+     *  boost run on the LOCAL ExoPlayer audio chain — on Spotify the
+     *  audio plays on the Connect device + we cannot transform that
+     *  stream. UI shows an explanatory note. */
+    isSpotifyActive: Boolean = false,
     settingsVm: SettingsViewModel = hiltViewModel()
 ) {
     val s by settingsVm.uiState.collectAsStateWithLifecycle()
@@ -89,6 +95,23 @@ fun AudioEffectsButton(
                     style = MaterialTheme.typography.titleMedium,
                     color = TealAccent
                 )
+                if (isSpotifyActive) {
+                    // Spotify Connect plays audio on the remote device.
+                    // Reverb / stereo flip / mono mix / pitch / speed /
+                    // EQ all run in our LOCAL ExoPlayer audio chain;
+                    // we don't have the stream when Connect mirrors.
+                    // Explain rather than just grey-out silently.
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Audio effects can't be applied while Spotify Connect " +
+                            "is mirroring. The audio plays on the Spotify device " +
+                            "(speaker / phone / car) and we can't transform that " +
+                            "stream from this app. Switch to local / Drive playback " +
+                            "to apply effects.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "Reverb",

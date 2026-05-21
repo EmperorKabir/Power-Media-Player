@@ -42,16 +42,27 @@ val playerInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Effects",
             bullets = listOf(
-                "Audio effects popup — Quick toggle for reverb (Off / Room / Medium hall / Large hall / Plate / Cave), stereo flip (L↔R), mono mix, multi-channel passthrough. Some are greyed out when casting because audio is on the speaker.",
+                "Audio effects popup — Quick toggle for reverb (Off / Room / Medium hall / Large hall / Plate / Cave) + wet/dry intensity slider, stereo flip (L↔R), mono mix, multi-channel passthrough. Greyed out when casting (audio is on the receiver) AND when Spotify Connect is mirroring (audio plays on the Spotify device, not via our chain).",
+                "Speed / Pitch — Independent. Sonic time-stretch processor adds ~250 ms of inherent buffer latency between dragging the slider and hearing the change; BT A2DP codec adds another ~100-300 ms. Turn on Settings → Low-latency audio buffer for snappier response (some dropout risk under CPU load).",
+                "Spotify Connect note — Speed / pitch / reverb / EQ / stereo flip / mono mix / volume boost all run in the LOCAL audio chain. With Spotify mirroring, the audio plays on the Connect device — those controls grey out + an explanation appears. Switch to local or Drive to apply effects.",
+                "Reverb on Bluetooth — EnvironmentalReverb attaches to our local audio chain. A2DP-routed audio is re-encoded by the BT codec downstream, so reverb can be inaudible over BT. Use wired output if you can't hear it.",
                 "Crossfade — True 2-player overlap with equal-power / linear / exponential / logarithmic curves. Tap the icon to open the panel: master ms slider, per-curve picker, skip-silence, pre-fade trigger, gapless. Greyed out for video and audiobooks unless you opt in via the panel."
             )
         ),
         InfoSection(
             title = "Output",
             bullets = listOf(
-                "Bluetooth button — Shows the device this app is currently sending audio to (phone speaker, headphones, car, etc.) and lets you switch. Remap a car's prev/next buttons under Settings → Bluetooth Car Controls.",
-                "Cast button — Opens the Cast picker for Chromecast / Google Home / smart TV. The app runs an embedded LAN HTTP relay so the receiver can fetch your phone-local content (works for MP4, M4A, M4B audiobooks, FLAC, MP3, MKV, etc — receiver compatibility decides what plays).",
-                "Spotify Connect — Opened from the Cloud tab → Spotify section. Spotify's public API only surfaces SDK-registered devices, so Google Home / Fire Stick / Sonos may not appear here. Use the Cast button on the Player tab to send LOCAL audio to those devices instead."
+                "Bluetooth button — Shows the device this app is currently sending audio to (phone speaker, headphones, car, etc.) and lets you switch. Remap a car's prev/next buttons under Settings → Bluetooth Car Controls — applies to both AVRCP key-event cars (older BMWs etc.) and MediaController-style ones (Android Auto), via two intercept paths.",
+                "Cast button — Opens the Cast picker for Chromecast / Google Home / smart TV. Single combined button. The app runs an embedded LAN HTTP relay so the receiver can fetch your phone-local content (works for MP4, M4A, M4B audiobooks, FLAC, MP3, MKV, etc — receiver compatibility decides what plays).",
+                "Spotify Connect — Opened from the Cloud tab → Spotify section. Spotify's public API only surfaces SDK-registered devices, so Google Home / Fire Stick / Sonos may not appear here. Use the Cast button on the Player tab to send LOCAL audio to those devices instead.",
+                "Spotify BT-remote on car HU — car steering-wheel prev/next/skip/play/pause route to SpotifyProvider.skipNext/skipPrevious/seekTo/pause/resume when the Connect mirror is active, so the car remote actually moves the Spotify song instead of silently re-driving a muted local Player."
+            )
+        ),
+        InfoSection(
+            title = "Webhooks + Hue lighting",
+            bullets = listOf(
+                "Webhooks (Settings → Webhooks) — Single URL + six per-event toggles (play / pause / resume / skip-next / skip-prev / track-end). On each event we fire a JSON POST: event name, timestamp ms, 8-char SHA-256 track hash, position ms, duration ms. Privacy: no titles or paths leave the device. 'Test' button sends a synthetic payload so you can verify your endpoint accepts our shape. Works with IFTTT, n8n, Home Assistant, Pushover, Google Apps Script, etc.",
+                "Philips Hue (Settings → Philips Hue) — Pair with bridge via button-press auth (LAN-only). Once paired: All On / All Off + four scene presets (Party / Ambient / Cinema / Reading) applied to every light on the bridge. Audio-reactive Entertainment streaming (Bass flash / Spectrum / Colour follows track) starts/stops automatically with playback; needs an Entertainment area created in the Hue app first + microphone permission for FFT-driven brightness."
             )
         ),
         InfoSection(
@@ -87,7 +98,8 @@ val libraryInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Actions on a row",
             bullets = listOf(
-                "Long press menu — Hold a row to open a menu with Favourite, Hide, Add to queue next, Edit tags, per-file Overrides (speed, pitch, EQ preset, ReplayGain mode, reverb (chip list, not a slider), volume boost, video flips, A-B loop), Share, Delete. Override options are only available for files you've starred or pinned. Saved overrides persist across plays — the override panel shows a coloured chip on the now-playing screen so you know they're active.",
+                "Long press menu — Hold a row to open a menu with Favourite, Hide, Add to queue next, Edit tags, per-file Overrides (speed, pitch, EQ preset, ReplayGain mode, reverb (chip list, not a slider), volume boost, video flips, A-B loop), Pin this album, Share, Delete. Override options are only available for files you've starred or pinned. Saved overrides persist across plays — the override panel shows a coloured chip on the now-playing screen so you know they're active.",
+                "Pin this album — Snapshots every track in the album (matched by artist + album) as a single entry in Last Played → Pinned. Shows under the audio rows of the long-press menu when the file has an album tag. Counts against the unified 10-slot pin cap.",
                 "Edit tags — Manually override the title / artist / album the app shows for this file. Doesn't write to the file itself; lives in app settings (cleared on Reset).",
                 "Hidden files — Hide from the long press menu removes a file from this list without deleting it. Unhide from Settings → Library → Hidden files.",
                 "Multi-select — Tap the three-dot menu in the top bar then \"Select multiple\" to bulk-favourite, bulk-delete, or bulk-add to queue."
@@ -112,7 +124,8 @@ val lastPlayedInfo: InfoSheetData = InfoSheetData(
             title = "Lists",
             bullets = listOf(
                 "Recents — Your last 20 things played. Each fresh play makes a new row, even if you played the same file more than once. Swipe a row left to delete it. Tap \"Clear all\" to wipe everything in Recents.",
-                "Pinned — Pinned can store up to 10 files you've starred from the Recents. Tap the star on a Recents row to pin. Pinning freezes the row as a snapshot of any bookmarks you'd added during that listen. Deleting from Recents does NOT touch the pin."
+                "Pinned (unified 10 slots) — Stores up to 10 things total. Tap the star on a Recents row to pin a single track. Long-press a track in Library → 'Pin this album' pins every track of that album as ONE album entry. Inside a Drive folder → 'Pin folder as album' does the same for cloud content. Track pins + album pins share the same 10-cap.",
+                "Pinned albums — Tap an album row to EXPAND its track list (does NOT auto-play). Tap any member track to play that one. Long-press an album row to unpin. Re-pinning is fine; the snapshot at pin time captures the track list."
             )
         ),
         InfoSection(
@@ -158,7 +171,10 @@ val cloudInfo: InfoSheetData = InfoSheetData(
             title = "Discovery",
             bullets = listOf(
                 "Favourites — Star tracks, albums, podcasts to keep them at the top of this tab.",
-                "Search — Searches inside the active provider only (Drive search → Drive only, Spotify search → Spotify only)."
+                "Search — Searches inside the active provider only (Drive search → Drive only, Spotify search → Spotify only).",
+                "Pin folder as album — When you're INSIDE a Drive sub-folder containing audio, a 'Pin this folder as album' row appears at the top of the list. Tap to snapshot every audio file in that folder as a single album pin in Last Played → Pinned. Counts against the unified 10-cap.",
+                "Auto-refresh on return — The Cloud tab now refreshes on every resume (e.g. after the picker / OAuth / Drive web returns). Earlier builds got stuck on the sign-in cards even after a successful pick; this is fixed.",
+                "Spotify Connect tap failure — If you tap a Spotify recents row and the play fails (no active device, session expired, etc.), a Toast appears with a clear reason — replaces an earlier silent-fail bug where the Player screen opened with no audio."
             )
         ),
         InfoSection(
@@ -196,7 +212,8 @@ val equalizerInfo: InfoSheetData = InfoSheetData(
             title = "Behaviour",
             bullets = listOf(
                 "Headphone-aware EQ — When a specific Bluetooth device connects, the app can auto-apply a preset for that device. Configure under EQ → Headphone presets.",
-                "Disabled while casting — The EQ runs on your phone's audio chain. When casting, audio is on the speaker so the EQ has no effect.",
+                "Disabled while casting — The EQ runs on your phone's audio chain. When casting, audio is on the receiver so the EQ has no effect.",
+                "Disabled while Spotify Connect is mirroring — Same reason: the audio plays on the Connect device, our EQ effect chain has no stream to transform. Switch to local or Drive playback for the EQ to take effect.",
                 "Per-track override — If a starred or pinned track has its own audio override, the EQ falls back to the override's preset for the duration of that play."
             )
         )

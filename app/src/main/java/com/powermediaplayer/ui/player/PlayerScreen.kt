@@ -547,11 +547,21 @@ private fun OverlayContent(
             playbackSpeed = uiState.playbackSpeed,
             onSpeedChange = { viewModel.setPlaybackSpeed(it) },
             modifier = Modifier.padding(horizontal = 16.dp),
-            // CastPlayer (Media3 1.6.0) doesn't expose playback speed —
-            // grey out while casting so the user understands why
-            // toggling the speed has no audible effect on the receiver.
-            enabled = uiState.controls.playbackSpeed && !uiState.isCasting
+            // CastPlayer (Media3 1.6.0) doesn't expose playback speed
+            // and Spotify Connect plays on a remote device we can't
+            // touch — grey out in both cases so the user knows why
+            // toggling the speed has no audible effect.
+            enabled = uiState.controls.playbackSpeed && !uiState.isCasting && !uiState.isSpotifyActive
         )
+        if (uiState.isSpotifyActive) {
+            Text(
+                text = "Speed / pitch don't apply to Spotify Connect — audio plays " +
+                    "on the Spotify device. Switch to local or Drive to use them.",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+            )
+        }
         Spacer(modifier = Modifier.height(4.dp))
         TertiaryControls(
             currentVolume = viewModel.getCurrentVolume(),
@@ -622,7 +632,10 @@ private fun OverlayContent(
             // Audio effects (reverb / stereo flip / mono mix /
             // passthrough) — applies to local audio chain only, so
             // greyed out when casting (audio is on the receiver).
-            AudioEffectsButton(enabled = !uiState.isCasting)
+            AudioEffectsButton(
+                enabled = !uiState.isCasting && !uiState.isSpotifyActive,
+                isSpotifyActive = uiState.isSpotifyActive
+            )
             // Crossfade button (Phase 4) — right of Audio Effects per
             // §B1. Greyed when video / cast / Spotify Connect — only
             // audio queues benefit from a smooth transition.
@@ -867,7 +880,10 @@ private fun PlayerScreenExpanded(
                 // passthrough) — applies to any audio track so it's
                 // present in both layouts. Greyed out while casting
                 // because the local audio chain is silent then.
-                AudioEffectsButton(enabled = !uiState.isCasting)
+                AudioEffectsButton(
+                enabled = !uiState.isCasting && !uiState.isSpotifyActive,
+                isSpotifyActive = uiState.isSpotifyActive
+            )
                 CrossfadeButton(
                     enabled = !uiState.isVideoContent &&
                         !uiState.isCasting &&
