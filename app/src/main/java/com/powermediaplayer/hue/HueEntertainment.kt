@@ -272,6 +272,12 @@ class HueEntertainment @Inject constructor(
             // through because they're large enough deltas to cross
             // the EMA quickly.
             val smoothedBri = FloatArray(lightChannels.size)
+            // vc29.25 — cache settings (offsets) instead of reading
+            // DataStore every frame. The previous loop did 3
+            // suspend Flow reads × 25 Hz = 75 DataStore reads/sec
+            // on the DTLS thread. Refresh once per second.
+            var cachedSyncOffsetMs = 200
+            var lastSettingsReadMs = 0L
             while (isActive) {
                 // Increment the sequence ID byte (rolls over at 255).
                 // Some bridge firmware checks for monotonic sequencing
@@ -303,10 +309,16 @@ class HueEntertainment @Inject constructor(
                 // to re-tune Hue every time they changed BT or audio
                 // delay; auto-summing keeps the Hue slider stable
                 // across other offsets.
-                val hueOffset = runCatching { settings.hueSyncOffsetMs.first() }.getOrDefault(200)
-                val audioDelay = runCatching { settings.audioDelayMs.first() }.getOrDefault(0)
-                val btOffset = runCatching { settings.btVideoAudioOffsetMs.first() }.getOrDefault(0)
-                val syncOffsetMs = (hueOffset + audioDelay + btOffset).coerceAtLeast(0)
+                // vc29.25 — refresh cached sync-offset once per second.
+                if (now - lastSettingsReadMs > 1000L) {
+                    lastSettingsReadMs = now
+                    cachedSyncOffsetMs = runCatching {
+                        settings.hueSyncOffsetMs.first() +
+                            settings.audioDelayMs.first() +
+                            settings.btVideoAudioOffsetMs.first()
+                    }.getOrDefault(200).coerceAtLeast(0)
+                }
+                val syncOffsetMs = cachedSyncOffsetMs
                 val r = analyserProcessor.getSnapshotAt(syncOffsetMs)
                 // vc29.21 — steeper palette coupling (Option E). Multi-
                 // plier 0.5..1.5 (was 0.7..1.3). The 2× spread between

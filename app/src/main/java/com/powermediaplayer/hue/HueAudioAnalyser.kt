@@ -102,8 +102,17 @@ class HueAudioAnalyser {
     private var fluxRunningMax = 0.01f
     private val fluxSortScratch = FloatArray(FLUX_HISTORY_SIZE)
 
+    // vc29.25 — pre-allocated scratch for percentile (was allocating a
+    // new FloatArray per band per frame = 150 allocs/sec on the audio
+    // thread). Reused across all 6 bands.
+    private val pctSortScratch = FloatArray(PCT_RING_SIZE)
+    // BPM autocorrelation pre-alloc (was allocating IntArray(141) +
+    // IntArray(recent-1) on every detected beat).
+    private val bpmBins = IntArray(141)
+    private val bpmIntervals = IntArray(ONSET_RING_SIZE - 1)
+
     // Onset timestamps (uptime ms). Used by the BPM tracker.
-    private val onsetTimes = LongArray(64)
+    private val onsetTimes = LongArray(ONSET_RING_SIZE)
     private var onsetCount = 0
     private var lastBpm = 120f
 
@@ -189,11 +198,12 @@ class HueAudioAnalyser {
         // the latest value into that range, then apply a light EMA
         // to tame frame-to-frame flicker before publishing. The EMA
         // is the only smoothing the engine layer needs.
+        val curIdx = (pctRingIdx + PCT_RING_SIZE - 1) % PCT_RING_SIZE
         for (i in 0..5) {
-            val (p10, p95) = percentile10And95(pctRing[i], pctRingFilled)
-            val cur = pctRing[i][(pctRingIdx + PCT_RING_SIZE - 1) % PCT_RING_SIZE]
-            val span = (p95 - p10).coerceAtLeast(0.02f)
-            val stretched = ((cur - p10) / span).coerceIn(0f, 1f)
+            percentile20And90(pctRing[i], pctRingFilled)
+            val cur = pctRing[i][curIdx]
+            val span = (pctP90 - pctP20).coerceAtLeast(0.02f)
+            val stretched = ((cur - pctP20) / span).coerceIn(0f, 1f)
             normSmoothed[i] = normSmoothed[i] * (1f - NORM_EMA_ALPHA) +
                 stretched * NORM_EMA_ALPHA
             result.normalisedBands[i] = normSmoothed[i]
@@ -250,24 +260,26 @@ class HueAudioAnalyser {
         // BPM via autocorrelation of inter-onset intervals.
         if (onsetCount >= 4) {
             val recent = min(onsetCount, onsetTimes.size)
-            val intervals = IntArray(recent - 1)
+            // vc29.25 — reuse pre-allocated bpmIntervals + bpmBins
+            // instead of allocating per beat. Clear only the used
+            // prefix / full bins range.
             for (i in 1 until recent) {
-                val curIdx = (onsetCount - recent + i) % onsetTimes.size
-                val prevIdx = (onsetCount - recent + i - 1) % onsetTimes.size
-                val dt = (onsetTimes[curIdx] - onsetTimes[prevIdx]).toInt()
-                intervals[i - 1] = dt
+                val cIdx = (onsetCount - recent + i) % onsetTimes.size
+                val pIdx = (onsetCount - recent + i - 1) % onsetTimes.size
+                bpmIntervals[i - 1] = (onsetTimes[cIdx] - onsetTimes[pIdx]).toInt()
             }
-            val bins = IntArray(141)
-            for (dt in intervals) {
+            for (i in bpmBins.indices) bpmBins[i] = 0
+            for (i in 0 until (recent - 1)) {
+                val dt = bpmIntervals[i]
                 if (dt <= 0) continue
                 val bpm = (60_000 / dt)
-                if (bpm in 60..200) bins[bpm - 60]++
+                if (bpm in 60..200) bpmBins[bpm - 60]++
             }
             var peakIdx = -1
             var peakVal = 0
-            for (i in bins.indices) {
-                if (bins[i] > peakVal) {
-                    peakVal = bins[i]; peakIdx = i
+            for (i in bpmBins.indices) {
+                if (bpmBins[i] > peakVal) {
+                    peakVal = bpmBins[i]; peakIdx = i
                 }
             }
             if (peakIdx >= 0 && peakVal >= 2) {
@@ -314,20 +326,24 @@ class HueAudioAnalyser {
      * (6 × 25 Hz = 150 calls/sec; each O(n log n) on 50 floats = ~300
      * float compares).
      */
-    private fun percentile10And95(ring: FloatArray, filled: Int): Pair<Float, Float> {
-        if (filled < 4) return 0f to 1f
-        // Copy into scratch + sort. Floats only — Arrays.sort is O(n log n).
-        val tmp = FloatArray(filled)
-        System.arraycopy(ring, 0, tmp, 0, filled)
-        java.util.Arrays.sort(tmp)
-        // vc29.20 — narrowed window p20..p90 (was p10..p95). More
-        // aggressive bottom-stretching so quiet music maps to lower
-        // brightness; tighter top so peaks aren't pinned to 1.0 quite
-        // as often. Net effect on the IKEA dimmable group: deeper
-        // dips, less time spent at the 80-90 % "stuck" plateau.
-        val p20 = tmp[(filled * 20 / 100).coerceIn(0, filled - 1)]
-        val p90 = tmp[(filled * 90 / 100).coerceIn(0, filled - 1)]
-        return p20 to p90
+    // vc29.25 — return into out-floats via per-band fields to avoid
+    // the previous Pair<Float, Float> + per-band FloatArray
+    // allocation (was 6 × Pair + 6 × FloatArray per frame at 25 Hz).
+    private var pctP20 = 0f
+    private var pctP90 = 1f
+    private fun percentile20And90(ring: FloatArray, filled: Int) {
+        if (filled < 4) {
+            pctP20 = 0f; pctP90 = 1f
+            return
+        }
+        // Sort the shared scratch buffer; only the first `filled`
+        // entries are meaningful.
+        System.arraycopy(ring, 0, pctSortScratch, 0, filled)
+        // java.util.Arrays.sort(float[], from, to) avoids touching
+        // the stale tail when the ring isn't full yet.
+        java.util.Arrays.sort(pctSortScratch, 0, filled)
+        pctP20 = pctSortScratch[(filled * 20 / 100).coerceIn(0, filled - 1)]
+        pctP90 = pctSortScratch[(filled * 90 / 100).coerceIn(0, filled - 1)]
     }
 
     /** Median absolute deviation — robust threshold component. */
@@ -346,5 +362,6 @@ class HueAudioAnalyser {
     companion object {
         private const val FLUX_HISTORY_SIZE = 25       // 1 s at 25 Hz
         private const val PCT_RING_SIZE = 50           // 2 s at 25 Hz
+        private const val ONSET_RING_SIZE = 64
     }
 }
