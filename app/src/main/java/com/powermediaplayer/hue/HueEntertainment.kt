@@ -119,6 +119,13 @@ class HueEntertainment @Inject constructor(
             }
             areaId = area
             settings.setHueEntertainmentId(area)
+            // (Removed pre-stream setAll(on) — it called the global
+            // /light listing and turned on EVERY light on the bridge,
+            // not just the ones in the entertainment area. That was a
+            // scope-violation bug. We now trust the user to have the
+            // entertainment-area lights on before starting; if they're
+            // off, the bridge silently ignores the frames for those
+            // lights and the user can flip them on in the Hue app.)
             val started = hueProvider.startEntertainmentStream(area)
             if (!started) {
                 DiagLog.event("HUE", "entertainment.start — bridge refused streaming PUT")
@@ -160,7 +167,15 @@ class HueEntertainment @Inject constructor(
             val frameBuf = ByteArray(headerSize + lightChannels.size * channelRecordSize)
             writeHeader(frameBuf, area)
             var frameCount = 0L
+            var seqId = 0
             while (isActive) {
+                // Increment the sequence ID byte (rolls over at 255).
+                // Some bridge firmware checks for monotonic sequencing
+                // and drops duplicate packets — keeping it constant
+                // would let the bridge legitimately ignore us as a
+                // stuck transmitter.
+                frameBuf[11] = seqId.toByte()
+                seqId = (seqId + 1) and 0xFF
                 val now = android.os.SystemClock.uptimeMillis()
                 // Effective offset auto-sums the three legs that all
                 // shift audio time relative to the PCM tap:
@@ -207,14 +222,14 @@ class HueEntertainment @Inject constructor(
                     val yCie = (xy[1] * 65535).toInt().coerceIn(0, 65535)
                     val bri = (combined * 65535).toInt().coerceIn(0, 65535)
 
-                    frameBuf[off + 0] = (ch ushr 8).toByte()
-                    frameBuf[off + 1] = ch.toByte()
-                    frameBuf[off + 2] = (xCie ushr 8).toByte()
-                    frameBuf[off + 3] = xCie.toByte()
-                    frameBuf[off + 4] = (yCie ushr 8).toByte()
-                    frameBuf[off + 5] = yCie.toByte()
-                    frameBuf[off + 6] = (bri ushr 8).toByte()
-                    frameBuf[off + 7] = bri.toByte()
+                    // v2 record: 1-byte channel id + 3 u16 BE values
+                    frameBuf[off + 0] = ch.toByte()
+                    frameBuf[off + 1] = (xCie ushr 8).toByte()
+                    frameBuf[off + 2] = xCie.toByte()
+                    frameBuf[off + 3] = (yCie ushr 8).toByte()
+                    frameBuf[off + 4] = yCie.toByte()
+                    frameBuf[off + 5] = (bri ushr 8).toByte()
+                    frameBuf[off + 6] = bri.toByte()
                     off += channelRecordSize
                 }
                 runCatching { dtls?.send(frameBuf, 0, frameBuf.size) }
@@ -222,6 +237,19 @@ class HueEntertainment @Inject constructor(
                         DiagLog.event("HUE", "DTLS send failed: ${it.message} — stopping stream")
                         cancel()
                     }
+                // One-shot dump of the first frame so a future debug
+                // session can compare bytes against the Philips spec.
+                if (frameCount == 0L) {
+                    val hex = StringBuilder()
+                    for (i in 0 until kotlin.math.min(64, frameBuf.size)) {
+                        hex.append("%02x".format(frameBuf[i].toInt() and 0xff))
+                        if (i % 16 == 15) hex.append(' ')
+                    }
+                    DiagLog.event(
+                        "HUE",
+                        "frame[0] size=${frameBuf.size} bytes hexHead=$hex"
+                    )
+                }
                 // Periodic diag — once per ~4 s — so we can see BPM
                 // tracking working at runtime.
                 frameCount++
@@ -293,18 +321,25 @@ class HueEntertainment @Inject constructor(
     // ── Wire-format helpers ────────────────────────────────────────
 
     private fun writeHeader(buf: ByteArray, areaUuid: String) {
-        // "HueStream" v2.0 header — magic + version + colour space +
-        // area UUID. Layout per Hue Entertainment v2 spec.
+        // "HueStream" v2.0 header (Philips Entertainment v2 spec):
+        //   bytes 0..8  : ASCII "HueStream"
+        //   byte 9      : version major (0x02)
+        //   byte 10     : version minor (0x00)
+        //   byte 11     : sequence id (any, bridge tolerates)
+        //   bytes 12-13 : reserved (0x00 0x00)
+        //   byte 14     : color space — 0x00 RGB, 0x01 XY+brightness
+        //   byte 15     : reserved (0x00)
+        //   bytes 16-51 : entertainment area UUID (36 ASCII)
         buf[0] = 'H'.code.toByte(); buf[1] = 'u'.code.toByte(); buf[2] = 'e'.code.toByte()
         buf[3] = 'S'.code.toByte(); buf[4] = 't'.code.toByte(); buf[5] = 'r'.code.toByte()
         buf[6] = 'e'.code.toByte(); buf[7] = 'a'.code.toByte(); buf[8] = 'm'.code.toByte()
         buf[9] = 0x02; buf[10] = 0x00       // version 2.0
-        buf[11] = 0; buf[12] = 0            // sequence (bridge ignores)
-        buf[13] = 0; buf[14] = 0            // reserved
-        buf[15] = 0                          // colour space 0 = XY+brightness
-        buf[16] = 0                          // reserved
+        buf[11] = 0x00                       // sequence id
+        buf[12] = 0x00; buf[13] = 0x00      // reserved
+        buf[14] = 0x01                       // color space = XY brightness
+        buf[15] = 0x00                       // reserved
         val ascii = areaUuid.toByteArray(Charsets.US_ASCII)
-        System.arraycopy(ascii, 0, buf, 17, min(ascii.size, 36))
+        System.arraycopy(ascii, 0, buf, 16, min(ascii.size, 36))
     }
 
     private fun hexDecode(hex: String): ByteArray {
@@ -319,8 +354,14 @@ class HueEntertainment @Inject constructor(
 
     companion object {
         private const val BRIDGE_DTLS_PORT = 2100
+        // v2 header is 16 bytes of magic+meta plus a 36-byte ASCII
+        // entertainment-area UUID = 52 bytes total.
         private const val headerSize = 52
-        // v2 light record: channel u16 + x u16 + y u16 + brightness u16
-        private const val channelRecordSize = 8
+        // v2 light record (per Philips Entertainment v2 spec):
+        //   1 byte channel id + 6 bytes (3 u16 BE values).
+        // Total 7 bytes. We had it as 8 (with a 2-byte channel id) in
+        // an earlier draft — wrong: the bridge silently accepted those
+        // packets but routed them to no lights.
+        private const val channelRecordSize = 7
     }
 }

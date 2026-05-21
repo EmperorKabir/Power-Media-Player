@@ -241,6 +241,44 @@ class HueProvider @Inject constructor(
         }
     }
 
+    /**
+     * Return the list of channel IDs configured in the bridge's
+     * entertainment_configuration for [areaId]. The streaming
+     * protocol's per-channel record uses these IDs (NOT the v2 light
+     * UUIDs and NOT a flat 0..N-1 range) — sending the wrong IDs
+     * means the bridge accepts the packets silently but doesn't route
+     * them to any actual light.
+     */
+    suspend fun entertainmentChannelIds(areaId: String): List<Int> {
+        val ip = settings.hueBridgeIp.first()
+        val key = settings.hueAppKey.first()
+        if (ip.isBlank() || key.isBlank()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val req = Request.Builder()
+                    .url("https://$ip/clip/v2/resource/entertainment_configuration/$areaId")
+                    .header("hue-application-key", key)
+                    .get()
+                    .build()
+                laxHttp.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@withContext emptyList()
+                    val text = resp.body?.string().orEmpty()
+                    // channels[]: each entry has "channel_id": <int>.
+                    // Match within the channels array slice if possible
+                    // — but a plain global regex is sufficient because
+                    // no other JSON keys named exactly channel_id appear
+                    // on this endpoint.
+                    val ids = Regex("\"channel_id\"\\s*:\\s*(\\d+)")
+                        .findAll(text)
+                        .map { it.groupValues[1].toInt() }
+                        .toList()
+                    DiagLog.event("HUE", "entertainmentChannelIds → ${ids.size}: $ids")
+                    ids
+                }
+            }.getOrDefault(emptyList())
+        }
+    }
+
     /** Start the bridge's entertainment stream for the given area. */
     suspend fun startEntertainmentStream(areaId: String): Boolean {
         val ip = settings.hueBridgeIp.first()

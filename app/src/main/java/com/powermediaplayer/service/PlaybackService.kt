@@ -1014,16 +1014,23 @@ class PlaybackService : MediaSessionService() {
                     val isCast = activePlayer is androidx.media3.cast.CastPlayer
                     val isSpotify = spotifyProvider.spotifyState.value != null
                     if (intensity > 0 && isPlaying && !isCast && !isSpotify) {
-                        val n = runCatching { hueProvider.listLightIds().size }
-                            .getOrDefault(0)
-                            .coerceAtMost(10)
-                        val channels = (0 until n).toList()
+                        // Fetch the channel IDs configured INSIDE the
+                        // entertainment area, not just any light on the
+                        // bridge. Wrong IDs => bridge accepts packets
+                        // silently but routes them to nothing visible.
+                        val areaId = runCatching {
+                            hueProvider.firstEntertainmentAreaId()
+                        }.getOrNull()
+                        val channels = if (areaId != null) {
+                            hueProvider.entertainmentChannelIds(areaId)
+                                .take(10) // bridge enforces <= 10
+                        } else emptyList()
                         if (channels.isNotEmpty()) {
                             hueEntertainment.start(intensity, channels)
                         } else {
                             com.powermediaplayer.diag.DiagLog.event(
                                 "HUE",
-                                "auto-start skipped — no lights known to bridge"
+                                "auto-start skipped — entertainment area has no channels (area=$areaId)"
                             )
                         }
                     } else {
