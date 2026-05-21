@@ -130,6 +130,14 @@ object DiagLog {
      * formatting, no file IO, no allocation beyond the receiver fields.
      */
     fun event(tag: String, msg: String) {
+        // Debug-only logcat mirror — makes DiagLog visible to
+        // `adb logcat -s PMP_DIAG_FILE` during dev / emulator runs
+        // without needing the user to first toggle the file logger
+        // on. R8 strips the entire block in release builds because
+        // BuildConfig.DEBUG resolves to a compile-time `false`.
+        if (BuildConfig.DEBUG) {
+            android.util.Log.i("PMP_DIAG_FILE", "[$tag] $msg")
+        }
         if (!enabled) return
         val now = System.currentTimeMillis()
         val upMs = SystemClock.uptimeMillis() - startUptimeMs
