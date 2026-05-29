@@ -161,6 +161,12 @@ android {
 }
 
 dependencies {
+    // ── android-deep-logger (debug-only forensic NDJSON logger) ──
+    // App Startup auto-installs DeepLogger at process start via the
+    // debug manifest. Release builds link the src/release no-op and
+    // never pull this in.
+    debugImplementation("androidx.startup:startup-runtime:1.1.1")
+
     // ── Compose BOM ──────────────────────────────────────────────
     val composeBom = platform("androidx.compose:compose-bom:2025.04.00")
     implementation(composeBom)

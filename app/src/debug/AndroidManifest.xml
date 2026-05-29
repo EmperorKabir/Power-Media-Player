@@ -1,0 +1,23 @@
+<!--
+  DEBUG-only manifest. Android's manifest merger combines this with the main
+  manifest for debug builds ONLY, so release never sees the startup provider
+  and never links the DeepLogger. Installed by the android-deep-logger skill.
+
+  App Startup auto-install: declares the androidx.startup InitializationProvider
+  with DeepLoggerInitializer as metadata. No host code touched.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="com.powermediaplayer.deeplog.DeepLoggerInitializer"
+                android:value="androidx.startup" />
+        </provider>
+    </application>
+</manifest>
