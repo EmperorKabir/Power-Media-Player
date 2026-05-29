@@ -217,14 +217,36 @@ class LastPlayedViewModel @Inject constructor(
         // Spotify entry was tapped from a fresh-position row).
         if (item.source == LastPlayedRepository.Source.SPOTIFY) {
             val targetPos = atPositionMs ?: item.lastPositionMs
+            // vc31 — instrument the Spotify resume branch with the same
+            // attempt/timing detail as local/Drive so ALL source
+            // permutations are covered (per test-all-permutations
+            // policy). The friend's audiobooks are likely local/Drive,
+            // but we don't assume — the log will show whichever branch
+            // is actually hit + its timing.
+            val attempt = resumeAttempts.incrementAndGet()
+            com.powermediaplayer.diag.DiagLog.resume(
+                "tap attempt=$attempt activeBefore=${resumeActive.get()} " +
+                    "source=SPOTIFY uri=${com.powermediaplayer.diag.DiagLog.hash(item.mediaUri)} " +
+                    "targetPos=${targetPos}ms"
+            )
             // Stop the local ExoPlayer first — otherwise tapping a
             // Spotify row from Last Played leaves any currently-playing
             // local audio audible behind the Spotify Connect track.
             runCatching { playbackConnection.pause() }
             viewModelScope.launch(Dispatchers.IO) {
+                val active = resumeActive.incrementAndGet()
+                val tStart = com.powermediaplayer.diag.DiagLog.now()
+                com.powermediaplayer.diag.DiagLog.resume(
+                    "spotify coroutine START attempt=$attempt activeNow=$active"
+                )
+                val tPlay = com.powermediaplayer.diag.DiagLog.now()
                 val play = runCatching {
                     spotifyProvider.playTrackOnConnectDevice(item.mediaUri, contextUri = null)
                 }.getOrNull()
+                com.powermediaplayer.diag.DiagLog.perf(
+                    "resume.spotifyPlayCall", com.powermediaplayer.diag.DiagLog.now() - tPlay,
+                    "attempt=$attempt ok=${play?.isSuccess == true}"
+                )
                 val ok = play?.isSuccess == true
                 if (ok) {
                     // Always start polling so the Player tab swaps to
@@ -280,6 +302,12 @@ class LastPlayedViewModel @Inject constructor(
                     // app-wide snackbar can also catch it.
                     _messages.emit(msg)
                 }
+                val remaining = resumeActive.decrementAndGet()
+                com.powermediaplayer.diag.DiagLog.resume(
+                    "spotify coroutine END attempt=$attempt ok=$ok " +
+                        "totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
+                        "stillActive=$remaining"
+                )
             }
             return
         }
