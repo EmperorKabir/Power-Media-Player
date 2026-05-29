@@ -48,6 +48,16 @@ class LastPlayedViewModel @Inject constructor(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
+    // vc31 resume-hang investigation — instrumentation only (no
+    // behaviour change). `resumeAttempts` increments on every tap;
+    // `resumeActive` tracks how many local/Drive resume coroutines are
+    // simultaneously in flight. If the log shows resumeActive climbing
+    // past 1, that PROVES the "keeps loading over and over" symptom is
+    // un-debounced re-entrancy. Both are read back into each RESUME
+    // line so the on-device trace is self-describing.
+    private val resumeAttempts = java.util.concurrent.atomic.AtomicInteger(0)
+    private val resumeActive = java.util.concurrent.atomic.AtomicInteger(0)
+
     /**
      * §C7 — drop overrides when a row stops being pinned.
      */
@@ -286,6 +296,15 @@ class LastPlayedViewModel @Inject constructor(
         }
         val uri = runCatching { Uri.parse(item.mediaUri) }.getOrNull() ?: return
         val targetPos = atPositionMs ?: item.lastPositionMs
+        // vc31 — tag this tap with an attempt number + show how many
+        // resume coroutines are already running. This is the headline
+        // evidence line for the resume-hang report.
+        val attempt = resumeAttempts.incrementAndGet()
+        com.powermediaplayer.diag.DiagLog.resume(
+            "tap attempt=$attempt activeBefore=${resumeActive.get()} " +
+                "source=${item.source} uri=${com.powermediaplayer.diag.DiagLog.hash(item.mediaUri)} " +
+                "scheme=${uri.scheme} targetPos=${targetPos}ms"
+        )
         // M4bChapterParser opens MediaExtractor + walks the full MP4 box
         // hierarchy synchronously. For multi-GB Drive-backed audiobooks
         // accessed via content:// SAF this routinely blocked the Main
@@ -293,11 +312,21 @@ class LastPlayedViewModel @Inject constructor(
         // the MediaItem on Dispatchers.IO, then hop back to Main for
         // the MediaController calls.
         viewModelScope.launch {
+            val active = resumeActive.incrementAndGet()
+            val tStart = com.powermediaplayer.diag.DiagLog.now()
+            com.powermediaplayer.diag.DiagLog.resume(
+                "coroutine START attempt=$attempt activeNow=$active"
+            )
             val mediaItem = withContext(Dispatchers.IO) {
+                val tParse = com.powermediaplayer.diag.DiagLog.now()
                 val chapterExtras = runCatching {
                     com.powermediaplayer.util.M4bChapterParser
                         .extractChaptersAsBundle(context, uri)
                 }.getOrDefault(android.os.Bundle())
+                com.powermediaplayer.diag.DiagLog.perf(
+                    "resume.chapterExtract", com.powermediaplayer.diag.DiagLog.now() - tParse,
+                    "attempt=$attempt chapterCount=${chapterExtras.getInt("chapter_count", -1)}"
+                )
                 androidx.media3.common.MediaItem.Builder()
                     .setMediaId(item.mediaUri)
                     .setUri(uri)
@@ -314,8 +343,18 @@ class LastPlayedViewModel @Inject constructor(
                     )
                     .build()
             }
+            val tSet = com.powermediaplayer.diag.DiagLog.now()
             playbackConnection.setMediaItems(listOf(mediaItem), 0)
             playbackConnection.seekTo(targetPos)
+            com.powermediaplayer.diag.DiagLog.perf(
+                "resume.setMediaItems+seek", com.powermediaplayer.diag.DiagLog.now() - tSet,
+                "attempt=$attempt"
+            )
+            val remaining = resumeActive.decrementAndGet()
+            com.powermediaplayer.diag.DiagLog.resume(
+                "coroutine END attempt=$attempt totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
+                    "stillActive=$remaining"
+            )
         }
         // Record a NEW session so the Recents list reflects this play
         // as its own row (the user-visible "A → B → A produces three

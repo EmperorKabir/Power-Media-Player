@@ -179,6 +179,28 @@ object DiagLog {
     fun dec(branch: String, reason: String) = event("DEC", "branch=$branch reason=$reason")
 
     /**
+     * Resume-from-last-played path timing. vc31 investigation — the
+     * friend reported 2-3 minute resume hangs + "keeps loading over
+     * and over" on repeated taps. These events carry per-phase
+     * elapsed-ms so the on-device log pinpoints which phase eats the
+     * time, plus an attempt/active counter pair so the re-entrancy
+     * (no tap-debounce) is visible.
+     */
+    fun resume(msg: String) = event("RESUME", msg)
+
+    /**
+     * Generic phase-timing helper. Logs a labelled phase with its
+     * elapsed wall-clock cost. Use for any "this block was slow"
+     * investigation — chapter parse, Drive fetch, ExoPlayer prepare.
+     * Pair with [now] to capture the start timestamp.
+     */
+    fun perf(label: String, elapsedMs: Long, extra: String = "") =
+        event("PERF", "$label took=${elapsedMs}ms${if (extra.isNotEmpty()) " $extra" else ""}")
+
+    /** Monotonic timestamp for measuring elapsed phases. */
+    fun now(): Long = SystemClock.uptimeMillis()
+
+    /**
      * Hash a string (URI / title / package) to a short hex token. Same
      * input always produces same token, so events referencing the
      * "same" content are correlatable without exposing the content

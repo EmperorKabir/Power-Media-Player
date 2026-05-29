@@ -1058,6 +1058,19 @@ class PlaybackService : MediaSessionService() {
                     val activePlayer = mediaSession?.player
                     val isCast = activePlayer is androidx.media3.cast.CastPlayer
                     val isSpotify = spotifyProvider.spotifyState.value != null
+                    // vc31 — full gating snapshot every time the collector
+                    // fires. The reconnect-regression report needs to see
+                    // WHY a re-pick does/doesn't restart: in particular
+                    // whether isStreaming() short-circuits with a stale
+                    // stream after a disconnect, and what hueSelectedArea
+                    // resolves to at this moment.
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "HUE",
+                        "collector fire intensity=$intensity isPlaying=$isPlaying " +
+                            "isCast=$isCast isSpotify=$isSpotify " +
+                            "isStreaming=${hueEntertainment.isStreaming()} " +
+                            "selectedArea=${runCatching { settingsDataStore.hueSelectedArea.first() }.getOrDefault("?")}"
+                    )
                     if (intensity > 0 && isPlaying && !isCast && !isSpotify) {
                         // vc29.10 — skip the whole bridge query chain
                         // (listAreas / listAllLights / ensureConfig /

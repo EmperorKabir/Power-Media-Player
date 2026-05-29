@@ -471,6 +471,17 @@ class SettingsViewModel @Inject constructor(
     /** Clear the picked area without unpairing the bridge. */
     fun clearHueSelectedArea() {
         viewModelScope.launch {
+            // vc31 — instrument the disconnect side of the reconnect
+            // regression. Logs the prior selection + intensity so the
+            // on-device trace shows the exact transition the engine
+            // then has to recover from.
+            val priorArea = runCatching { settingsDataStore.hueSelectedArea.first() }.getOrDefault("?")
+            val priorIntensity = runCatching { settingsDataStore.hueReactiveIntensity.first() }.getOrDefault(-1)
+            com.powermediaplayer.diag.DiagLog.event(
+                "HUE",
+                "DISCONNECT room/zone — priorArea=$priorArea priorIntensity=$priorIntensity " +
+                    "→ clearing area + intensity=0"
+            )
             settingsDataStore.setHueSelectedArea("")
             settingsDataStore.setHueReactiveIntensity(0)
         }
