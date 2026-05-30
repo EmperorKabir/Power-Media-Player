@@ -87,6 +87,15 @@ fun AppNavigation(
         }
     }
 
+    // vc31 — empty-player guidance jumps the user to the Library tab.
+    val navigateToLibrary = {
+        navController.navigate(Screen.Library.route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     val isPlayerRoute = currentDestination?.hierarchy?.any { it.route == Screen.Player.route } == true
 
     Scaffold(
@@ -135,7 +144,10 @@ fun AppNavigation(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Player.route) {
-                PlayerScreen(windowSizeClass = windowSizeClass)
+                PlayerScreen(
+                    windowSizeClass = windowSizeClass,
+                    onNavigateToLibrary = navigateToLibrary
+                )
             }
             composable(Screen.Library.route) {
                 LibraryScreen(

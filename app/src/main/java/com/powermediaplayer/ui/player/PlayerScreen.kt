@@ -68,6 +68,7 @@ val LocalOpenPopupCount = compositionLocalOf<androidx.compose.runtime.MutableInt
 @Composable
 fun PlayerScreen(
     windowSizeClass: WindowSizeClass,
+    onNavigateToLibrary: () -> Unit = {},
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -272,6 +273,60 @@ fun PlayerScreen(
                     IconButton(onClick = { viewModel.clearError() }) {
                         Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = TextPrimary)
                     }
+                }
+            }
+        }
+
+        // vc31 — empty-player guidance. The cold-start path restores the
+        // most-recent LOCAL/DRIVE item paused (PlayerViewModel init), so
+        // this only shows when there is genuinely nothing to wait in the
+        // player (fresh install, history cleared, or a Spotify-only
+        // recent that can't be pre-loaded). Audio only — video has its
+        // own surface. Gated off while loading so it never flashes over
+        // an in-progress restore.
+        if (!uiState.hasMedia && !uiState.isLoading &&
+            !uiState.cloudFetchInProgress && !uiState.isVideoContent
+        ) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LibraryMusic,
+                    contentDescription = null,
+                    tint = TealAccent,
+                    modifier = Modifier.size(72.dp)
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "Nothing's playing yet",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Pick a track from your Library or open a file, and it'll be waiting here next time you come back.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextTertiary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = onNavigateToLibrary,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Teal800,
+                        contentColor = TealAccent
+                    )
+                ) {
+                    Icon(
+                        Icons.Filled.LibraryMusic,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open Library")
                 }
             }
         }

@@ -1783,6 +1783,7 @@ class PlayerViewModel @Inject constructor(
         return PlayerUiState(
             isPlaying = playerState.isPlaying,
             isLoading = playerState.isLoading,
+            hasMedia = hasMedia,
             // Normalize all human-visible strings to repair UTF-8/Latin-1
             // mojibake (e.g. "Philosopherâ€™s" → "Philosopher's") and
             // collapse curly quotes / invisible formatting.

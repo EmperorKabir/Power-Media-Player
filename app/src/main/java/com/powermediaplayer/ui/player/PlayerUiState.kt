@@ -18,6 +18,9 @@ data class PlayerUiState(
     // Playback status
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
+    // vc31: true once the player holds ≥1 media item (incl. a paused
+    // cold-start restore). Drives the empty-player guidance state.
+    val hasMedia: Boolean = false,
 
     // Track info
     val title: String = "No media loaded",
