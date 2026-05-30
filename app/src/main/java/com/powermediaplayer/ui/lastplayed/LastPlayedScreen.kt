@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.data.repository.LastPlayedRepository.HistoryItem
 import com.powermediaplayer.data.repository.LastPlayedRepository.Source
+import com.powermediaplayer.ui.theme.ErrorRed
 import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.ui.theme.SurfaceElevated
 import com.powermediaplayer.ui.theme.TealAccent
@@ -70,6 +71,35 @@ fun LastPlayedScreen(
         viewModel.messages.collect { snackbar.showSnackbar(it) }
     }
     var showInfoSheet by remember { mutableStateOf(false) }
+    // vc31 UX fix: 'Clear all' wiped every recent + cascade-deleted its
+    // session bookmarks with one tap, no undo. Gate behind a confirm.
+    var showClearAllConfirm by remember { mutableStateOf(false) }
+    if (showClearAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirm = false },
+            title = { Text("Delete all recent items?", color = ErrorRed) },
+            text = {
+                Text(
+                    "This removes every item from Recents and deletes the " +
+                        "session bookmarks saved against them. Pinned and " +
+                        "favourited items are NOT affected. This cannot be undone.",
+                    color = TextPrimary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearAllRecents()
+                    showClearAllConfirm = false
+                }) { Text("Delete all", color = ErrorRed) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearAllConfirm = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            },
+            containerColor = OledBlack
+        )
+    }
     var contextItem by remember { mutableStateOf<HistoryItem?>(null) }
     var contextFromRecents by remember { mutableStateOf(true) }
     var overrideTarget by remember { mutableStateOf<HistoryItem?>(null) }
@@ -214,7 +244,7 @@ fun LastPlayedScreen(
             RecentsSectionHeader(
                 visible = dynamic.isNotEmpty(),
                 emptyLabel = "No recent items",
-                onClearAll = { viewModel.clearAllRecents() }
+                onClearAll = { showClearAllConfirm = true }
             )
             LazyColumn(modifier = Modifier.weight(1f)) {
                 itemsIndexed(dynamic, key = { _, it -> "dyn_${it.id}" }) { _, item ->

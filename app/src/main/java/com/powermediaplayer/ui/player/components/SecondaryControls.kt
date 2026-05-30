@@ -194,7 +194,7 @@ fun SpeedControl(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = speedMenuExpanded) },
                 modifier = Modifier
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                    .height(44.dp),
+                    .height(48.dp),
                 textStyle = MaterialTheme.typography.labelLarge,
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
@@ -290,7 +290,7 @@ fun PreparedSpeedComponent(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = enabled && speedMenuExpanded) },
                 modifier = Modifier
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = enabled)
-                    .height(44.dp),
+                    .height(48.dp),
                 textStyle = MaterialTheme.typography.labelLarge,
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(

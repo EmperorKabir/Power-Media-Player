@@ -49,7 +49,10 @@ val SurfaceCard = Color(0xFF1E1E1E)
 val SurfaceOverlay = Color(0x99000000) // 60% black overlay
 
 // ── Disabled/Grey States ─────────────────────────────────────
-val DisabledGrey = Color(0xFF555555)
+// vc31 a11y: was 0xFF555555 = 2.82:1 on OledBlack (fails WCAG AA 3:1).
+// 0xFF6E6E6E = ~4.1:1, clears the minimum with margin while still
+// reading as a muted/disabled grey vs primary text.
+val DisabledGrey = Color(0xFF6E6E6E)
 val DisabledContent = Color(0xFF3A3A3A)
 
 // ── Text Colors ──────────────────────────────────────────────

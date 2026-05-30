@@ -187,6 +187,40 @@ fun PlayerScreen(
                 }
             }
         }
+        // vc31 UX fix: render the player's own isLoading state. It was
+        // set during a (slow, 2-3 min) Last-Played resume but never
+        // rendered — the screen looked frozen. Mirrors the cloud-fetch
+        // banner. Gated to not double-stack with cloudFetchInProgress.
+        AnimatedVisibility(
+            visible = uiState.isLoading && !uiState.cloudFetchInProgress,
+            enter = fadeIn(animationSpec = tween(durationMillis = 300)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 300)),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            Surface(
+                color = Teal800.copy(alpha = 0.9f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp, start = 16.dp, end = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        color = TealAccent,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Loading media… please wait…",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
         if (sleepTimerExpired) {
             Surface(
                 color = Teal800,
@@ -590,7 +624,7 @@ private fun OverlayContent(
             // before the seek so a quick tap on a playing video
             // freezes + steps in one motion.
             if (uiState.isVideoContent && !uiState.isCasting) {
-                IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(48.dp)) {
                     Icon(painterResource(R.drawable.ic_frame_step_back), contentDescription = "Step one frame back",
                         tint = TealAccent)
                 }
@@ -613,12 +647,12 @@ private fun OverlayContent(
                 )
             }
             if (uiState.isVideoContent && !uiState.isCasting) {
-                IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(48.dp)) {
                     Icon(painterResource(R.drawable.ic_frame_step_forward), contentDescription = "Step one frame forward",
                         tint = TealAccent)
                 }
             }
-            IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(40.dp)) {
+            IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
                     tint = TealAccent)
             }
@@ -683,10 +717,10 @@ private fun OverlayContent(
                             trailingIcon = {
                                 IconButton(
                                     onClick = { viewModel.deleteBookmark(b) },
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(Icons.Filled.Close, contentDescription = "Remove",
-                                        tint = ErrorRed, modifier = Modifier.size(14.dp))
+                                        tint = ErrorRed, modifier = Modifier.size(16.dp))
                                 }
                             }
                         )
@@ -844,7 +878,7 @@ private fun PlayerScreenExpanded(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (uiState.isVideoContent && !uiState.isCasting) {
-                    IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(40.dp)) {
+                    IconButton(onClick = { viewModel.stepFrameBack() }, modifier = Modifier.size(48.dp)) {
                         Icon(painterResource(R.drawable.ic_frame_step_back), contentDescription = "Step one frame back",
                             tint = TealAccent)
                     }
@@ -867,12 +901,12 @@ private fun PlayerScreenExpanded(
                     )
                 }
                 if (uiState.isVideoContent && !uiState.isCasting) {
-                    IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(40.dp)) {
+                    IconButton(onClick = { viewModel.stepFrameForward() }, modifier = Modifier.size(48.dp)) {
                         Icon(painterResource(R.drawable.ic_frame_step_forward), contentDescription = "Step one frame forward",
                             tint = TealAccent)
                     }
                 }
-                IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(40.dp)) {
+                IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
                         tint = TealAccent)
                 }
@@ -913,10 +947,10 @@ private fun PlayerScreenExpanded(
                             trailingIcon = {
                                 IconButton(
                                     onClick = { viewModel.deleteBookmark(b) },
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(Icons.Filled.Close, contentDescription = "Remove",
-                                        tint = ErrorRed, modifier = Modifier.size(14.dp))
+                                        tint = ErrorRed, modifier = Modifier.size(16.dp))
                                 }
                             }
                         )

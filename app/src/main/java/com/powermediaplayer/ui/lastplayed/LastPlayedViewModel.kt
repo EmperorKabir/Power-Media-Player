@@ -210,6 +210,19 @@ class LastPlayedViewModel @Inject constructor(
         item: LastPlayedRepository.HistoryItem,
         atPositionMs: Long? = null
     ) {
+        // vc31 debounce: while a resume coroutine is already in flight,
+        // ignore further taps. This is the fix for the friend's "keeps
+        // loading over and over (once for each time you pressed it)" —
+        // previously every tap of a still-loading entry spawned another
+        // full M4bChapterParser coroutine. Paired with the PlayerScreen
+        // isLoading spinner so the user gets feedback instead of tapping
+        // blindly. resumeActive is decremented in each branch's END log.
+        if (resumeActive.get() > 0) {
+            com.powermediaplayer.diag.DiagLog.resume(
+                "tap IGNORED — resume already in flight (active=${resumeActive.get()})"
+            )
+            return
+        }
         // Spotify rows: route via Spotify Connect, including the
         // bookmark override position. Polling starts unconditionally on
         // play success (the previous gating-on-positive-position bug
