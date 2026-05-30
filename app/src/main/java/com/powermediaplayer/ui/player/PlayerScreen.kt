@@ -787,7 +787,7 @@ private fun OverlayContent(
             var label by remember(bookmark.id) { mutableStateOf(bookmark.label) }
             AlertDialog(
                 onDismissRequest = { renamingBookmark = null },
-                title = { Text("Rename bookmark", color = TealAccent) },
+                title = { Text("Rename bookmark", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
                 text = {
                     OutlinedTextField(
                         value = label,

@@ -177,7 +177,7 @@ fun LibraryScreen(
     pendingDelete?.let { file ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Delete this file?", color = ErrorRed) },
+            title = { Text("Delete this file?", color = ErrorRed, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Text(
                     "Permanently remove '${file.title}' from your phone. This can't be undone.",

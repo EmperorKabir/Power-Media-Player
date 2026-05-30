@@ -77,7 +77,7 @@ fun LastPlayedScreen(
     if (showClearAllConfirm) {
         AlertDialog(
             onDismissRequest = { showClearAllConfirm = false },
-            title = { Text("Delete all recent items?", color = ErrorRed) },
+            title = { Text("Delete all recent items?", color = ErrorRed, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Text(
                     "This removes every item from Recents and deletes the " +

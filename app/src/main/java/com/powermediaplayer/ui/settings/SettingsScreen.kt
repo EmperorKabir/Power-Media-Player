@@ -58,7 +58,7 @@ fun SettingsScreen(
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
-            title = { Text("Reset all settings?", color = ErrorRed) },
+            title = { Text("Reset all settings?", color = ErrorRed, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Text(
                     "Every preference will be restored to its default value. " +

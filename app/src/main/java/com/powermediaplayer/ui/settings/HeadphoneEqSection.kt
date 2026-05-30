@@ -85,7 +85,7 @@ fun HeadphoneEqSection(
     if (showDialog) {
         AlertDialog(
             onDismissRequest = { showDialog = false },
-            title = { Text("Headphone EQ preset", color = TealAccent) },
+            title = { Text("Headphone EQ preset", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column {
                     Text(

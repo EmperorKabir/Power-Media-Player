@@ -172,7 +172,7 @@ private fun SmartPlaylistEditor(
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("New smart playlist", color = TealAccent) },
+        title = { Text("New smart playlist", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(

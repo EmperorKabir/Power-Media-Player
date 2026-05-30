@@ -1266,7 +1266,7 @@ private fun SourceChooserDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Pick a source", color = TealAccent) },
+        title = { Text("Pick a source", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
         text = {
             Column {
                 Text(

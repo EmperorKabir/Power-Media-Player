@@ -289,7 +289,7 @@ fun EqualizerScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Preset", color = ErrorRed) },
+            title = { Text("Delete Preset", color = ErrorRed, style = MaterialTheme.typography.titleLarge) },
             text = {
                 Text(
                     "Delete \"${uiState.selectedPresetName}\"? This cannot be undone.",
@@ -509,7 +509,7 @@ private fun SavePresetDialog(onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Save Preset", color = TealAccent) },
+        title = { Text("Save Preset", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
         text = {
             OutlinedTextField(
                 value = name,
