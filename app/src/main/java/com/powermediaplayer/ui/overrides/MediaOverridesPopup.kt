@@ -134,7 +134,9 @@ fun MediaOverridesPopup(
                 TextButton(onClick = {
                     save(MediaOverrideEntity(mediaUri = mediaUri))
                 }) { Text("Clear all overrides", color = ErrorRed) }
-                Button(onClick = onDismiss) { Text("Done") }
+                // vc31 consistency: was the only filled Button among the
+                // app's dialog actions; Material3 dialogs use TextButton.
+                TextButton(onClick = onDismiss) { Text("Done", color = TealAccent) }
             }
             Spacer(Modifier.height(24.dp))
         }

@@ -193,7 +193,9 @@ fun LibraryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) {
-                    Text("Cancel", color = TealAccent)
+                    // vc31 consistency: dialog Cancel buttons standardise
+                    // on grey (TextSecondary), not the teal accent.
+                    Text("Cancel", color = TextSecondary)
                 }
             },
             containerColor = OledBlack

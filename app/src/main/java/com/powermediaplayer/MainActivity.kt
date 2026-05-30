@@ -5,6 +5,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
@@ -142,10 +143,22 @@ class MainActivity : FragmentActivity() {
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        AppNavigation(
-                            windowSizeClass = windowSizeClass,
-                            initialOpenTab = pendingOpenTab.value
-                        )
+                        // vc31 edge-to-edge: keep the OledBlack Surface
+                        // full-bleed behind the (transparent, Android-15
+                        // default) system bars, but inset the app chrome
+                        // so InfoIcon/controls don't collide with the
+                        // notch or the back-gesture zone. Addresses the
+                        // Play Console edge-to-edge warning.
+                        androidx.compose.foundation.layout.Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .systemBarsPadding()
+                        ) {
+                            AppNavigation(
+                                windowSizeClass = windowSizeClass,
+                                initialOpenTab = pendingOpenTab.value
+                            )
+                        }
                     }
                 }
             }

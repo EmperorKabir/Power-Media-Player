@@ -77,7 +77,7 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) {
-                    Text("Cancel", color = TealAccent)
+                    Text("Cancel", color = TextSecondary)
                 }
             },
             containerColor = OledBlack
@@ -437,6 +437,13 @@ fun SettingsScreen(
         SliderRow("Subtitle delay", "${uiState.subtitleDelayMs} ms",
             uiState.subtitleDelayMs.toFloat(), -5000f..5000f,
             default = 0f) { viewModel.setSubtitleDelay(it.toInt()) }
+        Text(
+            text = "Positive = subtitles appear later; negative = earlier. " +
+                "Typical nudge is ±100–500 ms.",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+        )
         SettingsDivider()
 
         // §D-8 Library
@@ -636,7 +643,9 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(80.dp))
+        // vc31: was 80dp — marginal above a 3-button nav bar under
+        // edge-to-edge. 96dp keeps the Reset button clear of the bar.
+        Spacer(modifier = Modifier.height(96.dp))
     }
 }
 
