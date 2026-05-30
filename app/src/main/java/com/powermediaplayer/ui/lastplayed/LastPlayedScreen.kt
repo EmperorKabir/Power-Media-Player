@@ -249,7 +249,21 @@ fun LastPlayedScreen(
             LazyColumn(modifier = Modifier.weight(1f)) {
                 itemsIndexed(dynamic, key = { _, it -> "dyn_${it.id}" }) { _, item ->
                     SwipeToDismissRow(
-                        onDismissed = { viewModel.deleteRecentsRow(item.id) }
+                        onDismissed = {
+                            viewModel.deleteRecentsRow(item.id)
+                            // vc31 — offer a single-level Undo. Restores the
+                            // row + its session bookmarks (ids preserved).
+                            scope.launch {
+                                val res = snackbar.showSnackbar(
+                                    message = "Removed “${item.title}”",
+                                    actionLabel = "Undo",
+                                    duration = SnackbarDuration.Short
+                                )
+                                if (res == SnackbarResult.ActionPerformed) {
+                                    viewModel.undoDeleteRecentsRow()
+                                }
+                            }
+                        }
                     ) {
                         HistoryRowWithBookmarks(
                             item = item,

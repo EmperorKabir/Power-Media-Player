@@ -153,8 +153,24 @@ class LastPlayedViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) { repo.reorderPinned(favouriteId, newOrder) }
     }
 
+    // vc31 — last swipe-deleted Recents row (+ its bookmarks), held for a
+    // single-level Undo from the snackbar. Cleared once consumed.
+    private var lastDeletedRecent:
+        Pair<com.powermediaplayer.data.db.entity.PlaybackHistoryEntity,
+            List<com.powermediaplayer.data.db.entity.HistoryBookmarkEntity>>? = null
+
     fun deleteRecentsRow(historyId: Long) {
-        viewModelScope.launch(Dispatchers.IO) { repo.delete(historyId) }
+        viewModelScope.launch(Dispatchers.IO) {
+            lastDeletedRecent = repo.snapshotForUndo(historyId)
+            repo.delete(historyId)
+        }
+    }
+
+    /** Restore the most-recent swipe-deleted Recents row (snackbar Undo). */
+    fun undoDeleteRecentsRow() {
+        val snap = lastDeletedRecent ?: return
+        lastDeletedRecent = null
+        viewModelScope.launch(Dispatchers.IO) { repo.restoreRow(snap.first, snap.second) }
     }
 
     fun clearAllRecents() {
