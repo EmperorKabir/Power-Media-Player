@@ -119,6 +119,9 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | T274 | Backoff × reverse interaction (user question) | M | DONE(answer: launch restore is forward-only by design, backoff normal; uncovered+fixed: reversed playback was persisting mirrored-timeline positions over the forward resume spot — tick now skips reverse-cache items; installed) |
 
+| T275 | Mid-playback reverse toggle | M | DONE(live flip in place from the mirrored position, state preserved; failure → toast + keeps playing forward) `[DEVICE]` |
+| T276 | Auto-play on launch for the status-bar close | M | DONE(fresh app open presses play on a paused surviving item; rotations excluded via savedInstanceState; Spotify mirror guarded; force-close path unchanged) `[DEVICE]` |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
