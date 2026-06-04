@@ -39,10 +39,10 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | ID | Task | Phase | Status |
 |----|------|-------|--------|
-| T228 | [VISUAL] on-device verification batch: settings 8-group order (A4), search live-feel (B5), empty-player state, swipe→Undo restore, edge-to-edge insets (video still full-bleed), isLoading spinner during slow resume | V | BLOCKED(needs T227 install → then user exercises app) |
+| T228 | [VISUAL] vc31 verification batch | V | folded into T257 (consolidated device pass) |
 | T229 | Resume-hang deep diagnosis (phase breakdown, all permutations) | I | DONE(superseded — delivered across findings rounds 2-5: Drive=75.9s parse (2 strategies), local=19ms, Spotify=handoff; cold-start guard decisions logged via DEC lines; fixes shipped T246/T252/T253/T254) |
 | T230 | Hue disconnect→reconnect + room-switch regression | I→M | DONE(T253 shipped: evidence run4 22:06-22:07 — disconnect zeroed intensity (priorIntensity=40→0) + area was never a collector source + isStreaming short-circuit ignored area changes. Fixed: intensity preserved on disconnect; area now a combine source; blank area=off; mid-stream switch restarts engine. 5/5 predicates (refined: clearHueSelectedArea clean, unpairHue zeroing intentional); pushed e70c8a7; installed Success) `[DEVICE]` re-test pending |
-| T231 | Edge-to-edge Play-warning closure: confirm Android-15 inset handling on device (ties to T228) | V | BLOCKED(needs T227) |
+| T231 | Edge-to-edge Play-warning device check | V | folded into T257 |
 
 | T257 | CONSOLIDATED on-device verification (the only outstanding work) — single user pass covering: T228 visuals (settings order+expand/collapse, search live-feel, empty-player, swipe→Undo, edge-to-edge/'transparent borders', loading banner), T232/233/237 visuals (⋮ menus, Hue sub-sections, expandable groups), T252/254 re-tests (Spotify switch clean, launch instant, taps never blocked), T253 re-test (Hue disconnect→re-pick→room switch) | V | AWAITING-USER(one device pass) |
 
