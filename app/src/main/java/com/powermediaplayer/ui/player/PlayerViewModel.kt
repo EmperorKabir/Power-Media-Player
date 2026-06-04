@@ -1572,7 +1572,7 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.setPlaybackParametersWithPitch(speed, clamped)
     }
 
-    // ── EnvironmentalReverb (heavier than PresetReverb) ─────────────
+    // ── Reverb (rendered in the service AudioProcessor chain) ───────
     init {
         // Reverb is rendered in the service's own AudioProcessor chain
         // (ReverbAudioProcessor) — the platform effect proved unusable
