@@ -101,11 +101,18 @@ fun PlayerScreen(
         }
     }
 
+    // vc31 overlap fix — the empty-player guidance must REPLACE the player
+    // chrome, not overlay it (it previously drew on top, so "No media
+    // loaded" + Track labels bled through underneath).
+    val showEmptyState = !uiState.hasMedia && !uiState.isLoading &&
+        !uiState.cloudFetchInProgress && !uiState.isVideoContent
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Video ALWAYS uses the Compact layout regardless of screen size,
         // so the picture fills the whole screen on phones, tablets, and
         // unfolded foldables. Audio uses the size-appropriate layout.
         when {
+            showEmptyState -> EmptyPlayerState(onNavigateToLibrary)
             uiState.isVideoContent -> PlayerScreenCompact(
                 uiState = uiState,
                 artworkBytes = artworkBytes,
@@ -277,59 +284,6 @@ fun PlayerScreen(
             }
         }
 
-        // vc31 — empty-player guidance. The cold-start path restores the
-        // most-recent LOCAL/DRIVE item paused (PlayerViewModel init), so
-        // this only shows when there is genuinely nothing to wait in the
-        // player (fresh install, history cleared, or a Spotify-only
-        // recent that can't be pre-loaded). Audio only — video has its
-        // own surface. Gated off while loading so it never flashes over
-        // an in-progress restore.
-        if (!uiState.hasMedia && !uiState.isLoading &&
-            !uiState.cloudFetchInProgress && !uiState.isVideoContent
-        ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(horizontal = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.LibraryMusic,
-                    contentDescription = null,
-                    tint = TealAccent,
-                    modifier = Modifier.size(72.dp)
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "Nothing's playing yet",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = TextPrimary
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Pick a track from your Library or open a file, and it'll be waiting here next time you come back.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextTertiary,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = onNavigateToLibrary,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Teal800,
-                        contentColor = TealAccent
-                    )
-                ) {
-                    Icon(
-                        Icons.Filled.LibraryMusic,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Open Library")
-                }
-            }
-        }
     }
 
     // ── Sleep Timer Dialog ────────────────────────────────────────
@@ -380,6 +334,64 @@ fun PlayerScreen(
             data = playerInfo,
             onDismiss = { showInfoSheet = false }
         )
+    }
+}
+
+/**
+ * vc31 — empty-player guidance, rendered INSTEAD of the player chrome
+ * (replacing the layout branch entirely so no "No media loaded" text or
+ * disabled controls bleed through underneath). Shows only when there is
+ * genuinely nothing to wait in the player: fresh install, cleared
+ * history, or a Spotify-only recent that can't be pre-loaded — the
+ * cold-start path otherwise restores the most-recent LOCAL/DRIVE item
+ * paused (PlayerViewModel init).
+ */
+@Composable
+private fun EmptyPlayerState(onNavigateToLibrary: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Icon(
+                imageVector = Icons.Filled.LibraryMusic,
+                contentDescription = null,
+                tint = TealAccent,
+                modifier = Modifier.size(72.dp)
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Nothing's playing yet",
+                style = MaterialTheme.typography.titleLarge,
+                color = TextPrimary
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Pick a track from your Library or open a file, and it'll be waiting here next time you come back.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextTertiary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick = onNavigateToLibrary,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Teal800,
+                    contentColor = TealAccent
+                )
+            ) {
+                Icon(
+                    Icons.Filled.LibraryMusic,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Open Library")
+            }
+        }
     }
 }
 
