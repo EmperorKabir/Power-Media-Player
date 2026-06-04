@@ -61,6 +61,8 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T238 | T1 back fix shipped: drill-in pushes (3 legit popUpTo remain: widget, navigateToLibrary, tab onClick) | M | DONE(gate T1 PASS) |
 | T239 | T2 Spotify banner 45s handoff grace + 3 armed call sites | M | DONE(SpotifyBannerGraceTest 3/3) |
 | T240 | T3 banner over pre-player parse — 6 wrapped paths + CloudViewModel verified-covered; resumeActive leak hardened | M | DONE(14 flag sites, was 2) |
+| T248 | PLAN ADDENDUM Tasks 13-20 for T241-T247 fixes (ResumeGate, async parse+cache, overlay gating, position retention, optimistic toggle, folder UX, GATE B) | P | DONE(`docs/superpowers/plans/2026-06-04-vc32-addendum-tasks-13-20.md`, E11-E18 index, self-review §end; parent Task 10 superseded by addendum Task 14) |
+| T249 | IMPLEMENT addendum Tasks 13-20 | M | AWAITING-USER(go) |
 
 ## F — New bugs reported 2026-06-04 evening device run (phase I — investigate)
 

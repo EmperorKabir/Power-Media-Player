@@ -687,6 +687,15 @@ class ChapterCache(private val maxEntries: Int = 16) {
 
 ---
 
+## ADDENDUM (2026-06-04 evening)
+
+Tasks 13-20 live in the sibling file
+`2026-06-04-vc32-addendum-tasks-13-20.md` — fixes for the seven device-run
+defects (T241-T247) with the round-2/3 evidence index E11-E18. **Task 10
+below is SUPERSEDED by addendum Task 14** (same cache, stronger design:
+remote parse fully async via the existing `setLocalChapters` path).
+Task 11 (Hue) unchanged — awaiting the user's Hue session.
+
 ## Self-review (run before execution)
 
 1. **Coverage:** E1→Task 1; E3→Task 2; E4/E5→Task 3; E7-1→Tasks 4-5; E7-groups→Task 6; E7-2→Task 7; perf→Task 10 (gated); Hue regression→Task 11; visual backlog→Task 12. No approved item without a task.
