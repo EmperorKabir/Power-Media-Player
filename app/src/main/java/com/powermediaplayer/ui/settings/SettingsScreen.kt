@@ -1,5 +1,8 @@
 package com.powermediaplayer.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -741,10 +744,35 @@ fun SettingsScreen(
             )
         } else {
             visibleGroups.forEach { (group, items) ->
-                SettingsSectionHeader(group.title)
-                items.forEachIndexed { idx, item ->
-                    item.content()
-                    if (idx < items.lastIndex) SettingsDivider()
+                // vc32 (E7): every group is expandable. Keyed on the group
+                // title so collapse states survive the search filter
+                // removing/reinserting groups (positional rememberSaveable
+                // would mix states up). Default collapsed — the 8 headers
+                // form a compact index; flagged for [VISUAL] sign-off.
+                // While searching, matches are force-shown regardless of
+                // the remembered state (filtering happens on the DATA
+                // above, so collapsed groups are still searched).
+                var expanded by rememberSaveable(key = "grp_${group.title}") {
+                    mutableStateOf(false)
+                }
+                val searching = q.isNotEmpty()
+                SettingsGroupHeader(
+                    title = group.title,
+                    expanded = expanded,
+                    searching = searching,
+                    onToggle = { expanded = !expanded }
+                )
+                AnimatedVisibility(
+                    visible = expanded || searching,
+                    enter = expandVertically(),
+                    exit = shrinkVertically()
+                ) {
+                    Column {
+                        items.forEachIndexed { idx, item ->
+                            item.content()
+                            if (idx < items.lastIndex) SettingsDivider()
+                        }
+                    }
                 }
                 SettingsDivider()
             }
@@ -766,6 +794,81 @@ private fun SettingsSectionHeader(title: String) {
         color = TealAccent,
         modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp)
     )
+}
+
+/**
+ * vc32 (E7): clickable expand/collapse group header. The chevron hides
+ * while searching because search force-shows matches regardless of the
+ * remembered collapse state.
+ */
+@Composable
+private fun SettingsGroupHeader(
+    title: String,
+    expanded: Boolean,
+    searching: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !searching) { onToggle() }
+            .padding(start = 24.dp, end = 16.dp, top = 24.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = TealAccent,
+            modifier = Modifier.weight(1f)
+        )
+        if (!searching) {
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+                tint = TealAccent
+            )
+        }
+    }
+}
+
+/** vc32 (E7 idea 2): collapsible sub-section inside a settings item. */
+@Composable
+private fun ExpandableSubsection(
+    title: String,
+    stateKey: String,
+    initiallyExpanded: Boolean,
+    content: @Composable () -> Unit
+) {
+    var expanded by rememberSaveable(key = "sub_$stateKey") {
+        mutableStateOf(initiallyExpanded)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { expanded = !expanded }
+            .padding(start = 24.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+            tint = TextSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+    AnimatedVisibility(
+        visible = expanded,
+        enter = expandVertically(),
+        exit = shrinkVertically()
+    ) {
+        Column { content() }
+    }
 }
 
 @Composable
