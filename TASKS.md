@@ -113,7 +113,7 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T270 | Restore toggle 'not working' | M | DONE(evidence: 00:17:15 restore DID load the item paused but confirm-log missing → failures now logged; OFF now also clears a paused leftover surviving in the service, never touching playing audio) `[DEVICE]` test both directions |
 
 | T271 | Player tab 'nothing playing' vs mini-bar offering resume | M | DONE(gate omitted isSpotifyActive — local player empty while the Spotify mirror was live; empty-state now respects the overlay; installed) `[DEVICE]` |
-| T272 | Reverse audio | M | DONE(built properly: decode→disk-streamed PCM→frame-reversed WAV, cached, 60-min guard; Library single+queue-collapse + LastPlayed local resume; local audio only by design (video/Drive excluded, Spotify impossible); ReverseAudioTest 2/2; installed) `[DEVICE]` |
+| T272 | Reverse audio | M | DONE v2(Drive enabled with 50 MB size guard — 5s-class load on decent Wi-Fi, size not duration is the honest cap; HEAD-checked pre-download; oversize → forward + snackbar; layman audio-only settings copy; ReverseAudioTest 2/2; installed) `[DEVICE]` |
 
 ## E — Completed (evidence archived)
 
