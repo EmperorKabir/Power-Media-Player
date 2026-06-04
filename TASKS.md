@@ -117,6 +117,8 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | T273 | 'Auto-play on launch' toggle (resume = restore + play) | M | DONE(nested under restore toggle, default off; cold-start playWhenReady=autoplay; backoff still applies; suites green; installed) `[DEVICE]` |
 
+| T274 | Backoff × reverse interaction (user question) | M | DONE(answer: launch restore is forward-only by design, backoff normal; uncovered+fixed: reversed playback was persisting mirrored-timeline positions over the forward resume spot — tick now skips reverse-cache items; installed) |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
