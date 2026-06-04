@@ -7,6 +7,7 @@ import com.powermediaplayer.data.repository.LastPlayedRepository
 import com.powermediaplayer.service.PlaybackConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -34,6 +35,7 @@ class LastPlayedViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
+    private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     @param:dagger.hilt.android.qualifiers.ApplicationContext
     private val context: android.content.Context
 ) : ViewModel() {
@@ -416,10 +418,29 @@ class LastPlayedViewModel @Inject constructor(
                 // Playback starts immediately (the URL is range-capable);
                 // chapters arrive via the async fill-in below.
                 val isRemote = com.powermediaplayer.util.M4bChapterParser.isRemote(uri)
+                // Reverse mode: LOCAL audio only (Drive would re-stream
+                // whole files; Spotify never enters our pipeline).
+                val reversed = !isRemote &&
+                    item.source == LastPlayedRepository.Source.LOCAL &&
+                    settingsDataStore.audioReverseLocal.first()
+                val playUri = if (reversed) {
+                    withContext(Dispatchers.IO) {
+                        com.powermediaplayer.audio.ReverseAudio
+                            .ensureReversedWav(context, uri)
+                            .map { android.net.Uri.fromFile(it) }
+                            .onFailure {
+                                com.powermediaplayer.diag.DiagLog.resume(
+                                    "reverse failed — playing forward: ${it.message}"
+                                )
+                            }
+                            .getOrDefault(uri)
+                    }
+                } else uri
                 val mediaItem = withContext(Dispatchers.IO) {
                     val tParse = com.powermediaplayer.diag.DiagLog.now()
-                    val chapterExtras = if (isRemote) {
-                        com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri)
+                    val chapterExtras = if (isRemote || reversed) {
+                        if (reversed) android.os.Bundle()
+                        else com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri)
                             ?: android.os.Bundle()
                     } else {
                         runCatching {
@@ -433,7 +454,7 @@ class LastPlayedViewModel @Inject constructor(
                     )
                     androidx.media3.common.MediaItem.Builder()
                         .setMediaId(item.mediaUri)
-                        .setUri(uri)
+                        .setUri(playUri)
                         .setRequestMetadata(
                             androidx.media3.common.MediaItem.RequestMetadata.Builder()
                                 .setMediaUri(uri).build()
@@ -458,10 +479,10 @@ class LastPlayedViewModel @Inject constructor(
                 }
                 val tSet = com.powermediaplayer.diag.DiagLog.now()
                 playbackConnection.setMediaItems(listOf(mediaItem), 0)
-                playbackConnection.seekTo(targetPos)
+                playbackConnection.seekTo(if (reversed) 0L else targetPos)
                 com.powermediaplayer.diag.DiagLog.perf(
                     "resume.setMediaItems+seek", com.powermediaplayer.diag.DiagLog.now() - tSet,
-                    "token=$token"
+                    "token=$token reversed=$reversed"
                 )
                 // vc32: background chapter fill-in for remote
                 // items — parses once, caches (including the empty

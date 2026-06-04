@@ -425,7 +425,10 @@ fun SettingsScreen(
                         uiState.pitch, 0.5f..2.0f,
                         default = 1.0f) { viewModel.setPitch(it) }
                     SettingsToggleItem("Reverse audio (local files)",
-                        "Play local files backwards. Cloud streams unsupported.",
+                        "Play local audio files backwards, one file at a time. " +
+                            "The file is decoded and reversed on first play (a " +
+                            "moment's wait, then cached; 60-minute limit). " +
+                            "Video, Drive and Spotify are not supported.",
                         Icons.Filled.SwapHoriz, uiState.audioReverseLocal) { viewModel.setAudioReverseLocal(it) }
                 }
             )),

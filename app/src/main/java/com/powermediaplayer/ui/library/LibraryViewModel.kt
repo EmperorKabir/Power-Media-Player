@@ -485,6 +485,15 @@ class LibraryViewModel @Inject constructor(
         // jank on tap when the file is a multi-GB audiobook. Parse off
         // Main, then hop back for the MediaController call.
         viewModelScope.launch {
+            // Reverse mode plays one file at a time — reversing a whole
+            // queue would decode every file up front.
+            val tapped = files.getOrNull(startIndex)
+            if (tapped != null && !tapped.isVideo &&
+                settingsDataStore.audioReverseLocal.first()
+            ) {
+                playSingle(tapped)
+                return@launch
+            }
             // vc32: banner over the pre-player parse phase.
             playbackConnection.setCloudFetchInProgress(true)
             try {
@@ -517,12 +526,32 @@ class LibraryViewModel @Inject constructor(
             playbackConnection.setCloudFetchInProgress(true)
             try {
                 val item = withContext(Dispatchers.IO) {
-                    val extras = com.powermediaplayer.util.M4bChapterParser
+                    // Reverse mode (Settings → Audio effects): local audio
+                    // only — video keeps its picture forward; Drive would
+                    // re-stream whole files; Spotify never enters our
+                    // pipeline. Decoded+reversed once, cached.
+                    val reversed = !file.isVideo &&
+                        settingsDataStore.audioReverseLocal.first() &&
+                        !com.powermediaplayer.util.M4bChapterParser.isRemote(file.uri)
+                    val playUri = if (reversed) {
+                        com.powermediaplayer.audio.ReverseAudio
+                            .ensureReversedWav(context, file.uri)
+                            .map { android.net.Uri.fromFile(it) }
+                            .onFailure {
+                                com.powermediaplayer.util.Diag.w(
+                                    "PMP_DIAG", "reverse failed — playing forward", it
+                                )
+                            }
+                            .getOrDefault(file.uri)
+                    } else file.uri
+                    // Chapters are meaningless on a reversed timeline.
+                    val extras = if (reversed) android.os.Bundle()
+                    else com.powermediaplayer.util.M4bChapterParser
                         .extractChaptersAsBundle(context, file.uri)
                     extras.putBoolean("is_video_hint", file.isVideo)
                     MediaItem.Builder()
                         .setMediaId(file.uri.toString())
-                        .setUri(file.uri)
+                        .setUri(playUri)
                         .setRequestMetadata(
                             MediaItem.RequestMetadata.Builder()
                                 .setMediaUri(file.uri).build()
