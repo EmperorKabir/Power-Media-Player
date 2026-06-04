@@ -297,7 +297,9 @@ class LastPlayedViewModel @Inject constructor(
                     // user is jumping to a saved position. expectPlayback
                     // arms the vc32 handoff grace so the loading banner
                     // survives the device-wake null snaps (E3).
-                    spotifyProvider.startPlaybackPolling(expectPlayback = true)
+                    spotifyProvider.startPlaybackPolling(
+                        expectPlayback = true, expectedTrack = item.mediaUri
+                    )
                     if (targetPos > 0L) {
                         // /seek lands a moment after /play; small dwell
                         // so Spotify Connect has finished loading.

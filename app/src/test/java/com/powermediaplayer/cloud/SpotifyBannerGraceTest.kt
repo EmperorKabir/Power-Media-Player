@@ -25,4 +25,15 @@ class SpotifyBannerGraceTest {
     fun nullSnap_noHandoff_clearsImmediately() {
         assertTrue(shouldClearBannerOnNullSnap(nowMs = 1L, graceUntilMs = 0L))
     }
+
+    /** vc32 (E14): Spotify's /me/player lagged PUT /play by a measured
+     *  11 s, reporting the OLD track — the overlay must hold until the
+     *  REQUESTED track is reported (grace expiry as failsafe). */
+    @Test
+    fun staleSnapSuppressedUntilRequestedTrackArrives() {
+        assertFalse(shouldEmitSnap("spotify:track:OLD", "spotify:track:NEW", 1_000L, 45_000L))
+        assertTrue(shouldEmitSnap("spotify:track:NEW", "spotify:track:NEW", 2_000L, 45_000L))
+        assertTrue(shouldEmitSnap("spotify:track:OLD", "spotify:track:NEW", 50_000L, 45_000L)) // grace expired failsafe
+        assertTrue(shouldEmitSnap("spotify:track:OLD", null, 0L, 0L)) // no expectation
+    }
 }

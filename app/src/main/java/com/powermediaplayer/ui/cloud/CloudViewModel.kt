@@ -440,8 +440,11 @@ class CloudViewModel @Inject constructor(
             runCatching { playbackConnection.pause() }
             val r = spotifyProvider.playTrackOnConnectDevice(uri, contextUri = null)
             r.onSuccess {
-                // vc32 (E3): user-initiated play → arm the handoff grace.
-                spotifyProvider.startPlaybackPolling(expectPlayback = true)
+                // vc32 (E3/E14): user-initiated play → arm the handoff grace
+                // + hold the overlay for the requested track.
+                spotifyProvider.startPlaybackPolling(
+                    expectPlayback = true, expectedTrack = uri
+                )
                 // Record this play in Last Played so the Recents tab + the
                 // session-bookmark dropdowns know about it. Previously
                 // missing — Spotify tracks tapped from the favourites
@@ -959,8 +962,11 @@ class CloudViewModel @Inject constructor(
                 }
                 val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri, item.contextUri)
                 r.onSuccess {
-                    // vc32 (E3): user-initiated play → arm the handoff grace.
-                    spotifyProvider.startPlaybackPolling(expectPlayback = true)
+                    // vc32 (E3/E14): user-initiated play → arm the handoff
+                    // grace + hold the overlay for the requested track.
+                    spotifyProvider.startPlaybackPolling(
+                        expectPlayback = true, expectedTrack = spotifyUri
+                    )
                     recordCloudPlay(item)
                     _uiState.value = _uiState.value.copy(
                         errorMessage = "Playing on Spotify: ${item.name}"

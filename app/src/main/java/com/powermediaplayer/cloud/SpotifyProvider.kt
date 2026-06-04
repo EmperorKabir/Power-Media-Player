@@ -130,6 +130,14 @@ class SpotifyProvider @Inject constructor(
      */
     @Volatile private var bannerGraceUntilMs: Long = 0L
 
+    /**
+     * vc32 (E14): the track the user actually requested. While the grace
+     * is active, snaps for any OTHER track (Spotify's eventually-consistent
+     * /me/player reporting the previous song — 11 s measured) are
+     * suppressed instead of overwriting the mirror overlay.
+     */
+    @Volatile private var expectedTrackUri: String? = null
+
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
 
@@ -969,12 +977,16 @@ class SpotifyProvider @Inject constructor(
     // visible while local m4b plays underneath.
     @Volatile private var pollGen: Int = 0
 
-    fun startPlaybackPolling(expectPlayback: Boolean = false) {
+    fun startPlaybackPolling(
+        expectPlayback: Boolean = false,
+        expectedTrack: String? = null
+    ) {
         if (expectPlayback) {
             // User-initiated play/transfer: arm the handoff grace window
             // and force the banner ON even if polling is already active.
             bannerGraceUntilMs =
                 android.os.SystemClock.uptimeMillis() + HANDOFF_GRACE_MS
+            expectedTrackUri = expectedTrack
             _spotifyMetadataFetching.value = true
         }
         if (pollJob?.isActive == true) return
@@ -1001,6 +1013,20 @@ class SpotifyProvider @Inject constructor(
                     val snap = fetchCurrentState(token)
                     if (gen != pollGen) return@launch
                     if (snap != null) {
+                        // vc32 (E14): during a handoff Spotify reports the
+                        // PREVIOUS track for up to ~11 s (measured) — hold
+                        // the overlay until the REQUESTED track arrives.
+                        val emit = shouldEmitSnap(
+                            snap.trackUri, expectedTrackUri,
+                            android.os.SystemClock.uptimeMillis(), bannerGraceUntilMs
+                        )
+                        if (!emit) {
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Spotify stale snap suppressed (${snap.trackUri})"
+                            )
+                        } else {
+                        expectedTrackUri = null
                         if (snap.trackUri != lastTrackUri) {
                             // Mid-session track change also re-fires the
                             // banner — the upcoming lyrics fetch is the
@@ -1019,6 +1045,7 @@ class SpotifyProvider @Inject constructor(
                         // Metadata fully resolved for this track.
                         bannerGraceUntilMs = 0L // handoff resolved
                         _spotifyMetadataFetching.value = false
+                        }
                     } else {
                         _spotifyState.value = null
                         lastTrackUri = ""
@@ -1118,6 +1145,7 @@ class SpotifyProvider @Inject constructor(
         pollJob = null
         _spotifyState.value = null
         bannerGraceUntilMs = 0L // stop = nothing to wait for (vc32 E3)
+        expectedTrackUri = null
         _spotifyMetadataFetching.value = false
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
     }
@@ -1291,3 +1319,21 @@ internal const val HANDOFF_GRACE_MS = 45_000L
 /** Pure, testable grace predicate — see SpotifyBannerGraceTest. */
 internal fun shouldClearBannerOnNullSnap(nowMs: Long, graceUntilMs: Long): Boolean =
     nowMs >= graceUntilMs
+
+/**
+ * vc32 (E14): suppress stale snaps — Spotify's /me/player lagged
+ * PUT /play by a measured 11 s, reporting the PREVIOUS track. While the
+ * handoff grace is active and a specific track was requested, only that
+ * track may be emitted into the mirror state; grace expiry is the
+ * failsafe (emit whatever is actually playing).
+ */
+internal fun shouldEmitSnap(
+    snapUri: String,
+    expectedUri: String?,
+    nowMs: Long,
+    graceUntilMs: Long
+): Boolean {
+    if (expectedUri == null) return true
+    if (nowMs >= graceUntilMs) return true
+    return snapUri == expectedUri
+}
