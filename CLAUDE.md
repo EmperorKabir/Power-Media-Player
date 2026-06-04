@@ -1,5 +1,14 @@
 # Power Media Player — project notes
 
+## MANDATORY task ledger — read FIRST, every turn
+
+- **`TASKS.md` (repo root) is the binding task ledger.** Read it at the start
+  of EVERY turn and immediately after any context compaction. Its PROTOCOL
+  block governs all work: evidence-gated check-offs, legal statuses only,
+  phase lock (investigate → plan → implement), no skip/defer ever.
+- End-of-turn reports must reflect that file's live statuses (the table, not
+  prose claims). New in-scope work gets added there the same turn it appears.
+
 ## Deep logger runbook (android-deep-logger skill)
 
 - A debug-only forensic logger writes NDJSON to
