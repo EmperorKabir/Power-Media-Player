@@ -66,12 +66,13 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | ID | Task | Phase | Status |
 |----|------|-------|--------|
-| T241 | Drive folder add: list doesn't visibly refresh after adding a folder (should refresh + show contents) | I | TODO |
-| T242 | Drive favourites strip: LEFT icon is a green star (redundant with right-side star) — should be a folder icon for folders; user mistook folder for track | I | TODO |
-| T243 | Spotify stale metadata: tapping "Drive-thru" showed previous SOAD metadata before switching — old state not cleared on new play; analyse logs around the switch window | I | TODO |
-| T244 | Question: does Last-Played position retention work for Spotify rows? (code + log answer) | I | TODO |
-| T245 | CRITICAL: pause on Spotify mirror → Drive audiobook silently resumed underneath, no metadata change, player tab blank — second-player/focus interaction | I | TODO |
-| T246 | Drive resume STILL has massive delay (new instrumentation now in logs) — phase breakdown; feeds plan Task 10 gate | I | TODO |
+| T241 | Drive folder add: no visible refresh/feedback | I | DONE(located: toggleDriveFavourite*→DataStore→strip reactive but silent; fix=confirm+auto-browse, plan) |
+| T242 | Favourites strip left icon misleading for folders | I | DONE(located: CloudBrowserScreen fav rows ~1438-1546; fix=Folder icon for folders, plan) |
+| T243 | Spotify stale metadata on switch | I | DONE(Spotify /me/player eventual-consistency returns OLD track 1-2s after PUT /play; we display first non-null snap. Fix=hold until snap.trackUri==requested, plan) |
+| T244 | Spotify position retention | I | DONE(answer: NO — 5s tick reads local player only; log shows targetPos=0ms. Fix=tick writes spotifyState.positionMs while mirror active, plan) |
+| T245 | CRITICAL ghost audiobook under Spotify | I | DONE(stale 76s resume coroutine completed setMediaItems+play at 19:53:53, 25s after Spotify switch; ALSO debounce hole: per-VM counter saw 0 mid-flight. Fix=global resume generation+cancel, plan) |
+| T246 | Drive resume delay phase breakdown | I | DONE(parse=75,918ms of 75,918ms: textTrack 38.0s + neroChpl re-stream 37.9s; local=19ms. Task-10 cache GATE: GO) |
+| T247 | Play/pause slow to respond | I | DONE(local touch→command = 11ms — instant; slowness = Spotify-mirror icon waits on 1 Hz poll + the T245 ghost pausing the wrong stream. Fix = optimistic mirror flip, plan) |
 
 ## E — Completed (evidence archived)
 

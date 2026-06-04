@@ -164,3 +164,20 @@ right side already carries the favourite star (CloudBrowserScreen
 favourite-row composables, ~1438-1546 region). Fix direction (plan):
 left icon = Icons.Filled.Folder for folders / kind icon for tracks; right
 star stays the favourite toggle.
+
+## T247 — "play/pause slow to respond" (reported live during round 2)
+
+Touch-to-command latency measured from DeepLogger touches vs DiagLog player
+events: tap ACTION_UP 18:53:21.265Z → playWhenReady flips 18:53:21.276Z =
+**11 ms**; second case 18:53:28.027Z → .038Z = 11 ms. The LOCAL pipeline is
+instant. Two real sources of perceived slowness:
+1. **Spotify mirror**: play/pause routes via Web API and the BUTTON ICON
+   only flips when the next 1 Hz poll returns the changed state (plus
+   Spotify's eventual consistency) → 1-2 s+ of "did it register?".
+   Fix direction (plan): optimistic isPlaying flip in the mirror state on
+   command success, reconciled by the next poll.
+2. **The T245 ghost**: during the overlap the pause button paused a
+   DIFFERENT stream than the one audible — perceived as unresponsive.
+Also ruled out: the 25.5 s frame gap at 18:51:16Z is NOT a stall — frames
+simply aren't drawn while MainActivity sat stopped behind the Spotify OAuth
+Custom Tab (lifecycle rows 1303-1326 bracket it exactly).
