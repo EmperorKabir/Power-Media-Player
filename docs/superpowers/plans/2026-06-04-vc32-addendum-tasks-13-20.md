@@ -1,5 +1,8 @@
 # vc32 plan ADDENDUM — Tasks 13-20 (round-2/3 deep-investigation fixes)
 
+> **EXECUTION RECORD:** implemented inline 2026-06-04; all code tasks verified via GATE A (9/9) / GATE B (11/11) predicate tables + unit suites — see TASKS.md (the binding ledger) and the checklist docs. Checkbox syntax below is the original plan text; the gates, not the boxes, are the verification record. Outstanding: on-device verification only (ledger T257).
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or superpowers:executing-plans. Parent plan: `2026-06-04-vc32-fixes-and-ux.md` (Tasks 1-12; its Task 10 is SUPERSEDED by Task 14 here; its Task 11 — Hue — unchanged, awaiting the user's Hue session).
 
 **Goal:** Fix the seven device-run defects with the round-3 root causes: stale-resume ghost playback, 76 s remote parse, 11 s stale Spotify overlay, missing Spotify position retention, laggy mirror toggle, silent folder add, misleading folder icon.

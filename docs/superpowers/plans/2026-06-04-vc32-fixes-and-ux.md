@@ -1,5 +1,8 @@
 # vc32 — Evidence-locked fixes + approved UX (back-stack, loading coverage, ⋮ menus, expandable settings)
 
+> **EXECUTION RECORD:** implemented inline 2026-06-04; all code tasks verified via GATE A (9/9) / GATE B (11/11) predicate tables + unit suites — see TASKS.md (the binding ledger) and the checklist docs. Checkbox syntax below is the original plan text; the gates, not the boxes, are the verification record. Outstanding: on-device verification only (ledger T257).
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the three log-convicted defects (back-stack wipe, Spotify banner death, uncovered Drive/local resume wait) and ship the three user-approved UX changes (⋮ row menus, Hue sub-sections, expandable settings groups with search-across-collapsed), each gated by build + test + grep predicates and a final on-device round.
