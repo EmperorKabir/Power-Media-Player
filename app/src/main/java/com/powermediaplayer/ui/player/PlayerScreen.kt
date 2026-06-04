@@ -104,8 +104,13 @@ fun PlayerScreen(
     // vc31 overlap fix — the empty-player guidance must REPLACE the player
     // chrome, not overlay it (it previously drew on top, so "No media
     // loaded" + Track labels bled through underneath).
+    // The Spotify mirror counts as "something playing" even though the
+    // LOCAL player is empty — without this gate the Player tab said
+    // "Nothing's playing yet" while the mini-bar (which keys off the
+    // overlaid title) correctly offered the Spotify track.
     val showEmptyState = !uiState.hasMedia && !uiState.isLoading &&
-        !uiState.cloudFetchInProgress && !uiState.isVideoContent
+        !uiState.cloudFetchInProgress && !uiState.isVideoContent &&
+        !uiState.isSpotifyActive
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Video ALWAYS uses the Compact layout regardless of screen size,
