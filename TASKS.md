@@ -112,6 +112,9 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T269 | Boost crackle at high gain (user should never accept it) | M | DONE(LoudnessEnhancer hard-clip replaced by in-chain GainAudioProcessor with per-sample glide + 4:1 soft knee; enhancer deleted) `[DEVICE]` |
 | T270 | Restore toggle 'not working' | M | DONE(evidence: 00:17:15 restore DID load the item paused but confirm-log missing → failures now logged; OFF now also clears a paused leftover surviving in the service, never touching playing audio) `[DEVICE]` test both directions |
 
+| T271 | Player tab 'nothing playing' vs mini-bar offering resume | M | DONE(gate omitted isSpotifyActive — local player empty while the Spotify mirror was live; empty-state now respects the overlay; installed) `[DEVICE]` |
+| T272 | Reverse audio not working | I | DONE(verdict: NEVER WIRED — pref + toggle exist, zero playback-layer consumers in any build; real reversed playback = decode-whole-file-backwards feature) AWAITING-USER(build it properly, or remove the toggle?) |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
