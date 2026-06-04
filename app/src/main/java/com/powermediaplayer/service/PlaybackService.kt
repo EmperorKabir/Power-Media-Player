@@ -106,6 +106,13 @@ class PlaybackService : MediaSessionService() {
     private var stereoFlipFlag: Boolean = false
     @Volatile
     private var monoMixFlag: Boolean = false
+    /** In-chain boost (soft-limited) — replaces LoudnessEnhancer. */
+    private val gainProcessor by lazy {
+        com.powermediaplayer.audio.GainAudioProcessor(
+            gainMbSupplier = { chainGainMbFlag }
+        )
+    }
+
     @Volatile
     private var audioDelayFlag: Int = 0
     /**
@@ -297,6 +304,12 @@ class PlaybackService : MediaSessionService() {
          *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
         @Volatile private var reverbPresetFlag: Int = 0
         @Volatile private var reverbWetFlag: Float = 1.0f
+        @Volatile private var chainGainMbFlag: Int = 0
+
+        /** Composed user-boost + ReplayGain positive gain, in millibels. */
+        fun setChainGain(mb: Int) {
+            chainGainMbFlag = mb.coerceIn(0, 3000)
+        }
 
         fun setReverb(preset: Int, wet: Float) {
             reverbPresetFlag = preset.coerceIn(0, 5)
@@ -427,6 +440,7 @@ class PlaybackService : MediaSessionService() {
                                 stereoTransformProcessor,
                                 reverbProcessor,
                                 audioDelayProcessor,
+                                gainProcessor,
                                 // §Hue PCM tap — passes audio through;
                                 // exposes the latest FFT analyser
                                 // result for HueEntertainment to read.

@@ -744,9 +744,25 @@ class PlayerViewModel @Inject constructor(
                 settingsDataStore.restoreLastOnLaunch.first()
             }.getOrDefault(true)
             if (!restoreEnabled) {
-                com.powermediaplayer.diag.DiagLog.dec(
-                    branch = "cold-start", reason = "restoreLastOnLaunch=false → skip"
-                )
+                // The playback service can outlive the UI process, so a
+                // previously-loaded PAUSED item may still sit in the
+                // player — with the toggle off the user expects a clean
+                // launch, so clear it. Actively PLAYING audio is never
+                // touched (reopening mid-listen must not stop music).
+                val leftover = playbackConnection.getPlayer()
+                if (leftover != null && !leftover.isPlaying &&
+                    leftover.mediaItemCount > 0
+                ) {
+                    runCatching { leftover.clearMediaItems() }
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "cold-start",
+                        reason = "restoreLastOnLaunch=false → cleared paused leftover"
+                    )
+                } else {
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "cold-start", reason = "restoreLastOnLaunch=false → skip"
+                    )
+                }
                 return@launch
             }
             val recent = withContext(Dispatchers.IO) {
@@ -854,6 +870,10 @@ class PlayerViewModel @Inject constructor(
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
                             "Cold-start restored '${recent.title}' [src=${recent.source}] @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id})"
+                        )
+                    }.onFailure { t ->
+                        com.powermediaplayer.util.Diag.w(
+                            "PMP_DIAG", "Cold-start restore FAILED mid-way", t
                         )
                     }
                     playbackConnection.setCloudFetchInProgress(false)
@@ -1613,55 +1633,15 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun applyLoudness() {
-        // Shared across all PlayerViewModel instances (several exist —
-        // PlayerScreen + MiniPlayerBar + per-nav-entry recreation), so a
-        // single enhancer serves the session instead of one per instance.
-        synchronized(loudnessLock) {
-            val total = (userBoostMb + replayGainBoostMb).coerceAtMost(3000)
-            // Boost is off — never attach an effect. (Eager attach at
-            // gain=0 hits INVALID_OPERATION on some Samsung devices
-            // until the effect is primed, spamming every transition.)
-            if (total == 0) {
-                disposeLoudnessEnhancerLocked()
-                return
-            }
-            // playbackConnection.getPlayer() returns a MediaController
-            // IPC proxy — reach the real ExoPlayer via the same static
-            // accessor VideoSurface uses.
-            val sessionId = com.powermediaplayer.service.PlaybackService
-                .getExoPlayer()?.audioSessionId ?: 0
-            if (sessionId == 0) {
-                disposeLoudnessEnhancerLocked()
-                return
-            }
-            // The audio session can change across track transitions
-            // (Media3 swaps the AudioTrack on some). Rebuild on change.
-            if (loudnessEnhancerSessionId != sessionId) {
-                disposeLoudnessEnhancerLocked()
-            }
-            try {
-                val le = loudnessEnhancer
-                    ?: android.media.audiofx.LoudnessEnhancer(sessionId).also {
-                        loudnessEnhancer = it
-                        loudnessEnhancerSessionId = sessionId
-                        it.enabled = true
-                    }
-                le.setTargetGain(total)
-                com.powermediaplayer.util.Diag.i(
-                    "PMP_DIAG",
-                    "Loudness gain=${total}mB (user=$userBoostMb rg=$replayGainBoostMb) session=$sessionId"
-                )
-            } catch (t: Throwable) {
-                com.powermediaplayer.util.Diag.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
-                disposeLoudnessEnhancerLocked()
-            }
-        }
-    }
-
-    private fun disposeLoudnessEnhancerLocked() {
-        runCatching { loudnessEnhancer?.release() }
-        loudnessEnhancer = null
-        loudnessEnhancerSessionId = 0
+        // Rendered by GainAudioProcessor in the service chain (soft
+        // limiter — no hard-clip crackle at high boost). The platform
+        // LoudnessEnhancer is gone.
+        val total = (userBoostMb + replayGainBoostMb).coerceAtMost(3000)
+        com.powermediaplayer.service.PlaybackService.setChainGain(total)
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "Loudness gain=${total}mB (user=$userBoostMb rg=$replayGainBoostMb) via chain"
+        )
     }
 
     // ── Frame step + screenshot helpers ───────────────────────────
@@ -1837,11 +1817,8 @@ class PlayerViewModel @Inject constructor(
         // MiniPlayerBar + per-nav-entry recreation). Platform audio
         // effects must be one-per-session, not one-per-instance, so the
         // holders live here and applications are serialised on the lock.
-        private val loudnessLock = Any()
         @Volatile private var userBoostMb: Int = 0
         @Volatile private var replayGainBoostMb: Int = 0
-        private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
-        private var loudnessEnhancerSessionId: Int = 0
 
         // Conservative whitelist matching the default Cast receiver's
         // documented support. .3gp / .3gpp omitted on purpose — receiver

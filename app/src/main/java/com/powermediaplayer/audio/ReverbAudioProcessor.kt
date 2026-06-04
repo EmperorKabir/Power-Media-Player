@@ -154,15 +154,26 @@ class ReverbAudioProcessor(
                 wetL = allpassL[i].process(wetL)
                 wetR = allpassR[i].process(wetR)
             }
-            // Wet level normalised by the comb steady-state gain
-            // 1/(1-feedback): every preset lands at roughly dry level
-            // at wet=1 instead of overdriving big rooms into clipping
-            // (the audible "crackle"). The dry path ducks slightly as
-            // wet rises so the sum keeps headroom.
-            val gain = curWet * (1f - curFeedback) * 8.3f
+            // Size-PROGRESSIVE wet level: full normalisation by
+            // 1/(1-feedback) made every preset equally loud, erasing the
+            // big-room character (Cave audibly died). sqrt-compensation
+            // keeps larger rooms denser and louder while staying well
+            // clear of the old ~10x overdrive; a soft knee rounds the
+            // rare hot peak instead of squaring it.
+            val gain = curWet * 1.85f *
+                kotlin.math.sqrt((1f - curFeedback).coerceAtLeast(0.02f))
             val dry = 1f - 0.12f * curWet
-            val outL = (l * dry + wetL * gain).coerceIn(-32768f, 32767f)
-            val outR = (r * dry + wetR * gain).coerceIn(-32768f, 32767f)
+            var outL = l * dry + wetL * gain
+            var outR = r * dry + wetR * gain
+            val knee = 26000f
+            if (kotlin.math.abs(outL) > knee) {
+                outL = Math.signum(outL) * (knee + (kotlin.math.abs(outL) - knee) * 0.25f)
+            }
+            if (kotlin.math.abs(outR) > knee) {
+                outR = Math.signum(outR) * (knee + (kotlin.math.abs(outR) - knee) * 0.25f)
+            }
+            outL = outL.coerceIn(-32760f, 32760f)
+            outR = outR.coerceIn(-32760f, 32760f)
             if (channelCount == 2) {
                 out.putShort(outL.toInt().toShort())
                 out.putShort(outR.toInt().toShort())
