@@ -181,3 +181,83 @@ instant. Two real sources of perceived slowness:
 Also ruled out: the 25.5 s frame gap at 18:51:16Z is NOT a stall — frames
 simply aren't drawn while MainActivity sat stopped behind the Spotify OAuth
 Custom Tab (lifecycle rows 1303-1326 bracket it exactly).
+
+---
+
+# Round 3 — DEEP investigation (adversarial re-check + second-order causes)
+
+New evidence: fresh logcat (`deeplogs/run2/logcat-evening.txt`, 351k lines —
+PMP_DIAG Spotify/Drive lines DiagLog doesn't carry) + full parser/nav code
+trace + context7 (Media3 /androidx/media, Compose/Hilt nav scoping docs).
+
+## T246 — three stacked causes, not one
+
+1. **Wrong URI class on resume.** `recordCloudPlay` stores `mediaUri =
+   item.downloadUrl` (raw https). The ORIGINAL Cloud play downloads to a
+   cache file (file:// — HP m4b played in ~3 s at 19:49:51), but every
+   Last-Played resume uses the https URL and never looks at that cache.
+2. **Both parser strategies full-stream the remote file.** textTrack =
+   framework `MediaExtractor.setDataSource(https)` (m4b moov-at-end → full
+   ~1.2 GB stream, 38.0 s); on 0 chapters the neroChpl fallback re-streams
+   the SAME file again (37.9 s). This book has NO chapters — 76 s to find
+   nothing, and it will repeat on EVERY resume (caching the EMPTY result
+   matters as much as caching chapters).
+3. **The https URI is range-capable** — ExoPlayer buffered to READY in
+   2.5 s after setMediaItems. The full-streams are purely the parsers'
+   access pattern, not the network. Context7: Media3 1.8+ instance-based
+   `MetadataRetriever` (extractor/range-based; 1.9 moves it to
+   `media3-inspector`) is the doc-blessed no-playback metadata path —
+   candidate replacement; equally valid: parse from the cache file, or
+   parse chapters ASYNC after playback starts (playback needs none).
+
+## T245 — two mechanisms, both now proven
+
+1. **`PlaybackConnection.setMediaItems` (lines 393-403) unconditionally
+   `prepare()+play()`** — any stale loader auto-plays. (Cold-start works
+   around it by flipping playWhenReady=false AFTER — itself racy.)
+   Fix shape: `setMediaItems(..., playWhenReady: Boolean = true)` +
+   resume-generation check before the call.
+2. **Per-instance guards, doc-confirmed.** Android docs: a
+   destination-scoped ViewModel "is cleared when the destination is
+   removed from the backstack" — tab re-navigation (popUpTo) recreates
+   LastPlayedViewModel. Evidence: both taps logged `attempt=1`
+   (instance-field counters reset). Guards must be process-wide
+   (companion AtomicInteger + generation token).
+
+## T243 — stale window measured: 11 s, and the OVERLAY is the gap
+
+PMP_DIAG sequence (first Drive-Thru play, 19:51:20-32):
+`playRequest 404 (no device)` → `listDevices` → `activate "Kabir's Z
+Fold7"` → `transferPlayback 204` → `playRequest 204` → poll gen=1
+expectPlayback=true → **first snap 19:51:21.756 returns the OLD track**
+(Hypnotize artwork f5e7…) → ~11 s of null snaps while the device wakes →
+correct Drive-Thru snaps from 19:51:32.791 → LRCLib lyrics +6.4 s.
+The vc32 grace only guards the BANNER; `_spotifyState` was SET to the
+stale snap, so the OVERLAY showed SOAD for ~11 s. Fix must gate the state
+emit on `snap.trackUri == requestedUri` (we log the requested uri:
+`spotify:track:6oaZvhLj…`) with the same grace expiry.
+
+## T247 — closed: 11 ms locally; two named perception sources
+
+- DeepLogger touch ACTION_UP → DiagLog playWhenReady flip: **11 ms** (×2).
+- Audio route at the time: **phone SPEAKER** (ROUTE lines) — BT/A2DP
+  buffer-drain factor ELIMINATED.
+- The 25.5 s render.frame gap = MainActivity stopped behind the Spotify
+  OAuth Custom Tab (lifecycle rows bracket it) — NOT jank.
+- Remaining real lag: (a) mirror icon waits on the 1 Hz poll (+11 s stale
+  window above); (b) the T245 ghost made pause act on the wrong stream.
+
+## T241 — refresh exists but is conditional AND silent
+
+`CloudViewModel.rememberPickedDriveFolder` (622-634) refreshes ONLY when
+`activeProvider == GOOGLE_DRIVE` at pick-time, and even then re-lists with
+no confirmation/scroll/highlight. User timeline: picked "Stephen Fry"
+19:48:50 → first found/opened it 19:49:35 (45 s of looking). Fix:
+unconditional snackbar confirm + auto-browse into the added folder.
+
+## T244 / T242 — verdicts unchanged after re-check
+
+T244: Spotify rows DO carry `mediaUri = spotify:track:…` so
+`updatePositionByUri` would match — the tick just never writes during
+mirror. T242: left icon = kind/star instead of Folder for folder rows
+(CloudBrowserScreen fav rows ~1438-1546).
