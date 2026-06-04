@@ -88,3 +88,79 @@ Spotify `startPlaybackPolling gen` lines, DeepLogger touch/frame forensics.
   wipe: settings, recents, Hue pairing) OR Play internal-testing update path.
 - Diagnostic logging toggle must be ON for next replication.
 - All numbers above are system-clock correlations, not in-app phase timings.
+
+---
+
+# Round 2 — instrumented run (vc32 build, 19:48-19:55) — T241-T246 verdicts
+
+Evidence: `deeplogs/run2/diag-log.txt` (DiagLog RESUME/PERF/PLAYER/DEC) +
+4 DeepLogger sessions. All timings from session 8b75dc31.
+
+## T246 — Drive resume delay: CONVICTED, exact phase split
+
+| Phase | Time |
+|---|---|
+| chapterParse textTrack (MediaExtractor over https) | **38,004 ms** |
+| chapterParse neroChpl fallback (re-streams the SAME file) | **37,910 ms** |
+| setMediaItems + seek | 2 ms |
+| **Total tap→loaded** | **75,918 ms** |
+
+Local files: 19 ms parse, 140 ms total — local is fine. The remote item is
+parsed TWICE, each pass streaming a ~1.2 GB file over https. Plan Task 10
+gate (parse ≥50% of gap) met at ~100% → **chapter cache GO**, plus an
+obvious second win: single-pass / skip-fallback for remote schemes.
+
+## T245 — ghost audiobook under Spotify: CONFIRMED, full mechanism
+
+```
+19:52:37  tap Drive audiobook → 76 s parse begins (coroutine A)
+19:53:17  tap LOCAL item — debounce saw activeBefore=0 (!) — played fine
+19:53:28  tap SPOTIFY Drive-thru → local player paused; Connect play ok=189ms
+19:53:53  coroutine A FINISHES → REMOVE + mediaItemTransition(audiobook)
+          + playWhenReady=true + seek(83535ms)
+19:53:55  PLAYER isPlaying=true mediaId=cab8aadc — audiobook AUDIBLY
+          playing under the Spotify mirror; Player tab shows the Spotify
+          overlay → looks like "nothing".
+```
+
+Two defects:
+1. **No generation/cancel on resume coroutines** — a stale resume may
+   setMediaItems+play long after the user moved on.
+2. **Debounce hole** — `resumeActive` is a per-ViewModel-instance counter;
+   multiple LastPlayedViewModel instances exist across nav entries
+   (DEC "guard-already-fired (other VM instance won)" proves multi-instance),
+   so the 19:53:17/19:53:28 taps read 0 mid-flight. Needs a process-wide
+   counter + a resume generation token checked after parse.
+
+## T243 — stale SOAD metadata on Spotify switch: MECHANISM CONFIRMED
+
+"System of a Down" = Stealing Society = the PREVIOUS Spotify track.
+Spotify's `/v1/me/player` is eventually-consistent after `PUT /play`: the
+first non-null snap returns the OLD track for 1-2 s. Our poll displays any
+non-null snap and the vc32 grace clears on it. Fix direction (plan): pass
+the requested trackUri with expectPlayback and hold banner/state until
+`snap.trackUri == requested` (or grace expiry).
+
+## T244 — Spotify position retention: DOES NOT WORK (answer: no)
+
+The 5 s persist tick (PlayerViewModel ~573-585) reads the LOCAL player's
+`currentMediaItem.mediaId` + `isPlaying` — paused/stale during a mirror →
+Spotify rows never get a position update. Log: `tap source=SPOTIFY
+targetPos=0ms`. The resume path DOES seek when targetPos>0 — it just never
+has one. Fix direction (plan): while `spotifyState != null`, tick writes
+`spotifyState.positionMs` against the Spotify row's mediaUri.
+
+## T241 — Drive folder add: no visible feedback/refresh
+
+Add = `CloudViewModel.toggleDriveFavourite*` → DataStore → strip updates
+reactively (CloudViewModel:285-291) but nothing scrolls/expands/confirms,
+and the added FOLDER looks like a track row. Fix direction (plan): snackbar
+confirm + auto-browse into the added folder (or visibly refresh listing).
+
+## T242 — favourites strip left icon
+
+Folder favourites render a star-family kind icon on the LEFT while the
+right side already carries the favourite star (CloudBrowserScreen
+favourite-row composables, ~1438-1546 region). Fix direction (plan):
+left icon = Icons.Filled.Folder for folders / kind icon for tracks; right
+star stays the favourite toggle.
