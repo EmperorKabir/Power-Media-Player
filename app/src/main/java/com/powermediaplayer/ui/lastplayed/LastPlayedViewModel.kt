@@ -274,6 +274,22 @@ class LastPlayedViewModel @Inject constructor(
             // Spotify row from Last Played leaves any currently-playing
             // local audio audible behind the Spotify Connect track.
             runCatching { playbackConnection.pause() }
+            // vc32 (T252): provisional mirror AT TAP TIME — controls route
+            // to Spotify immediately and the UI shows the REQUESTED track,
+            // closing the gap where play/pause resumed the local player.
+            spotifyProvider.armProvisionalMirror(
+                com.powermediaplayer.cloud.SpotifyPlaybackState(
+                    title = item.title,
+                    artist = item.subtitle,
+                    album = "",
+                    artworkUrl = item.artworkUri,
+                    positionMs = targetPos.coerceAtLeast(0L),
+                    durationMs = item.durationMs,
+                    isPlaying = true,
+                    trackUri = item.mediaUri,
+                    deviceName = null
+                )
+            )
             viewModelScope.launch(Dispatchers.IO) {
                 val token = com.powermediaplayer.playback.ResumeGate.begin()
                 val tStart = com.powermediaplayer.diag.DiagLog.now()
@@ -324,6 +340,9 @@ class LastPlayedViewModel @Inject constructor(
                         )
                     }
                 } else {
+                    // vc32 (T252): never leave a provisional mirror for a
+                    // track that failed to play.
+                    spotifyProvider.clearProvisionalMirror()
                     // Surface the failure. Earlier this used a SharedFlow
                     // routed to LastPlayedScreen's SnackbarHost, but the
                     // caller has ALREADY navigated to the Player screen

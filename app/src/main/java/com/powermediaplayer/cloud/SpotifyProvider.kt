@@ -138,8 +138,58 @@ class SpotifyProvider @Inject constructor(
      */
     @Volatile private var expectedTrackUri: String? = null
 
+    /**
+     * vc32 (T252): true while the mirror holds a PROVISIONAL state
+     * synthesised from the row the user tapped (not yet confirmed by
+     * /v1/me/player). Cleared when the first matching snap replaces it,
+     * when the grace expires, or when the play call fails.
+     */
+    @Volatile private var provisionalActive: Boolean = false
+
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
+
+    /**
+     * vc32 (T252): install a provisional mirror state AT TAP TIME so
+     * (a) isSpotifyActive flips true immediately — play/pause routes to
+     * the Web API instead of resuming the paused LOCAL player (logged
+     * 21:47:31-38: six USER toggles all hit the local track while
+     * Spotify played), and (b) the Player tab shows the REQUESTED track
+     * + loading banner instead of the previous item's metadata.
+     * The first accepted snap replaces it with real data.
+     */
+    fun armProvisionalMirror(provisional: SpotifyPlaybackState) {
+        bannerGraceUntilMs =
+            android.os.SystemClock.uptimeMillis() + HANDOFF_GRACE_MS
+        expectedTrackUri = provisional.trackUri
+        provisionalActive = true
+        _spotifyState.value = provisional
+        _spotifyMetadataFetching.value = true
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "Spotify provisional mirror armed (${provisional.trackUri})"
+        )
+    }
+
+    /**
+     * vc32 (T252): the play call failed — a provisional mirror for a
+     * track that will never play must not linger (it would keep routing
+     * controls to Spotify and showing a dead track). No-op if a real
+     * snap already replaced the provisional state.
+     */
+    fun clearProvisionalMirror() {
+        if (provisionalActive) {
+            provisionalActive = false
+            expectedTrackUri = null
+            bannerGraceUntilMs = 0L
+            _spotifyState.value = null
+            _spotifyMetadataFetching.value = false
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "Spotify provisional mirror cleared (play failed)"
+            )
+        }
+    }
 
     init {
         // Restore the signed-in flag on cold start. Without this every
@@ -1043,26 +1093,33 @@ class SpotifyProvider @Inject constructor(
                         }
                         _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
                         // Metadata fully resolved for this track.
+                        provisionalActive = false // real data now (T252)
                         bannerGraceUntilMs = 0L // handoff resolved
                         _spotifyMetadataFetching.value = false
                         }
                     } else {
-                        _spotifyState.value = null
-                        lastTrackUri = ""
-                        lastLyrics = null
-                        lastSynced = emptyList()
-                        // vc32 (E3): during a handoff Spotify legitimately
-                        // reports no active device for many seconds — only
-                        // clear the banner once outside the grace window.
+                        // vc32 (E3/T252): during a handoff Spotify
+                        // legitimately reports no active device for many
+                        // seconds — inside the grace window keep BOTH the
+                        // banner AND the (provisional) mirror state, else
+                        // the controls would fall back to the local player
+                        // mid-handoff (the "two tracks at once" bug).
                         val clear = shouldClearBannerOnNullSnap(
                             android.os.SystemClock.uptimeMillis(), bannerGraceUntilMs
                         )
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
-                            "Spotify poll null snap — bannerClear=$clear graceRemainMs=" +
+                            "Spotify poll null snap — clear=$clear graceRemainMs=" +
                                 (bannerGraceUntilMs - android.os.SystemClock.uptimeMillis())
                         )
-                        if (clear) _spotifyMetadataFetching.value = false
+                        if (clear) {
+                            _spotifyState.value = null
+                            lastTrackUri = ""
+                            lastLyrics = null
+                            lastSynced = emptyList()
+                            provisionalActive = false
+                            _spotifyMetadataFetching.value = false
+                        }
                     }
                 }
                 iter++
@@ -1146,6 +1203,7 @@ class SpotifyProvider @Inject constructor(
         _spotifyState.value = null
         bannerGraceUntilMs = 0L // stop = nothing to wait for (vc32 E3)
         expectedTrackUri = null
+        provisionalActive = false
         _spotifyMetadataFetching.value = false
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
     }

@@ -438,6 +438,21 @@ class CloudViewModel @Inject constructor(
             )
             // Pause any local playback so the two streams don't overlap.
             runCatching { playbackConnection.pause() }
+            // vc32 (T252): provisional mirror AT TAP TIME — controls route
+            // to Spotify immediately; UI shows the requested track.
+            spotifyProvider.armProvisionalMirror(
+                com.powermediaplayer.cloud.SpotifyPlaybackState(
+                    title = name,
+                    artist = "",
+                    album = "",
+                    artworkUrl = null,
+                    positionMs = 0L,
+                    durationMs = 0L,
+                    isPlaying = true,
+                    trackUri = uri,
+                    deviceName = null
+                )
+            )
             val r = spotifyProvider.playTrackOnConnectDevice(uri, contextUri = null)
             r.onSuccess {
                 // vc32 (E3/E14): user-initiated play → arm the handoff grace
@@ -466,6 +481,9 @@ class CloudViewModel @Inject constructor(
                 )
                 onPlaybackStarted()
             }.onFailure { ex ->
+                // vc32 (T252): never leave a provisional mirror for a
+                // track that failed to play.
+                spotifyProvider.clearProvisionalMirror()
                 _uiState.value = _uiState.value.copy(
                     errorMessage = ex.message ?: "Spotify playback failed"
                 )
@@ -965,6 +983,20 @@ class CloudViewModel @Inject constructor(
                 } else {
                     "spotify:track:${item.id}"
                 }
+                // vc32 (T252): provisional mirror AT TAP TIME.
+                spotifyProvider.armProvisionalMirror(
+                    com.powermediaplayer.cloud.SpotifyPlaybackState(
+                        title = item.name,
+                        artist = "",
+                        album = "",
+                        artworkUrl = item.thumbnailUri?.toString(),
+                        positionMs = 0L,
+                        durationMs = 0L,
+                        isPlaying = true,
+                        trackUri = spotifyUri,
+                        deviceName = null
+                    )
+                )
                 val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri, item.contextUri)
                 r.onSuccess {
                     // vc32 (E3/E14): user-initiated play → arm the handoff
@@ -978,6 +1010,9 @@ class CloudViewModel @Inject constructor(
                     )
                     onPlaybackStarted()
                 }.onFailure { ex ->
+                    // vc32 (T252): never leave a provisional mirror for a
+                    // track that failed to play.
+                    spotifyProvider.clearProvisionalMirror()
                     _uiState.value = _uiState.value.copy(
                         errorMessage = ex.message ?: "Spotify playback failed"
                     )
