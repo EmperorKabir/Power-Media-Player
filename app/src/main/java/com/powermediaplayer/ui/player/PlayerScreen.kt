@@ -199,8 +199,20 @@ fun PlayerScreen(
         // set during a (slow, 2-3 min) Last-Played resume but never
         // rendered — the screen looked frozen. Mirrors the cloud-fetch
         // banner. Gated to not double-stack with cloudFetchInProgress.
+        // Debounced: ExoPlayer toggles isLoading every ~100 ms during
+        // ordinary chunked reads (logged spam) — the banner must only
+        // surface for SUSTAINED loading, not flicker per chunk.
+        var sustainedLoading by remember { mutableStateOf(false) }
+        androidx.compose.runtime.LaunchedEffect(uiState.isLoading) {
+            if (uiState.isLoading) {
+                kotlinx.coroutines.delay(450)
+                sustainedLoading = true
+            } else {
+                sustainedLoading = false
+            }
+        }
         AnimatedVisibility(
-            visible = uiState.isLoading && !uiState.cloudFetchInProgress,
+            visible = sustainedLoading && !uiState.cloudFetchInProgress,
             enter = fadeIn(animationSpec = tween(durationMillis = 300)),
             exit = fadeOut(animationSpec = tween(durationMillis = 300)),
             modifier = Modifier.align(Alignment.TopCenter)

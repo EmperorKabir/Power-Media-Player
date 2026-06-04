@@ -106,6 +106,8 @@ fun VideoSurface(
             transformOrigin = TransformOrigin.Center
         )
 
+        val pipGen by VideoSurfaceBinding.pipExitGeneration.collectAsStateWithLifecycle()
+        androidx.compose.runtime.key(pipGen) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
@@ -144,6 +146,7 @@ fun VideoSurface(
             },
             modifier = aspectMod.then(transformMod)
         )
+        }
     }
 }
 
@@ -156,4 +159,14 @@ fun VideoSurface(
  */
 object VideoSurfaceBinding {
     @Volatile var current: java.lang.ref.WeakReference<android.view.TextureView>? = null
+
+    /**
+     * Bumped by MainActivity on every PiP EXIT. Evidence (logcat
+     * 00:01:02): the codec reconnects to the fresh surface within ms of
+     * the maximise, yet the picture stays black — the TextureView's
+     * SurfaceTexture is frozen after the PiP window transition (the
+     * same recreation a tab-switch performs cures it). Keying the
+     * AndroidView on this counter recreates the view automatically.
+     */
+    val pipExitGeneration = kotlinx.coroutines.flow.MutableStateFlow(0)
 }

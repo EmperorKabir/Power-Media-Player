@@ -154,11 +154,15 @@ class ReverbAudioProcessor(
                 wetL = allpassL[i].process(wetL)
                 wetR = allpassR[i].process(wetR)
             }
-            // Dry passes at unity; wet is summed on top (scaled so a
-            // full-wet large hall stays clear of clipping).
-            val gain = curWet * 9f
-            val outL = (l + wetL * gain).coerceIn(-32768f, 32767f)
-            val outR = (r + wetR * gain).coerceIn(-32768f, 32767f)
+            // Wet level normalised by the comb steady-state gain
+            // 1/(1-feedback): every preset lands at roughly dry level
+            // at wet=1 instead of overdriving big rooms into clipping
+            // (the audible "crackle"). The dry path ducks slightly as
+            // wet rises so the sum keeps headroom.
+            val gain = curWet * (1f - curFeedback) * 7f
+            val dry = 1f - 0.25f * curWet
+            val outL = (l * dry + wetL * gain).coerceIn(-32768f, 32767f)
+            val outR = (r * dry + wetR * gain).coerceIn(-32768f, 32767f)
             if (channelCount == 2) {
                 out.putShort(outL.toInt().toShort())
                 out.putShort(outR.toInt().toShort())

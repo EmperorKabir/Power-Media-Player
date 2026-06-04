@@ -187,24 +187,19 @@ class MainActivity : FragmentActivity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         com.powermediaplayer.util.Diag.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
         isInPip.value = isInPictureInPictureMode
-        // Re-bind the player to the freshly-recomposed VideoSurface.
-        // The composition swaps trees on a PiP-mode change, and on some
-        // devices the player is left without an active video output —
-        // picture black while audio continues — until the next surface
-        // recreation. Posted (delayed) so the recomposition has settled
-        // and the new TextureView has registered itself.
-        window.decorView.postDelayed({
+        // Force the video view to be RECREATED on PiP exit. A re-bind
+        // alone is not enough: logs show the codec connected to the new
+        // surface within ms of the maximise while the picture stayed
+        // black — the TextureView's SurfaceTexture comes back frozen
+        // from the PiP window transition. Recreating the view (what a
+        // tab-switch incidentally does) is the reliable cure.
+        if (!isInPictureInPictureMode) {
             com.powermediaplayer.ui.player.components.VideoSurfaceBinding
-                .current?.get()?.let { tv ->
-                    runCatching {
-                        com.powermediaplayer.service.PlaybackService
-                            .getExoPlayer()?.setVideoTextureView(tv)
-                    }
-                    com.powermediaplayer.util.Diag.i(
-                        "PMP_PIP", "re-asserted video output after PiP change"
-                    )
-                }
-        }, 150)
+                .pipExitGeneration.value++
+            com.powermediaplayer.util.Diag.i(
+                "PMP_PIP", "pip-exit → video view recreation requested"
+            )
+        }
     }
 
     override fun onDestroy() {
