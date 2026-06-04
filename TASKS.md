@@ -48,16 +48,19 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | ID | Task | Status |
 |----|------|--------|
-| T232 | Visible ⋮ menu per row (Library + LastPlayed recents/pinned) | PLANNED(plan Tasks 4-5) |
-| T233 | Hue → 4 expandable sub-sections (Bridge / Rooms / Power&scenes / Tuning) | PLANNED(plan Task 7) |
-| T237 | ALL 8 settings groups expandable; search force-shows matches across collapsed groups; clear restores | PLANNED(plan Task 6) |
+| T232 | Visible ⋮ menu per row (Library + LastPlayed recents/pinned) | DONE(grep 1+2 "More options for"; build green; commit in 0ba355f range) `[VISUAL]` pending |
+| T233 | Hue → 4 expandable sub-sections | DONE(5 ExpandableSubsection refs; no-drop inventory 16==16) `[VISUAL]` pending |
+| T237 | ALL 8 settings groups expandable; search sees collapsed; clear restores | DONE(SettingsGroupHeader + "expanded || searching" + keyed rememberSaveable; SettingsSearchTest 6/6) `[VISUAL]` pending |
 
 ## D — Plan + implementation
 
 | ID | Task | Phase | Status |
 |----|------|-------|--------|
-| T234 | PLAN covering investigation verdicts + approved UX, evidence-cross-referenced, predicate-gated | P | DONE(`docs/superpowers/plans/2026-06-04-vc32-fixes-and-ux.md` — 12 tasks, E1-E10 evidence index, self-review §end) |
-| T235 | IMPLEMENT per plan (Tasks 1-8 code; 9 on-device; 10-11 evidence-gated; 12 visual gate) | M | AWAITING-USER(execution mode: subagent-driven or inline) |
+| T234 | PLAN (12 tasks, E1-E10 evidence index) | P | DONE(`docs/superpowers/plans/2026-06-04-vc32-fixes-and-ux.md`) |
+| T235 | IMPLEMENT inline | M | Tasks 1-8 DONE(GATE A: 9/9 predicates PASS, assembleDebug + all unit tests green, pushed 0ba355f, installed Success). Tasks 9-12 AWAITING-USER(device script run) |
+| T238 | T1 back fix shipped: drill-in pushes (3 legit popUpTo remain: widget, navigateToLibrary, tab onClick) | M | DONE(gate T1 PASS) |
+| T239 | T2 Spotify banner 45s handoff grace + 3 armed call sites | M | DONE(SpotifyBannerGraceTest 3/3) |
+| T240 | T3 banner over pre-player parse — 6 wrapped paths + CloudViewModel verified-covered; resumeActive leak hardened | M | DONE(14 flag sites, was 2) |
 
 ## E — Completed (evidence archived)
 
