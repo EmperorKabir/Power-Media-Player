@@ -101,7 +101,10 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T260 | Local metadata delay? | I | DONE(answer: no — logs show local tap→loaded 34-140 ms, cacheHit 0 ms, READY within ~250 ms; the loading banner on local is a sub-second blip. No multi-second local event exists in the logs) |
 | T261 | Resume-on-restart toggle? | I | DONE(answer: NO toggle exists — the launch restore is always-on built-in behaviour for local/Drive; 'Cold-start resume backoff' only sets the rewind amount; 'Resume on Bluetooth connect' is a different feature. Optional new toggle proposed — awaiting user) |
 
-| T262 | Feature ask: in-app PiP — keep video visible when leaving the Player tab inside the app (system PiP on leaving the app unchanged) | P | AWAITING-USER(design approval — floating mini video overlay) |
+| T262 | In-app PiP mini-player | M | DONE(FloatingVideoMiniPlayer on non-Player tabs; reuses VideoSurface → effects + surface handoff identical to system PiP; GATE C 8/8 PASS; pushed 7809ae8; installed) `[DEVICE]` |
+| T263 | Reverb fix: session-attached insert (OUTPUT_MIX denial closed) | M | DONE(GATE C; aux calls removed; rebuild-on-session-change) `[DEVICE]` audibility check |
+| T264 | Boost fix: RG/user gain separation + shared effect holders across VM instances | M | DONE(GATE C) `[DEVICE]` |
+| T265 | 'Restore last played on launch' toggle (default on); backoff subordinate; BT/headphone toggles independent by design | M | DONE(GATE C, 8 wiring refs) `[DEVICE]` |
 
 ## E — Completed (evidence archived)
 
