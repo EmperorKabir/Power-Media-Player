@@ -106,9 +106,9 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T264 | Boost fix: RG/user gain separation + shared effect holders across VM instances | M | DONE(GATE C) `[DEVICE]` |
 | T265 | 'Restore last played on launch' toggle (default on); backoff subordinate; BT/headphone toggles independent by design | M | DONE(GATE C, 8 wiring refs) `[DEVICE]` |
 
-| T266 | PiP-maximise black video | M | DONE v2(re-assert disproven by logs — codec reconnected in ms yet black persisted → frozen TextureView class; now the video view is RECREATED on every PiP exit via pipExitGeneration key, replicating the tab-switch cure automatically; installed) `[DEVICE]` |
+| T266 | PiP-maximise black video | M | DONE v3(v2 disproven; SurfaceUtils log convicted a surface FIGHT — two binds 30ms apart on exit, loser's dispose nulling output; VideoSurfaceBinding now an ownership stack that re-binds the survivor; installed) `[DEVICE]` |
 | T268 | Loading banner flickering during video playback/PiP | M | DONE(ExoPlayer isLoading oscillates per ~100ms chunk — banner now needs 450ms sustained loading; installed) `[DEVICE]` |
-| T267 | Reverb v2 — in-chain Freeverb DSP | M | DONE v2(user confirmed audible; crackle = clipping from unnormalised wet gain (~10x on big rooms) — wet now normalised by 1/(1-feedback) + 25% dry duck for headroom; installed) `[DEVICE]` quality re-check |
+| T267 | Reverb | M | DONE v3(offline reproducer: DSP click-free (delta 650<943) → crackle is downstream; prime suspect = user's +20dB LoudnessEnhancer (logged volumeBoost=2000mB), newly effective post-T264; wet restored K=8.3/duck 12%; loudness gain now logged) AWAITING-USER(set Volume boost to 0 and re-test reverb) |
 
 ## E — Completed (evidence archived)
 
