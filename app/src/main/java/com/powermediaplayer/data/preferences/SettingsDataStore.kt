@@ -155,6 +155,7 @@ class SettingsDataStore @Inject constructor(
         // because surprise audio is annoying.
         val HEADPHONE_PLUG_AUTOPLAY = booleanPreferencesKey("headphone_plug_autoplay")
         val RESTORE_LAST_ON_LAUNCH = booleanPreferencesKey("restore_last_on_launch")
+        val AUTOPLAY_ON_LAUNCH = booleanPreferencesKey("autoplay_on_launch")
 
         // §C11 — fade volume over the last 30 s of a sleep timer instead
         // of an abrupt pause. Off by default so existing behaviour is
@@ -634,6 +635,15 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setRestoreLastOnLaunch(v: Boolean) {
         context.dataStore.edit { it[Keys.RESTORE_LAST_ON_LAUNCH] = v }
+    }
+
+    /** With the launch restore on: start PLAYING from the saved spot
+     *  instead of waiting paused. Default OFF — no surprise audio. */
+    val autoplayOnLaunch: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUTOPLAY_ON_LAUNCH] ?: false
+    }
+    suspend fun setAutoplayOnLaunch(v: Boolean) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_ON_LAUNCH] = v }
     }
 
     val audioBufferLowLatency: Flow<Boolean> = context.dataStore.data.map {

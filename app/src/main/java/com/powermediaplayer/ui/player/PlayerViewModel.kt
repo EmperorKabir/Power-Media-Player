@@ -853,11 +853,13 @@ class PlayerViewModel @Inject constructor(
                                     .build()
                             )
                             .build()
-                        // vc32: load PAUSED atomically — the old
-                        // post-hoc `player.playWhenReady = false` raced the
-                        // unconditional play() inside setMediaItems.
+                        // Paused by default; "Auto-play on launch" starts
+                        // playback immediately from the saved spot instead.
+                        val autoplay = runCatching {
+                            settingsDataStore.autoplayOnLaunch.first()
+                        }.getOrDefault(false)
                         playbackConnection.setMediaItems(
-                            listOf(item), 0, playWhenReady = false
+                            listOf(item), 0, playWhenReady = autoplay
                         )
                         // Apply user-configured backoff so the user lands
                         // a bit BEFORE the saved position for context.

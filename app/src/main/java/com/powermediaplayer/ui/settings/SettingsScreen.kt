@@ -150,7 +150,7 @@ fun SettingsScreen(
                     listOf("focus", "call", "notification", "headphone", "autoplay",
                         "swipe", "gapless", "latency", "buffer", "bluetooth", "resume",
                         "bookmark", "replay", "cold start", "backoff", "interrupt", "duck",
-                        "restore", "launch", "last played")
+                        "restore", "launch", "last played", "autoplay", "auto play")
                 ) {
                     Text(
                         text = "What this app does when something else needs the speakers — phone calls, alarms, navigation, or another music app.",
@@ -215,6 +215,16 @@ fun SettingsScreen(
                     )
                     // Backoff only matters while the launch restore is on.
                     if (uiState.restoreLastOnLaunch) {
+                        SettingsToggleItem(
+                            title = "Auto-play on launch",
+                            description = "Start playing immediately when the app " +
+                                "opens, from where you left off — instead of " +
+                                "waiting paused. Off by default so opening the " +
+                                "app never makes unexpected sound.",
+                            icon = Icons.Filled.PlayArrow,
+                            checked = uiState.autoplayOnLaunch,
+                            onCheckedChange = { viewModel.setAutoplayOnLaunch(it) }
+                        )
                         SliderRow("Cold-start resume backoff", "${uiState.coldStartResumeBackoffSec} s",
                             uiState.coldStartResumeBackoffSec.toFloat(), 0f..30f,
                             default = 5f) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
