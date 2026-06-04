@@ -88,6 +88,8 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T254 | Stuck 'Loading metadata' + tap lockout on launch (cold-start inline https parse; debounce swallowed taps; cache died with process) | M | DONE(4/4 predicates after grep-artefact verification; cold-start remote=cache-or-none; IGNORE→supersession; disk-backed ChapterCache; fill dedup; pushed 6708a96; installed Success) `[DEVICE]` re-test pending |
 | T255 | Resume-option answer: launch restore DOES fire (recent id=23 DRIVE restored) — it was working but blocking; now instant | I | DONE(run5 DEC cold-start evaluating + restore lines) |
 
+| T256 | Code audit: comments → plain engineering rationale (no tracker IDs / session timestamps / personal references); optimisation pass | M | DONE(tell-sweep grep returns clean; agent audit 6 findings — F1 settings-catalog remember(uiState) APPLIED, 5 micro-items assessed + declined with reasons in commit c1203cb; build+tests green; pushed; installed) |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER

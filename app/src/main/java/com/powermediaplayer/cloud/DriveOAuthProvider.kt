@@ -43,7 +43,7 @@ import javax.inject.Singleton
  * Flow on subsequent launches: cached account + token refresh, no UI.
  *
  * Why drive.file (not drive.readonly): drive.file is **non-sensitive**
- * — Google verification is not required, and friends can sign in
+ * — Google verification is not required, and other users can sign in
  * without a 100-tester whitelist or 4–6-week CASA wait. The cost is
  * that the app can only see files/folders the user explicitly grants
  * via Picker (or that the app itself created). That matches a media
