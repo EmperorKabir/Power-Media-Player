@@ -92,6 +92,17 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | T256 | Code audit: comments → plain engineering rationale (no tracker IDs / session timestamps / personal references); optimisation pass | M | DONE(tell-sweep grep returns clean; agent audit 6 findings — F1 settings-catalog remember(uiState) APPLIED, 5 micro-items assessed + declined with reasons in commit c1203cb; build+tests green; pushed; installed) |
 
+## H — Device-run reports 2026-06-04 night (phase I)
+
+| ID | Task | Phase | Status |
+|----|------|-------|--------|
+| T258 | Reverb does nothing | I | DONE(convicted: EnvironmentalReverb(0, 0) targets the GLOBAL output mix — AudioFlinger denies it on modern Android ('no permission for AUDIO_SESSION_OUTPUT_MIX', initCheck -3, 5 retries then gives up). Fix: attach to the player's audioSessionId exactly like LoudnessEnhancer in the same file, which attaches fine) |
+| T259 | Volume boost does nothing | I | DONE(convicted: the ReplayGain collector resets boost to 0 whenever RG is disabled — i.e. always, by default — on every emission, amplified across multiple PlayerViewModel instances (10 identical resets in one ms logged). The LoudnessEnhancer itself attaches fine. Fix: RG-off must reset only RG attenuation, never the user's boost) |
+| T260 | Local metadata delay? | I | DONE(answer: no — logs show local tap→loaded 34-140 ms, cacheHit 0 ms, READY within ~250 ms; the loading banner on local is a sub-second blip. No multi-second local event exists in the logs) |
+| T261 | Resume-on-restart toggle? | I | DONE(answer: NO toggle exists — the launch restore is always-on built-in behaviour for local/Drive; 'Cold-start resume backoff' only sets the rewind amount; 'Resume on Bluetooth connect' is a different feature. Optional new toggle proposed — awaiting user) |
+
+| T262 | Feature ask: in-app PiP — keep video visible when leaving the Player tab inside the app (system PiP on leaving the app unchanged) | P | AWAITING-USER(design approval — floating mini video overlay) |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
