@@ -79,11 +79,16 @@ fun AppNavigation(
     // trigger playback and then navigate to the Player tab in one tap.
     val libraryViewModel: LibraryViewModel = hiltViewModel()
 
+    // vc32 (E1): drill-ins PUSH the Player so back returns to the list the
+    // user came from (Last Played / Library / Cloud / mini-player). The
+    // previous popUpTo-wipe made every back press exit the whole app —
+    // logcat 2026-06-04 18:05-18:32 shows 5 moveTaskToBack exits during
+    // resume waits. Bottom-bar TAB taps keep their canonical
+    // popUpTo(start){saveState} pattern (unchanged below) so tab presses
+    // still reset the stack and growth stays bounded.
     val navigateToPlayer = {
         navController.navigate(Screen.Player.route) {
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
-            restoreState = true
         }
     }
 
