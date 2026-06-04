@@ -595,6 +595,13 @@ class PlayerViewModel @Inject constructor(
                 val pos = player.currentPosition.coerceAtLeast(0L)
                 val playing = player.isPlaying
                 if (!playing) continue
+                // Reverse mode is ephemeral: its positions live on a
+                // MIRRORED timeline (1:00 reversed = 9:00 forward of a
+                // 10-minute file) but the row is keyed by the ORIGINAL
+                // uri — persisting them would corrupt the forward resume
+                // spot. The reversed temp wav identifies the mode.
+                val playbackPath = item.localConfiguration?.uri?.path ?: ""
+                if (playbackPath.contains("/reverse-cache/")) continue
                 // Capture metadata on Main before hopping to IO.
                 val title = item.mediaMetadata.title?.toString()
                 val artist = item.mediaMetadata.artist?.toString()
