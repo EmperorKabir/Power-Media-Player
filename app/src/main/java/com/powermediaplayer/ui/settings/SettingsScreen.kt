@@ -1827,6 +1827,9 @@ private fun HueSection(
         )
     }
     if (!paired) {
+        // vc32 (E7 idea 2) — sub-section 1/4. Open by default when
+        // unpaired so first-time pairing is immediately discoverable.
+        ExpandableSubsection("Bridge connection", "hue_bridge", initiallyExpanded = true) {
         // Manual IP override — for networks that block Philips' cloud
         // N-UPnP discovery or for bridges not registered with the cloud.
         // The Hue mobile app shows the bridge IP under Settings →
@@ -1857,47 +1860,14 @@ private fun HueSection(
                 Text("Pair", color = TealAccent)
             }
         }
+        }
     } else {
-        // ── PRIMARY — audio-reactive lighting ──────────────────────
-        Text(
-            text = "Audio-reactive lighting",
-            style = MaterialTheme.typography.titleMedium,
-            color = TealAccent,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
-        Text(
-            text = "Lights pulse with the music — bass kicks flash bright, " +
-                "treble runs cool blues, mids track melody. The colour-cycle " +
-                "rate is BPM-driven so transitions feel musical, and rises " +
-                "with the slider below. Sensitivity controls both brightness " +
-                "swing and colour-shift speed: 0 turns reactive lighting off, " +
-                "low values feel calm + occasional, high values feel pulsing " +
-                "+ dramatic.",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
-        )
-        Text(
-            text = "Works with any room or zone in your Hue app — the player " +
-                "auto-creates the Entertainment configuration the first time " +
-                "you pick one. Colour bulbs are streamed over Hue's low-latency " +
-                "Entertainment protocol; white-only bulbs are pulsed via a " +
-                "single group brightness command per cycle so the bridge stays " +
-                "comfortable even with many lights in the room. No microphone " +
-                "permission needed.",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextTertiary,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
-        )
-        Text(
-            text = "Doesn't apply to Spotify Connect or Cast — those play " +
-                "audio on a remote device, so the analyser has nothing to " +
-                "see. Reactive lighting auto-pauses on those sources.",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextTertiary,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
-        )
-
+        // vc32 (E7 idea 2): four expandable sub-sections — every control
+        // moved VERBATIM, only wrapped + regrouped (A2-style no-drop
+        // inventory: 16 interactive controls before and after). The
+        // audio-reactive intro texts moved down into the Tuning
+        // sub-section they describe.
+        ExpandableSubsection("Rooms & zones", "hue_rooms", initiallyExpanded = true) {
         // ── vc29 — area picker (Rooms + Zones + Entertainment areas) ─
         Spacer(Modifier.height(8.dp))
         Row(
@@ -2030,6 +2000,49 @@ private fun HueSection(
                 "forgets the bridge entirely — you'll need to press the " +
                 "bridge button to re-pair.",
             style = MaterialTheme.typography.labelSmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+        )
+        }
+
+        // vc32 sub-section: the fiddly tuning, collapsed by default.
+        ExpandableSubsection("Audio-reactive tuning", "hue_tuning", initiallyExpanded = false) {
+        // ── PRIMARY — audio-reactive lighting ──────────────────────
+        Text(
+            text = "Audio-reactive lighting",
+            style = MaterialTheme.typography.titleMedium,
+            color = TealAccent,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        Text(
+            text = "Lights pulse with the music — bass kicks flash bright, " +
+                "treble runs cool blues, mids track melody. The colour-cycle " +
+                "rate is BPM-driven so transitions feel musical, and rises " +
+                "with the slider below. Sensitivity controls both brightness " +
+                "swing and colour-shift speed: 0 turns reactive lighting off, " +
+                "low values feel calm + occasional, high values feel pulsing " +
+                "+ dramatic.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+        )
+        Text(
+            text = "Works with any room or zone in your Hue app — the player " +
+                "auto-creates the Entertainment configuration the first time " +
+                "you pick one. Colour bulbs are streamed over Hue's low-latency " +
+                "Entertainment protocol; white-only bulbs are pulsed via a " +
+                "single group brightness command per cycle so the bridge stays " +
+                "comfortable even with many lights in the room. No microphone " +
+                "permission needed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+        )
+        Text(
+            text = "Doesn't apply to Spotify Connect or Cast — those play " +
+                "audio on a remote device, so the analyser has nothing to " +
+                "see. Reactive lighting auto-pauses on those sources.",
+            style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
@@ -2212,7 +2225,11 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
 
+        }
+
         // ── SECONDARY — basic Hue control (third-party-style) ──────
+        // vc32 sub-section 4/4.
+        ExpandableSubsection("Power & scenes", "hue_scenes", initiallyExpanded = true) {
         Spacer(Modifier.height(16.dp))
         Text(
             text = "Basic controls",
@@ -2276,6 +2293,7 @@ private fun HueSection(
                     tint = TealAccent
                 )
             }
+        }
         }
     }
 }
