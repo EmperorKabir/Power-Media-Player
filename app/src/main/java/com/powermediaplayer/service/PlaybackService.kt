@@ -89,6 +89,19 @@ class PlaybackService : MediaSessionService() {
      */
     @javax.inject.Inject
     lateinit var hueAnalyserProcessor: com.powermediaplayer.hue.HueAnalyserAudioProcessor
+    /**
+     * In-chain reverb — replaces the platform EnvironmentalReverb, which
+     * failed twice on hardware (OUTPUT_MIX denied; session-insert
+     * crackled while inaudible). Flags are written by PlayerViewModel's
+     * override-aware collectors and read lazily per buffer.
+     */
+    private val reverbProcessor by lazy {
+        com.powermediaplayer.audio.ReverbAudioProcessor(
+            presetSupplier = { reverbPresetFlag },
+            wetSupplier = { reverbWetFlag }
+        )
+    }
+
     @Volatile
     private var stereoFlipFlag: Boolean = false
     @Volatile
@@ -282,6 +295,14 @@ class PlaybackService : MediaSessionService() {
 
         /** ReplayGain attenuation for negative track-gain tags
          *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
+        @Volatile private var reverbPresetFlag: Int = 0
+        @Volatile private var reverbWetFlag: Float = 1.0f
+
+        fun setReverb(preset: Int, wet: Float) {
+            reverbPresetFlag = preset.coerceIn(0, 5)
+            reverbWetFlag = wet.coerceIn(0f, 1f)
+        }
+
         fun setReplayGainAttenuation(factor: Float) {
             replayGainFactor = factor.coerceIn(0.0f, 1.0f)
             applyMixedVolume()
@@ -404,6 +425,7 @@ class PlaybackService : MediaSessionService() {
                         androidx.media3.exoplayer.audio.DefaultAudioSink
                             .DefaultAudioProcessorChain(
                                 stereoTransformProcessor,
+                                reverbProcessor,
                                 audioDelayProcessor,
                                 // §Hue PCM tap — passes audio through;
                                 // exposes the latest FFT analyser
