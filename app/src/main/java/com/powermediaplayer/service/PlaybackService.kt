@@ -138,6 +138,14 @@ class PlaybackService : MediaSessionService() {
     @javax.inject.Inject
     lateinit var hueEntertainment: com.powermediaplayer.hue.HueEntertainment
 
+    /**
+     * vc32 (T253): the area key ("<kind>:<uuid>") the CURRENTLY RUNNING
+     * entertainment stream was started for. The collector compares it to
+     * the live hueSelectedArea so a mid-stream room/zone switch restarts
+     * the engine on the new area instead of silently driving the old one.
+     */
+    @Volatile private var activeHueAreaKey: String = ""
+
     @javax.inject.Inject
     lateinit var hueProvider: com.powermediaplayer.hue.HueProvider
 
@@ -1043,12 +1051,19 @@ class PlaybackService : MediaSessionService() {
                 p?.addListener(listener)
                 awaitClose { p?.removeListener(listener) }
             }.distinctUntilChanged()
+            // vc32 (T253): hueSelectedArea is now a COLLECTOR SOURCE.
+            // Previously it was only read one-shot inside the handler, so
+            // (a) re-picking an area after Disconnect never re-fired the
+            // collector and (b) switching rooms mid-stream kept driving
+            // the OLD room (logged 22:06-22:07: re-pick produced a single
+            // intensity=0 fire and nothing else).
             kotlinx.coroutines.flow.combine(
                 settingsDataStore.hueReactiveIntensity,
-                playingFlow
-            ) { intensity, isPlaying -> intensity to isPlaying }
+                playingFlow,
+                settingsDataStore.hueSelectedArea
+            ) { intensity, isPlaying, areaKey -> Triple(intensity, isPlaying, areaKey) }
                 .distinctUntilChanged()
-                .collect { (intensity, isPlaying) ->
+                .collect { (intensity, isPlaying, areaKey) ->
                     // Spotify Connect + Cast — audio plays on a remote
                     // device, not through our AudioProcessor chain, so
                     // the PCM tap sees silence. Don't start the
@@ -1069,9 +1084,17 @@ class PlaybackService : MediaSessionService() {
                         "collector fire intensity=$intensity isPlaying=$isPlaying " +
                             "isCast=$isCast isSpotify=$isSpotify " +
                             "isStreaming=${hueEntertainment.isStreaming()} " +
-                            "selectedArea=${runCatching { settingsDataStore.hueSelectedArea.first() }.getOrDefault("?")}"
+                            "selectedArea=$areaKey activeStreamArea=$activeHueAreaKey"
                     )
-                    if (intensity > 0 && isPlaying && !isCast && !isSpotify) {
+                    // vc32 (T253): a BLANK area now means OFF, full stop —
+                    // an explicit Disconnect must kill the stream even
+                    // though intensity is no longer zeroed. (Behaviour
+                    // change for pre-vc29 installs that relied on the
+                    // blank→first-entertainment-area fallback: they pick
+                    // an area once in Settings.)
+                    if (intensity > 0 && isPlaying && !isCast && !isSpotify &&
+                        areaKey.isNotBlank()
+                    ) {
                         // vc29.10 — skip the whole bridge query chain
                         // (listAreas / listAllLights / ensureConfig /
                         // fetchProfiles) if a stream is already up.
@@ -1081,19 +1104,29 @@ class PlaybackService : MediaSessionService() {
                         // sensitivity so slider moves during playback
                         // actually take effect. The engine reads
                         // liveIntensity each frame.
+                        // vc32 (T253) — UNLESS the user moved to a
+                        // different room/zone: the engine captured the
+                        // old area at start, so an area change must
+                        // stop + restart on the new one.
                         if (hueEntertainment.isStreaming()) {
-                            hueEntertainment.setIntensity(intensity)
-                            return@collect
+                            if (areaKey != activeHueAreaKey) {
+                                com.powermediaplayer.diag.DiagLog.event(
+                                    "HUE",
+                                    "area changed mid-stream ($activeHueAreaKey → $areaKey) — restarting engine"
+                                )
+                                hueEntertainment.stop()
+                                // fall through to the start path below
+                            } else {
+                                hueEntertainment.setIntensity(intensity)
+                                return@collect
+                            }
                         }
                         // vc29 — resolve the user-picked area (room /
                         // zone / entertainment) from DataStore. The
                         // composite key is "<kind>:<uuid>" so we don't
                         // need a second roundtrip just to know what
-                        // kind to look up. Empty → legacy fallback to
-                        // the first entertainment area.
-                        val pickedKey = runCatching {
-                            settingsDataStore.hueSelectedArea.first()
-                        }.getOrDefault("")
+                        // kind to look up.
+                        val pickedKey = areaKey
                         val areas = runCatching { hueProvider.listAreas() }
                             .getOrDefault(emptyList())
                         val picked = if (pickedKey.isNotBlank()) {
@@ -1164,6 +1197,10 @@ class PlaybackService : MediaSessionService() {
                             intensity,
                             area.groupedLightId
                         )
+                        // vc32 (T253): remember which area the running
+                        // stream belongs to so a mid-stream room switch
+                        // is detected and restarts the engine.
+                        activeHueAreaKey = areaKey
                     } else {
                         if (intensity > 0 && isPlaying && (isCast || isSpotify)) {
                             com.powermediaplayer.diag.DiagLog.event(
@@ -1173,6 +1210,7 @@ class PlaybackService : MediaSessionService() {
                             )
                         }
                         hueEntertainment.stop()
+                        activeHueAreaKey = ""
                     }
                 }
         }

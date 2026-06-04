@@ -480,10 +480,15 @@ class SettingsViewModel @Inject constructor(
             com.powermediaplayer.diag.DiagLog.event(
                 "HUE",
                 "DISCONNECT room/zone — priorArea=$priorArea priorIntensity=$priorIntensity " +
-                    "→ clearing area + intensity=0"
+                    "→ clearing area (intensity PRESERVED, vc32 T253)"
             )
+            // vc32 (T253): do NOT zero the sensitivity. Zeroing made every
+            // re-pick dead (the collector saw intensity=0 forever — logged
+            // 22:07:41) and silently reset a user preference whose slider
+            // now lives in the collapsed Tuning sub-section. The stream
+            // still stops on disconnect: the collector treats a BLANK area
+            // as off (PlaybackService gate, same change-set).
             settingsDataStore.setHueSelectedArea("")
-            settingsDataStore.setHueReactiveIntensity(0)
         }
     }
 

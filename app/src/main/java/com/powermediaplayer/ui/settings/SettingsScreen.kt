@@ -1972,8 +1972,9 @@ private fun HueSection(
         // ── Connection controls ─────────────────────────────────────
         // Surfaced near the picker so leaving an area / unpairing the
         // bridge doesn't require digging through the basic-controls
-        // section. Disconnecting an area also forces sensitivity to 0
-        // so playback doesn't keep streaming silently.
+        // section. vc32 (T253): disconnect clears ONLY the area — the
+        // stream stops because the collector treats a blank area as off;
+        // sensitivity is preserved so a re-pick works immediately.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
