@@ -85,6 +85,9 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | T252 | FIX: provisional mirror state on Spotify play | M | DONE(arm+clear methods; armed at all 3 tap sites; cleared on all 3 failure paths; null-snap grace hold; 5/5 predicates PASS; all suites green 3+3+4+6; pushed bb8e195; installed Success) `[DEVICE]` re-test pending |
 
+| T254 | Stuck 'Loading metadata' + tap lockout on launch (cold-start inline https parse; debounce swallowed taps; cache died with process) | M | DONE(4/4 predicates after grep-artefact verification; cold-start remote=cache-or-none; IGNORE→supersession; disk-backed ChapterCache; fill dedup; pushed 6708a96; installed Success) `[DEVICE]` re-test pending |
+| T255 | Resume-option answer: launch restore DOES fire (recent id=23 DRIVE restored) — it was working but blocking; now instant | I | DONE(run5 DEC cold-start evaluating + restore lines) |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
