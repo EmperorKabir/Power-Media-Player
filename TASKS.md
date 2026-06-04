@@ -83,7 +83,7 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T250 | Spotify switch conflict | I | DONE(convicted: 6 USER toggles 21:47:31-38 ALL on local mediaId=2514d2e4 while Spotify played — playPause routes by isSpotifyActive which stays false through the handoff gap; round-2 suppression lengthened it) |
 | T251 | Spotify pending-state metadata/control question | I | DONE(same gap; answer: show the REQUESTED track immediately via provisional mirror state — design in findings round 4) |
 
-| T252 | FIX: provisional mirror state on Spotify play (controls route instantly, requested metadata shown, null-snap grace hold, expiry failsafe) | P→M | AWAITING-USER(go) |
+| T252 | FIX: provisional mirror state on Spotify play | M | DONE(arm+clear methods; armed at all 3 tap sites; cleared on all 3 failure paths; null-snap grace hold; 5/5 predicates PASS; all suites green 3+3+4+6; pushed bb8e195; installed Success) `[DEVICE]` re-test pending |
 
 ## E — Completed (evidence archived)
 
