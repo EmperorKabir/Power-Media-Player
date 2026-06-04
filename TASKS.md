@@ -76,6 +76,13 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T246 | Drive resume delay phase breakdown | I | DONE(parse=75,918ms of 75,918ms: textTrack 38.0s + neroChpl re-stream 37.9s; local=19ms. Task-10 cache GATE: GO) |
 | T247 | Play/pause slow to respond | I | DONE(local touch→command = 11ms — instant; slowness = Spotify-mirror icon waits on 1 Hz poll + the T245 ghost pausing the wrong stream. Fix = optimistic mirror flip, plan) |
 
+## G — Round-3 device run reports (2026-06-04 late — phase I)
+
+| ID | Task | Phase | Status |
+|----|------|-------|--------|
+| T250 | Spotify switch: lag + conflict; play/pause "moved between 2 tracks or 2 playing at once" | I | TODO |
+| T251 | Switching to Spotify still shows previous track's metadata; what should the pending state show/control? | I | TODO |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
