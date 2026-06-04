@@ -390,7 +390,15 @@ class PlaybackConnection @Inject constructor(
      * Set media items and start playback. Clears any folder-chapter override
      * because callers using setMediaItems() are not in folder mode.
      */
-    fun setMediaItems(items: List<MediaItem>, startIndex: Int = 0) {
+    fun setMediaItems(
+        items: List<MediaItem>,
+        startIndex: Int = 0,
+        // vc32 (E12): callers that restore state (cold-start) must load
+        // WITHOUT auto-playing — the old unconditional play() let a stale
+        // 76 s resume audibly start an audiobook under the Spotify mirror,
+        // and forced cold-start into a racy post-hoc pause.
+        playWhenReady: Boolean = true
+    ) {
         folderChapters = null
         localChapters = null
         localMetadata = null
@@ -398,7 +406,7 @@ class PlaybackConnection @Inject constructor(
         controller?.let { c ->
             c.setMediaItems(items, startIndex, 0L)
             c.prepare()
-            c.play()
+            if (playWhenReady) c.play() else c.pause()
         }
     }
 

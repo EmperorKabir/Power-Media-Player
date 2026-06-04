@@ -48,15 +48,11 @@ class LastPlayedViewModel @Inject constructor(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    // vc31 resume-hang investigation — instrumentation only (no
-    // behaviour change). `resumeAttempts` increments on every tap;
-    // `resumeActive` tracks how many local/Drive resume coroutines are
-    // simultaneously in flight. If the log shows resumeActive climbing
-    // past 1, that PROVES the "keeps loading over and over" symptom is
-    // un-debounced re-entrancy. Both are read back into each RESUME
-    // line so the on-device trace is self-describing.
-    private val resumeAttempts = java.util.concurrent.atomic.AtomicInteger(0)
-    private val resumeActive = java.util.concurrent.atomic.AtomicInteger(0)
+    // vc32 (E12/E13): the vc31 per-instance counters proved the bug but
+    // were themselves part of it — destination-scoped ViewModels are
+    // cleared on back-stack pop, so every tab re-entry reset them (both
+    // ghost-bug taps logged attempt=1). Debounce + staleness now live in
+    // the process-wide com.powermediaplayer.playback.ResumeGate.
 
     /**
      * §C7 — drop overrides when a row stops being pinned.
@@ -110,6 +106,9 @@ class LastPlayedViewModel @Inject constructor(
     fun playAlbumTrack(trackUri: String, title: String) {
         val uri = runCatching { Uri.parse(trackUri) }.getOrNull() ?: return
         viewModelScope.launch {
+            // vc32 (E12): parse-bearing path — token so a newer play
+            // intent supersedes it.
+            val token = com.powermediaplayer.playback.ResumeGate.begin()
             // vc32 (E4/E5): banner over the pre-player parse phase.
             playbackConnection.setCloudFetchInProgress(true)
             try {
@@ -133,9 +132,16 @@ class LastPlayedViewModel @Inject constructor(
                         )
                         .build()
                 }
+                if (!com.powermediaplayer.playback.ResumeGate.isCurrent(token)) {
+                    com.powermediaplayer.diag.DiagLog.resume(
+                        "playAlbumTrack ABORT token=$token — superseded"
+                    )
+                    return@launch
+                }
                 playbackConnection.setMediaItems(listOf(mediaItem), 0)
             } finally {
                 playbackConnection.setCloudFetchInProgress(false)
+                com.powermediaplayer.playback.ResumeGate.end(token)
             }
         }
     }
@@ -238,10 +244,11 @@ class LastPlayedViewModel @Inject constructor(
         // previously every tap of a still-loading entry spawned another
         // full M4bChapterParser coroutine. Paired with the PlayerScreen
         // isLoading spinner so the user gets feedback instead of tapping
-        // blindly. resumeActive is decremented in each branch's END log.
-        if (resumeActive.get() > 0) {
+        // blindly. The in-flight count lives in the process-wide ResumeGate.
+        if (com.powermediaplayer.playback.ResumeGate.activeCount() > 0) {
             com.powermediaplayer.diag.DiagLog.resume(
-                "tap IGNORED — resume already in flight (active=${resumeActive.get()})"
+                "tap IGNORED — resume already in flight " +
+                    "(active=${com.powermediaplayer.playback.ResumeGate.activeCount()})"
             )
             return
         }
@@ -258,9 +265,8 @@ class LastPlayedViewModel @Inject constructor(
             // policy). The friend's audiobooks are likely local/Drive,
             // but we don't assume — the log will show whichever branch
             // is actually hit + its timing.
-            val attempt = resumeAttempts.incrementAndGet()
             com.powermediaplayer.diag.DiagLog.resume(
-                "tap attempt=$attempt activeBefore=${resumeActive.get()} " +
+                "tap activeBefore=${com.powermediaplayer.playback.ResumeGate.activeCount()} " +
                     "source=SPOTIFY uri=${com.powermediaplayer.diag.DiagLog.hash(item.mediaUri)} " +
                     "targetPos=${targetPos}ms"
             )
@@ -269,18 +275,20 @@ class LastPlayedViewModel @Inject constructor(
             // local audio audible behind the Spotify Connect track.
             runCatching { playbackConnection.pause() }
             viewModelScope.launch(Dispatchers.IO) {
-                val active = resumeActive.incrementAndGet()
+                val token = com.powermediaplayer.playback.ResumeGate.begin()
                 val tStart = com.powermediaplayer.diag.DiagLog.now()
                 com.powermediaplayer.diag.DiagLog.resume(
-                    "spotify coroutine START attempt=$attempt activeNow=$active"
+                    "spotify coroutine START token=$token " +
+                        "activeNow=${com.powermediaplayer.playback.ResumeGate.activeCount()}"
                 )
+                try {
                 val tPlay = com.powermediaplayer.diag.DiagLog.now()
                 val play = runCatching {
                     spotifyProvider.playTrackOnConnectDevice(item.mediaUri, contextUri = null)
                 }.getOrNull()
                 com.powermediaplayer.diag.DiagLog.perf(
                     "resume.spotifyPlayCall", com.powermediaplayer.diag.DiagLog.now() - tPlay,
-                    "attempt=$attempt ok=${play?.isSuccess == true}"
+                    "token=$token ok=${play?.isSuccess == true}"
                 )
                 val ok = play?.isSuccess == true
                 if (ok) {
@@ -339,12 +347,14 @@ class LastPlayedViewModel @Inject constructor(
                     // app-wide snackbar can also catch it.
                     _messages.emit(msg)
                 }
-                val remaining = resumeActive.decrementAndGet()
-                com.powermediaplayer.diag.DiagLog.resume(
-                    "spotify coroutine END attempt=$attempt ok=$ok " +
-                        "totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
-                        "stillActive=$remaining"
-                )
+                } finally {
+                    com.powermediaplayer.playback.ResumeGate.end(token)
+                    com.powermediaplayer.diag.DiagLog.resume(
+                        "spotify coroutine END token=$token " +
+                            "totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
+                            "stillActive=${com.powermediaplayer.playback.ResumeGate.activeCount()}"
+                    )
+                }
             }
             return
         }
@@ -361,12 +371,8 @@ class LastPlayedViewModel @Inject constructor(
         }
         val uri = runCatching { Uri.parse(item.mediaUri) }.getOrNull() ?: return
         val targetPos = atPositionMs ?: item.lastPositionMs
-        // vc31 — tag this tap with an attempt number + show how many
-        // resume coroutines are already running. This is the headline
-        // evidence line for the resume-hang report.
-        val attempt = resumeAttempts.incrementAndGet()
         com.powermediaplayer.diag.DiagLog.resume(
-            "tap attempt=$attempt activeBefore=${resumeActive.get()} " +
+            "tap activeBefore=${com.powermediaplayer.playback.ResumeGate.activeCount()} " +
                 "source=${item.source} uri=${com.powermediaplayer.diag.DiagLog.hash(item.mediaUri)} " +
                 "scheme=${uri.scheme} targetPos=${targetPos}ms"
         )
@@ -377,10 +383,11 @@ class LastPlayedViewModel @Inject constructor(
         // the MediaItem on Dispatchers.IO, then hop back to Main for
         // the MediaController calls.
         viewModelScope.launch {
-            val active = resumeActive.incrementAndGet()
+            val token = com.powermediaplayer.playback.ResumeGate.begin()
             val tStart = com.powermediaplayer.diag.DiagLog.now()
             com.powermediaplayer.diag.DiagLog.resume(
-                "coroutine START attempt=$attempt activeNow=$active"
+                "coroutine START token=$token " +
+                    "activeNow=${com.powermediaplayer.playback.ResumeGate.activeCount()}"
             )
             // vc32 (E4/E5): banner over the pre-player parse phase — the
             // dominant slice of the logged 93 s Drive resume happened
@@ -389,15 +396,26 @@ class LastPlayedViewModel @Inject constructor(
             // finally so a failed parse can't strand the banner.
             playbackConnection.setCloudFetchInProgress(true)
             try {
+                // vc32 (E11): remote schemes are NEVER parsed inline —
+                // both parser strategies full-stream the file (2×38 s
+                // measured on a 1.2 GB m4b). Playback starts immediately
+                // (the https URL is range-capable — READY in 2.5 s);
+                // chapters arrive via the async fill-in below.
+                val isRemote = com.powermediaplayer.util.M4bChapterParser.isRemote(uri)
                 val mediaItem = withContext(Dispatchers.IO) {
                     val tParse = com.powermediaplayer.diag.DiagLog.now()
-                    val chapterExtras = runCatching {
-                        com.powermediaplayer.util.M4bChapterParser
-                            .extractChaptersAsBundle(context, uri)
-                    }.getOrDefault(android.os.Bundle())
+                    val chapterExtras = if (isRemote) {
+                        com.powermediaplayer.util.M4bChapterParser.cachedOnly(uri)
+                            ?: android.os.Bundle()
+                    } else {
+                        runCatching {
+                            com.powermediaplayer.util.M4bChapterParser
+                                .extractChaptersAsBundle(context, uri)
+                        }.getOrDefault(android.os.Bundle())
+                    }
                     com.powermediaplayer.diag.DiagLog.perf(
                         "resume.chapterExtract", com.powermediaplayer.diag.DiagLog.now() - tParse,
-                        "attempt=$attempt chapterCount=${chapterExtras.getInt("chapter_count", -1)}"
+                        "token=$token remote=$isRemote chapterCount=${chapterExtras.getInt("chapter_count", -1)}"
                     )
                     androidx.media3.common.MediaItem.Builder()
                         .setMediaId(item.mediaUri)
@@ -415,19 +433,63 @@ class LastPlayedViewModel @Inject constructor(
                         )
                         .build()
                 }
+                // vc32 (E12): a stale resume must never touch the player —
+                // the ghost audiobook loaded + auto-played 25 s after the
+                // user had switched to Spotify.
+                if (!com.powermediaplayer.playback.ResumeGate.isCurrent(token)) {
+                    com.powermediaplayer.diag.DiagLog.resume(
+                        "coroutine ABORT token=$token — superseded"
+                    )
+                    return@launch
+                }
                 val tSet = com.powermediaplayer.diag.DiagLog.now()
                 playbackConnection.setMediaItems(listOf(mediaItem), 0)
                 playbackConnection.seekTo(targetPos)
                 com.powermediaplayer.diag.DiagLog.perf(
                     "resume.setMediaItems+seek", com.powermediaplayer.diag.DiagLog.now() - tSet,
-                    "attempt=$attempt"
+                    "token=$token"
                 )
+                // vc32 (E11/E18): background chapter fill-in for remote
+                // items — parses once, caches (including the empty
+                // result), and injects via the existing setLocalChapters
+                // path IF the user is still on this item.
+                if (isRemote &&
+                    mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0
+                ) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        val tFill = com.powermediaplayer.diag.DiagLog.now()
+                        val late = runCatching {
+                            com.powermediaplayer.util.M4bChapterParser
+                                .extractChaptersAsBundle(context, uri)
+                        }.getOrDefault(android.os.Bundle())
+                        val count = late.getInt("chapter_count", 0)
+                        com.powermediaplayer.diag.DiagLog.perf(
+                            "resume.asyncChapterFill",
+                            com.powermediaplayer.diag.DiagLog.now() - tFill,
+                            "token=$token count=$count"
+                        )
+                        if (count > 0 &&
+                            com.powermediaplayer.playback.ResumeGate.isCurrent(token)
+                        ) {
+                            val chapters = (0 until count).mapNotNull { i ->
+                                val title = late.getString("chapter_title_$i")
+                                    ?: "Chapter ${i + 1}"
+                                val start = late.getLong("chapter_start_$i", -1)
+                                val end = late.getLong("chapter_end_$i", -1)
+                                if (start >= 0) {
+                                    com.powermediaplayer.service.ChapterInfo(title, start, end, i)
+                                } else null
+                            }
+                            playbackConnection.setLocalChapters(chapters)
+                        }
+                    }
+                }
             } finally {
                 playbackConnection.setCloudFetchInProgress(false)
-                val remaining = resumeActive.decrementAndGet()
+                com.powermediaplayer.playback.ResumeGate.end(token)
                 com.powermediaplayer.diag.DiagLog.resume(
-                    "coroutine END attempt=$attempt totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
-                        "stillActive=$remaining"
+                    "coroutine END token=$token totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
+                        "stillActive=${com.powermediaplayer.playback.ResumeGate.activeCount()}"
                 )
             }
         }

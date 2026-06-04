@@ -697,6 +697,11 @@ class PlayerViewModel @Inject constructor(
                 )
                 return@launch
             }
+            // vc32 (E12): token taken BEFORE the grace delay so any user
+            // play during it supersedes the cold-start restore instead of
+            // racing it.
+            val gateToken = com.powermediaplayer.playback.ResumeGate.begin()
+            try {
             kotlinx.coroutines.delay(800) // wait for service connection
             if (spotifyProvider.spotifyState.value != null) {
                 com.powermediaplayer.diag.DiagLog.dec(
@@ -758,6 +763,13 @@ class PlayerViewModel @Inject constructor(
                     // below is finally-equivalent.
                     playbackConnection.setCloudFetchInProgress(true)
                     runCatching {
+                        if (!com.powermediaplayer.playback.ResumeGate.isCurrent(gateToken)) {
+                            com.powermediaplayer.diag.DiagLog.dec(
+                                branch = "cold-start",
+                                reason = "superseded by a user play intent — abort restore"
+                            )
+                            return@runCatching
+                        }
                         val uri = android.net.Uri.parse(recent.mediaUri)
                         // Parser off-Main — for multi-GB Drive
                         // audiobooks the synchronous MP4 box scan
@@ -785,7 +797,12 @@ class PlayerViewModel @Inject constructor(
                                     .build()
                             )
                             .build()
-                        playbackConnection.setMediaItems(listOf(item), 0)
+                        // vc32 (E12): load PAUSED atomically — the old
+                        // post-hoc `player.playWhenReady = false` raced the
+                        // unconditional play() inside setMediaItems.
+                        playbackConnection.setMediaItems(
+                            listOf(item), 0, playWhenReady = false
+                        )
                         // Apply user-configured backoff so the user lands
                         // a bit BEFORE the saved position for context.
                         val backoffSec = runCatching {
@@ -793,7 +810,6 @@ class PlayerViewModel @Inject constructor(
                         }.getOrNull() ?: 5
                         val target = (recent.lastPositionMs - backoffSec * 1000L).coerceAtLeast(0L)
                         playbackConnection.seekTo(target)
-                        player.playWhenReady = false
                         lastPlayedRepo.adoptSession(recent.id)
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
@@ -806,6 +822,9 @@ class PlayerViewModel @Inject constructor(
                 // session null. Spotify needs an active Connect device,
                 // chosen by the user; the 5s tick will synthesise a
                 // session if playback continues from another entry path.
+            }
+            } finally {
+                com.powermediaplayer.playback.ResumeGate.end(gateToken)
             }
         }
         // ReplayGain: when enabled, read REPLAYGAIN_TRACK_GAIN on each

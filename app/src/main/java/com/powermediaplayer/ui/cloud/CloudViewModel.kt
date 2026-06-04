@@ -432,6 +432,10 @@ class CloudViewModel @Inject constructor(
         onPlaybackStarted: () -> Unit = {}
     ) {
         viewModelScope.launch {
+            // vc32 (E12): new play intent — supersedes any in-flight slow resume.
+            com.powermediaplayer.playback.ResumeGate.end(
+                com.powermediaplayer.playback.ResumeGate.begin()
+            )
             // Pause any local playback so the two streams don't overlap.
             runCatching { playbackConnection.pause() }
             val r = spotifyProvider.playTrackOnConnectDevice(uri, contextUri = null)
@@ -901,6 +905,12 @@ class CloudViewModel @Inject constructor(
             "PMP_DIAG",
             "Cloud.openItem name=${item.name} provider=${item.sourceProvider} folder=${item.isFolder} mime=${item.mimeType}"
         )
+        if (!item.isFolder) {
+            // vc32 (E12): new play intent — supersedes any in-flight slow resume.
+            com.powermediaplayer.playback.ResumeGate.end(
+                com.powermediaplayer.playback.ResumeGate.begin()
+            )
+        }
         if (item.isFolder) {
             when (item.sourceProvider) {
                 CloudProviderType.GOOGLE_DRIVE -> browseDrive(item.id, item.name)
