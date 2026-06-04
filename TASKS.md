@@ -44,19 +44,20 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T230 | Hue disconnect→reconnect regression: on-device evidence via collector decision-snapshot + DISCONNECT logs (re-pick room/zone after Disconnect → lights unresponsive) | I | BLOCKED(needs T227 install + Hue replication) |
 | T231 | Edge-to-edge Play-warning closure: confirm Android-15 inset handling on device (ties to T228) | V | BLOCKED(needs T227) |
 
-## C — Awaiting user election (audit backlog, NOT auto-scoped)
+## C — User-approved UX (2026-06-04: "I approve of idea 1… make 3-5 sub sections… all main sections expandable… search still checks all")
 
 | ID | Task | Status |
 |----|------|--------|
-| T232 | Long-press discoverability: visible ⋮ menu per row (Library/LastPlayed) | AWAITING-USER(want it?) |
-| T233 | Hue settings progressive disclosure (collapsible Quick/Advanced/Tuning) | AWAITING-USER(want it?) |
+| T232 | Visible ⋮ menu per row (Library + LastPlayed recents/pinned) | PLANNED(plan Tasks 4-5) |
+| T233 | Hue → 4 expandable sub-sections (Bridge / Rooms / Power&scenes / Tuning) | PLANNED(plan Task 7) |
+| T237 | ALL 8 settings groups expandable; search force-shows matches across collapsed groups; clear restores | PLANNED(plan Task 6) |
 
-## D — Next phases (locked until investigation reported + user advances)
+## D — Plan + implementation
 
 | ID | Task | Phase | Status |
 |----|------|-------|--------|
-| T234 | PLAN: fixes for whatever T223-T226/T229-T230 evidence convicts (back behaviour, resume delay, metadata warning coverage, Hue reconnect) | P | BLOCKED(phase lock — investigation first) |
-| T235 | IMPLEMENT per approved plan + on-device verify | M | BLOCKED(needs T234) |
+| T234 | PLAN covering investigation verdicts + approved UX, evidence-cross-referenced, predicate-gated | P | DONE(`docs/superpowers/plans/2026-06-04-vc32-fixes-and-ux.md` — 12 tasks, E1-E10 evidence index, self-review §end) |
+| T235 | IMPLEMENT per plan (Tasks 1-8 code; 9 on-device; 10-11 evidence-gated; 12 visual gate) | M | AWAITING-USER(execution mode: subagent-driven or inline) |
 
 ## E — Completed (evidence archived)
 
