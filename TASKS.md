@@ -106,8 +106,9 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T264 | Boost fix: RG/user gain separation + shared effect holders across VM instances | M | DONE(GATE C) `[DEVICE]` |
 | T265 | 'Restore last played on launch' toggle (default on); backoff subordinate; BT/headphone toggles independent by design | M | DONE(GATE C, 8 wiring refs) `[DEVICE]` |
 
-| T266 | PiP-maximise black video | M | DONE(logs: playback continuous through the transition → lost surface binding; VideoSurfaceBinding registry + 150ms re-assert in onPictureInPictureModeChanged; installed) `[DEVICE]` |
-| T267 | Reverb v2 — in-chain Freeverb DSP | M | DONE(ReverbAudioProcessor in sink chain; click-free param glide; true bypass; platform effect deleted; ReverbAudioProcessorTest 2/2; all suites green; installed) `[DEVICE]` audibility |
+| T266 | PiP-maximise black video | M | DONE v2(re-assert disproven by logs — codec reconnected in ms yet black persisted → frozen TextureView class; now the video view is RECREATED on every PiP exit via pipExitGeneration key, replicating the tab-switch cure automatically; installed) `[DEVICE]` |
+| T268 | Loading banner flickering during video playback/PiP | M | DONE(ExoPlayer isLoading oscillates per ~100ms chunk — banner now needs 450ms sustained loading; installed) `[DEVICE]` |
+| T267 | Reverb v2 — in-chain Freeverb DSP | M | DONE v2(user confirmed audible; crackle = clipping from unnormalised wet gain (~10x on big rooms) — wet now normalised by 1/(1-feedback) + 25% dry duck for headroom; installed) `[DEVICE]` quality re-check |
 
 ## E — Completed (evidence archived)
 
