@@ -28,12 +28,12 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | ID | Task | Phase | Status |
 |----|------|-------|--------|
-| T222 | Connect phone, identify installed build, pull ALL on-device logs (DiagLog `diag/log-current.txt` + any `deeplog/` sessions) to disk BEFORE anything touches the app | I | TODO |
-| T223 | Back-button: analyse user's back presses from the pulled logs (what happened each press, app state at the time) + assess whether different behaviour would be better | I | TODO |
-| T224 | Back-button: SEPARATE app-wide code survey (BackHandler / OnBackPressedDispatcher / predictive-back / nav pop behaviour per screen) + context7 current-Android guidance; produce behaviour map + recommendation | I | TODO |
-| T225 | Resume delay: locate the user's replication of the tester's 2-3 min Last-Played resume in the logs; extract timeline evidence (which phase ate the time, how many stacked loads) | I | TODO |
-| T226 | Metadata-loading warning: why did NO warning appear playing "Stealing Society" from Spotify (logs + code trace of `cloudFetchInProgress`); EXPAND delay investigation beyond Drive to local + Spotify paths | I | TODO |
-| T227 | End of turn: git push origin + adb install -r fresh debug build (arms the new RESUME/PERF + DeepLogger instrumentation for the next evidence round) — AFTER T222 pull so existing logs are not disturbed | — | TODO |
+| T222 | Connect phone, identify installed build, pull ALL on-device logs BEFORE anything touches the app | I | DONE(installed=vc30 22-May, NOT debug-signed; `diag/` EMPTY → diagnostic toggle was OFF; no deeplog on vc30; fallback: full logcat 330k lines → `deeplogs/logcat-2026-06-04-full.txt` + `app-slice.txt`) |
+| T223 | Back-button: analyse user's back presses from logs + assess | I | DONE(6 presses found 18:05–18:32; every non-IME press → `moveTaskToBack` = whole app to launcher; all fired from Player tab because drill-in nav wipes the stack; full analysis in `docs/superpowers/specs/2026-06-04-investigation-findings.md`) |
+| T224 | Back-button: app-wide code survey + guidance + recommendation | I | DONE(only 2 BackHandlers app-wide — CloudBrowser provider-exit, Library multi-select; tab taps use canonical popUpTo(start){saveState}; DEVIATION: `navigateToPlayer` drill-in also popUpTo-wipes → back cannot return to Last Played; context7 confirms drill-ins should push, not wipe) |
+| T225 | Resume delay: locate user's replication + timeline | I | DONE(Drive+Cast: tap 18:05:10 FGS → playing 18:06:43.9 = **93 s**, user backed out 3× during gap; Spotify: tap 18:32:08 → Spotify audio 18:32:40 = **32 s**, backed out 2×; phase breakdown needs instrumented build → T229) |
+| T226 | Metadata-warning gap: Spotify + expand to local/Drive | I | DONE(3 gaps: (1) Spotify banner killed ~1 s in — `SpotifyProvider.kt:1007` sets fetching=false on null snap during device-wake handoff; (2) Drive/local Last-Played resume NEVER sets cloudFetchInProgress — only CloudViewModel browse path does; (3) vc31 isLoading spinner starts only at ExoPlayer load — pre-player parse/SAF phase still uncovered) |
+| T227 | End of turn: push + install instrumented debug build | — | push DONE(30279d8..a3e1878); install BLOCKED(INSTALL_FAILED_UPDATE_INCOMPATIBLE — installed vc30 is release-signed; replacing needs uninstall = APP-DATA WIPE → user consent. Both sessions confirmed PAUSED before attempt) |
 
 ## B — Outstanding (carried, phone now available)
 
