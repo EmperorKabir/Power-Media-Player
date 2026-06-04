@@ -238,19 +238,19 @@ class LastPlayedViewModel @Inject constructor(
         item: LastPlayedRepository.HistoryItem,
         atPositionMs: Long? = null
     ) {
-        // vc31 debounce: while a resume coroutine is already in flight,
-        // ignore further taps. This is the fix for the friend's "keeps
-        // loading over and over (once for each time you pressed it)" —
-        // previously every tap of a still-loading entry spawned another
-        // full M4bChapterParser coroutine. Paired with the PlayerScreen
-        // isLoading spinner so the user gets feedback instead of tapping
-        // blindly. The in-flight count lives in the process-wide ResumeGate.
+        // vc32 (T254): the vc31 hard tap-IGNORE is gone — it let the
+        // COLD-START restore's token swallow user taps for the whole of
+        // its parse (logged 22:19:00: "tap IGNORED" while the launch
+        // restore parsed an https book). Stacked loads (the friend's
+        // "keeps loading over and over") are prevented by ResumeGate
+        // generation supersession instead: every tap begins a new
+        // generation and any in-flight resume aborts before touching the
+        // player — last tap wins, nobody is locked out.
         if (com.powermediaplayer.playback.ResumeGate.activeCount() > 0) {
             com.powermediaplayer.diag.DiagLog.resume(
-                "tap IGNORED — resume already in flight " +
+                "tap SUPERSEDES in-flight resume " +
                     "(active=${com.powermediaplayer.playback.ResumeGate.activeCount()})"
             )
-            return
         }
         // Spotify rows: route via Spotify Connect, including the
         // bookmark override position. Polling starts unconditionally on
@@ -426,7 +426,7 @@ class LastPlayedViewModel @Inject constructor(
                 val mediaItem = withContext(Dispatchers.IO) {
                     val tParse = com.powermediaplayer.diag.DiagLog.now()
                     val chapterExtras = if (isRemote) {
-                        com.powermediaplayer.util.M4bChapterParser.cachedOnly(uri)
+                        com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri)
                             ?: android.os.Bundle()
                     } else {
                         runCatching {
@@ -475,14 +475,22 @@ class LastPlayedViewModel @Inject constructor(
                 // result), and injects via the existing setLocalChapters
                 // path IF the user is still on this item.
                 if (isRemote &&
-                    mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0
+                    mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0 &&
+                    // vc32 (T254): dedup — two resumes of the same uri fired
+                    // two CONCURRENT 365 s parses competing for bandwidth.
+                    com.powermediaplayer.util.ChapterCache.shared.markFilling(item.mediaUri)
                 ) {
                     viewModelScope.launch(Dispatchers.IO) {
                         val tFill = com.powermediaplayer.diag.DiagLog.now()
-                        val late = runCatching {
-                            com.powermediaplayer.util.M4bChapterParser
-                                .extractChaptersAsBundle(context, uri)
-                        }.getOrDefault(android.os.Bundle())
+                        val late = try {
+                            runCatching {
+                                com.powermediaplayer.util.M4bChapterParser
+                                    .extractChaptersAsBundle(context, uri)
+                            }.getOrDefault(android.os.Bundle())
+                        } finally {
+                            com.powermediaplayer.util.ChapterCache.shared
+                                .unmarkFilling(item.mediaUri)
+                        }
                         val count = late.getInt("chapter_count", 0)
                         com.powermediaplayer.diag.DiagLog.perf(
                             "resume.asyncChapterFill",

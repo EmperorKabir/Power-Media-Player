@@ -21,14 +21,87 @@ class ChapterCache(private val maxEntries: Int = 16) {
             size > maxEntries
     }
 
+    /**
+     * vc32 (T254): disk write-through. The in-memory cache dies with the
+     * process — logged 22:18:57: a fresh launch re-parsed the SAME 1.2 GB
+     * https book for 365 s. One small JSON file per entry under
+     * <dir>/chapter-cache/, read on memory miss, written on put.
+     */
+    @Volatile private var diskDir: java.io.File? = null
+
+    fun attachDiskStore(baseDir: java.io.File) {
+        if (diskDir == null) {
+            synchronized(this) {
+                if (diskDir == null) {
+                    diskDir = java.io.File(baseDir, "chapter-cache").apply { mkdirs() }
+                }
+            }
+        }
+    }
+
+    private fun fileFor(uri: String, token: String): java.io.File? {
+        val dir = diskDir ?: return null
+        val key = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("$uri|$token".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return java.io.File(dir, "$key.json")
+    }
+
     @Synchronized
-    fun get(uri: String, validityToken: String): Bundle? =
-        map[uri]?.takeIf { it.token == validityToken }?.bundle
+    fun get(uri: String, validityToken: String): Bundle? {
+        map[uri]?.takeIf { it.token == validityToken }?.let { return it.bundle }
+        // Memory miss → disk.
+        val f = fileFor(uri, validityToken) ?: return null
+        if (!f.isFile) return null
+        return runCatching {
+            val o = org.json.JSONObject(f.readText())
+            val count = o.getInt("count")
+            val b = Bundle()
+            b.putInt("chapter_count", count)
+            val titles = o.getJSONArray("titles")
+            val starts = o.getJSONArray("starts")
+            val ends = o.getJSONArray("ends")
+            for (i in 0 until count) {
+                b.putString("chapter_title_$i", titles.getString(i))
+                b.putLong("chapter_start_$i", starts.getLong(i))
+                b.putLong("chapter_end_$i", ends.getLong(i))
+            }
+            map[uri] = Entry(validityToken, b)
+            b
+        }.getOrNull()
+    }
 
     @Synchronized
     fun put(uri: String, validityToken: String, bundle: Bundle) {
         map[uri] = Entry(validityToken, bundle)
+        val f = fileFor(uri, validityToken) ?: return
+        runCatching {
+            val count = bundle.getInt("chapter_count", 0)
+            val o = org.json.JSONObject()
+            o.put("count", count)
+            val titles = org.json.JSONArray()
+            val starts = org.json.JSONArray()
+            val ends = org.json.JSONArray()
+            for (i in 0 until count) {
+                titles.put(bundle.getString("chapter_title_$i") ?: "")
+                starts.put(bundle.getLong("chapter_start_$i", 0L))
+                ends.put(bundle.getLong("chapter_end_$i", 0L))
+            }
+            o.put("titles", titles)
+            o.put("starts", starts)
+            o.put("ends", ends)
+            f.writeText(o.toString())
+        }
     }
+
+    // ── vc32 (T254): async fill-in dedup — two resumes of the same uri
+    // fired two concurrent 365 s parses competing for bandwidth. ──────
+    private val fillsInFlight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** True iff the caller acquired the fill slot for [uri]. */
+    fun markFilling(uri: String): Boolean = fillsInFlight.add(uri)
+
+    fun unmarkFilling(uri: String) { fillsInFlight.remove(uri) }
 
     companion object {
         val shared = ChapterCache()

@@ -790,16 +790,24 @@ class PlayerViewModel @Inject constructor(
                             return@runCatching
                         }
                         val uri = android.net.Uri.parse(recent.mediaUri)
-                        // Parser off-Main — for multi-GB Drive
-                        // audiobooks the synchronous MP4 box scan
-                        // routinely blocked the cold-start coroutine
-                        // > 5 s. Same fix shape as LastPlayedViewModel
-                        // .playLocalAt and LibraryViewModel.playSingle.
+                        // vc32 (T254): the launch restore must NEVER parse
+                        // a remote file inline — logged 22:18:57: it held
+                        // the "Loading metadata" banner for a ~6-minute
+                        // https parse AND its gate token swallowed the
+                        // user's tap ("tap IGNORED" at 22:19:00). Remote →
+                        // disk-cached chapters or none (they fill in when
+                        // the user actively resumes the item); local →
+                        // parse off-Main as before (ms-fast, cached).
                         val chapterExtras = withContext(Dispatchers.IO) {
-                            runCatching {
+                            if (com.powermediaplayer.util.M4bChapterParser.isRemote(uri)) {
                                 com.powermediaplayer.util.M4bChapterParser
-                                    .extractChaptersAsBundle(context, uri)
-                            }.getOrDefault(android.os.Bundle())
+                                    .cachedOnly(context, uri) ?: android.os.Bundle()
+                            } else {
+                                runCatching {
+                                    com.powermediaplayer.util.M4bChapterParser
+                                        .extractChaptersAsBundle(context, uri)
+                                }.getOrDefault(android.os.Bundle())
+                            }
                         }
                         val item = androidx.media3.common.MediaItem.Builder()
                             .setMediaId(recent.mediaUri)
