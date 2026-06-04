@@ -80,8 +80,10 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | ID | Task | Phase | Status |
 |----|------|-------|--------|
-| T250 | Spotify switch: lag + conflict; play/pause "moved between 2 tracks or 2 playing at once" | I | TODO |
-| T251 | Switching to Spotify still shows previous track's metadata; what should the pending state show/control? | I | TODO |
+| T250 | Spotify switch conflict | I | DONE(convicted: 6 USER toggles 21:47:31-38 ALL on local mediaId=2514d2e4 while Spotify played — playPause routes by isSpotifyActive which stays false through the handoff gap; round-2 suppression lengthened it) |
+| T251 | Spotify pending-state metadata/control question | I | DONE(same gap; answer: show the REQUESTED track immediately via provisional mirror state — design in findings round 4) |
+
+| T252 | FIX: provisional mirror state on Spotify play (controls route instantly, requested metadata shown, null-snap grace hold, expiry failsafe) | P→M | AWAITING-USER(go) |
 
 ## E — Completed (evidence archived)
 

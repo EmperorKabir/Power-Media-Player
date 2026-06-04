@@ -261,3 +261,44 @@ T244: Spotify rows DO carry `mediaUri = spotify:track:…` so
 `updatePositionByUri` would match — the tick just never writes during
 mirror. T242: left icon = kind/star instead of Folder for folder rows
 (CloudBrowserScreen fav rows ~1438-1546).
+
+---
+
+# Round 4 — T250/T251 (post-GATE-B device run, 21:47 window)
+
+Evidence: `deeplogs/run3/diag-log.txt` sess=b8cd38fa.
+
+## One defect, two symptoms: the unrouted handoff gap
+
+```
+21:47:29.521 tap SPOTIFY token=11 targetPos=38127
+21:47:29.555 local player paused (branch pause) ✓
+21:47:29.791 spotifyPlayCall ok=269ms
+21:47:31.453 PLAYER playWhenReady=true reason=USER mediaId=2514d2e4 ← LOCAL
+21:47:32-38  five more USER toggles, ALL on mediaId=2514d2e4 (local)
+```
+
+Between the tap and the first ACCEPTED mirror snap, `spotifyState` is null:
+- Player tab shows the PREVIOUS item's metadata (T251), and
+- `playPause()` routes by `isSpotifyActive=false` → controls the LOCAL
+  player → user resumed the local track under Spotify (T250's "two at
+  once"). The round-2 stale-snap suppression LENGTHENED this gap.
+
+ALSO: the null-snap branch sets `_spotifyState.value = null`
+unconditionally — any provisional/held state would be wiped by the
+device-wake null snaps, so the fix must respect the grace there too.
+
+## Confirmed working in the same log
+- Drive/local resume: `chapterParse.cacheHit took=0ms`, tap→loaded 61 ms.
+- The 75.7 s parse ran as `resume.asyncChapterFill` (background) and is
+  now cached (empty result included). ResumeGate tokens active (token=8
+  fill-in declined injection: count=0).
+
+## Fix design (T252 — provisional mirror state)
+On a user Spotify play: synthesise SpotifyPlaybackState from the tapped
+row (title/artist/durationMs, positionMs=targetPos, isPlaying=true,
+trackUri=requested) and set `_spotifyState` IMMEDIATELY →
+`isSpotifyActive` true at tap time (controls route to Spotify Web API;
+no local-player window), UI shows the REQUESTED track + loading banner.
+First matching snap replaces it; null snaps during grace no longer null
+the state; grace expiry (45 s) clears provisional + banner as failsafe.
