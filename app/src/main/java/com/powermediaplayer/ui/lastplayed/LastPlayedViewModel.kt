@@ -280,8 +280,10 @@ class LastPlayedViewModel @Inject constructor(
                 if (ok) {
                     // Always start polling so the Player tab swaps to
                     // the Spotify mirror — independent of whether the
-                    // user is jumping to a saved position.
-                    spotifyProvider.startPlaybackPolling()
+                    // user is jumping to a saved position. expectPlayback
+                    // arms the vc32 handoff grace so the loading banner
+                    // survives the device-wake null snaps (E3).
+                    spotifyProvider.startPlaybackPolling(expectPlayback = true)
                     if (targetPos > 0L) {
                         // /seek lands a moment after /play; small dwell
                         // so Spotify Connect has finished loading.

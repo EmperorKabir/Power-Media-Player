@@ -120,6 +120,16 @@ class SpotifyProvider @Inject constructor(
     private val _spotifyMetadataFetching = MutableStateFlow(false)
     val spotifyMetadataFetching: StateFlow<Boolean> = _spotifyMetadataFetching.asStateFlow()
 
+    /**
+     * vc32 (E3): while a user-initiated play/transfer is in flight, null
+     * /v1/me/player snaps (Spotify still waking the target device) must
+     * NOT clear the loading banner — logcat 2026-06-04 showed the banner
+     * dying ~1 s into a 32 s handoff. Set by
+     * startPlaybackPolling(expectPlayback = true); zeroed on the first
+     * resolved snap and on stopPlaybackPolling.
+     */
+    @Volatile private var bannerGraceUntilMs: Long = 0L
+
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
 
@@ -959,10 +969,20 @@ class SpotifyProvider @Inject constructor(
     // visible while local m4b plays underneath.
     @Volatile private var pollGen: Int = 0
 
-    fun startPlaybackPolling() {
+    fun startPlaybackPolling(expectPlayback: Boolean = false) {
+        if (expectPlayback) {
+            // User-initiated play/transfer: arm the handoff grace window
+            // and force the banner ON even if polling is already active.
+            bannerGraceUntilMs =
+                android.os.SystemClock.uptimeMillis() + HANDOFF_GRACE_MS
+            _spotifyMetadataFetching.value = true
+        }
         if (pollJob?.isActive == true) return
         val gen = ++pollGen
-        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.startPlaybackPolling gen=$gen")
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "Spotify.startPlaybackPolling gen=$gen expectPlayback=$expectPlayback"
+        )
         // Banner ON until the first fully-resolved emit arrives.
         _spotifyMetadataFetching.value = true
         pollJob = pollScope.launch {
@@ -997,14 +1017,25 @@ class SpotifyProvider @Inject constructor(
                         }
                         _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
                         // Metadata fully resolved for this track.
+                        bannerGraceUntilMs = 0L // handoff resolved
                         _spotifyMetadataFetching.value = false
                     } else {
                         _spotifyState.value = null
                         lastTrackUri = ""
                         lastLyrics = null
                         lastSynced = emptyList()
-                        // No Spotify activity → nothing to wait for.
-                        _spotifyMetadataFetching.value = false
+                        // vc32 (E3): during a handoff Spotify legitimately
+                        // reports no active device for many seconds — only
+                        // clear the banner once outside the grace window.
+                        val clear = shouldClearBannerOnNullSnap(
+                            android.os.SystemClock.uptimeMillis(), bannerGraceUntilMs
+                        )
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "Spotify poll null snap — bannerClear=$clear graceRemainMs=" +
+                                (bannerGraceUntilMs - android.os.SystemClock.uptimeMillis())
+                        )
+                        if (clear) _spotifyMetadataFetching.value = false
                     }
                 }
                 iter++
@@ -1086,6 +1117,7 @@ class SpotifyProvider @Inject constructor(
         pollJob?.cancel()
         pollJob = null
         _spotifyState.value = null
+        bannerGraceUntilMs = 0L // stop = nothing to wait for (vc32 E3)
         _spotifyMetadataFetching.value = false
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
     }
@@ -1247,3 +1279,15 @@ class SpotifyProvider @Inject constructor(
         }
     }
 }
+
+/**
+ * vc32 (E3): handoff grace window for the Spotify loading banner. A
+ * user-initiated play/transfer arms a grace deadline; null player snaps
+ * inside it must not clear the banner (Spotify reports "no active
+ * device" for many seconds while the target wakes).
+ */
+internal const val HANDOFF_GRACE_MS = 45_000L
+
+/** Pure, testable grace predicate — see SpotifyBannerGraceTest. */
+internal fun shouldClearBannerOnNullSnap(nowMs: Long, graceUntilMs: Long): Boolean =
+    nowMs >= graceUntilMs
