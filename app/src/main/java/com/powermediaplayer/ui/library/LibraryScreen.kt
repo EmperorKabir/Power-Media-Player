@@ -781,6 +781,18 @@ private fun MediaFileItem(
                 modifier = Modifier.size(20.dp)
             )
         }
+
+        // vc32 (E7 idea 1): visible affordance for the long-press context
+        // menu — same sheet, discoverable via a normal tap. Long-press on
+        // the row continues to work unchanged.
+        IconButton(onClick = onLongClick) {
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = "More options for ${file.title}",
+                tint = TextTertiary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 

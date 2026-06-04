@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
@@ -300,6 +301,19 @@ fun LastPlayedScreen(
                                         tint = if (item.isPinned) TealAccent else TextSecondary
                                     )
                                 }
+                                // vc32 (E7 idea 1): visible affordance for
+                                // the long-press context menu.
+                                IconButton(onClick = {
+                                    contextItem = item
+                                    contextFromRecents = true
+                                }) {
+                                    Icon(
+                                        Icons.Filled.MoreVert,
+                                        contentDescription = "More options for ${item.title}",
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         )
                     }
@@ -551,6 +565,16 @@ private fun ReorderablePinnedList(
                         IconButton(onClick = { onUnpin(item.id) }) {
                             Icon(Icons.Filled.Star, contentDescription = "Unpin",
                                 tint = TealAccent)
+                        }
+                        // vc32 (E7 idea 1): visible affordance for the
+                        // long-press context menu.
+                        IconButton(onClick = { onLongClick(item) }) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = "More options for ${item.title}",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                         IconButton(
                             onClick = {},
