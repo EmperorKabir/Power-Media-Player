@@ -753,6 +753,10 @@ class PlayerViewModel @Inject constructor(
                 // tree was first authorised. Spotify is still skipped —
                 // Connect needs an active device chosen explicitly.
                 currentMediaUri == null && (recent.source == "LOCAL" || recent.source == "DRIVE") -> {
+                    // vc32 (E4/E5): banner over the cold-start parse +
+                    // restore. runCatching swallows, so the post-clear
+                    // below is finally-equivalent.
+                    playbackConnection.setCloudFetchInProgress(true)
                     runCatching {
                         val uri = android.net.Uri.parse(recent.mediaUri)
                         // Parser off-Main — for multi-GB Drive
@@ -796,6 +800,7 @@ class PlayerViewModel @Inject constructor(
                             "Cold-start restored '${recent.title}' [src=${recent.source}] @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id})"
                         )
                     }
+                    playbackConnection.setCloudFetchInProgress(false)
                 }
                 // Spotify recent / player has a different media — leave
                 // session null. Spotify needs an active Connect device,

@@ -110,27 +110,33 @@ class LastPlayedViewModel @Inject constructor(
     fun playAlbumTrack(trackUri: String, title: String) {
         val uri = runCatching { Uri.parse(trackUri) }.getOrNull() ?: return
         viewModelScope.launch {
-            val mediaItem = withContext(Dispatchers.IO) {
-                val chapterExtras = runCatching {
-                    com.powermediaplayer.util.M4bChapterParser
-                        .extractChaptersAsBundle(context, uri)
-                }.getOrDefault(android.os.Bundle())
-                androidx.media3.common.MediaItem.Builder()
-                    .setMediaId(trackUri)
-                    .setUri(uri)
-                    .setRequestMetadata(
-                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                            .setMediaUri(uri).build()
-                    )
-                    .setMediaMetadata(
-                        androidx.media3.common.MediaMetadata.Builder()
-                            .setTitle(title)
-                            .setExtras(chapterExtras)
-                            .build()
-                    )
-                    .build()
+            // vc32 (E4/E5): banner over the pre-player parse phase.
+            playbackConnection.setCloudFetchInProgress(true)
+            try {
+                val mediaItem = withContext(Dispatchers.IO) {
+                    val chapterExtras = runCatching {
+                        com.powermediaplayer.util.M4bChapterParser
+                            .extractChaptersAsBundle(context, uri)
+                    }.getOrDefault(android.os.Bundle())
+                    androidx.media3.common.MediaItem.Builder()
+                        .setMediaId(trackUri)
+                        .setUri(uri)
+                        .setRequestMetadata(
+                            androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                                .setMediaUri(uri).build()
+                        )
+                        .setMediaMetadata(
+                            androidx.media3.common.MediaMetadata.Builder()
+                                .setTitle(title)
+                                .setExtras(chapterExtras)
+                                .build()
+                        )
+                        .build()
+                }
+                playbackConnection.setMediaItems(listOf(mediaItem), 0)
+            } finally {
+                playbackConnection.setCloudFetchInProgress(false)
             }
-            playbackConnection.setMediaItems(listOf(mediaItem), 0)
         }
     }
 
@@ -376,44 +382,54 @@ class LastPlayedViewModel @Inject constructor(
             com.powermediaplayer.diag.DiagLog.resume(
                 "coroutine START attempt=$attempt activeNow=$active"
             )
-            val mediaItem = withContext(Dispatchers.IO) {
-                val tParse = com.powermediaplayer.diag.DiagLog.now()
-                val chapterExtras = runCatching {
-                    com.powermediaplayer.util.M4bChapterParser
-                        .extractChaptersAsBundle(context, uri)
-                }.getOrDefault(android.os.Bundle())
+            // vc32 (E4/E5): banner over the pre-player parse phase — the
+            // dominant slice of the logged 93 s Drive resume happened
+            // BEFORE ExoPlayer ever started loading, so neither the
+            // cloud-browse flag nor isLoading covered it. Cleared in
+            // finally so a failed parse can't strand the banner.
+            playbackConnection.setCloudFetchInProgress(true)
+            try {
+                val mediaItem = withContext(Dispatchers.IO) {
+                    val tParse = com.powermediaplayer.diag.DiagLog.now()
+                    val chapterExtras = runCatching {
+                        com.powermediaplayer.util.M4bChapterParser
+                            .extractChaptersAsBundle(context, uri)
+                    }.getOrDefault(android.os.Bundle())
+                    com.powermediaplayer.diag.DiagLog.perf(
+                        "resume.chapterExtract", com.powermediaplayer.diag.DiagLog.now() - tParse,
+                        "attempt=$attempt chapterCount=${chapterExtras.getInt("chapter_count", -1)}"
+                    )
+                    androidx.media3.common.MediaItem.Builder()
+                        .setMediaId(item.mediaUri)
+                        .setUri(uri)
+                        .setRequestMetadata(
+                            androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                                .setMediaUri(uri).build()
+                        )
+                        .setMediaMetadata(
+                            androidx.media3.common.MediaMetadata.Builder()
+                                .setTitle(item.title)
+                                .setArtist(item.subtitle)
+                                .setExtras(chapterExtras)
+                                .build()
+                        )
+                        .build()
+                }
+                val tSet = com.powermediaplayer.diag.DiagLog.now()
+                playbackConnection.setMediaItems(listOf(mediaItem), 0)
+                playbackConnection.seekTo(targetPos)
                 com.powermediaplayer.diag.DiagLog.perf(
-                    "resume.chapterExtract", com.powermediaplayer.diag.DiagLog.now() - tParse,
-                    "attempt=$attempt chapterCount=${chapterExtras.getInt("chapter_count", -1)}"
+                    "resume.setMediaItems+seek", com.powermediaplayer.diag.DiagLog.now() - tSet,
+                    "attempt=$attempt"
                 )
-                androidx.media3.common.MediaItem.Builder()
-                    .setMediaId(item.mediaUri)
-                    .setUri(uri)
-                    .setRequestMetadata(
-                        androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                            .setMediaUri(uri).build()
-                    )
-                    .setMediaMetadata(
-                        androidx.media3.common.MediaMetadata.Builder()
-                            .setTitle(item.title)
-                            .setArtist(item.subtitle)
-                            .setExtras(chapterExtras)
-                            .build()
-                    )
-                    .build()
+            } finally {
+                playbackConnection.setCloudFetchInProgress(false)
+                val remaining = resumeActive.decrementAndGet()
+                com.powermediaplayer.diag.DiagLog.resume(
+                    "coroutine END attempt=$attempt totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
+                        "stillActive=$remaining"
+                )
             }
-            val tSet = com.powermediaplayer.diag.DiagLog.now()
-            playbackConnection.setMediaItems(listOf(mediaItem), 0)
-            playbackConnection.seekTo(targetPos)
-            com.powermediaplayer.diag.DiagLog.perf(
-                "resume.setMediaItems+seek", com.powermediaplayer.diag.DiagLog.now() - tSet,
-                "attempt=$attempt"
-            )
-            val remaining = resumeActive.decrementAndGet()
-            com.powermediaplayer.diag.DiagLog.resume(
-                "coroutine END attempt=$attempt totalElapsed=${com.powermediaplayer.diag.DiagLog.now() - tStart}ms " +
-                    "stillActive=$remaining"
-            )
         }
         // Record a NEW session so the Recents list reflects this play
         // as its own row (the user-visible "A → B → A produces three

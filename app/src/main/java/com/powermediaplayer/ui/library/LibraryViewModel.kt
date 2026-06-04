@@ -483,6 +483,8 @@ class LibraryViewModel @Inject constructor(
         // jank on tap when the file is a multi-GB audiobook. Parse off
         // Main, then hop back for the MediaController call.
         viewModelScope.launch {
+            // vc32 (E4/E5): banner over the pre-player parse phase.
+            playbackConnection.setCloudFetchInProgress(true)
             try {
                 val (items, idx) = withContext(Dispatchers.IO) {
                     createMediaItems(files, startIndex)
@@ -492,6 +494,8 @@ class LibraryViewModel @Inject constructor(
                 files.getOrNull(idx)?.let { recordLocalPlay(it) }
             } catch (t: Throwable) {
                 com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "playFiles failed", t)
+            } finally {
+                playbackConnection.setCloudFetchInProgress(false)
             }
         }
     }
@@ -505,6 +509,8 @@ class LibraryViewModel @Inject constructor(
     fun playSingle(file: MediaFileInfo) {
         stopSpotifyMirrorIfActive()
         viewModelScope.launch {
+            // vc32 (E4/E5): banner over the pre-player parse phase.
+            playbackConnection.setCloudFetchInProgress(true)
             try {
                 val item = withContext(Dispatchers.IO) {
                     val extras = com.powermediaplayer.util.M4bChapterParser
@@ -533,6 +539,8 @@ class LibraryViewModel @Inject constructor(
                 recordLocalPlay(file)
             } catch (t: Throwable) {
                 com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "playSingle failed", t)
+            } finally {
+                playbackConnection.setCloudFetchInProgress(false)
             }
         }
     }
@@ -546,18 +554,25 @@ class LibraryViewModel @Inject constructor(
     fun playFolder(files: List<MediaFileInfo>, startIndex: Int = 0) {
         stopSpotifyMirrorIfActive()
         viewModelScope.launch {
-            val sorted = FolderChapterAggregator.naturalSort(files)
-            val (items, idx) = withContext(Dispatchers.IO) {
-                createMediaItems(sorted, startIndex)
+            // vc32 (E4/E5): banner over the pre-player parse phase
+            // (folder aggregation parses EVERY file — the slowest path).
+            playbackConnection.setCloudFetchInProgress(true)
+            try {
+                val sorted = FolderChapterAggregator.naturalSort(files)
+                val (items, idx) = withContext(Dispatchers.IO) {
+                    createMediaItems(sorted, startIndex)
+                }
+                playbackConnection.setMediaItems(items, idx)
+                val chapters = withContext(Dispatchers.IO) {
+                    FolderChapterAggregator.aggregate(sorted)
+                }
+                if (chapters.isNotEmpty()) {
+                    playbackConnection.setFolderChapters(chapters)
+                }
+                sorted.getOrNull(idx)?.let { recordLocalPlay(it) }
+            } finally {
+                playbackConnection.setCloudFetchInProgress(false)
             }
-            playbackConnection.setMediaItems(items, idx)
-            val chapters = withContext(Dispatchers.IO) {
-                FolderChapterAggregator.aggregate(sorted)
-            }
-            if (chapters.isNotEmpty()) {
-                playbackConnection.setFolderChapters(chapters)
-            }
-            sorted.getOrNull(idx)?.let { recordLocalPlay(it) }
         }
     }
 
