@@ -60,6 +60,12 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 ## E — Completed (evidence archived)
 
+- T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
+  the player chrome (user screenshot: "No media loaded" bleeding through).
+  Fixed — EmptyPlayerState now a layout branch replacing the chrome, not an
+  overlay. Evidence: assembleDebug green, installed (Success), commit 72de6d1.
+  `[VISUAL]` re-check on device with the rest of T228.
+
 - vc30 shipped to Play Closed testing — sent for review. ✔
 - vc31 UX batch (#210-#220 + reorg/search/empty-player/undo/typography):
   ALL gate-PASS — evidence tables in
