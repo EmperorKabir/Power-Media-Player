@@ -111,6 +111,7 @@ fun VideoSurface(
                 TextureView(ctx).apply {
                     isOpaque = true
                     runCatching { PlaybackService.getExoPlayer()?.setVideoTextureView(this) }
+                    VideoSurfaceBinding.current = java.lang.ref.WeakReference(this)
                 }
             },
             update = { view ->
@@ -137,8 +138,22 @@ fun VideoSurface(
             },
             onRelease = { view ->
                 runCatching { PlaybackService.getExoPlayer()?.clearVideoTextureView(view) }
+                if (VideoSurfaceBinding.current?.get() === view) {
+                    VideoSurfaceBinding.current = null
+                }
             },
             modifier = aspectMod.then(transformMod)
         )
     }
+}
+
+/**
+ * Tracks the TextureView most recently bound to the player so the
+ * activity can RE-ASSERT the binding after a PiP-mode change. On some
+ * devices the composition swap on PiP exit leaves the player without an
+ * active video output (picture goes black while audio continues) until
+ * the next surface recreation; see MainActivity.onPictureInPictureModeChanged.
+ */
+object VideoSurfaceBinding {
+    @Volatile var current: java.lang.ref.WeakReference<android.view.TextureView>? = null
 }

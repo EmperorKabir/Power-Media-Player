@@ -188,11 +188,23 @@ class MainActivity : FragmentActivity() {
         com.powermediaplayer.util.Diag.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
         isInPip.value = isInPictureInPictureMode
         // Re-bind the player to the freshly-recomposed VideoSurface.
-        // Compose creates a new SurfaceView when the conditional tree
-        // flips, and ExoPlayer needs an explicit setVideoSurfaceView
-        // on the new view; otherwise PiP shows a blank/black window
-        // while audio continues. Done via a posted Runnable so the
-        // recomposition has settled before we look up the surface.
+        // The composition swaps trees on a PiP-mode change, and on some
+        // devices the player is left without an active video output —
+        // picture black while audio continues — until the next surface
+        // recreation. Posted (delayed) so the recomposition has settled
+        // and the new TextureView has registered itself.
+        window.decorView.postDelayed({
+            com.powermediaplayer.ui.player.components.VideoSurfaceBinding
+                .current?.get()?.let { tv ->
+                    runCatching {
+                        com.powermediaplayer.service.PlaybackService
+                            .getExoPlayer()?.setVideoTextureView(tv)
+                    }
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_PIP", "re-asserted video output after PiP change"
+                    )
+                }
+        }, 150)
     }
 
     override fun onDestroy() {
