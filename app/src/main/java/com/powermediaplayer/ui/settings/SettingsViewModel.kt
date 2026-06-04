@@ -71,6 +71,7 @@ data class SettingsUiState(
     val bookmarkReplayContextSec: Int = 10,
     val stopOnTaskRemoved: Boolean = false,
     val coldStartResumeBackoffSec: Int = 5,
+    val restoreLastOnLaunch: Boolean = true,
     val scheduledAlarms: List<com.powermediaplayer.alarm.AlarmRecord> = emptyList(),
     val themeAccentHex: String = "",
     val fontSizeScale: Float = 1.0f,
@@ -188,7 +189,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.webhookOnSkipPrev,
             settingsDataStore.webhookOnEnd,
             settingsDataStore.hueBridgeIp,
-            settingsDataStore.hueAppKey
+            settingsDataStore.hueAppKey,
+            settingsDataStore.restoreLastOnLaunch
         )
     ) { v ->
         SettingsUiState(
@@ -264,7 +266,8 @@ class SettingsViewModel @Inject constructor(
             webhookOnSkipPrev = v[69] as Boolean,
             webhookOnEnd = v[70] as Boolean,
             hueBridgeIp = v[71] as String,
-            hueAppKey = v[72] as String
+            hueAppKey = v[72] as String,
+            restoreLastOnLaunch = v[73] as Boolean
         )
     }
         // vc29.26 — drop duplicate emissions + conflate rapid bursts.
@@ -489,6 +492,10 @@ class SettingsViewModel @Inject constructor(
             // disconnect: the collector treats a blank area as off.
             settingsDataStore.setHueSelectedArea("")
         }
+    }
+
+    fun setRestoreLastOnLaunch(v: Boolean) {
+        viewModelScope.launch { settingsDataStore.setRestoreLastOnLaunch(v) }
     }
 
     fun setHueReactiveMode(mode: com.powermediaplayer.hue.HueEntertainment.ReactiveMode) {

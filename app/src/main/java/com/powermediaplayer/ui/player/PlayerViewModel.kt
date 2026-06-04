@@ -735,6 +735,20 @@ class PlayerViewModel @Inject constructor(
                 )
                 return@launch
             }
+            // User-controllable: the launch restore can be switched off in
+            // Settings (Playback → Restore last played on launch). The
+            // Bluetooth/headphone auto-resume toggles are unaffected —
+            // they act on whatever is already loaded, which is nothing
+            // when this is off, so they no-op safely.
+            val restoreEnabled = runCatching {
+                settingsDataStore.restoreLastOnLaunch.first()
+            }.getOrDefault(true)
+            if (!restoreEnabled) {
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "cold-start", reason = "restoreLastOnLaunch=false → skip"
+                )
+                return@launch
+            }
             val recent = withContext(Dispatchers.IO) {
                 runCatching { lastPlayedRepo.mostRecent() }.getOrNull()
             }
@@ -866,9 +880,11 @@ class PlayerViewModel @Inject constructor(
             ) { enabled, _ -> enabled }
                 .collectLatest { enabled ->
                     if (!enabled) {
-                        // Reset both paths so disabling the toggle
-                        // restores unmodified output.
-                        setVolumeBoost(0)
+                        // Reset ONLY ReplayGain's own contributions. The
+                        // user's volume boost is an independent setting —
+                        // zeroing it here silently killed the boost
+                        // slider on every track event.
+                        setReplayGainBoost(0)
                         com.powermediaplayer.service.PlaybackService
                             .setReplayGainAttenuation(1.0f)
                         return@collectLatest
@@ -877,7 +893,7 @@ class PlayerViewModel @Inject constructor(
                         playbackConnection.getPlayer()?.currentMediaItem?.mediaId
                     }
                     if (mediaUri.isNullOrBlank()) {
-                        setVolumeBoost(0)
+                        setReplayGainBoost(0)
                         com.powermediaplayer.service.PlaybackService
                             .setReplayGainAttenuation(1.0f)
                         return@collectLatest
@@ -905,13 +921,13 @@ class PlayerViewModel @Inject constructor(
                         // Boost path. Reset attenuation first.
                         com.powermediaplayer.service.PlaybackService
                             .setReplayGainAttenuation(1.0f)
-                        setVolumeBoost(mb)
+                        setReplayGainBoost(mb)
                     } else {
                         // Attenuation path. linearGain = 10^(dB/20)
                         // = 10^(mb / 2000). Floor at 0.05 so the
                         // signal doesn't go fully silent on a
                         // pathological -∞ tag.
-                        setVolumeBoost(0)
+                        setReplayGainBoost(0)
                         val factor = Math.pow(10.0, mb / 2000.0)
                             .toFloat().coerceIn(0.05f, 1.0f)
                         com.powermediaplayer.service.PlaybackService
@@ -1557,7 +1573,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ── EnvironmentalReverb (heavier than PresetReverb) ─────────────
-    private var environmentalReverb: android.media.audiofx.EnvironmentalReverb? = null
     // Most recent preset the user wants applied. Held independently
     // of the actual effect attachment because EnvironmentalReverb's
     // global-aux session (id = 0) can fail to attach on cold start
@@ -1609,18 +1624,13 @@ class PlayerViewModel @Inject constructor(
      */
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun applyReverbPreset(preset: Int) {
-        val exoPlayer = com.powermediaplayer.service.PlaybackService.getExoPlayer() ?: return
         try {
             if (preset == 0) {
-                runCatching {
-                    exoPlayer.setAuxEffectInfo(
-                        androidx.media3.common.AuxEffectInfo(
-                            androidx.media3.common.AuxEffectInfo.NO_AUX_EFFECT_ID, 0f
-                        )
-                    )
+                synchronized(reverbLock) {
+                    environmentalReverb?.runCatching { release() }
+                    environmentalReverb = null
+                    reverbSessionId = 0
                 }
-                environmentalReverb?.runCatching { release() }
-                environmentalReverb = null
                 com.powermediaplayer.util.Diag.i("PMP_DIAG", "Reverb off")
                 return
             }
@@ -1650,6 +1660,17 @@ class PlayerViewModel @Inject constructor(
                     reverbLevel = 2000, roomLevel = 0,
                     reflectionsLevel = -100, density = 1000, diffusion = 1000)
                 else -> return
+            }
+            // The session can change across track transitions — rebuild
+            // on change so the effect follows the live AudioTrack.
+            val currentSession = com.powermediaplayer.service.PlaybackService
+                .getExoPlayer()?.audioSessionId ?: 0
+            synchronized(reverbLock) {
+                if (environmentalReverb != null && reverbSessionId != currentSession) {
+                    environmentalReverb?.runCatching { release() }
+                    environmentalReverb = null
+                    reverbSessionId = 0
+                }
             }
             val er = environmentalReverb ?: tryConstructEnvironmentalReverb()
             if (er == null) {
@@ -1681,29 +1702,29 @@ class PlayerViewModel @Inject constructor(
                 }
                 return
             }
+            // Wet/dry mix — user-controllable via Settings (or the
+            // Audio Effects popup). With a session-attached (insert)
+            // reverb there is no aux send level, so the mix maps onto
+            // reverbLevel: 0.0 → -9000 mB (inaudible), 1.0 → the
+            // preset's full level. Read synchronously from the cached
+            // DataStore to keep this path off the IO dispatcher.
+            val wetMix = (kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(50) {
+                    settingsDataStore.reverbWetMix.first()
+                }
+            } ?: 1.0f).coerceIn(0f, 1f)
+            val mixedLevel =
+                (-9000 + (spec.reverbLevel + 9000) * wetMix).toInt().toShort()
             er.decayTime = spec.decayMs
             er.decayHFRatio = spec.decayHfRatio
-            er.reverbLevel = spec.reverbLevel
+            er.reverbLevel = mixedLevel
             er.roomLevel = spec.roomLevel
             er.reflectionsLevel = spec.reflectionsLevel
             er.density = spec.density
             er.diffusion = spec.diffusion
-            // Wet/dry mix — user-controllable via Settings (or the
-            // Audio Effects popup). 0.0 = dry only (effect inaudible),
-            // 1.0 = full preset wetness. Read synchronously from the
-            // already-cached DataStore to keep this binder-thread path
-            // off the IO dispatcher.
-            val wetMix = kotlinx.coroutines.runBlocking {
-                kotlinx.coroutines.withTimeoutOrNull(50) {
-                    settingsDataStore.reverbWetMix.first()
-                }
-            } ?: 1.0f
-            exoPlayer.setAuxEffectInfo(
-                androidx.media3.common.AuxEffectInfo(er.id, wetMix.coerceIn(0f, 1f))
-            )
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
-                "Reverb applied: preset=$preset decay=${spec.decayMs}ms reverbLvl=${spec.reverbLevel} auxId=${er.id}"
+                "Reverb applied: preset=$preset decay=${spec.decayMs}ms reverbLvl=$mixedLevel session=$reverbSessionId"
             )
         } catch (t: Throwable) {
             com.powermediaplayer.util.Diag.w("PMP_DIAG", "EnvironmentalReverb apply failed", t)
@@ -1711,10 +1732,22 @@ class PlayerViewModel @Inject constructor(
     }
 
     private fun tryConstructEnvironmentalReverb(): android.media.audiofx.EnvironmentalReverb? {
+        // Attached to the PLAYER'S audio session as an insert effect.
+        // The previous aux-bus construction (session 0 / OUTPUT_MIX) is
+        // denied by AudioFlinger on modern Android for ordinary apps
+        // ("no permission for AUDIO_SESSION_OUTPUT_MIX", initCheck -3)
+        // — the reverb silently never worked. Same session plumbing as
+        // the LoudnessEnhancer, which attaches fine.
+        val sessionId = com.powermediaplayer.service.PlaybackService
+            .getExoPlayer()?.audioSessionId ?: 0
+        if (sessionId == 0) return null
         return runCatching {
-            android.media.audiofx.EnvironmentalReverb(0, 0).also {
+            android.media.audiofx.EnvironmentalReverb(0, sessionId).also {
                 it.enabled = true
-                environmentalReverb = it
+                synchronized(reverbLock) {
+                    environmentalReverb = it
+                    reverbSessionId = sessionId
+                }
             }
         }.onFailure {
             com.powermediaplayer.util.Diag.w("PMP_DIAG", "EnvironmentalReverb construct failed (will retry)", it)
@@ -1723,53 +1756,66 @@ class PlayerViewModel @Inject constructor(
 
     // ── LoudnessEnhancer volume boost ─────────────────────────────
     // _volumeBoostMb backing field is declared above the init block.
-    private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
-    private var loudnessEnhancerSessionId: Int = 0
     val volumeBoostMb: StateFlow<Int> = _volumeBoostMb.asStateFlow()
 
     /** millibels of gain on top of normal volume. 0 = off; 2000 = +20 dB. */
     fun setVolumeBoost(milliBels: Int) {
-        val clamped = milliBels.coerceIn(0, 2000)
-        _volumeBoostMb.value = clamped
-        // Boost is off — never attach an effect. (Earlier versions
-        // attached LoudnessEnhancer eagerly even at gain=0; on some
-        // Samsung devices setTargetGain(0) returns INVALID_OPERATION
-        // until the effect is fully primed, spamming the log on every
-        // mediaItemTransition. Lazy-attach only when the user actually
-        // wants boost.)
-        if (clamped == 0) {
-            disposeLoudnessEnhancer()
-            return
-        }
-        // playbackConnection.getPlayer() returns a MediaController IPC
-        // proxy — `as? ExoPlayer` always yields null. Reach the real
-        // ExoPlayer via the same static accessor used by VideoSurface.
-        val sessionId = com.powermediaplayer.service.PlaybackService
-            .getExoPlayer()?.audioSessionId ?: 0
-        if (sessionId == 0) {
-            disposeLoudnessEnhancer()
-            return
-        }
-        // Audio session id can change across track transitions (Media3
-        // swaps the AudioTrack on some transitions). Rebuild on change.
-        if (loudnessEnhancerSessionId != sessionId) {
-            disposeLoudnessEnhancer()
-        }
-        try {
-            val le = loudnessEnhancer
-                ?: android.media.audiofx.LoudnessEnhancer(sessionId).also {
-                    loudnessEnhancer = it
-                    loudnessEnhancerSessionId = sessionId
-                    it.enabled = true
-                }
-            le.setTargetGain(clamped)
-        } catch (t: Throwable) {
-            com.powermediaplayer.util.Diag.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
-            disposeLoudnessEnhancer()
+        userBoostMb = milliBels.coerceIn(0, 2000)
+        _volumeBoostMb.value = userBoostMb
+        applyLoudness()
+    }
+
+    /** ReplayGain's positive-gain contribution. Shares the enhancer with
+     *  the user's boost (composed additively) but is its own channel so
+     *  enabling/disabling ReplayGain never alters the user's setting. */
+    private fun setReplayGainBoost(milliBels: Int) {
+        replayGainBoostMb = milliBels.coerceIn(0, 1500)
+        applyLoudness()
+    }
+
+    private fun applyLoudness() {
+        // Shared across all PlayerViewModel instances (several exist —
+        // PlayerScreen + MiniPlayerBar + per-nav-entry recreation), so a
+        // single enhancer serves the session instead of one per instance.
+        synchronized(loudnessLock) {
+            val total = (userBoostMb + replayGainBoostMb).coerceAtMost(3000)
+            // Boost is off — never attach an effect. (Eager attach at
+            // gain=0 hits INVALID_OPERATION on some Samsung devices
+            // until the effect is primed, spamming every transition.)
+            if (total == 0) {
+                disposeLoudnessEnhancerLocked()
+                return
+            }
+            // playbackConnection.getPlayer() returns a MediaController
+            // IPC proxy — reach the real ExoPlayer via the same static
+            // accessor VideoSurface uses.
+            val sessionId = com.powermediaplayer.service.PlaybackService
+                .getExoPlayer()?.audioSessionId ?: 0
+            if (sessionId == 0) {
+                disposeLoudnessEnhancerLocked()
+                return
+            }
+            // The audio session can change across track transitions
+            // (Media3 swaps the AudioTrack on some). Rebuild on change.
+            if (loudnessEnhancerSessionId != sessionId) {
+                disposeLoudnessEnhancerLocked()
+            }
+            try {
+                val le = loudnessEnhancer
+                    ?: android.media.audiofx.LoudnessEnhancer(sessionId).also {
+                        loudnessEnhancer = it
+                        loudnessEnhancerSessionId = sessionId
+                        it.enabled = true
+                    }
+                le.setTargetGain(total)
+            } catch (t: Throwable) {
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
+                disposeLoudnessEnhancerLocked()
+            }
         }
     }
 
-    private fun disposeLoudnessEnhancer() {
+    private fun disposeLoudnessEnhancerLocked() {
         runCatching { loudnessEnhancer?.release() }
         loudnessEnhancer = null
         loudnessEnhancerSessionId = 0
@@ -1943,6 +1989,21 @@ class PlayerViewModel @Inject constructor(
     // `internal` rather than `private` so PlaybackConnection (same module)
     // can call resetColdStartGuard() when the MediaController disconnects.
     internal companion object {
+        // ── Shared audio-effect holders ──────────────────────────────
+        // Several PlayerViewModel instances coexist (PlayerScreen +
+        // MiniPlayerBar + per-nav-entry recreation). Platform audio
+        // effects must be one-per-session, not one-per-instance, so the
+        // holders live here and applications are serialised on the lock.
+        private val loudnessLock = Any()
+        @Volatile private var userBoostMb: Int = 0
+        @Volatile private var replayGainBoostMb: Int = 0
+        private var loudnessEnhancer: android.media.audiofx.LoudnessEnhancer? = null
+        private var loudnessEnhancerSessionId: Int = 0
+
+        private val reverbLock = Any()
+        private var environmentalReverb: android.media.audiofx.EnvironmentalReverb? = null
+        private var reverbSessionId: Int = 0
+
         // Conservative whitelist matching the default Cast receiver's
         // documented support. .3gp / .3gpp omitted on purpose — receiver
         // support varies by device generation; keeping the list tight

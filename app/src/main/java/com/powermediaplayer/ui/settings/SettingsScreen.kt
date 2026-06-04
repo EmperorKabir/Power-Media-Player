@@ -149,7 +149,8 @@ fun SettingsScreen(
                     "playback", "Playback & audio focus",
                     listOf("focus", "call", "notification", "headphone", "autoplay",
                         "swipe", "gapless", "latency", "buffer", "bluetooth", "resume",
-                        "bookmark", "replay", "cold start", "backoff", "interrupt", "duck")
+                        "bookmark", "replay", "cold start", "backoff", "interrupt", "duck",
+                        "restore", "launch", "last played")
                 ) {
                     Text(
                         text = "What this app does when something else needs the speakers — phone calls, alarms, navigation, or another music app.",
@@ -201,15 +202,29 @@ fun SettingsScreen(
                         color = TextTertiary,
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
                     )
-                    SliderRow("Cold-start resume backoff", "${uiState.coldStartResumeBackoffSec} s",
-                        uiState.coldStartResumeBackoffSec.toFloat(), 0f..30f,
-                        default = 5f) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
-                    Text(
-                        text = "When re-opening the app after a force-stop, rewind by this many seconds before resuming. Helpful for re-finding context in podcasts and audiobooks.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                    SettingsToggleItem(
+                        title = "Restore last played on launch",
+                        description = "When the app starts, load the most recent " +
+                            "local or Drive item into the player, paused where " +
+                            "you left off. Separate from 'Resume on Bluetooth " +
+                            "connect' and headphone auto-play, which act on " +
+                            "whatever is already in the player.",
+                        icon = Icons.Filled.History,
+                        checked = uiState.restoreLastOnLaunch,
+                        onCheckedChange = { viewModel.setRestoreLastOnLaunch(it) }
                     )
+                    // Backoff only matters while the launch restore is on.
+                    if (uiState.restoreLastOnLaunch) {
+                        SliderRow("Cold-start resume backoff", "${uiState.coldStartResumeBackoffSec} s",
+                            uiState.coldStartResumeBackoffSec.toFloat(), 0f..30f,
+                            default = 5f) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
+                        Text(
+                            text = "When re-opening the app after a force-stop, rewind by this many seconds before resuming. Helpful for re-finding context in podcasts and audiobooks.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextTertiary,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                        )
+                    }
                 },
                 SettingsItem(
                     "crossfade", "Crossfade",

@@ -154,6 +154,7 @@ class SettingsDataStore @Inject constructor(
         // §C22 — auto-play when headphones plug in. Default OFF; opt-in
         // because surprise audio is annoying.
         val HEADPHONE_PLUG_AUTOPLAY = booleanPreferencesKey("headphone_plug_autoplay")
+        val RESTORE_LAST_ON_LAUNCH = booleanPreferencesKey("restore_last_on_launch")
 
         // §C11 — fade volume over the last 30 s of a sleep timer instead
         // of an abrupt pause. Off by default so existing behaviour is
@@ -620,6 +621,19 @@ class SettingsDataStore @Inject constructor(
 
     val coldStartResumeBackoffSec: Flow<Int> = context.dataStore.data.map {
         it[Keys.COLD_START_RESUME_BACKOFF_SEC] ?: 5
+    }
+
+    /** Restore the most-recent local/Drive item into a paused player on
+     *  app launch. Default ON (matches long-standing behaviour). When
+     *  off, the launch restore is skipped entirely; the backoff slider
+     *  is only meaningful while this is on. Independent of the
+     *  Bluetooth/headphone auto-resume toggles, which act on whatever
+     *  is ALREADY loaded in the player. */
+    val restoreLastOnLaunch: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.RESTORE_LAST_ON_LAUNCH] ?: true
+    }
+    suspend fun setRestoreLastOnLaunch(v: Boolean) {
+        context.dataStore.edit { it[Keys.RESTORE_LAST_ON_LAUNCH] = v }
     }
 
     val audioBufferLowLatency: Flow<Boolean> = context.dataStore.data.map {

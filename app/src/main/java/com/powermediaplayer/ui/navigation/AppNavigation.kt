@@ -1,5 +1,7 @@
 package com.powermediaplayer.ui.navigation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
@@ -143,10 +145,14 @@ fun AppNavigation(
             }
         }
     ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
         NavHost(
             navController = navController,
-            startDestination = Screen.Player.route,
-            modifier = Modifier.padding(innerPadding)
+            startDestination = Screen.Player.route
         ) {
             composable(Screen.Player.route) {
                 PlayerScreen(
@@ -170,6 +176,16 @@ fun AppNavigation(
             }
             composable(Screen.Equalizer.route) { EqualizerScreen() }
             composable(Screen.Settings.route) { SettingsScreen() }
+        }
+        // In-app picture-in-picture: keep the video visible while the
+        // user browses other tabs. Hidden on the Player tab (the full
+        // surface owns the video there); system PiP on leaving the app
+        // is unchanged (MainActivity's PiP branch).
+        if (!isPlayerRoute) {
+            com.powermediaplayer.ui.components.FloatingVideoMiniPlayer(
+                onExpand = navigateToPlayer
+            )
+        }
         }
     }
 }
