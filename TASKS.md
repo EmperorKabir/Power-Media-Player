@@ -62,6 +62,17 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T239 | T2 Spotify banner 45s handoff grace + 3 armed call sites | M | DONE(SpotifyBannerGraceTest 3/3) |
 | T240 | T3 banner over pre-player parse — 6 wrapped paths + CloudViewModel verified-covered; resumeActive leak hardened | M | DONE(14 flag sites, was 2) |
 
+## F — New bugs reported 2026-06-04 evening device run (phase I — investigate)
+
+| ID | Task | Phase | Status |
+|----|------|-------|--------|
+| T241 | Drive folder add: list doesn't visibly refresh after adding a folder (should refresh + show contents) | I | TODO |
+| T242 | Drive favourites strip: LEFT icon is a green star (redundant with right-side star) — should be a folder icon for folders; user mistook folder for track | I | TODO |
+| T243 | Spotify stale metadata: tapping "Drive-thru" showed previous SOAD metadata before switching — old state not cleared on new play; analyse logs around the switch window | I | TODO |
+| T244 | Question: does Last-Played position retention work for Spotify rows? (code + log answer) | I | TODO |
+| T245 | CRITICAL: pause on Spotify mirror → Drive audiobook silently resumed underneath, no metadata change, player tab blank — second-player/focus interaction | I | TODO |
+| T246 | Drive resume STILL has massive delay (new instrumentation now in logs) — phase breakdown; feeds plan Task 10 gate | I | TODO |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
