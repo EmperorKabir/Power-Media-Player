@@ -107,7 +107,7 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T265 | 'Restore last played on launch' toggle (default on); backoff subordinate; BT/headphone toggles independent by design | M | DONE(GATE C, 8 wiring refs) `[DEVICE]` |
 
 | T266 | PiP-maximise black video | M | DONE(logs: playback continuous through the transition → lost surface binding; VideoSurfaceBinding registry + 150ms re-assert in onPictureInPictureModeChanged; installed) `[DEVICE]` |
-| T267 | Reverb v2: platform EnvironmentalReverb crackles + inaudible even session-attached → render reverb in our own AudioProcessor chain (deterministic on all devices) | M | ACTIVE |
+| T267 | Reverb v2 — in-chain Freeverb DSP | M | DONE(ReverbAudioProcessor in sink chain; click-free param glide; true bypass; platform effect deleted; ReverbAudioProcessorTest 2/2; all suites green; installed) `[DEVICE]` audibility |
 
 ## E — Completed (evidence archived)
 
