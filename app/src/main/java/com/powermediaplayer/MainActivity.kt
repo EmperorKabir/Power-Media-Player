@@ -17,6 +17,8 @@ import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.ui.theme.PowerMediaPlayerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -54,6 +56,12 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var playbackConnection: PlaybackConnection
 
+    @Inject
+    lateinit var settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore
+
+    @Inject
+    lateinit var spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
+
     /**
      * True while the system is rendering us in PiP. Drives
      * AppNavigation to render ONLY the VideoSurface in this mode so
@@ -89,6 +97,36 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         MainActivityHolder.set(this)
         playbackConnection.connect()
+
+        // "Auto-play on launch", status-bar case: closing the app with
+        // back/swipe leaves the playback service alive with the item
+        // PAUSED in the notification — the cold-start restore then sees
+        // media already loaded and steps aside, so autoplay never fired.
+        // The user's definition is the right one: OPENING the app means
+        // resume, however it was closed. savedInstanceState==null keeps
+        // rotations/recreations from re-triggering; the truly-cold path
+        // is handled by the restore itself (playWhenReady=autoplay).
+        if (savedInstanceState == null) {
+            lifecycleScope.launch {
+                val autoplay = runCatching {
+                    settingsDataStore.autoplayOnLaunch.first()
+                }.getOrDefault(false)
+                if (!autoplay) return@launch
+                val player = kotlinx.coroutines.withTimeoutOrNull(3000) {
+                    playbackConnection.playerFlow.filterNotNull().first()
+                } ?: return@launch
+                // Let any restored state settle.
+                kotlinx.coroutines.delay(400)
+                val spotifyActive = spotifyProvider.spotifyState.value != null
+                if (!spotifyActive && !player.isPlaying && player.mediaItemCount > 0) {
+                    player.play()
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "cold-start",
+                        reason = "autoplayOnLaunch → resumed the paused status-bar item"
+                    )
+                }
+            }
+        }
 
         // Keep PiP params in sync with playback state so SDK 31+
         // setAutoEnterEnabled actually fires when the user presses Home.

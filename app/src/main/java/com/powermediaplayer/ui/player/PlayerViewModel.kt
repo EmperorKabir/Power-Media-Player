@@ -1603,6 +1603,89 @@ class PlayerViewModel @Inject constructor(
 
     // ── Reverb (rendered in the service AudioProcessor chain) ───────
     init {
+        // Live direction flip: toggling "Reverse audio" mid-playback
+        // swaps the CURRENT item's direction from the mirrored position
+        // (2:00 forward of a 10-min file = 8:00 reversed — the audio
+        // turns around exactly where you are). Playing/paused state is
+        // preserved. Video and the Spotify mirror are untouched; if the
+        // reversed copy can't be built (e.g. Drive over the 50 MB
+        // guard), playback continues unchanged.
+        viewModelScope.launch {
+            settingsDataStore.audioReverseLocal
+                .distinctUntilChanged()
+                .drop(1) // react to flips, not the startup value
+                .collect { wantReversed ->
+                    val player = playbackConnection.getPlayer() ?: return@collect
+                    val item = player.currentMediaItem ?: return@collect
+                    val originalUri = item.mediaId.takeIf { it.isNotBlank() }
+                        ?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+                        ?: return@collect
+                    val isReversedNow = (item.localConfiguration?.uri?.path ?: "")
+                        .contains("/reverse-cache/")
+                    if (wantReversed == isReversedNow) return@collect
+                    if (playbackConnection.playerState.value.isVideoContent) return@collect
+                    if (spotifyProvider.spotifyState.value != null) return@collect
+                    val duration = player.duration.takeIf { it > 0 } ?: return@collect
+                    val mirrored = (duration - player.currentPosition)
+                        .coerceIn(0L, duration)
+                    val wasPlaying = player.isPlaying
+                    val title = item.mediaMetadata.title
+                    val artist = item.mediaMetadata.artist
+                    val token = com.powermediaplayer.playback.ResumeGate.begin()
+                    playbackConnection.setCloudFetchInProgress(true)
+                    try {
+                        val newUri = if (wantReversed) {
+                            withContext(Dispatchers.IO) {
+                                com.powermediaplayer.audio.ReverseAudio
+                                    .ensureReversedWav(context, originalUri)
+                                    .map { android.net.Uri.fromFile(it) }
+                                    .getOrNull()
+                            } ?: run {
+                                withContext(Dispatchers.Main) {
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Can't reverse this file — playing on normally",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                                return@collect
+                            }
+                        } else originalUri
+                        if (!com.powermediaplayer.playback.ResumeGate.isCurrent(token)) {
+                            return@collect
+                        }
+                        val extras = if (wantReversed) android.os.Bundle()
+                        else com.powermediaplayer.util.M4bChapterParser
+                            .cachedOnly(context, originalUri) ?: android.os.Bundle()
+                        val swapped = androidx.media3.common.MediaItem.Builder()
+                            .setMediaId(originalUri.toString())
+                            .setUri(newUri)
+                            .setRequestMetadata(
+                                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                                    .setMediaUri(newUri).build()
+                            )
+                            .setMediaMetadata(
+                                androidx.media3.common.MediaMetadata.Builder()
+                                    .setTitle(title)
+                                    .setArtist(artist)
+                                    .setExtras(extras)
+                                    .build()
+                            )
+                            .build()
+                        playbackConnection.setMediaItems(
+                            listOf(swapped), 0, playWhenReady = wasPlaying
+                        )
+                        playbackConnection.seekTo(mirrored)
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "PLAYER",
+                            "direction flip reversed=$wantReversed mirroredPos=${mirrored}ms playing=$wasPlaying"
+                        )
+                    } finally {
+                        playbackConnection.setCloudFetchInProgress(false)
+                        com.powermediaplayer.playback.ResumeGate.end(token)
+                    }
+                }
+        }
         // Reverb is rendered in the service's own AudioProcessor chain
         // (ReverbAudioProcessor) — the platform effect proved unusable
         // on real hardware. Per-file override wins over the global

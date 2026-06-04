@@ -217,10 +217,11 @@ fun SettingsScreen(
                     if (uiState.restoreLastOnLaunch) {
                         SettingsToggleItem(
                             title = "Auto-play on launch",
-                            description = "Start playing immediately when the app " +
-                                "opens, from where you left off — instead of " +
-                                "waiting paused. Off by default so opening the " +
-                                "app never makes unexpected sound.",
+                            description = "Start playing the moment the app opens, " +
+                                "from where you left off — whether the app was " +
+                                "fully closed or still paused in the status bar. " +
+                                "Off by default so opening the app never makes " +
+                                "unexpected sound.",
                             icon = Icons.Filled.PlayArrow,
                             checked = uiState.autoplayOnLaunch,
                             onCheckedChange = { viewModel.setAutoplayOnLaunch(it) }
