@@ -106,14 +106,11 @@ fun VideoSurface(
             transformOrigin = TransformOrigin.Center
         )
 
-        val pipGen by VideoSurfaceBinding.pipExitGeneration.collectAsStateWithLifecycle()
-        androidx.compose.runtime.key(pipGen) {
         AndroidView(
             factory = { ctx ->
                 TextureView(ctx).apply {
                     isOpaque = true
-                    runCatching { PlaybackService.getExoPlayer()?.setVideoTextureView(this) }
-                    VideoSurfaceBinding.current = java.lang.ref.WeakReference(this)
+                    VideoSurfaceBinding.bind(this)
                 }
             },
             update = { view ->
@@ -139,14 +136,10 @@ fun VideoSurface(
                 // the cause of the off-frame / frozen-frame artefacts.
             },
             onRelease = { view ->
-                runCatching { PlaybackService.getExoPlayer()?.clearVideoTextureView(view) }
-                if (VideoSurfaceBinding.current?.get() === view) {
-                    VideoSurfaceBinding.current = null
-                }
+                VideoSurfaceBinding.release(view)
             },
             modifier = aspectMod.then(transformMod)
         )
-        }
     }
 }
 
@@ -161,12 +154,47 @@ object VideoSurfaceBinding {
     @Volatile var current: java.lang.ref.WeakReference<android.view.TextureView>? = null
 
     /**
-     * Bumped by MainActivity on every PiP EXIT. Evidence (logcat
-     * 00:01:02): the codec reconnects to the fresh surface within ms of
-     * the maximise, yet the picture stays black — the TextureView's
-     * SurfaceTexture is frozen after the PiP window transition (the
-     * same recreation a tab-switch performs cures it). Keying the
-     * AndroidView on this counter recreates the view automatically.
+     * Ownership stack. Evidence (SurfaceUtils log, PiP exit): two
+     * VideoSurfaces can bind within ~30 ms of each other during a window
+     * transition (the player surface, then the floating mini-player
+     * flashing in while the nav route settles); when the transient one
+     * is disposed it clears the codec output — black picture while
+     * audio continues. Healing rule: releasing the CURRENT surface
+     * re-binds the most recent still-alive one, so the last man
+     * standing always owns the output regardless of ordering.
      */
-    val pipExitGeneration = kotlinx.coroutines.flow.MutableStateFlow(0)
+    private val stack = java.util.ArrayDeque<java.lang.ref.WeakReference<android.view.TextureView>>()
+
+    @Synchronized
+    fun bind(view: android.view.TextureView) {
+        stack.removeAll { it.get() == null || it.get() === view }
+        stack.addLast(java.lang.ref.WeakReference(view))
+        current = stack.peekLast()
+        runCatching {
+            com.powermediaplayer.service.PlaybackService
+                .getExoPlayer()?.setVideoTextureView(view)
+        }
+    }
+
+    @Synchronized
+    fun release(view: android.view.TextureView) {
+        val wasCurrent = stack.peekLast()?.get() === view
+        stack.removeAll { it.get() == null || it.get() === view }
+        runCatching {
+            com.powermediaplayer.service.PlaybackService
+                .getExoPlayer()?.clearVideoTextureView(view)
+        }
+        current = stack.peekLast()
+        if (wasCurrent) {
+            stack.peekLast()?.get()?.let { survivor ->
+                runCatching {
+                    com.powermediaplayer.service.PlaybackService
+                        .getExoPlayer()?.setVideoTextureView(survivor)
+                }
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_PIP", "surface released while current — re-bound survivor"
+                )
+            }
+        }
+    }
 }

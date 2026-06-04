@@ -187,19 +187,10 @@ class MainActivity : FragmentActivity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         com.powermediaplayer.util.Diag.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
         isInPip.value = isInPictureInPictureMode
-        // Force the video view to be RECREATED on PiP exit. A re-bind
-        // alone is not enough: logs show the codec connected to the new
-        // surface within ms of the maximise while the picture stayed
-        // black — the TextureView's SurfaceTexture comes back frozen
-        // from the PiP window transition. Recreating the view (what a
-        // tab-switch incidentally does) is the reliable cure.
-        if (!isInPictureInPictureMode) {
-            com.powermediaplayer.ui.player.components.VideoSurfaceBinding
-                .pipExitGeneration.value++
-            com.powermediaplayer.util.Diag.i(
-                "PMP_PIP", "pip-exit → video view recreation requested"
-            )
-        }
+        // Surface ownership across the transition is handled by
+        // VideoSurfaceBinding's healing stack (the SurfaceUtils log
+        // showed two surfaces binding within ~30 ms on exit and the
+        // loser's disposal clearing the winner's output).
     }
 
     override fun onDestroy() {

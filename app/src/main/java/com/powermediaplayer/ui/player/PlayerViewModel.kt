@@ -1647,6 +1647,10 @@ class PlayerViewModel @Inject constructor(
                         it.enabled = true
                     }
                 le.setTargetGain(total)
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Loudness gain=${total}mB (user=$userBoostMb rg=$replayGainBoostMb) session=$sessionId"
+                )
             } catch (t: Throwable) {
                 com.powermediaplayer.util.Diag.w("PMP_DIAG", "LoudnessEnhancer setGain failed", t)
                 disposeLoudnessEnhancerLocked()

@@ -159,8 +159,8 @@ class ReverbAudioProcessor(
             // at wet=1 instead of overdriving big rooms into clipping
             // (the audible "crackle"). The dry path ducks slightly as
             // wet rises so the sum keeps headroom.
-            val gain = curWet * (1f - curFeedback) * 7f
-            val dry = 1f - 0.25f * curWet
+            val gain = curWet * (1f - curFeedback) * 8.3f
+            val dry = 1f - 0.12f * curWet
             val outL = (l * dry + wetL * gain).coerceIn(-32768f, 32767f)
             val outR = (r * dry + wetR * gain).coerceIn(-32768f, 32767f)
             if (channelCount == 2) {
