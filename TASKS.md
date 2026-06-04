@@ -106,9 +106,11 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T264 | Boost fix: RG/user gain separation + shared effect holders across VM instances | M | DONE(GATE C) `[DEVICE]` |
 | T265 | 'Restore last played on launch' toggle (default on); backoff subordinate; BT/headphone toggles independent by design | M | DONE(GATE C, 8 wiring refs) `[DEVICE]` |
 
-| T266 | PiP-maximise black video | M | DONE v3(v2 disproven; SurfaceUtils log convicted a surface FIGHT — two binds 30ms apart on exit, loser's dispose nulling output; VideoSurfaceBinding now an ownership stack that re-binds the survivor; installed) `[DEVICE]` |
+| T266 | PiP-maximise black video | M | CLOSED(user: 'pip seems to be working' — ownership-stack healing) |
 | T268 | Loading banner flickering during video playback/PiP | M | DONE(ExoPlayer isLoading oscillates per ~100ms chunk — banner now needs 450ms sustained loading; installed) `[DEVICE]` |
-| T267 | Reverb | M | DONE v3(offline reproducer: DSP click-free (delta 650<943) → crackle is downstream; prime suspect = user's +20dB LoudnessEnhancer (logged volumeBoost=2000mB), newly effective post-T264; wet restored K=8.3/duck 12%; loudness gain now logged) AWAITING-USER(set Volume boost to 0 and re-test reverb) |
+| T267 | Reverb | M | DONE v4(boost confirmed as crackle source; presets re-curved size-progressive — sqrt(1-fb), Cave ≈2.3x Room — + soft knee; diag click-free) `[DEVICE]` per-preset check |
+| T269 | Boost crackle at high gain (user should never accept it) | M | DONE(LoudnessEnhancer hard-clip replaced by in-chain GainAudioProcessor with per-sample glide + 4:1 soft knee; enhancer deleted) `[DEVICE]` |
+| T270 | Restore toggle 'not working' | M | DONE(evidence: 00:17:15 restore DID load the item paused but confirm-log missing → failures now logged; OFF now also clears a paused leftover surviving in the service, never touching playing audio) `[DEVICE]` test both directions |
 
 ## E — Completed (evidence archived)
 
