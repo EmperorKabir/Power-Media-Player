@@ -115,6 +115,8 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T271 | Player tab 'nothing playing' vs mini-bar offering resume | M | DONE(gate omitted isSpotifyActive — local player empty while the Spotify mirror was live; empty-state now respects the overlay; installed) `[DEVICE]` |
 | T272 | Reverse audio | M | DONE v2(Drive enabled with 50 MB size guard — 5s-class load on decent Wi-Fi, size not duration is the honest cap; HEAD-checked pre-download; oversize → forward + snackbar; layman audio-only settings copy; ReverseAudioTest 2/2; installed) `[DEVICE]` |
 
+| T273 | 'Auto-play on launch' toggle (resume = restore + play) | M | DONE(nested under restore toggle, default off; cold-start playWhenReady=autoplay; backoff still applies; suites green; installed) `[DEVICE]` |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
