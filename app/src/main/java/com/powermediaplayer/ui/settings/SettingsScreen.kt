@@ -378,7 +378,7 @@ fun SettingsScreen(
                     "audio-effects", "Audio effects",
                     listOf("eq", "equaliser", "equalizer", "reverb", "echo", "bass",
                         "stereo", "mono", "passthrough", "volume", "boost", "pitch",
-                        "reverse", "headphone")
+                        "reverse", "backwards", "headphone")
                 ) {
                     com.powermediaplayer.ui.settings.HeadphoneEqSection()
                     Text(
@@ -424,11 +424,13 @@ fun SettingsScreen(
                     SliderRow("Independent pitch", "${"%.2f".format(uiState.pitch)}×",
                         uiState.pitch, 0.5f..2.0f,
                         default = 1.0f) { viewModel.setPitch(it) }
-                    SettingsToggleItem("Reverse audio (local files)",
-                        "Play local audio files backwards, one file at a time. " +
-                            "The file is decoded and reversed on first play (a " +
-                            "moment's wait, then cached; 60-minute limit). " +
-                            "Video, Drive and Spotify are not supported.",
+                    SettingsToggleItem("Reverse audio (audio only)",
+                        "Plays a song or recording backwards — audio only, one " +
+                            "file at a time. The first play takes a moment while " +
+                            "the file is flipped; after that it's instant. Works " +
+                            "with files on your phone (up to 60 minutes long) and " +
+                            "Drive files (up to 50 MB). Doesn't work with video " +
+                            "or Spotify.",
                         Icons.Filled.SwapHoriz, uiState.audioReverseLocal) { viewModel.setAudioReverseLocal(it) }
                 }
             )),

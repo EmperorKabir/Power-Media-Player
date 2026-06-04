@@ -418,11 +418,10 @@ class LastPlayedViewModel @Inject constructor(
                 // Playback starts immediately (the URL is range-capable);
                 // chapters arrive via the async fill-in below.
                 val isRemote = com.powermediaplayer.util.M4bChapterParser.isRemote(uri)
-                // Reverse mode: LOCAL audio only (Drive would re-stream
-                // whole files; Spotify never enters our pipeline).
-                val reversed = !isRemote &&
-                    item.source == LastPlayedRepository.Source.LOCAL &&
-                    settingsDataStore.audioReverseLocal.first()
+                // Reverse mode: local audio + Drive files up to the 50 MB
+                // size guard (download cost; cached after the first run).
+                // Spotify never enters our pipeline.
+                val reversed = settingsDataStore.audioReverseLocal.first()
                 val playUri = if (reversed) {
                     withContext(Dispatchers.IO) {
                         com.powermediaplayer.audio.ReverseAudio

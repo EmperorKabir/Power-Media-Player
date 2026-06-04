@@ -23,6 +23,34 @@ object ReverseAudio {
 
     private const val MAX_DURATION_MS = 60 * 60_000L
 
+    /**
+     * Remote (Drive) cap by COMPRESSED size — the cost there is the
+     * download, and duration is a poor proxy (bitrate varies 5x).
+     * 50 MB ≈ 5 s on decent Wi-Fi (~10 MB/s measured on-device),
+     * ≈ 17 s on the slowest measured network, ≈ 50 min of 128 kbps
+     * audio. One download ever per file (result cached).
+     */
+    private const val MAX_REMOTE_BYTES = 50L * 1024 * 1024
+
+    private fun isRemote(uri: Uri) = uri.scheme == "http" || uri.scheme == "https"
+
+    /** Compressed size of [uri], or -1 when unknowable. */
+    private fun sizeOf(context: Context, uri: Uri): Long = runCatching {
+        when (uri.scheme) {
+            "http", "https" -> {
+                val c = java.net.URL(uri.toString())
+                    .openConnection() as java.net.HttpURLConnection
+                c.requestMethod = "HEAD"
+                c.connectTimeout = 4000
+                c.readTimeout = 4000
+                try { c.contentLengthLong } finally { c.disconnect() }
+            }
+            "file" -> File(uri.path!!).length()
+            else -> context.contentResolver
+                .openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
+        }
+    }.getOrDefault(-1L)
+
     /** Cached-or-built reversed WAV for [uri]. Call on Dispatchers.IO. */
     fun ensureReversedWav(context: Context, uri: Uri): Result<File> = runCatching {
         val dir = File(context.cacheDir, "reverse-cache").apply { mkdirs() }
@@ -33,6 +61,13 @@ object ReverseAudio {
         if (wav.isFile && wav.length() > 44) {
             DiagLog.perf("reverse.cacheHit", 0, "bytes=${wav.length()}")
             return@runCatching wav
+        }
+        if (isRemote(uri)) {
+            val size = sizeOf(context, uri)
+            require(size in 1..MAX_REMOTE_BYTES) {
+                "Drive file too large for reverse mode " +
+                    "(${size / (1024 * 1024)} MB > 50 MB limit)"
+            }
         }
         val pcm = File(dir, "$key.pcm.tmp")
         try {

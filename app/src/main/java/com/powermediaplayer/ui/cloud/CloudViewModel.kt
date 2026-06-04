@@ -1120,9 +1120,25 @@ class CloudViewModel @Inject constructor(
             val extras = android.os.Bundle().apply {
                 putBoolean("is_video_hint", isVideo)
             }
+            // Reverse mode: Drive audio up to the 50 MB guard (download
+            // cost — cached after the first run). Falls back to forward
+            // playback with a snackbar when the file is too large.
+            val playUri = if (!isVideo &&
+                settingsDataStore.audioReverseLocal.first()
+            ) {
+                com.powermediaplayer.audio.ReverseAudio
+                    .ensureReversedWav(context, uri)
+                    .map { android.net.Uri.fromFile(it) }
+                    .onFailure { t ->
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = t.message ?: "Reverse mode failed — playing forward"
+                        )
+                    }
+                    .getOrDefault(uri)
+            } else uri
             val mediaItem = MediaItem.Builder()
                 .setMediaId(uri.toString())
-                .setUri(uri)
+                .setUri(playUri)
                 .setRequestMetadata(
                     MediaItem.RequestMetadata.Builder()
                         .setMediaUri(uri)
