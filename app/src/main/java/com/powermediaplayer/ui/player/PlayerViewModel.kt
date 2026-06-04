@@ -570,6 +570,25 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.Main) {
             while (isActive) {
                 delay(5_000)
+                // vc32 (E15): during a Spotify mirror the LOCAL player is
+                // paused on a stale item — Spotify rows never got their
+                // position persisted (the user's tap logged targetPos=0ms).
+                // Persist the MIRROR's position against the Spotify row's
+                // mediaUri (spotify:track:… — matchable by
+                // updatePositionByUri) instead.
+                val spot = spotifyProvider.spotifyState.value
+                if (spot != null) {
+                    if (spot.isPlaying && spot.trackUri.isNotBlank()) {
+                        launch(Dispatchers.IO) {
+                            runCatching {
+                                lastPlayedRepo.updatePositionByUri(
+                                    spot.trackUri, spot.positionMs.coerceAtLeast(0L)
+                                )
+                            }
+                        }
+                    }
+                    continue
+                }
                 val player = playbackConnection.getPlayer() ?: continue
                 val item = player.currentMediaItem ?: continue
                 val mediaUri = item.mediaId.takeIf { it.isNotBlank() } ?: continue

@@ -629,14 +629,19 @@ class CloudViewModel @Inject constructor(
     fun rememberPickedDriveFolder(folderId: String, folderName: String) {
         viewModelScope.launch(Dispatchers.IO) {
             driveOAuthProvider.rememberPickedFolder(folderId, folderName)
-            // Force a fresh Drive root listing so the newly-picked folder
-            // appears immediately, bypassing refreshIfStale's 30s gate.
             lastCloudRefreshMs = System.currentTimeMillis()
-            val st = _uiState.value
-            if (st.activeProvider == CloudProviderType.GOOGLE_DRIVE) {
-                val (id, label) = st.folderStack.lastOrNull() ?: (null to "Root")
-                browseDrive(id, label)
+            // vc32 (E16): the old refresh ran only when the user was
+            // ALREADY inside Drive, and silently — a logged 45 s discovery
+            // gap. Now: confirm via the errorMessage snackbar channel and
+            // browse straight INTO the new folder regardless of where the
+            // user was.
+            _uiState.update {
+                it.copy(
+                    activeProvider = CloudProviderType.GOOGLE_DRIVE,
+                    errorMessage = "Added \"$folderName\" — opening it"
+                )
             }
+            browseDrive(folderId, folderName)
         }
     }
 

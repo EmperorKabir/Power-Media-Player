@@ -1527,9 +1527,12 @@ private fun FavouriteFolderRow(
                 .background(Teal800),
             contentAlignment = Alignment.Center
         ) {
+            // vc32 (T242): was a star — redundant with the trailing unstar
+            // and it made the user mistake this FOLDER for a track. The
+            // leading icon now says what the item IS.
             Icon(
-                Icons.Filled.Star,
-                contentDescription = "Favourite folder",
+                Icons.Filled.Folder,
+                contentDescription = "Folder",
                 tint = TealAccent,
                 modifier = Modifier.size(18.dp)
             )

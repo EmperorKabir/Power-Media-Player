@@ -1194,7 +1194,15 @@ class SpotifyProvider @Inject constructor(
         )
         val playing = _spotifyState.value?.isPlaying ?: false
         val endpoint = if (playing) "pause" else "play"
-        simplePut(token, "https://api.spotify.com/v1/me/player/$endpoint")
+        val result = simplePut(token, "https://api.spotify.com/v1/me/player/$endpoint")
+        // vc32 (E17): the icon otherwise waits on the next 1 Hz poll
+        // (local taps measure 11 ms — this path felt broken). Flip the
+        // mirror optimistically on success; the poll reconciles within
+        // ~1.3 s if Spotify disagrees.
+        if (result.isSuccess) {
+            _spotifyState.value = _spotifyState.value?.copy(isPlaying = !playing)
+        }
+        result
     }
 
     /**
