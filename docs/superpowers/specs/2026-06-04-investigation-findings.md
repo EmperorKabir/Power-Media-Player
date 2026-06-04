@@ -302,3 +302,34 @@ trackUri=requested) and set `_spotifyState` IMMEDIATELY →
 no local-player window), UI shows the REQUESTED track + loading banner.
 First matching snap replaces it; null snaps during grace no longer null
 the state; grace expiry (45 s) clears provisional + banner as failsafe.
+
+---
+
+# Round 5 — T230 Hue disconnect/reconnect: CONVICTED + FIXED (T253)
+
+Evidence: `deeplogs/run4/diag-log.txt` 22:06:57-22:07:41.
+
+```
+22:06:57.978 DISCONNECT — priorArea=zone:321ec… priorIntensity=40 → intensity zeroed
+22:06:58-59  stream stopped cleanly (RESTORE + stop http=200)
+22:07:41.918 collector fire intensity=0 … selectedArea=zone:32… ← RE-PICK, dead
+```
+
+Three root causes:
+1. `clearHueSelectedArea` zeroed the user's sensitivity; re-pick set only
+   the area → collector gated on intensity=0 forever. The reset slider
+   ("Off") hides inside the collapsed Tuning sub-section — invisible.
+2. `hueSelectedArea` was not a collector source (one-shot read inside the
+   handler) → re-picking never re-fired the collector.
+3. The `isStreaming()` short-circuit ignored area changes → switching
+   rooms mid-stream kept driving the OLD room.
+
+Fix (commit e70c8a7): intensity preserved on disconnect; area added to the
+combine; blank area = off (replaces the intensity-zero hack AND the
+pre-vc29 blank→first-entertainment-area fallback — noted behaviour
+change); `activeHueAreaKey` tracks the running stream and a mid-stream
+area change stops + restarts the engine on the new pick.
+
+Device re-test script: connect room A (lights react) → Disconnect (lights
+stop, sensitivity slider KEEPS its value) → re-pick room A (lights react
+immediately) → switch to zone B while playing (lights move to B).
