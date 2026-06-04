@@ -79,7 +79,7 @@ fun AppNavigation(
     // trigger playback and then navigate to the Player tab in one tap.
     val libraryViewModel: LibraryViewModel = hiltViewModel()
 
-    // vc32 (E1): drill-ins PUSH the Player so back returns to the list the
+    // vc32: drill-ins PUSH the Player so back returns to the list the
     // user came from (Last Played / Library / Cloud / mini-player). The
     // previous popUpTo-wipe made every back press exit the whole app —
     // logcat 2026-06-04 18:05-18:32 shows 5 moveTaskToBack exits during

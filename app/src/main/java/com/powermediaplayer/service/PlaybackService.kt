@@ -139,7 +139,7 @@ class PlaybackService : MediaSessionService() {
     lateinit var hueEntertainment: com.powermediaplayer.hue.HueEntertainment
 
     /**
-     * vc32 (T253): the area key ("<kind>:<uuid>") the CURRENTLY RUNNING
+     * vc32: the area key ("<kind>:<uuid>") the CURRENTLY RUNNING
      * entertainment stream was started for. The collector compares it to
      * the live hueSelectedArea so a mid-stream room/zone switch restarts
      * the engine on the new area instead of silently driving the old one.
@@ -748,7 +748,7 @@ class PlaybackService : MediaSessionService() {
         // DataStore synchronously and seed the player BEFORE first
         // playback so the user doesn't hear unwanted pitch/speed for
         // the first ~100 ms while the async flow collectors catch up.
-        // 600 ms timeout safety net (raised from 200 ms — friend
+        // 600 ms timeout safety net (raised from 200 ms — testers
         // reported "half a second of un-pitched audio" on cold start;
         // DataStore cold reads can take 300–500 ms under load and were
         // missing the 200 ms window). Defaults applied on miss.
@@ -1051,12 +1051,11 @@ class PlaybackService : MediaSessionService() {
                 p?.addListener(listener)
                 awaitClose { p?.removeListener(listener) }
             }.distinctUntilChanged()
-            // vc32 (T253): hueSelectedArea is now a COLLECTOR SOURCE.
+            // vc32: hueSelectedArea is now a COLLECTOR SOURCE.
             // Previously it was only read one-shot inside the handler, so
             // (a) re-picking an area after Disconnect never re-fired the
             // collector and (b) switching rooms mid-stream kept driving
-            // the OLD room (logged 22:06-22:07: re-pick produced a single
-            // intensity=0 fire and nothing else).
+            // the OLD room.
             kotlinx.coroutines.flow.combine(
                 settingsDataStore.hueReactiveIntensity,
                 playingFlow,
@@ -1086,7 +1085,7 @@ class PlaybackService : MediaSessionService() {
                             "isStreaming=${hueEntertainment.isStreaming()} " +
                             "selectedArea=$areaKey activeStreamArea=$activeHueAreaKey"
                     )
-                    // vc32 (T253): a BLANK area now means OFF, full stop —
+                    // vc32: a BLANK area now means OFF, full stop —
                     // an explicit Disconnect must kill the stream even
                     // though intensity is no longer zeroed. (Behaviour
                     // change for pre-vc29 installs that relied on the
@@ -1104,7 +1103,7 @@ class PlaybackService : MediaSessionService() {
                         // sensitivity so slider moves during playback
                         // actually take effect. The engine reads
                         // liveIntensity each frame.
-                        // vc32 (T253) — UNLESS the user moved to a
+                        // vc32 — UNLESS the user moved to a
                         // different room/zone: the engine captured the
                         // old area at start, so an area change must
                         // stop + restart on the new one.
@@ -1197,7 +1196,7 @@ class PlaybackService : MediaSessionService() {
                             intensity,
                             area.groupedLightId
                         )
-                        // vc32 (T253): remember which area the running
+                        // vc32: remember which area the running
                         // stream belongs to so a mid-stream room switch
                         // is detected and restarts the engine.
                         activeHueAreaKey = areaKey

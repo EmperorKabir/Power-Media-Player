@@ -180,7 +180,7 @@ object DiagLog {
 
     /**
      * Resume-from-last-played path timing. vc31 investigation — the
-     * friend reported 2-3 minute resume hangs + "keeps loading over
+     * testers reported multi-minute resume hangs + "keeps loading over
      * and over" on repeated taps. These events carry per-phase
      * elapsed-ms so the on-device log pinpoints which phase eats the
      * time, plus an attempt/active counter pair so the re-entrancy

@@ -570,9 +570,9 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.Main) {
             while (isActive) {
                 delay(5_000)
-                // vc32 (E15): during a Spotify mirror the LOCAL player is
+                // vc32: during a Spotify mirror the LOCAL player is
                 // paused on a stale item — Spotify rows never got their
-                // position persisted (the user's tap logged targetPos=0ms).
+                // position persisted at all.
                 // Persist the MIRROR's position against the Spotify row's
                 // mediaUri (spotify:track:… — matchable by
                 // updatePositionByUri) instead.
@@ -716,7 +716,7 @@ class PlayerViewModel @Inject constructor(
                 )
                 return@launch
             }
-            // vc32 (E12): token taken BEFORE the grace delay so any user
+            // vc32: token taken BEFORE the grace delay so any user
             // play during it supersedes the cold-start restore instead of
             // racing it.
             val gateToken = com.powermediaplayer.playback.ResumeGate.begin()
@@ -777,7 +777,7 @@ class PlayerViewModel @Inject constructor(
                 // tree was first authorised. Spotify is still skipped —
                 // Connect needs an active device chosen explicitly.
                 currentMediaUri == null && (recent.source == "LOCAL" || recent.source == "DRIVE") -> {
-                    // vc32 (E4/E5): banner over the cold-start parse +
+                    // vc32: banner over the cold-start parse +
                     // restore. runCatching swallows, so the post-clear
                     // below is finally-equivalent.
                     playbackConnection.setCloudFetchInProgress(true)
@@ -790,11 +790,10 @@ class PlayerViewModel @Inject constructor(
                             return@runCatching
                         }
                         val uri = android.net.Uri.parse(recent.mediaUri)
-                        // vc32 (T254): the launch restore must NEVER parse
-                        // a remote file inline — logged 22:18:57: it held
-                        // the "Loading metadata" banner for a ~6-minute
-                        // https parse AND its gate token swallowed the
-                        // user's tap ("tap IGNORED" at 22:19:00). Remote →
+                        // vc32: the launch restore must never parse a
+                        // remote file inline — on a slow network that
+                        // holds the loading banner for minutes and its
+                        // gate token blocks user taps. Remote →
                         // disk-cached chapters or none (they fill in when
                         // the user actively resumes the item); local →
                         // parse off-Main as before (ms-fast, cached).
@@ -824,7 +823,7 @@ class PlayerViewModel @Inject constructor(
                                     .build()
                             )
                             .build()
-                        // vc32 (E12): load PAUSED atomically — the old
+                        // vc32: load PAUSED atomically — the old
                         // post-hoc `player.playWhenReady = false` raced the
                         // unconditional play() inside setMediaItems.
                         playbackConnection.setMediaItems(

@@ -138,7 +138,11 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        val groups = listOf(
+        // The catalog is structurally static; only uiState (captured by
+        // the content lambdas) changes. Without remember every search
+        // keystroke would re-allocate all 8 groups, 20 items and their
+        // keyword lists on the main thread.
+        val groups = remember(uiState) { listOf(
             // 1 — Playback (folds old Playback + Crossfade)
             SettingsGroup("Playback", listOf(
                 SettingsItem(
@@ -728,7 +732,7 @@ fun SettingsScreen(
                     }
                 }
             ))
-        )
+        ) }
 
         val q = searchQuery.trim().lowercase()
         val visibleGroups = groups
@@ -744,7 +748,7 @@ fun SettingsScreen(
             )
         } else {
             visibleGroups.forEach { (group, items) ->
-                // vc32 (E7): every group is expandable. Keyed on the group
+                // vc32: every group is expandable. Keyed on the group
                 // title so collapse states survive the search filter
                 // removing/reinserting groups (positional rememberSaveable
                 // would mix states up). Default collapsed — the 8 headers
@@ -797,7 +801,7 @@ private fun SettingsSectionHeader(title: String) {
 }
 
 /**
- * vc32 (E7): clickable expand/collapse group header. The chevron hides
+ * vc32: clickable expand/collapse group header. The chevron hides
  * while searching because search force-shows matches regardless of the
  * remembered collapse state.
  */
@@ -1972,7 +1976,7 @@ private fun HueSection(
         // ── Connection controls ─────────────────────────────────────
         // Surfaced near the picker so leaving an area / unpairing the
         // bridge doesn't require digging through the basic-controls
-        // section. vc32 (T253): disconnect clears ONLY the area — the
+        // section. vc32: disconnect clears ONLY the area — the
         // stream stops because the collector treats a blank area as off;
         // sensitivity is preserved so a re-pick works immediately.
         Row(

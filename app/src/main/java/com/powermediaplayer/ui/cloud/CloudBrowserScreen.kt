@@ -1527,9 +1527,9 @@ private fun FavouriteFolderRow(
                 .background(Teal800),
             contentAlignment = Alignment.Center
         ) {
-            // vc32 (T242): was a star — redundant with the trailing unstar
-            // and it made the user mistake this FOLDER for a track. The
-            // leading icon now says what the item IS.
+            // vc32: was a star — redundant with the trailing unstar
+            // and easy to misread as a track row. The leading icon now
+            // says what the item IS.
             Icon(
                 Icons.Filled.Folder,
                 contentDescription = "Folder",

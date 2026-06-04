@@ -432,13 +432,13 @@ class CloudViewModel @Inject constructor(
         onPlaybackStarted: () -> Unit = {}
     ) {
         viewModelScope.launch {
-            // vc32 (E12): new play intent — supersedes any in-flight slow resume.
+            // vc32: new play intent — supersedes any in-flight slow resume.
             com.powermediaplayer.playback.ResumeGate.end(
                 com.powermediaplayer.playback.ResumeGate.begin()
             )
             // Pause any local playback so the two streams don't overlap.
             runCatching { playbackConnection.pause() }
-            // vc32 (T252): provisional mirror AT TAP TIME — controls route
+            // vc32: provisional mirror AT TAP TIME — controls route
             // to Spotify immediately; UI shows the requested track.
             spotifyProvider.armProvisionalMirror(
                 com.powermediaplayer.cloud.SpotifyPlaybackState(
@@ -455,7 +455,7 @@ class CloudViewModel @Inject constructor(
             )
             val r = spotifyProvider.playTrackOnConnectDevice(uri, contextUri = null)
             r.onSuccess {
-                // vc32 (E3/E14): user-initiated play → arm the handoff grace
+                // vc32: user-initiated play → arm the handoff grace
                 // + hold the overlay for the requested track.
                 spotifyProvider.startPlaybackPolling(
                     expectPlayback = true, expectedTrack = uri
@@ -481,7 +481,7 @@ class CloudViewModel @Inject constructor(
                 )
                 onPlaybackStarted()
             }.onFailure { ex ->
-                // vc32 (T252): never leave a provisional mirror for a
+                // vc32: never leave a provisional mirror for a
                 // track that failed to play.
                 spotifyProvider.clearProvisionalMirror()
                 _uiState.value = _uiState.value.copy(
@@ -648,9 +648,9 @@ class CloudViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             driveOAuthProvider.rememberPickedFolder(folderId, folderName)
             lastCloudRefreshMs = System.currentTimeMillis()
-            // vc32 (E16): the old refresh ran only when the user was
-            // ALREADY inside Drive, and silently — a logged 45 s discovery
-            // gap. Now: confirm via the errorMessage snackbar channel and
+            // vc32: the old refresh ran only when the user was
+            // ALREADY inside Drive, and silently — newly added folders
+            // went unnoticed. Now: confirm via the snackbar channel and
             // browse straight INTO the new folder regardless of where the
             // user was.
             _uiState.update {
@@ -932,7 +932,7 @@ class CloudViewModel @Inject constructor(
             "Cloud.openItem name=${item.name} provider=${item.sourceProvider} folder=${item.isFolder} mime=${item.mimeType}"
         )
         if (!item.isFolder) {
-            // vc32 (E12): new play intent — supersedes any in-flight slow resume.
+            // vc32: new play intent — supersedes any in-flight slow resume.
             com.powermediaplayer.playback.ResumeGate.end(
                 com.powermediaplayer.playback.ResumeGate.begin()
             )
@@ -983,7 +983,7 @@ class CloudViewModel @Inject constructor(
                 } else {
                     "spotify:track:${item.id}"
                 }
-                // vc32 (T252): provisional mirror AT TAP TIME.
+                // vc32: provisional mirror AT TAP TIME.
                 spotifyProvider.armProvisionalMirror(
                     com.powermediaplayer.cloud.SpotifyPlaybackState(
                         title = item.name,
@@ -999,7 +999,7 @@ class CloudViewModel @Inject constructor(
                 )
                 val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri, item.contextUri)
                 r.onSuccess {
-                    // vc32 (E3/E14): user-initiated play → arm the handoff
+                    // vc32: user-initiated play → arm the handoff
                     // grace + hold the overlay for the requested track.
                     spotifyProvider.startPlaybackPolling(
                         expectPlayback = true, expectedTrack = spotifyUri
@@ -1010,7 +1010,7 @@ class CloudViewModel @Inject constructor(
                     )
                     onPlaybackStarted()
                 }.onFailure { ex ->
-                    // vc32 (T252): never leave a provisional mirror for a
+                    // vc32: never leave a provisional mirror for a
                     // track that failed to play.
                     spotifyProvider.clearProvisionalMirror()
                     _uiState.value = _uiState.value.copy(

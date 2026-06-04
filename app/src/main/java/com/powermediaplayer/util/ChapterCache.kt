@@ -3,15 +3,13 @@ package com.powermediaplayer.util
 import android.os.Bundle
 
 /**
- * vc32 (E11): LRU cache of parsed chapter bundles keyed by mediaUri + a
+ * vc32: LRU cache of parsed chapter bundles keyed by mediaUri + a
  * validity token ("?" when size/mtime are unknowable, e.g. https). The
- * M4B parse over Drive https cost 75.9 s — a same-session re-resume must
- * never re-stream, INCLUDING when the answer was "no chapters" (the
- * measured book has zero; without caching the empty result every resume
- * re-pays the full cost).
- * In-memory only: process death re-parses once (async — see
- * LastPlayedViewModel's remote fill-in), which is acceptable; persistence
- * is YAGNI until evidence says otherwise.
+ * M4B box-walk over a remote file can take minutes, so a re-resume must
+ * never re-stream — INCLUDING when the answer was "no chapters" (an
+ * uncached empty result re-pays the full cost every time).
+ * Backed by a small per-entry JSON store on disk so the cache survives
+ * process death; memory is the hot tier.
  */
 class ChapterCache(private val maxEntries: Int = 16) {
     private data class Entry(val token: String, val bundle: Bundle)
@@ -22,10 +20,10 @@ class ChapterCache(private val maxEntries: Int = 16) {
     }
 
     /**
-     * vc32 (T254): disk write-through. The in-memory cache dies with the
-     * process — logged 22:18:57: a fresh launch re-parsed the SAME 1.2 GB
-     * https book for 365 s. One small JSON file per entry under
-     * <dir>/chapter-cache/, read on memory miss, written on put.
+     * vc32: disk write-through — a memory-only cache dies with the
+     * process, and a fresh launch then re-pays a multi-minute remote
+     * parse. One small JSON file per entry under <dir>/chapter-cache/,
+     * read on memory miss, written on put.
      */
     @Volatile private var diskDir: java.io.File? = null
 
@@ -94,8 +92,8 @@ class ChapterCache(private val maxEntries: Int = 16) {
         }
     }
 
-    // ── vc32 (T254): async fill-in dedup — two resumes of the same uri
-    // fired two concurrent 365 s parses competing for bandwidth. ──────
+    // ── vc32: async fill-in dedup — concurrent resumes of the same
+    // uri must not fire duplicate multi-minute parses. ────────────────
     private val fillsInFlight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     /** True iff the caller acquired the fill slot for [uri]. */

@@ -48,10 +48,9 @@ class LastPlayedViewModel @Inject constructor(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
 
-    // vc32 (E12/E13): the vc31 per-instance counters proved the bug but
-    // were themselves part of it — destination-scoped ViewModels are
-    // cleared on back-stack pop, so every tab re-entry reset them (both
-    // ghost-bug taps logged attempt=1). Debounce + staleness now live in
+    // vc32: per-instance resume counters were themselves a bug —
+    // destination-scoped ViewModels are cleared on back-stack pop, so
+    // every tab re-entry reset them. Debounce + staleness now live in
     // the process-wide com.powermediaplayer.playback.ResumeGate.
 
     /**
@@ -106,10 +105,10 @@ class LastPlayedViewModel @Inject constructor(
     fun playAlbumTrack(trackUri: String, title: String) {
         val uri = runCatching { Uri.parse(trackUri) }.getOrNull() ?: return
         viewModelScope.launch {
-            // vc32 (E12): parse-bearing path — token so a newer play
+            // vc32: parse-bearing path — token so a newer play
             // intent supersedes it.
             val token = com.powermediaplayer.playback.ResumeGate.begin()
-            // vc32 (E4/E5): banner over the pre-player parse phase.
+            // vc32: banner over the pre-player parse phase.
             playbackConnection.setCloudFetchInProgress(true)
             try {
                 val mediaItem = withContext(Dispatchers.IO) {
@@ -238,14 +237,12 @@ class LastPlayedViewModel @Inject constructor(
         item: LastPlayedRepository.HistoryItem,
         atPositionMs: Long? = null
     ) {
-        // vc32 (T254): the vc31 hard tap-IGNORE is gone — it let the
-        // COLD-START restore's token swallow user taps for the whole of
-        // its parse (logged 22:19:00: "tap IGNORED" while the launch
-        // restore parsed an https book). Stacked loads (the friend's
-        // "keeps loading over and over") are prevented by ResumeGate
-        // generation supersession instead: every tap begins a new
-        // generation and any in-flight resume aborts before touching the
-        // player — last tap wins, nobody is locked out.
+        // vc32: the vc31 hard tap-IGNORE is gone — it let the
+        // cold-start restore's token swallow user taps for the whole of
+        // its parse. Stacked loads are prevented by ResumeGate generation
+        // supersession instead: every tap begins a new generation and any
+        // in-flight resume aborts before touching the player — last tap
+        // wins, nobody is locked out.
         if (com.powermediaplayer.playback.ResumeGate.activeCount() > 0) {
             com.powermediaplayer.diag.DiagLog.resume(
                 "tap SUPERSEDES in-flight resume " +
@@ -260,11 +257,8 @@ class LastPlayedViewModel @Inject constructor(
         if (item.source == LastPlayedRepository.Source.SPOTIFY) {
             val targetPos = atPositionMs ?: item.lastPositionMs
             // vc31 — instrument the Spotify resume branch with the same
-            // attempt/timing detail as local/Drive so ALL source
-            // permutations are covered (per test-all-permutations
-            // policy). The friend's audiobooks are likely local/Drive,
-            // but we don't assume — the log will show whichever branch
-            // is actually hit + its timing.
+            // timing detail as local/Drive so every source path is
+            // traceable in the diagnostic log.
             com.powermediaplayer.diag.DiagLog.resume(
                 "tap activeBefore=${com.powermediaplayer.playback.ResumeGate.activeCount()} " +
                     "source=SPOTIFY uri=${com.powermediaplayer.diag.DiagLog.hash(item.mediaUri)} " +
@@ -274,7 +268,7 @@ class LastPlayedViewModel @Inject constructor(
             // Spotify row from Last Played leaves any currently-playing
             // local audio audible behind the Spotify Connect track.
             runCatching { playbackConnection.pause() }
-            // vc32 (T252): provisional mirror AT TAP TIME — controls route
+            // vc32: provisional mirror AT TAP TIME — controls route
             // to Spotify immediately and the UI shows the REQUESTED track,
             // closing the gap where play/pause resumed the local player.
             spotifyProvider.armProvisionalMirror(
@@ -312,7 +306,7 @@ class LastPlayedViewModel @Inject constructor(
                     // the Spotify mirror — independent of whether the
                     // user is jumping to a saved position. expectPlayback
                     // arms the vc32 handoff grace so the loading banner
-                    // survives the device-wake null snaps (E3).
+                    // survives the device-wake null snaps.
                     spotifyProvider.startPlaybackPolling(
                         expectPlayback = true, expectedTrack = item.mediaUri
                     )
@@ -340,7 +334,7 @@ class LastPlayedViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    // vc32 (T252): never leave a provisional mirror for a
+                    // vc32: never leave a provisional mirror for a
                     // track that failed to play.
                     spotifyProvider.clearProvisionalMirror()
                     // Surface the failure. Earlier this used a SharedFlow
@@ -410,17 +404,16 @@ class LastPlayedViewModel @Inject constructor(
                 "coroutine START token=$token " +
                     "activeNow=${com.powermediaplayer.playback.ResumeGate.activeCount()}"
             )
-            // vc32 (E4/E5): banner over the pre-player parse phase — the
-            // dominant slice of the logged 93 s Drive resume happened
-            // BEFORE ExoPlayer ever started loading, so neither the
-            // cloud-browse flag nor isLoading covered it. Cleared in
-            // finally so a failed parse can't strand the banner.
+            // vc32: banner over the pre-player parse phase — on slow
+            // remote items the dominant wait happens BEFORE ExoPlayer
+            // ever starts loading, so neither the cloud-browse flag nor
+            // isLoading covers it. Cleared in finally so a failed parse
+            // can't strand the banner.
             playbackConnection.setCloudFetchInProgress(true)
             try {
-                // vc32 (E11): remote schemes are NEVER parsed inline —
-                // both parser strategies full-stream the file (2×38 s
-                // measured on a 1.2 GB m4b). Playback starts immediately
-                // (the https URL is range-capable — READY in 2.5 s);
+                // vc32: remote schemes are NEVER parsed inline — both
+                // parser strategies end up streaming most of the file.
+                // Playback starts immediately (the URL is range-capable);
                 // chapters arrive via the async fill-in below.
                 val isRemote = com.powermediaplayer.util.M4bChapterParser.isRemote(uri)
                 val mediaItem = withContext(Dispatchers.IO) {
@@ -454,9 +447,9 @@ class LastPlayedViewModel @Inject constructor(
                         )
                         .build()
                 }
-                // vc32 (E12): a stale resume must never touch the player —
-                // the ghost audiobook loaded + auto-played 25 s after the
-                // user had switched to Spotify.
+                // vc32: a stale resume must never touch the player — a
+                // superseded load would otherwise auto-play underneath
+                // whatever the user has since switched to.
                 if (!com.powermediaplayer.playback.ResumeGate.isCurrent(token)) {
                     com.powermediaplayer.diag.DiagLog.resume(
                         "coroutine ABORT token=$token — superseded"
@@ -470,14 +463,14 @@ class LastPlayedViewModel @Inject constructor(
                     "resume.setMediaItems+seek", com.powermediaplayer.diag.DiagLog.now() - tSet,
                     "token=$token"
                 )
-                // vc32 (E11/E18): background chapter fill-in for remote
+                // vc32: background chapter fill-in for remote
                 // items — parses once, caches (including the empty
                 // result), and injects via the existing setLocalChapters
                 // path IF the user is still on this item.
                 if (isRemote &&
                     mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0 &&
-                    // vc32 (T254): dedup — two resumes of the same uri fired
-                    // two CONCURRENT 365 s parses competing for bandwidth.
+                    // vc32: dedup — concurrent resumes of the same uri
+                    // must not fire duplicate multi-minute parses.
                     com.powermediaplayer.util.ChapterCache.shared.markFilling(item.mediaUri)
                 ) {
                     viewModelScope.launch(Dispatchers.IO) {

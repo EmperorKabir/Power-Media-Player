@@ -4,9 +4,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * vc32 (E12/E13): process-wide resume coordination. Instance-field
- * guards died with their ViewModel (destination-scoped VMs are cleared
- * on back-stack pop — both ghost-bug taps logged attempt=1), so the
+ * vc32: process-wide resume coordination. Instance-field
+ * guards died with their ViewModel (destination-scoped ViewModels are
+ * cleared on back-stack pop), so the
  * debounce counter AND the staleness check live here, JVM-wide.
  *
  * Slow, parse-bearing resume paths:

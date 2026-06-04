@@ -393,7 +393,7 @@ class PlaybackConnection @Inject constructor(
     fun setMediaItems(
         items: List<MediaItem>,
         startIndex: Int = 0,
-        // vc32 (E12): callers that restore state (cold-start) must load
+        // vc32: callers that restore state (cold-start) must load
         // WITHOUT auto-playing — the old unconditional play() let a stale
         // 76 s resume audibly start an audiobook under the Spotify mirror,
         // and forced cold-start into a racy post-hoc pause.

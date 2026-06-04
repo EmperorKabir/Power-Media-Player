@@ -478,14 +478,14 @@ class LibraryViewModel @Inject constructor(
      */
     fun playFiles(files: List<MediaFileInfo>, startIndex: Int) {
         stopSpotifyMirrorIfActive()
-        // vc32 (E12): new play intent — supersedes any in-flight slow resume.
+        // vc32: new play intent — supersedes any in-flight slow resume.
         com.powermediaplayer.playback.ResumeGate.end(com.powermediaplayer.playback.ResumeGate.begin())
         // M4bChapterParser inside createMediaItems opens MediaExtractor
         // + reads the entire MP4 box hierarchy synchronously — visible
         // jank on tap when the file is a multi-GB audiobook. Parse off
         // Main, then hop back for the MediaController call.
         viewModelScope.launch {
-            // vc32 (E4/E5): banner over the pre-player parse phase.
+            // vc32: banner over the pre-player parse phase.
             playbackConnection.setCloudFetchInProgress(true)
             try {
                 val (items, idx) = withContext(Dispatchers.IO) {
@@ -510,10 +510,10 @@ class LibraryViewModel @Inject constructor(
      */
     fun playSingle(file: MediaFileInfo) {
         stopSpotifyMirrorIfActive()
-        // vc32 (E12): new play intent — supersedes any in-flight slow resume.
+        // vc32: new play intent — supersedes any in-flight slow resume.
         com.powermediaplayer.playback.ResumeGate.end(com.powermediaplayer.playback.ResumeGate.begin())
         viewModelScope.launch {
-            // vc32 (E4/E5): banner over the pre-player parse phase.
+            // vc32: banner over the pre-player parse phase.
             playbackConnection.setCloudFetchInProgress(true)
             try {
                 val item = withContext(Dispatchers.IO) {
@@ -557,10 +557,10 @@ class LibraryViewModel @Inject constructor(
      */
     fun playFolder(files: List<MediaFileInfo>, startIndex: Int = 0) {
         stopSpotifyMirrorIfActive()
-        // vc32 (E12): new play intent — supersedes any in-flight slow resume.
+        // vc32: new play intent — supersedes any in-flight slow resume.
         com.powermediaplayer.playback.ResumeGate.end(com.powermediaplayer.playback.ResumeGate.begin())
         viewModelScope.launch {
-            // vc32 (E4/E5): banner over the pre-player parse phase
+            // vc32: banner over the pre-player parse phase
             // (folder aggregation parses EVERY file — the slowest path).
             playbackConnection.setCloudFetchInProgress(true)
             try {

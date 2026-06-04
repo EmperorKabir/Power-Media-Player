@@ -121,7 +121,7 @@ class SpotifyProvider @Inject constructor(
     val spotifyMetadataFetching: StateFlow<Boolean> = _spotifyMetadataFetching.asStateFlow()
 
     /**
-     * vc32 (E3): while a user-initiated play/transfer is in flight, null
+     * vc32: while a user-initiated play/transfer is in flight, null
      * /v1/me/player snaps (Spotify still waking the target device) must
      * NOT clear the loading banner — logcat 2026-06-04 showed the banner
      * dying ~1 s into a 32 s handoff. Set by
@@ -131,15 +131,15 @@ class SpotifyProvider @Inject constructor(
     @Volatile private var bannerGraceUntilMs: Long = 0L
 
     /**
-     * vc32 (E14): the track the user actually requested. While the grace
+     * vc32: the track the user actually requested. While the grace
      * is active, snaps for any OTHER track (Spotify's eventually-consistent
-     * /me/player reporting the previous song — 11 s measured) are
+     * /me/player reporting the previous song for up to ~11 s) are
      * suppressed instead of overwriting the mirror overlay.
      */
     @Volatile private var expectedTrackUri: String? = null
 
     /**
-     * vc32 (T252): true while the mirror holds a PROVISIONAL state
+     * vc32: true while the mirror holds a PROVISIONAL state
      * synthesised from the row the user tapped (not yet confirmed by
      * /v1/me/player). Cleared when the first matching snap replaces it,
      * when the grace expires, or when the play call fails.
@@ -150,11 +150,10 @@ class SpotifyProvider @Inject constructor(
     private var pollJob: Job? = null
 
     /**
-     * vc32 (T252): install a provisional mirror state AT TAP TIME so
+     * vc32: install a provisional mirror state AT TAP TIME so
      * (a) isSpotifyActive flips true immediately — play/pause routes to
-     * the Web API instead of resuming the paused LOCAL player (logged
-     * 21:47:31-38: six USER toggles all hit the local track while
-     * Spotify played), and (b) the Player tab shows the REQUESTED track
+     * the Web API instead of resuming the paused local player
+     * underneath, and (b) the Player tab shows the REQUESTED track
      * + loading banner instead of the previous item's metadata.
      * The first accepted snap replaces it with real data.
      */
@@ -172,7 +171,7 @@ class SpotifyProvider @Inject constructor(
     }
 
     /**
-     * vc32 (T252): the play call failed — a provisional mirror for a
+     * vc32: the play call failed — a provisional mirror for a
      * track that will never play must not linger (it would keep routing
      * controls to Spotify and showing a dead track). No-op if a real
      * snap already replaced the provisional state.
@@ -1063,7 +1062,7 @@ class SpotifyProvider @Inject constructor(
                     val snap = fetchCurrentState(token)
                     if (gen != pollGen) return@launch
                     if (snap != null) {
-                        // vc32 (E14): during a handoff Spotify reports the
+                        // vc32: during a handoff Spotify reports the
                         // PREVIOUS track for up to ~11 s (measured) — hold
                         // the overlay until the REQUESTED track arrives.
                         val emit = shouldEmitSnap(
@@ -1093,12 +1092,12 @@ class SpotifyProvider @Inject constructor(
                         }
                         _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
                         // Metadata fully resolved for this track.
-                        provisionalActive = false // real data now (T252)
+                        provisionalActive = false // real data now
                         bannerGraceUntilMs = 0L // handoff resolved
                         _spotifyMetadataFetching.value = false
                         }
                     } else {
-                        // vc32 (E3/T252): during a handoff Spotify
+                        // vc32: during a handoff Spotify
                         // legitimately reports no active device for many
                         // seconds — inside the grace window keep BOTH the
                         // banner AND the (provisional) mirror state, else
@@ -1201,7 +1200,7 @@ class SpotifyProvider @Inject constructor(
         pollJob?.cancel()
         pollJob = null
         _spotifyState.value = null
-        bannerGraceUntilMs = 0L // stop = nothing to wait for (vc32 E3)
+        bannerGraceUntilMs = 0L // stop = nothing to wait for (vc32)
         expectedTrackUri = null
         provisionalActive = false
         _spotifyMetadataFetching.value = false
@@ -1253,8 +1252,8 @@ class SpotifyProvider @Inject constructor(
         val playing = _spotifyState.value?.isPlaying ?: false
         val endpoint = if (playing) "pause" else "play"
         val result = simplePut(token, "https://api.spotify.com/v1/me/player/$endpoint")
-        // vc32 (E17): the icon otherwise waits on the next 1 Hz poll
-        // (local taps measure 11 ms — this path felt broken). Flip the
+        // vc32: the icon otherwise waits on the next 1 Hz poll, which
+        // reads as unresponsive next to the ~11 ms local path. Flip the
         // mirror optimistically on success; the poll reconciles within
         // ~1.3 s if Spotify disagrees.
         if (result.isSuccess) {
@@ -1375,7 +1374,7 @@ class SpotifyProvider @Inject constructor(
 }
 
 /**
- * vc32 (E3): handoff grace window for the Spotify loading banner. A
+ * vc32: handoff grace window for the Spotify loading banner. A
  * user-initiated play/transfer arms a grace deadline; null player snaps
  * inside it must not clear the banner (Spotify reports "no active
  * device" for many seconds while the target wakes).
@@ -1387,8 +1386,8 @@ internal fun shouldClearBannerOnNullSnap(nowMs: Long, graceUntilMs: Long): Boole
     nowMs >= graceUntilMs
 
 /**
- * vc32 (E14): suppress stale snaps — Spotify's /me/player lagged
- * PUT /play by a measured 11 s, reporting the PREVIOUS track. While the
+ * vc32: suppress stale snaps — Spotify's /me/player lagged
+ * PUT /play by up to ~11 s in testing, reporting the PREVIOUS track. While the
  * handoff grace is active and a specific track was requested, only that
  * track may be emitted into the mirror state; grace expiry is the
  * failsafe (emit whatever is actually playing).
