@@ -106,6 +106,9 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T264 | Boost fix: RG/user gain separation + shared effect holders across VM instances | M | DONE(GATE C) `[DEVICE]` |
 | T265 | 'Restore last played on launch' toggle (default on); backoff subordinate; BT/headphone toggles independent by design | M | DONE(GATE C, 8 wiring refs) `[DEVICE]` |
 
+| T266 | PiP-maximise black video | M | DONE(logs: playback continuous through the transition → lost surface binding; VideoSurfaceBinding registry + 150ms re-assert in onPictureInPictureModeChanged; installed) `[DEVICE]` |
+| T267 | Reverb v2: platform EnvironmentalReverb crackles + inaudible even session-attached → render reverb in our own AudioProcessor chain (deterministic on all devices) | M | ACTIVE |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
