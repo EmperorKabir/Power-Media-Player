@@ -26,7 +26,7 @@ object ReverseAudio {
     /**
      * Remote (Drive) cap by COMPRESSED size — the cost there is the
      * download, and duration is a poor proxy (bitrate varies 5x).
-     * 50 MB ≈ 5 s on decent Wi-Fi (~10 MB/s measured on-device),
+     * 50 MB ≈ 5 s on a typical ~10 MB/s Wi-Fi connection,
      * ≈ 17 s on the slowest measured network, ≈ 50 min of 128 kbps
      * audio. One download ever per file (result cached).
      */

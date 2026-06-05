@@ -123,8 +123,8 @@ class SpotifyProvider @Inject constructor(
     /**
      * vc32: while a user-initiated play/transfer is in flight, null
      * /v1/me/player snaps (Spotify still waking the target device) must
-     * NOT clear the loading banner — logcat 2026-06-04 showed the banner
-     * dying ~1 s into a 32 s handoff. Set by
+     * NOT clear the loading banner — it otherwise dies ~1 s into a
+     * handoff that can take 30 s+. Set by
      * startPlaybackPolling(expectPlayback = true); zeroed on the first
      * resolved snap and on stopPlaybackPolling.
      */

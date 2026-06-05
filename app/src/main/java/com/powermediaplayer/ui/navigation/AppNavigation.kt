@@ -84,8 +84,8 @@ fun AppNavigation(
     // vc32: drill-ins PUSH the Player so back returns to the list the
     // user came from (Last Played / Library / Cloud / mini-player). The
     // previous popUpTo-wipe made every back press exit the whole app —
-    // logcat 2026-06-04 18:05-18:32 shows 5 moveTaskToBack exits during
-    // resume waits. Bottom-bar TAB taps keep their canonical
+    // especially painful while waiting on a slow resume. Bottom-bar TAB
+    // taps keep their canonical
     // popUpTo(start){saveState} pattern (unchanged below) so tab presses
     // still reset the stack and growth stays bounded.
     val navigateToPlayer = {

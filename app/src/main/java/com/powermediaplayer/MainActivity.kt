@@ -226,9 +226,9 @@ class MainActivity : FragmentActivity() {
         com.powermediaplayer.util.Diag.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
         isInPip.value = isInPictureInPictureMode
         // Surface ownership across the transition is handled by
-        // VideoSurfaceBinding's healing stack (the SurfaceUtils log
-        // showed two surfaces binding within ~30 ms on exit and the
-        // loser's disposal clearing the winner's output).
+        // VideoSurfaceBinding's healing stack: two surfaces can bind
+        // within ~30 ms of each other on exit, and the loser's disposal
+        // would otherwise clear the winner's output.
     }
 
     override fun onDestroy() {

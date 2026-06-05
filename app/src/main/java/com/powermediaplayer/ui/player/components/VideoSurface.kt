@@ -154,14 +154,14 @@ object VideoSurfaceBinding {
     @Volatile var current: java.lang.ref.WeakReference<android.view.TextureView>? = null
 
     /**
-     * Ownership stack. Evidence (SurfaceUtils log, PiP exit): two
-     * VideoSurfaces can bind within ~30 ms of each other during a window
-     * transition (the player surface, then the floating mini-player
-     * flashing in while the nav route settles); when the transient one
-     * is disposed it clears the codec output — black picture while
-     * audio continues. Healing rule: releasing the CURRENT surface
-     * re-binds the most recent still-alive one, so the last man
-     * standing always owns the output regardless of ordering.
+     * Ownership stack. During a window transition (PiP exit) two
+     * VideoSurfaces can bind within ~30 ms of each other — the player
+     * surface, then the floating mini-player flashing in while the nav
+     * route settles — and when the transient one is disposed it clears
+     * the codec output: black picture while audio continues. Healing
+     * rule: releasing the CURRENT surface re-binds the most recent
+     * still-alive one, so the last man standing always owns the output
+     * regardless of ordering.
      */
     private val stack = java.util.ArrayDeque<java.lang.ref.WeakReference<android.view.TextureView>>()
 
