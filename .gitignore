@@ -25,3 +25,4 @@ deeplogs/
 # superpowers brainstorm visual companion
 .superpowers/
 deeplogs/*.txt
+.kotlin/

@@ -122,6 +122,8 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T275 | Mid-playback reverse toggle | M | DONE(live flip in place from the mirrored position, state preserved; failure → toast + keeps playing forward) `[DEVICE]` |
 | T276 | Auto-play on launch for the status-bar close | M | DONE(fresh app open presses play on a paused surviving item; rotations excluded via savedInstanceState; Spotify mirror guarded; force-close path unchanged) `[DEVICE]` |
 
+| T277 | Final audit + authoring sweep + vc31 release AAB | M | DONE(tell-sweep clean; full gate green; versionCode 31; bundleRelease 14.7 MB upload-key-signed; DeepLogger full-impl absent from release dex (0 tell-tale hits); staged at dist/PowerMediaPlayer-1.0.0-vc31-release-2026-06-05.aab; matching vc31 debug installed on phone) AWAITING-USER(Play Console upload) |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER
