@@ -124,6 +124,14 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | T277 | Final audit + authoring sweep + vc31 release AAB | M | DONE(tell-sweep clean; full gate green; versionCode 31; bundleRelease 14.7 MB upload-key-signed; DeepLogger full-impl absent from release dex (0 tell-tale hits); staged at dist/PowerMediaPlayer-1.0.0-vc31-release-2026-06-05.aab; matching vc31 debug installed on phone) AWAITING-USER(Play Console upload) |
 
+## I — Speed/efficiency + form-factor audit (2026-06-11)
+
+| ID | Task | Phase | Status |
+|----|------|-------|--------|
+| T278 | Whole-app audit: speed/efficiency + bug risk across phones/tablets/foldables; findings doc with discussion items | I | DONE(5-agent sweep over all 173 files + direct verification of every single-source high-stakes claim — grep evidence: zero abandonAudioFocus, zero removeSessionManagerListener, zero sender-cache evictions, HueEntertainment cleanup outside finally read-verified, isRemote http/https-only read-verified. Findings doc: `docs/superpowers/specs/2026-06-11-perf-formfactor-audit.md` — 9 sections, ~60 findings, §8 discussion items) |
+| T280 | Select audit findings to implement (doc §1-§7 fixes; §8 decisions: tablet layout strategy, fold-posture, video fullscreen UX, VM consolidation, baseline profile, Spotify poll lifecycle, minSdk) | — | AWAITING-USER(pick items / priorities from the findings doc) |
+| T279 | Tester report: launch restore loads last item but at 0:00, not saved position | I→M | DONE(CONVICTED: MediaController.seekTo gated on COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, unavailable while the placeholder window is BUFFERING → the restore's set-then-seek always lost the race on fast media. Evidence chain: phone (release vc31) repro played-25.07s→relaunch→position=0 with Recents "@0:24" proving DB writes healthy; emulator (debug) diag log: `seekTo target=5772ms` issued during BUFFERING (42.233→42.996 READY), ZERO `discontinuity reason=SEEK` lines → seek never reached ExoPlayer. FIX: startPositionMs now rides atomically inside setMediaItems; applied to all 3 set-then-seek sites (cold-start restore PlayerViewModel; LastPlayed tap-resume; mid-playback reverse flip). GATES: assembleDebug+testDebugUnitTest EXIT=0; emulator same-cycle re-run restored position=5772 EXACTLY (=saved 10772 − 5s backoff; was 0 pre-fix). NOTE: phone's installed vc31 is NOT debug-signed (pkgFlags lacks DEBUGGABLE — corrects T277's claim); debug install needs uninstall+data wipe) `[DEVICE]` AWAITING-USER(consent to wipe phone data for debug install, OR verify via next Play build) |
+
 ## E — Completed (evidence archived)
 
 - T236 (added+done 2026-06-04, protocol rule 5): empty-player guidance drew OVER

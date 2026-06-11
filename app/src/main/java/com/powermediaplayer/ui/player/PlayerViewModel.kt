@@ -865,16 +865,16 @@ class PlayerViewModel @Inject constructor(
                         val autoplay = runCatching {
                             settingsDataStore.autoplayOnLaunch.first()
                         }.getOrDefault(false)
-                        playbackConnection.setMediaItems(
-                            listOf(item), 0, playWhenReady = autoplay
-                        )
                         // Apply user-configured backoff so the user lands
                         // a bit BEFORE the saved position for context.
                         val backoffSec = runCatching {
                             settingsDataStore.coldStartResumeBackoffSec.first()
                         }.getOrNull() ?: 5
                         val target = (recent.lastPositionMs - backoffSec * 1000L).coerceAtLeast(0L)
-                        playbackConnection.seekTo(target)
+                        playbackConnection.setMediaItems(
+                            listOf(item), 0, playWhenReady = autoplay,
+                            startPositionMs = target
+                        )
                         lastPlayedRepo.adoptSession(recent.id)
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
@@ -1673,9 +1673,9 @@ class PlayerViewModel @Inject constructor(
                             )
                             .build()
                         playbackConnection.setMediaItems(
-                            listOf(swapped), 0, playWhenReady = wasPlaying
+                            listOf(swapped), 0, playWhenReady = wasPlaying,
+                            startPositionMs = mirrored
                         )
-                        playbackConnection.seekTo(mirrored)
                         com.powermediaplayer.diag.DiagLog.event(
                             "PLAYER",
                             "direction flip reversed=$wantReversed mirroredPos=${mirrored}ms playing=$wasPlaying"

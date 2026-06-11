@@ -477,8 +477,10 @@ class LastPlayedViewModel @Inject constructor(
                     return@launch
                 }
                 val tSet = com.powermediaplayer.diag.DiagLog.now()
-                playbackConnection.setMediaItems(listOf(mediaItem), 0)
-                playbackConnection.seekTo(if (reversed) 0L else targetPos)
+                playbackConnection.setMediaItems(
+                    listOf(mediaItem), 0,
+                    startPositionMs = if (reversed) 0L else targetPos
+                )
                 com.powermediaplayer.diag.DiagLog.perf(
                     "resume.setMediaItems+seek", com.powermediaplayer.diag.DiagLog.now() - tSet,
                     "token=$token reversed=$reversed"

@@ -397,14 +397,21 @@ class PlaybackConnection @Inject constructor(
         // WITHOUT auto-playing — the old unconditional play() let a stale
         // 76 s resume audibly start an audiobook under the Spotify mirror,
         // and forced cold-start into a racy post-hoc pause.
-        playWhenReady: Boolean = true
+        playWhenReady: Boolean = true,
+        // Resume position MUST ride inside setMediaItems rather than a
+        // follow-up seekTo(): MediaController gates seekTo on
+        // COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM, which ExoPlayer does not
+        // advertise until the prepared timeline replaces the placeholder
+        // (the window is unseekable while BUFFERING) — an early seekTo
+        // is silently dropped and playback starts at 0.
+        startPositionMs: Long = 0L
     ) {
         folderChapters = null
         localChapters = null
         localMetadata = null
         videoModeHint = false
         controller?.let { c ->
-            c.setMediaItems(items, startIndex, 0L)
+            c.setMediaItems(items, startIndex, startPositionMs)
             c.prepare()
             if (playWhenReady) c.play() else c.pause()
         }
