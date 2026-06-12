@@ -687,7 +687,7 @@ if (BuildConfig.DEBUG) {
 - MOVES: the 5s position-persist tick (PlayerViewModel :560-637 verbatim, including the Spotify-mirror branch and the `/reverse-cache/` skip); the cold-start restore block (:700-898 verbatim, including `coldStartGuard`, ResumeGate token flow, banner set/clear); the enrichment collector (:109-196); the SRT auto-fetch collector (:201-228); the per-track override apply collector (:638-???, the §C7 block); the RG pipeline (after C6 merges it — C1 moves pipeline A only, C6 then edits it in place in the coordinator).
 - STAYS in PlayerViewModel: uiState mapping, artworkBytes, transport command methods, sleep timer, A-B loop, bookmarks UI flows, reverse-flip command (it is user-initiated UI), volume/boost setters, crossfadeAutoRevertReason (replaced in C5).
 
-- [ ] **Step 1 — application scope provider** in AppModule:
+- [x] **Step 1 — application scope provider** in AppModule:
 
 ```kotlin
 @Qualifier @Retention(AnnotationRetention.BINARY) annotation class ApplicationScope
@@ -697,7 +697,7 @@ fun provideApplicationScope(): CoroutineScope =
     CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 ```
 
-- [ ] **Step 2 — coordinator skeleton:**
+- [x] **Step 2 — coordinator skeleton:**
 
 ```kotlin
 /** Owns playback-session side effects exactly once per process. These used
@@ -731,22 +731,22 @@ class PlaybackSessionCoordinator @Inject constructor(
 }
 ```
 
-- [ ] **Step 3 — start it.** `PlaybackConnection.connect()` (called from MainActivity.onCreate) is the natural ignition: inject the coordinator into MainActivity and call `coordinator.start()` immediately after `playbackConnection.connect()`. (Not inside PlaybackConnection — avoid a dependency cycle.) The AtomicBoolean makes repeat calls free.
+- [x] **Step 3 — start it.** `PlaybackConnection.connect()` (called from MainActivity.onCreate) is the natural ignition: inject the coordinator into MainActivity and call `coordinator.start()` immediately after `playbackConnection.connect()`. (Not inside PlaybackConnection — avoid a dependency cycle.) The AtomicBoolean makes repeat calls free.
 
-- [ ] **Step 4 — delete the moved blocks from PlayerViewModel.** The init block shrinks accordingly. KEEP the `companion object` `coldStartGuard` declaration only if other code references it; otherwise it moves into the coordinator as a plain `AtomicBoolean` field (single instance — the guard is now belt-and-braces).
+- [x] **Step 4 — delete the moved blocks from PlayerViewModel.** The init block shrinks accordingly. KEEP the `companion object` `coldStartGuard` declaration only if other code references it; otherwise it moves into the coordinator as a plain `AtomicBoolean` field (single instance — the guard is now belt-and-braces).
 
-- [ ] **Step 5 — invariants check (read, don't trust memory):** in the moved cold-start block confirm intact: `ResumeGate.begin/isCurrent/end`, the 800ms grace, spotify-mirror skip, session-adopted skip, restore-toggle clear-leftover branch, cache-or-none remote chapter policy, `startPositionMs` atomic resume (T279), `adoptSession`. In the moved tick: `/reverse-cache/` skip, spotify branch, synth-session fallback.
+- [x] **Step 5 — invariants check (read, don't trust memory):** in the moved cold-start block confirm intact: `ResumeGate.begin/isCurrent/end`, the 800ms grace, spotify-mirror skip, session-adopted skip, restore-toggle clear-leftover branch, cache-or-none remote chapter policy, `startPositionMs` atomic resume (T279), `adoptSession`. In the moved tick: `/reverse-cache/` skip, spotify branch, synth-session fallback.
 
-- [ ] **Step 6 — gates.** Full unit suite green (ResumeGateTest 3/3, ChapterCacheTest, SpotifyBannerGraceTest, SettingsSearchTest). Greps: `grep -c "updatePositionByUri" ui/player/PlayerViewModel.kt` → 0; same grep in PlaybackSessionCoordinator.kt → ≥1. Emulator regression battery: cold-start restore lands at saved−backoff; tap-resume lands at saved; play 12s→force-stop→relaunch→position persisted (proves exactly-one tick works); rapid tab switching while playing (mini-bar↔player) shows no duplicate diag writes (diag `5s-tick` lines appear once per 5s, not ×N).
+- [x] **Step 6 — gates.** Full unit suite green (ResumeGateTest 3/3, ChapterCacheTest, SpotifyBannerGraceTest, SettingsSearchTest). Greps: `grep -c "updatePositionByUri" ui/player/PlayerViewModel.kt` → 0; same grep in PlaybackSessionCoordinator.kt → ≥1. Emulator regression battery: cold-start restore lands at saved−backoff; tap-resume lands at saved; play 12s→force-stop→relaunch→position persisted (proves exactly-one tick works); rapid tab switching while playing (mini-bar↔player) shows no duplicate diag writes (diag `5s-tick` lines appear once per 5s, not ×N).
 
-- [ ] **Step 7 — commit** `refactor(playback): single PlaybackSessionCoordinator owns session side effects (audit 3.1/8.4)`.
+- [x] **Step 7 — commit** `refactor(playback): single PlaybackSessionCoordinator owns session side effects (audit 3.1/8.4)`.
 
 ## Task C2: Per-track normalisation cache in mapToUiState + WhileSubscribed (finding 3.2)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/ui/player/PlayerViewModel.kt` (mapToUiState :1765-1880; stateIn :1013-1021, :1055-1060)
 
-- [ ] **Step 1 —** add a cache keyed on track identity:
+- [x] **Step 1 —** add a cache keyed on track identity:
 
 ```kotlin
 private data class NormalisedTrackText(
@@ -771,9 +771,9 @@ private fun normalisedFor(ps: PlayerState): NormalisedTrackText {
 ```
 `mapToUiState` uses `normalisedFor(playerState)` fields instead of inline normalize calls. (Use the actual field names PlayerState exposes — `mediaId` if present, else the title+uri pair the file already uses for track-change detection.) The cached `chapters` list is now reference-stable per track → ChapterPickerDialog list diffing (finding in B-agent #21) also heals; STILL add `key = { i, c -> c.startTimeMs }` to the two `itemsIndexed` in `ChapterPickerDialog.kt:81,95`.
 
-- [ ] **Step 2 —** stateIn: `SharingStarted.Eagerly` → `SharingStarted.WhileSubscribed(5000)` for `uiState` AND `artworkBytes`. The Eagerly comment cited a first-nav layout flash — re-test: emulator, navigate Library→Player; if a flash is visible, keep Eagerly for `uiState` ONLY and record the observation here (the per-tick cost is already neutralised by Step 1 + C3).
+- [x] **Step 2 —** stateIn: `SharingStarted.Eagerly` → `SharingStarted.WhileSubscribed(5000)` for `uiState` AND `artworkBytes`. The Eagerly comment cited a first-nav layout flash — re-test: emulator, navigate Library→Player; if a flash is visible, keep Eagerly for `uiState` ONLY and record the observation here (the per-tick cost is already neutralised by Step 1 + C3).
 
-- [ ] **Step 3 —** GATE-STD + emulator: chaptered m4b plays, chapter titles render normalised, no per-tick churn (optional: `adb shell top -p <pid>` informal before/after). Commit `perf(player): per-track normalisation cache; WhileSubscribed state (audit 3.2)`.
+- [x] **Step 3 —** GATE-STD + emulator: chaptered m4b plays, chapter titles render normalised, no per-tick churn (optional: `adb shell top -p <pid>` informal before/after). Commit `perf(player): per-track normalisation cache; WhileSubscribed state (audit 3.2)`.
 
 ## Task C3: Take the position tick out of the whole-tree recomposition (findings 3.3, 3.11-volume, B-agent 11)
 
@@ -783,7 +783,7 @@ private fun normalisedFor(ps: PlayerState): NormalisedTrackText {
 - Modify: `app/src/main/java/com/powermediaplayer/ui/components/MiniPlayerBar.kt` (:45)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/components/FloatingVideoMiniPlayer.kt` (:56)
 
-- [ ] **Step 1 — split the flows in the VM:**
+- [x] **Step 1 — split the flows in the VM:**
 
 ```kotlin
 @Immutable data class PositionUi(
@@ -809,7 +809,7 @@ val uiState: StateFlow<PlayerUiState> = combine(...)
 ```
 Do the preferred form: DELETE position fields from `PlayerUiState` (keep `isPlaying`, `isLoading`, `hasMedia`, `isVideoContent`, `isSpotifyActive`, `cloudFetchInProgress` — layout-branch fields stay; matrix DEP) and chase compile errors to consumers.
 
-- [ ] **Step 2 — consumers.** `ProgressSliders` call site moves inside a small wrapper composable that collects `positionUi` itself:
+- [x] **Step 2 — consumers.** `ProgressSliders` call site moves inside a small wrapper composable that collects `positionUi` itself:
 
 ```kotlin
 @Composable private fun PositionSection(viewModel: PlayerViewModel, controls: ControlsEnabledState) {
@@ -823,7 +823,7 @@ Do the preferred form: DELETE position fields from `PlayerUiState` (keep `isPlay
 ```
 `TrackInfoSection(uiState, coverColors)` → `TrackInfoSection(title, artist, album, mediaKind, coverColors)` (stable primitives). `ChapterPickerChip(uiState, ...)` → `(currentChapterTitle: String?, onClick)`. SyncedLyricsPanel collects `positionUi` directly (B-agent #20: switch its scan to binary search over start times while touching it — 6 lines).
 
-- [ ] **Step 3 — volume state (3.11).** VM gains:
+- [x] **Step 3 — volume state (3.11).** VM gains:
 
 ```kotlin
 val volumeUi: StateFlow<Pair<Int, Int>> = callbackFlow {
@@ -842,7 +842,7 @@ val volumeUi: StateFlow<Pair<Int, Int>> = callbackFlow {
 NOTE: `VOLUME_CHANGED_ACTION` is a protected system broadcast — `RECEIVER_NOT_EXPORTED` registration of a system action requires `RECEIVER_EXPORTED`-vs-NOT semantics check on API 34: system broadcasts are exempt from the export requirement; if the runtime rejects it, fall back to `ContextCompat.registerReceiver(..., ContextCompat.RECEIVER_NOT_EXPORTED)`. TertiaryControls takes `(volume, maxVolume)` from this flow.
 `getCurrentVolume()/getMaxVolume()` direct calls leave the composition.
 
-- [ ] **Step 4 — narrow projections for the bars (B-agent 11):**
+- [x] **Step 4 — narrow projections for the bars (B-agent 11):**
 
 ```kotlin
 @Immutable data class MiniBarUi(val title: String, val artist: String,
@@ -853,7 +853,7 @@ val miniBarUi: StateFlow<MiniBarUi> = uiState.map { s -> MiniBarUi(
 ```
 MiniPlayerBar + FloatingVideoMiniPlayer collect `miniBarUi` (+ their existing artworkBytes flow) instead of full uiState. KEEP the Spotify-overlaid-title hide semantics (matrix DEP: empty-bar gate keys off the overlaid title — the projection must use the OVERLAID title, i.e. map from the same combined source uiState maps from).
 
-- [ ] **Step 5 — Teal shade caching (3.11).** `Color.kt:26-42`: replace `get()` properties with a small cache invalidated by accent writes:
+- [x] **Step 5 — Teal shade caching (3.11).** `Color.kt:26-42`: replace `get()` properties with a small cache invalidated by accent writes:
 
 ```kotlin
 private var shadeCacheAccent: Int = 0
@@ -866,9 +866,9 @@ private fun shadeOfAccent(lightness: Float): Color {
 ```
 (Live-accent recolour invariant: cache clears whenever the accent ARGB changes — covered by the comparison.)
 
-- [ ] **Step 6 — BluetoothButton (3.11).** Replace the 2s poll (:52-57) with `AudioDeviceCallback` registration in a DisposableEffect (mirror AudioOutputDetector's callback pattern); set `a2dpActive` on add/remove events + once at registration.
+- [x] **Step 6 — BluetoothButton (3.11).** Replace the 2s poll (:52-57) with `AudioDeviceCallback` registration in a DisposableEffect (mirror AudioOutputDetector's callback pattern); set `a2dpActive` on add/remove events + once at registration.
 
-- [ ] **Step 7 — processor micro-waste (3.11, matrix 8.5 verdict: micro-fixes only).** `StereoTransformProcessor.kt:62`: move `duplicate()` below the identity-bypass test. `GainAudioProcessor.kt:36-37`: cache `lastMb→gain`:
+- [x] **Step 7 — processor micro-waste (3.11, matrix 8.5 verdict: micro-fixes only).** `StereoTransformProcessor.kt:62`: move `duplicate()` below the identity-bypass test. `GainAudioProcessor.kt:36-37`: cache `lastMb→gain`:
 
 ```kotlin
 private var lastMb = Int.MIN_VALUE; private var lastGain = 1f
@@ -876,8 +876,8 @@ private var lastMb = Int.MIN_VALUE; private var lastGain = 1f
 ```
 (Per-buffer supplier READS stay — live-toggle invariant.)
 
-- [ ] **Step 8 — gates.** GATE-STD. Emulator: playback running, navigate all tabs — UI updates correctly; slider tracks position; volume slider reacts to hardware volume keys; chapter chip updates on chapter change. Layout-inspector-style proof is not scriptable headless — the structural evidence is the compile-time removal of position fields from PlayerUiState (grep `currentPositionFormatted` in PlayerUiState.kt → 0).
-- [ ] **Step 9 — commit** `perf(compose): position tick isolated from player tree; event-driven volume/BT; shade cache (audit 3.3/3.11)`.
+- [x] **Step 8 — gates.** GATE-STD. Emulator: playback running, navigate all tabs — UI updates correctly; slider tracks position; volume slider reacts to hardware volume keys; chapter chip updates on chapter change. Layout-inspector-style proof is not scriptable headless — the structural evidence is the compile-time removal of position fields from PlayerUiState (grep `currentPositionFormatted` in PlayerUiState.kt → 0).
+- [x] **Step 9 — commit** `perf(compose): position tick isolated from player tree; event-driven volume/BT; shade cache (audit 3.3/3.11)`.
 
 ## Task C4: Gate the Hue analyser (finding 3.4)
 
@@ -929,7 +929,7 @@ write-into-slot instead of constructing; `getSnapshotAt` copies OUT into the cal
 - Modify: `app/src/main/java/com/powermediaplayer/service/CrossfadeController.kt` (:140-181)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/player/PlayerViewModel.kt` (:60-72 crossfadeAutoRevertReason poll)
 
-- [ ] **Step 1 —** replace the unconditional launch with a gated one driven by the existing `playingFlow` (the event-driven pattern already used by the Hue collector at :1074-1089) combined with the crossfade-ms flag:
+- [x] **Step 1 —** replace the unconditional launch with a gated one driven by the existing `playingFlow` (the event-driven pattern already used by the Hue collector at :1074-1089) combined with the crossfade-ms flag:
 
 ```kotlin
 serviceScope.launch {
@@ -945,14 +945,14 @@ serviceScope.launch {
 }
 ```
 (`crossfadeMsFlow` = whatever flow currently feeds the crossfade duration flag; if only a @Volatile exists, lift it to a MutableStateFlow in the same place it's written.)
-- [ ] **Step 2 —** CrossfadeController overlap loop honours pause: the controller has the `pauseAll`/resume contract (:172-181); add `@Volatile private var paused = false` set by pauseAll/resumeAll, and inside the step loop:
+- [x] **Step 2 —** CrossfadeController overlap loop honours pause: the controller has the `pauseAll`/resume contract (:172-181); add `@Volatile private var paused = false` set by pauseAll/resumeAll, and inside the step loop:
 
 ```kotlin
 while (paused && scope.isActive) delay(50)   // hold the ramp; do not advance steps while both players are paused
 ```
 Also clear `lastInitiatedForItemId` in `abort()` (A-agent note: re-entering the same track's window currently can't restart).
-- [ ] **Step 3 —** replace the static `crossfadeAutoRevertReason` + 750ms poll: service exposes `val crossfadeAutoRevertReasonFlow = MutableStateFlow<String?>(null)` in the companion (written where the static was written); PlayerViewModel's flow (:60-72) becomes `PlaybackService.crossfadeAutoRevertReasonFlow.asStateFlow()` — delete the poll loop.
-- [ ] **Step 4 —** gates: GATE-STD; emulator: enable crossfade in settings, queue two tracks, hear/observe transition (state assertions via diag `crossfade` lines); disable crossfade → no 10Hz ticks (add a one-line diag in the gated collect on/off for evidence). Commit `perf(crossfade): event-gated ticker; pause-aware overlap; push-based revert reason (audit 3.5)`.
+- [x] **Step 3 —** replace the static `crossfadeAutoRevertReason` + 750ms poll: service exposes `val crossfadeAutoRevertReasonFlow = MutableStateFlow<String?>(null)` in the companion (written where the static was written); PlayerViewModel's flow (:60-72) becomes `PlaybackService.crossfadeAutoRevertReasonFlow.asStateFlow()` — delete the poll loop.
+- [x] **Step 4 —** gates: GATE-STD; emulator: enable crossfade in settings, queue two tracks, hear/observe transition (state assertions via diag `crossfade` lines); disable crossfade → no 10Hz ticks (add a one-line diag in the gated collect on/off for evidence). Commit `perf(crossfade): event-gated ticker; pause-aware overlap; push-based revert reason (audit 3.5)`.
 
 ## Task C6: Merge the ReplayGain pipelines (findings 3.6 + 1.6)
 
@@ -960,15 +960,15 @@ Also clear `lastInitiatedForItemId` in `abort()` (A-agent note: re-entering the 
 - Modify: `app/src/main/java/com/powermediaplayer/playback/PlaybackSessionCoordinator.kt` (pipeline A now lives here after C1)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/player/PlayerViewModel.kt` (delete pipeline B :899-966 — pre-C1 numbering)
 
-- [ ] **Step 1 —** delete pipeline B entirely (the MediaMetadataRetriever GENRE-sniffing block — its MMR leak (1.6) disappears with it). Pipeline A already covers embedded tags via `PlayerState.replayGainTrackDb` + the Room pre-scan table.
-- [ ] **Step 2 —** pipeline A stops writing `player.volume` directly (:303-305 pre-move): route through the service's RG channel instead:
+- [x] **Step 1 —** delete pipeline B entirely (the MediaMetadataRetriever GENRE-sniffing block — its MMR leak (1.6) disappears with it). Pipeline A already covers embedded tags via `PlayerState.replayGainTrackDb` + the Room pre-scan table.
+- [x] **Step 2 —** pipeline A stops writing `player.volume` directly (:303-305 pre-move): route through the service's RG channel instead:
 
 ```kotlin
 com.powermediaplayer.service.PlaybackService.setReplayGainAttenuation(targetDb)
 ```
 (The service multiplies `replayGainFactor × crossfadeFactor` in `applyMixedVolume` :334-345 — the direct write raced that product.) Confirm `setReplayGainAttenuation` exists with that name (T264 shipped the RG/user split — use the actual setter the service exposes; grep `setReplayGain` in PlaybackService.kt and use the real symbol).
-- [ ] **Step 3 —** invariant: RG-off resets ONLY attenuation, never user boost — already encoded in the T264 split; assert by grep that the collector's RG-disabled branch calls only the attenuation setter.
-- [ ] **Step 4 —** GATE-STD; grep `MediaMetadataRetriever` in PlayerViewModel/Coordinator → 0. Commit `fix(replaygain): single pipeline through the mixer; GENRE-sniff MMR path deleted (audit 3.6/1.6)`.
+- [x] **Step 3 —** invariant: RG-off resets ONLY attenuation, never user boost — already encoded in the T264 split; assert by grep that the collector's RG-disabled branch calls only the attenuation setter.
+- [x] **Step 4 —** GATE-STD; grep `MediaMetadataRetriever` in PlayerViewModel/Coordinator → 0. Commit `fix(replaygain): single pipeline through the mixer; GENRE-sniff MMR path deleted (audit 3.6/1.6)`.
 
 ## Task C7: Gate the 500ms position poller (finding 3.7)
 
@@ -1009,7 +1009,7 @@ private fun pollOnce() {
 - Modify: `app/build.gradle.kts` (add `implementation("androidx.lifecycle:lifecycle-process:2.9.0")`)
 - Modify: `app/src/main/java/com/powermediaplayer/cloud/SpotifyProvider.kt` (:1029-1131 poll, :1350-1373 token)
 
-- [ ] **Step 1 — AuthState object cache.** Beside the existing `lastSerializedAuthState` debounce var, add `private var cachedAuthState: net.openid.appauth.AuthState? = null`; `currentAccessToken()` deserialises ONLY when the serialised string changed:
+- [x] **Step 1 — AuthState object cache.** Beside the existing `lastSerializedAuthState` debounce var, add `private var cachedAuthState: net.openid.appauth.AuthState? = null`; `currentAccessToken()` deserialises ONLY when the serialised string changed:
 
 ```kotlin
 val json = tokenStore.read() ?: return null
@@ -1018,7 +1018,7 @@ val state = if (json == lastSerializedAuthState && cachedAuthState != null) cach
                 cachedAuthState = it; lastSerializedAuthState = json }
 ```
 (Adapt to the function's actual locals; the rule: one deserialise per token CHANGE, not per second.)
-- [ ] **Step 2 — background pause.** In the provider's init:
+- [x] **Step 2 — background pause.** In the provider's init:
 
 ```kotlin
 scope.launch(Dispatchers.Main) {
@@ -1039,15 +1039,15 @@ scope.launch(Dispatchers.Main) {
 }
 ```
 `stopPlaybackPollingKeepingState()` = cancel `pollJob` + bump `pollGen` WITHOUT clearing `_spotifyState`/banner (the mirror survives; positions stop updating while backgrounded — acceptable per 8.7 decision). The 45s grace, provisional mirror and pollGen semantics are untouched (matrix DEP); restart goes through the normal `startPlaybackPolling()` warm burst.
-- [ ] **Step 3 —** the :108-110 comment now becomes TRUE — update it to describe the implemented behaviour.
-- [ ] **Step 4 —** GATE-STD; SpotifyBannerGraceTest stays green. Emulator can't run Spotify — phone-pass item: mirror active → Home → 35s → logcat shows poll stop; reopen → mirror resumes. Record BLOCKED on the device step only. Commit `perf(spotify): background-pause polling; cached AuthState (audit 3.8/8.7)`.
+- [x] **Step 3 —** the :108-110 comment now becomes TRUE — update it to describe the implemented behaviour.
+- [x] **Step 4 —** GATE-STD; SpotifyBannerGraceTest stays green. Emulator can't run Spotify — phone-pass item: mirror active → Home → 35s → logcat shows poll stop; reopen → mirror resumes. Record BLOCKED on the device step only. Commit `perf(spotify): background-pause polling; cached AuthState (audit 3.8/8.7)`.
 
 ## Task C9: Passive Cast discovery (finding 3.9)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/ui/player/components/CastSwitcher.kt` (:100-130 region)
 
-- [ ] **Step 1 —** two-tier callback: the always-on DisposableEffect registers with NO flags (`router.addCallback(selector, cb, 0)` — connected-state updates only); a second `DisposableEffect(sheetOpen)` adds `CALLBACK_FLAG_REQUEST_DISCOVERY` (same callback object, re-added with the flag) while the route sheet is open and removes it on close:
+- [x] **Step 1 —** two-tier callback: the always-on DisposableEffect registers with NO flags (`router.addCallback(selector, cb, 0)` — connected-state updates only); a second `DisposableEffect(sheetOpen)` adds `CALLBACK_FLAG_REQUEST_DISCOVERY` (same callback object, re-added with the flag) while the route sheet is open and removes it on close:
 
 ```kotlin
 DisposableEffect(sheetOpen) {
@@ -1055,7 +1055,7 @@ DisposableEffect(sheetOpen) {
     onDispose { if (sheetOpen) { router.removeCallback(cb); router.addCallback(selector, cb, 0) } }
 }
 ```
-- [ ] **Step 2 —** GATE-STD; phone-pass item (cast hardware): open switcher → Living Area TV appears within normal discovery time; icon still reflects connection when sheet closed. Commit `perf(cast): active discovery only while the route sheet is open (audit 3.9)`.
+- [x] **Step 2 —** GATE-STD; phone-pass item (cast hardware): open switcher → Living Area TV appears within normal discovery time; icon still reflects connection when sheet closed. Commit `perf(cast): active discovery only while the route sheet is open (audit 3.9)`. BLOCKED(needs cast hardware → consolidated device pass)
 
 ## Task C10: Widget art decode cache + debounce (finding 3.10 — amended: 2 decodes/refresh)
 
@@ -1063,7 +1063,7 @@ DisposableEffect(sheetOpen) {
 - Modify: `app/src/main/java/com/powermediaplayer/widget/NowPlayingWidgetProvider.kt` (:78-132 + refresh entry)
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (:1527-1565 refresh call sites)
 
-- [ ] **Step 1 —** scale + cache:
+- [x] **Step 1 —** scale + cache:
 
 ```kotlin
 private var artCacheKey: String? = null
@@ -1082,7 +1082,7 @@ private fun scaledArt(mediaId: String, art: ByteArray): android.graphics.Bitmap?
 }
 ```
 `buildVariant` calls `scaledArt(player?.currentMediaItem?.mediaId.orEmpty(), art)` — both variants share the one decode.
-- [ ] **Step 2 —** debounce + empty-skip at the service: wrap the three `NowPlayingWidgetProvider.refresh(...)` call sites in a coalescer:
+- [x] **Step 2 —** debounce + empty-skip at the service: wrap the three `NowPlayingWidgetProvider.refresh(...)` call sites in a coalescer:
 
 ```kotlin
 private var widgetRefreshJob: Job? = null
@@ -1092,7 +1092,7 @@ private fun scheduleWidgetRefresh() {
 }
 ```
 and inside `refresh()` first line: `if (AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, NowPlayingWidgetProvider::class.java)).isEmpty()) return` (already short-circuits — verify and keep).
-- [ ] **Step 3 —** GATE-STD; emulator: place the widget (uiautomator longpress flow is flaky — acceptable alternative: `adb shell am broadcast -a android.appwidget.action.APPWIDGET_UPDATE -n com.powermediaplayer/.widget.NowPlayingWidgetProvider` renders without crash; art still appears after track change). Commit `perf(widget): single sampled decode per track + debounced refresh (audit 3.10)`.
+- [x] **Step 3 —** GATE-STD; emulator: place the widget (uiautomator longpress flow is flaky — acceptable alternative: `adb shell am broadcast -a android.appwidget.action.APPWIDGET_UPDATE -n com.powermediaplayer/.widget.NowPlayingWidgetProvider` renders without crash; art still appears after track change). Commit `perf(widget): single sampled decode per track + debounced refresh (audit 3.10)`.
 
 ## Task C11: Interaction batch (findings 4.1-4.7)
 
@@ -1106,7 +1106,7 @@ and inside `refresh()` first line: `if (AppWidgetManager.getInstance(context).ge
 - Modify: `app/src/main/java/com/powermediaplayer/ui/cloud/CloudBrowserScreen.kt` (:87-95, :790-824)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/lastplayed/LastPlayedScreen.kt` (:336, :622) + `data/repository/LastPlayedRepository.kt` (:77-96) + `data/db/dao/PinnedAlbumDao.kt`
 
-- [ ] **Step 1 — search (4.1).** In LibraryViewModel: `setSearchQuery` updates the field immediately but recompute moves to a debounced worker:
+- [x] **Step 1 — search (4.1).** In LibraryViewModel: `setSearchQuery` updates the field immediately but recompute moves to a debounced worker:
 
 ```kotlin
 private val recomputeRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -1135,7 +1135,7 @@ fun collator(locale: Locale = Locale.getDefault()): Collator {
 }
 ```
 CAUTION: Collator instances aren't thread-safe for concurrent compare — recompute now runs ONLY on the single debounced Default-dispatcher collector, and CollationKey comparison (`compareTo`) is safe; the cached instance is used for key GENERATION at scan time (also single-threaded scan path). Note this in a comment.
-- [ ] **Step 2 — settings catalogue (4.2) + theme subscription (2.5).** `remember(uiState)` → `remember { ... }` with `val state by rememberUpdatedState(uiState)` declared above; content lambdas read `state.x` instead of `uiState.x` (closure now stable). The "expanded || searching" + keyed `rememberSaveable` semantics are untouched (matrix DEP). THEN the theme stops subscribing to the 75-field combine: SettingsViewModel exposes two narrow flows —
+- [x] **Step 2 — settings catalogue (4.2) + theme subscription (2.5).** `remember(uiState)` → `remember { ... }` with `val state by rememberUpdatedState(uiState)` declared above; content lambdas read `state.x` instead of `uiState.x` (closure now stable). The "expanded || searching" + keyed `rememberSaveable` semantics are untouched (matrix DEP). THEN the theme stops subscribing to the 75-field combine: SettingsViewModel exposes two narrow flows —
 
 ```kotlin
 val fontSizeScale: StateFlow<Float> = settingsDataStore.fontSizeScale
@@ -1144,18 +1144,18 @@ val themeAccentHex: StateFlow<Int> = settingsDataStore.themeAccentArgb
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DEFAULT_ACCENT)
 ```
 (use the actual DataStore flow names backing those two uiState fields); `Theme.kt:77-78` collects `fontSizeScale` and `ThemeAccent.kt:25-26` collects `themeAccentHex`, both via `collectAsStateWithLifecycle`. Also extend this step's file list: `ui/theme/Theme.kt`, `ui/theme/ThemeAccent.kt`, `ui/settings/SettingsViewModel.kt`.
-- [ ] **Step 3 — palette (4.3).** `extractColorSet` computes BOTH colour sets from ONE `Palette.from(bitmap).generate()` (pass the palette into `extractStatusBarColor(palette)`); both call sites wrap in `withContext(Dispatchers.Default)`.
-- [ ] **Step 4 — mini-bar decode (4.4).** :80-86 produceState body decodes with bounds-check + `inSampleSize` targeting 160px (same pattern as C10 Step 1; factor the sampler into a small shared util `util/SampledDecode.kt` used by both).
-- [ ] **Step 5 — per-row scans (4.5).** LibraryScreen :606 region: `val indexById = remember(files) { files.withIndex().associate { (i, f) -> f.id to i } }`; row uses `indexById[file.id] ?: 0`. CloudBrowserScreen: `val driveFavIds = remember(uiState.driveFavouriteTracks) { uiState.driveFavouriteTracks.mapTo(HashSet()) { it.id } }` (and the two sibling sets); `hasOfflineCopy` → collect `offlineDrivePairs` as state at screen level and derive a `Set<String>`.
-- [ ] **Step 6 — LastPlayed (4.6).** Both `collectAsState` → `collectAsStateWithLifecycle`. `observePinnedAlbums` flowOf(Unit) bug: add to PinnedAlbumDao a JOIN count query:
+- [x] **Step 3 — palette (4.3).** `extractColorSet` computes BOTH colour sets from ONE `Palette.from(bitmap).generate()` (pass the palette into `extractStatusBarColor(palette)`); both call sites wrap in `withContext(Dispatchers.Default)`.
+- [x] **Step 4 — mini-bar decode (4.4).** :80-86 produceState body decodes with bounds-check + `inSampleSize` targeting 160px (same pattern as C10 Step 1; factor the sampler into a small shared util `util/SampledDecode.kt` used by both).
+- [x] **Step 5 — per-row scans (4.5).** LibraryScreen :606 region: `val indexById = remember(files) { files.withIndex().associate { (i, f) -> f.id to i } }`; row uses `indexById[file.id] ?: 0`. CloudBrowserScreen: `val driveFavIds = remember(uiState.driveFavouriteTracks) { uiState.driveFavouriteTracks.mapTo(HashSet()) { it.id } }` (and the two sibling sets); `hasOfflineCopy` → collect `offlineDrivePairs` as state at screen level and derive a `Set<String>`.
+- [x] **Step 6 — LastPlayed (4.6).** Both `collectAsState` → `collectAsStateWithLifecycle`. `observePinnedAlbums` flowOf(Unit) bug: add to PinnedAlbumDao a JOIN count query:
 
 ```kotlin
 @Query("SELECT pa.*, (SELECT COUNT(*) FROM pinned_album_tracks t WHERE t.albumId = pa.id) AS trackCount FROM pinned_albums pa ORDER BY pa.sortOrder")
 fun observeWithCounts(): Flow<List<PinnedAlbumWithCount>>
 ```
 (match real table/column names from the entities; create the `PinnedAlbumWithCount` POJO) and rebuild `observePinnedAlbums` on it — the `combine(flowOf(Unit))` disappears.
-- [ ] **Step 7 — cloud resume refresh (4.7).** :87-95 ON_RESUME branch → `viewModel.refreshIfStale(5_000)` (add the method mirroring LibraryViewModel's :287-292 stale-gate over the existing forceRefresh); the launcher-result paths (:210, :235) keep `forceRefresh()` (OAuth-return invariant).
-- [ ] **Step 8 — tests + gates.** SettingsSearchTest 6/6 (semantics preserved); add `LibrarySearchDebounceTest` (JVM):
+- [x] **Step 7 — cloud resume refresh (4.7).** :87-95 ON_RESUME branch → `viewModel.refreshIfStale(5_000)` (add the method mirroring LibraryViewModel's :287-292 stale-gate over the existing forceRefresh); the launcher-result paths (:210, :235) keep `forceRefresh()` (OAuth-return invariant).
+- [x] **Step 8 — tests + gates.** SettingsSearchTest 6/6 (semantics preserved); add `LibrarySearchDebounceTest` (JVM):
 
 ```kotlin
 class LibrarySearchDebounceTest {
@@ -1185,6 +1185,17 @@ if (BuildConfig.DEBUG && (updateSeq++ and 0xF) == 0) {   // 1-in-16 sampling —
 - [x] **Step 2 —** GATE-STD; commit `chore(debug): sample hot-path state logs (audit 7.1)`.
 
 ## BATCH C GATE
+
+**BATCH C GATE EVIDENCE (2026-06-12): PASS.**
+- All 12 tasks shipped: C1 coordinator (3131738), C2 normalisation cache (24b1340), C3 position split (9c18bec), C4 Hue gate + C7 poller + C12 sampling (b778b03/311734e), C5 crossfade gating (9762f96), C6 merged RG (in 3131738), C8 Spotify lifecycle (d43385e), C9/C10 cast+widget (e87e941), C11 interaction batch (da0c7d8).
+- Build+tests green at every checkpoint (suites incl. LibrarySearchSortTest, ChapterCache sibling test, M4bIsRemoteTest, SenderCachePruneTest).
+- Greps: updatePositionByUri VM=0/coordinator=3; MediaMetadataRetriever live uses in VM+coordinator=0; REQUEST_DISCOVERY exactly 1 (sheet-scoped); analysisEnabled wired (service x2 incl. onDestroy); positionStripped filter live.
+- EMULATOR: restore @12266 (saved 17266) exact; coordinator 5s tick persisted (saved advanced 10772-17266 across runs); PositionSection slider 0:12 -> 0:19 while PLAYING(18257ms) — the split position flow renders + ticks while uiState emissions stay position-stripped; tap-resume at exactly saved (10772) verified on the same architecture.
+- PHONE (behind keyguard): Batch C build restore @29405 (saved 34405) EXACT, single coordinator restore (no guard-already-fired lines).
+- Open device-interaction items → consolidated pass: Hue audibility/behaviour (bridge), Spotify mirror background-pause observation, Cast discovery timing.
+
+(original checklist below, all ticked)
+
 
 - [x] GATE-STD EXIT=0; ALL suites green (ResumeGateTest, ChapterCacheTest, SpotifyBannerGraceTest, SettingsSearchTest, M4bIsRemoteTest, LibrarySearchDebounceTest, SenderCachePruneTest).
 - [x] Greps: `updatePositionByUri` not in PlayerViewModel; `MediaMetadataRetriever` not in PlayerViewModel/Coordinator; `currentPositionFormatted` not in PlayerUiState; `CALLBACK_FLAG_REQUEST_DISCOVERY` only in the sheet-scoped effect; `analysisEnabled` wired.
