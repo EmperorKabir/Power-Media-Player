@@ -62,6 +62,29 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
         private set
 
     /**
+     * Audit 3.4 — the FFT pipeline ran for EVERY local playback, Hue
+     * paired or not (~0.5-2% of a core on the audio sink thread, for
+     * everyone, always). The service's Hue collector flips this on only
+     * when the reactive engine can actually consume the analysis.
+     */
+    @Volatile private var analysisEnabled: Boolean = false
+
+    fun setAnalysis(enabled: Boolean) {
+        if (enabled && !analysisEnabled) {
+            // Fresh stream must not read snapshots from a previous one —
+            // same contract as onFlush (matrix DEP: ring continuity).
+            onFlush()
+        }
+        analysisEnabled = enabled
+    }
+
+    /** Hann window precomputed once: the per-sample cos() recompute cost
+     *  512 transcendental ops per FFT frame (audit 3.4). */
+    private val hannWindow = FloatArray(FFT_SIZE) { i ->
+        0.5f * (1f - kotlin.math.cos(2.0 * Math.PI * i / (FFT_SIZE - 1)).toFloat())
+    }
+
+    /**
      * 1-second ring of analyser snapshots @ 25 Hz, indexed by uptime
      * ms. HueEntertainment reads via [getSnapshotAt] so the stream
      * loop can compensate for the AudioTrack output-buffer latency
@@ -70,20 +93,23 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
      *
      * Stores up to RING_SIZE entries; oldest is overwritten in place.
      */
-    private data class TimedSnapshot(
-        val uptimeMs: Long,
-        val bands: FloatArray,
-        val normalisedBands: FloatArray,
-        val beat: Boolean,
-        val beatStrength: Float,
-        val normalisedBeatStrength: Float,
-        val bpm: Float,
-        val dynamics: Float,
-        val normalisedDynamics: Float,
-        val paletteHz: Float
-    )
+    // Mutable preallocated slots written in place: the old per-frame
+    // data-class + 2×copyOf() allocation drip ran on the time-sensitive
+    // audio thread (audit 3.4). uptimeMs == 0 marks an unfilled slot.
+    private class TimedSnapshot {
+        var uptimeMs: Long = 0L
+        val bands = FloatArray(6)
+        val normalisedBands = FloatArray(6)
+        var beat: Boolean = false
+        var beatStrength: Float = 0f
+        var normalisedBeatStrength: Float = 0f
+        var bpm: Float = 0f
+        var dynamics: Float = 0f
+        var normalisedDynamics: Float = 0f
+        var paletteHz: Float = 0f
+    }
 
-    private val ring = arrayOfNulls<TimedSnapshot>(RING_SIZE)
+    private val ring = Array(RING_SIZE) { TimedSnapshot() }
     private var ringWrite = 0
 
     /**
@@ -97,7 +123,7 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
         // Linear scan — at most RING_SIZE=25 entries; cheap.
         var best: TimedSnapshot? = null
         for (entry in ring) {
-            if (entry == null) continue
+            if (entry.uptimeMs == 0L) continue   // unfilled slot
             if (entry.uptimeMs <= target) {
                 if (best == null || entry.uptimeMs > best.uptimeMs) best = entry
             }
@@ -158,7 +184,7 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
         monoWrite = 0
         monoFilled = 0
         analyser.reset()
-        for (i in ring.indices) ring[i] = null
+        for (i in ring.indices) ring[i].uptimeMs = 0L
         ringWrite = 0
         return input
     }
@@ -172,12 +198,20 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
         monoWrite = 0
         monoFilled = 0
         analyser.reset()
-        for (i in ring.indices) ring[i] = null
+        for (i in ring.indices) ring[i].uptimeMs = 0L
         ringWrite = 0
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!inputBuffer.hasRemaining()) return
+        if (!analysisEnabled) {
+            // Pure passthrough — zero analysis cost when Hue isn't
+            // streaming (audit 3.4).
+            val out = replaceOutputBuffer(inputBuffer.remaining())
+            out.put(inputBuffer)
+            out.flip()
+            return
+        }
 
         // Allocate / size output buffer (passthrough).
         val length = inputBuffer.remaining()
@@ -219,8 +253,7 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
             }
             // Hann window so spectral leakage doesn't smear bass into mids.
             for (i in 0 until FFT_SIZE) {
-                val w = 0.5f * (1f - cos(2.0 * Math.PI * i / (FFT_SIZE - 1)).toFloat())
-                fftReal[i] *= w
+                fftReal[i] *= hannWindow[i]
             }
             fftInPlaceRadix2()
             // Pack magnitudes into the same byte layout HueAudioAnalyser
@@ -240,18 +273,17 @@ class HueAnalyserAudioProcessor @Inject constructor() : BaseAudioProcessor() {
             latest = result
             // Push into ring so HueEntertainment can read aged
             // snapshots for sync-offset compensation.
-            ring[ringWrite] = TimedSnapshot(
-                uptimeMs = now,
-                bands = result.bands.copyOf(),
-                normalisedBands = result.normalisedBands.copyOf(),
-                beat = result.beat,
-                beatStrength = result.beatStrength,
-                normalisedBeatStrength = result.normalisedBeatStrength,
-                bpm = result.bpm,
-                dynamics = result.dynamics,
-                normalisedDynamics = result.normalisedDynamics,
-                paletteHz = result.paletteHz
-            )
+            val slot = ring[ringWrite]
+            slot.uptimeMs = now
+            System.arraycopy(result.bands, 0, slot.bands, 0, 6)
+            System.arraycopy(result.normalisedBands, 0, slot.normalisedBands, 0, 6)
+            slot.beat = result.beat
+            slot.beatStrength = result.beatStrength
+            slot.normalisedBeatStrength = result.normalisedBeatStrength
+            slot.bpm = result.bpm
+            slot.dynamics = result.dynamics
+            slot.normalisedDynamics = result.normalisedDynamics
+            slot.paletteHz = result.paletteHz
             ringWrite = (ringWrite + 1) % RING_SIZE
         }
 

@@ -230,7 +230,9 @@ class HueAudioAnalyser {
         // Median + MAD-derived threshold. Far more robust than the
         // old fixed 55 % of running max — onsets fire reliably even
         // on quiet, narrow-dynamic-range passages.
-        val (fluxMedian, fluxMad) = medianAndMad(fluxHistory, fluxSortScratch)
+        computeMedianAndMad(fluxHistory, fluxSortScratch)
+        val fluxMedian = lastMedian
+        val fluxMad = lastMad
         val threshold = fluxMedian + fluxMad * 2.5f
 
         val timeSinceLast = if (onsetCount == 0) Long.MAX_VALUE
@@ -346,8 +348,12 @@ class HueAudioAnalyser {
         pctP90 = pctSortScratch[(filled * 90 / 100).coerceIn(0, filled - 1)]
     }
 
-    /** Median absolute deviation — robust threshold component. */
-    private fun medianAndMad(values: FloatArray, scratch: FloatArray): Pair<Float, Float> {
+    /** Median absolute deviation — robust threshold component. Writes
+     *  into fields like [percentile20And90] does: a Pair return boxed two
+     *  Floats per audio frame (audit 3.4). */
+    private var lastMedian = 0f
+    private var lastMad = 0f
+    private fun computeMedianAndMad(values: FloatArray, scratch: FloatArray) {
         val n = values.size
         System.arraycopy(values, 0, scratch, 0, n)
         java.util.Arrays.sort(scratch)
@@ -355,8 +361,8 @@ class HueAudioAnalyser {
         // MAD = median(|x - median|). Compute in place.
         for (i in 0 until n) scratch[i] = abs(values[i] - median)
         java.util.Arrays.sort(scratch)
-        val mad = scratch[n / 2]
-        return median to mad
+        lastMedian = median
+        lastMad = scratch[n / 2]
     }
 
     companion object {

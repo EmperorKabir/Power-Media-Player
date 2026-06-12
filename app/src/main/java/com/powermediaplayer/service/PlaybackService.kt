@@ -1157,6 +1157,13 @@ class PlaybackService : MediaSessionService() {
                             "isStreaming=${hueEntertainment.isStreaming()} " +
                             "selectedArea=$areaKey activeStreamArea=$activeHueAreaKey"
                     )
+                    // Audit 3.4 — the FFT analyser runs only when the
+                    // reactive engine can consume it; everyone else gets
+                    // a pure passthrough on the audio thread.
+                    hueAnalyserProcessor.setAnalysis(
+                        intensity > 0 && isPlaying && !isCast && !isSpotify &&
+                            areaKey.isNotBlank()
+                    )
                     // vc32: a BLANK area now means OFF, full stop —
                     // an explicit Disconnect must kill the stream even
                     // though intensity is no longer zeroed. (Behaviour
@@ -2088,6 +2095,7 @@ class PlaybackService : MediaSessionService() {
         // The Hue engine runs in its own singleton scope — cancelling
         // serviceScope only kills the COLLECTOR, not the 25Hz stream.
         runCatching { hueEntertainment.stop() }
+        runCatching { hueAnalyserProcessor.setAnalysis(false) }
         runCatching { crossfadeController.shutdown() }
         serviceScope.cancel()
         stopCastRelay()
