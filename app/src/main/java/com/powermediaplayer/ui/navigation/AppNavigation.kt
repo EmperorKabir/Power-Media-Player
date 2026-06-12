@@ -111,50 +111,69 @@ fun AppNavigation(
 
     val isPlayerRoute = currentDestination?.hierarchy?.any { it.route == Screen.Player.route } == true
 
-    Scaffold(
+    // Audit 6.1 / 8.1 — bar↔rail by window width. Phones keep the bottom
+    // bar; tablets/unfolded foldables get a NavigationRail (Play
+    // large-screen tier requirement). Immersive video hides navigation
+    // entirely.
+    val navLayoutType = when {
+        com.powermediaplayer.MainActivityHolder.fullBleedVideo.value ->
+            androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
+        windowSizeClass.widthSizeClass == androidx.compose.material3.windowsizeclass.WindowWidthSizeClass.Compact ->
+            androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationBar
+        else ->
+            androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationRail
+    }
+    val suiteColors =
+        androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults.colors(
+            navigationBarContainerColor = OledBlack,
+            navigationRailContainerColor = OledBlack
+        )
+    // item()'s builder lambda is not composable — build the colours here.
+    val suiteItemColors =
+        androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults.itemColors(
+            navigationBarItemColors = NavigationBarItemDefaults.colors(
+                selectedIconColor = TealAccent,
+                selectedTextColor = TealAccent,
+                unselectedIconColor = DisabledGrey,
+                unselectedTextColor = DisabledGrey,
+                indicatorColor = OledBlack
+            ),
+            navigationRailItemColors =
+                androidx.compose.material3.NavigationRailItemDefaults.colors(
+                    selectedIconColor = TealAccent,
+                    selectedTextColor = TealAccent,
+                    unselectedIconColor = DisabledGrey,
+                    unselectedTextColor = DisabledGrey,
+                    indicatorColor = OledBlack
+                )
+        )
+    androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold(
+        layoutType = navLayoutType,
         containerColor = OledBlack,
-        bottomBar = {
-            androidx.compose.foundation.layout.Column {
-                // MiniPlayerBar — visible on every non-Player tab.
-                // Tapping the bar navigates to the Player tab.
-                if (!isPlayerRoute) {
-                    com.powermediaplayer.ui.components.MiniPlayerBar(
-                        onClick = navigateToPlayer
-                    )
-                }
-                NavigationBar(
-                    containerColor = OledBlack,
-                    contentColor = TealAccent
-                ) {
-                screens.forEach { screen ->
-                    NavigationBarItem(
-                        icon = { Icon(imageVector = screen.icon, contentDescription = screen.title) },
-                        label = { Text(text = screen.title, style = MaterialTheme.typography.labelSmall) },
-                        selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
-                        onClick = {
-                            navController.navigate(screen.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = TealAccent,
-                            selectedTextColor = TealAccent,
-                            unselectedIconColor = DisabledGrey,
-                            unselectedTextColor = DisabledGrey,
-                            indicatorColor = OledBlack
-                        )
-                    )
-                }
-                }
+        navigationSuiteColors = suiteColors,
+        navigationSuiteItems = {
+            screens.forEach { screen ->
+                item(
+                    icon = { Icon(imageVector = screen.icon, contentDescription = screen.title) },
+                    label = { Text(text = screen.title, style = MaterialTheme.typography.labelSmall) },
+                    selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
+                    onClick = {
+                        navController.navigate(screen.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    colors = suiteItemColors
+                )
             }
         }
-    ) { innerPadding ->
+    ) {
+        androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .weight(1f)
         ) {
         NavHost(
             navController = navController,
@@ -190,6 +209,14 @@ fun AppNavigation(
         if (!isPlayerRoute) {
             com.powermediaplayer.ui.components.FloatingVideoMiniPlayer(
                 onExpand = navigateToPlayer
+            )
+        }
+        }
+        // MiniPlayerBar — every non-Player tab; spans the CONTENT width
+        // so it sits beside the rail on wide layouts rather than under it.
+        if (!isPlayerRoute) {
+            com.powermediaplayer.ui.components.MiniPlayerBar(
+                onClick = navigateToPlayer
             )
         }
         }
