@@ -17,7 +17,10 @@ import com.powermediaplayer.util.TextNormalizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +54,20 @@ data class MediaFileInfo(
     // / Parcelable, and body properties never participate in data
     // class equals/hashCode/copy/componentN.
     val uriStr: String = uri.toString()
+
+    // Audit 4.1 — search haystack + collation key computed once per file
+    // (lazily, on first use) instead of per keystroke / per comparison.
+    // A 2k-track search keystroke used to run ~44k normalisations and
+    // construct ~22k Collators inside sortedWith.
+    val searchHay: String by lazy {
+        com.powermediaplayer.util.TextNormalizer
+            .normalize("$title $artist $album").lowercase()
+    }
+    val collationKey: java.text.CollationKey by lazy {
+        com.powermediaplayer.util.TextNormalizer.collationKey(
+            com.powermediaplayer.util.TextNormalizer.normalize(title)
+        )
+    }
 }
 
 /**
@@ -256,6 +273,23 @@ class LibraryViewModel @Inject constructor(
         recomputeDisplayed()
     }
 
+    // Audit 4.1 — recompute used to run synchronously on the CALLER
+    // thread (Main, per keystroke). One debounced worker on Default now
+    // does the filter+sort; emissions within the window coalesce.
+    private val recomputeRequests = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
+
+    init {
+        viewModelScope.launch(Dispatchers.Default) {
+            recomputeRequests.collectLatest {
+                kotlinx.coroutines.delay(250)   // newer requests cancel the wait
+                recomputeDisplayedNow()
+            }
+        }
+    }
+
     fun toggleFavorite(uri: Uri) {
         val key = uri.toString()
         viewModelScope.launch(Dispatchers.IO) {
@@ -379,6 +413,10 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun recomputeDisplayed() {
+        recomputeRequests.tryEmit(Unit)
+    }
+
+    private fun recomputeDisplayedNow() {
         // Read-modify-write inside update {} so a concurrent
         // search-bar keystroke or sort-change collector can't lose
         // its emission to this rewrite.
@@ -386,11 +424,8 @@ class LibraryViewModel @Inject constructor(
             val q = TextNormalizer.normalize(state.searchQuery).lowercase()
             val hidden = hiddenUris
             val filterFn: (MediaFileInfo) -> Boolean = { f ->
-                val notHidden = f.uri.toString() !in hidden
-                val matchesQuery = if (q.isBlank()) true else {
-                    val hay = TextNormalizer.normalize("${f.title} ${f.artist} ${f.album}").lowercase()
-                    hay.contains(q)
-                }
+                val notHidden = f.uriStr !in hidden
+                val matchesQuery = q.isBlank() || f.searchHay.contains(q)
                 notHidden && matchesQuery
             }
             state.copy(
@@ -405,22 +440,23 @@ class LibraryViewModel @Inject constructor(
         mode: SortMode,
         favorites: Set<String>
     ): List<MediaFileInfo> {
+        // Audit 4.1 — NAME comparisons go through precomputed
+        // CollationKeys: key.compareTo(key) is a byte compare, versus
+        // 2 normalisations + a fresh Collator per comparison before.
         val byMode: Comparator<MediaFileInfo> = when (mode) {
-            SortMode.NAME_ASC ->
-                Comparator { a, b -> TextNormalizer.compare(a.title, b.title) }
-            SortMode.NAME_DESC ->
-                Comparator { a, b -> TextNormalizer.compare(b.title, a.title) }
+            SortMode.NAME_ASC -> compareBy { it.collationKey }
+            SortMode.NAME_DESC -> compareByDescending { it.collationKey }
             SortMode.SIZE_ASC -> compareBy { it.size }
             SortMode.SIZE_DESC -> compareByDescending { it.size }
-            SortMode.TYPE -> compareBy({ it.mimeType }, { TextNormalizer.normalize(it.title) })
+            SortMode.TYPE -> compareBy({ it.mimeType }, { it.collationKey })
             SortMode.DATE_DESC -> compareByDescending { it.dateModified }
             SortMode.FAVORITES_FIRST -> Comparator { a, b ->
-                val aFav = a.uri.toString() in favorites
-                val bFav = b.uri.toString() in favorites
+                val aFav = a.uriStr in favorites
+                val bFav = b.uriStr in favorites
                 when {
                     aFav && !bFav -> -1
                     !aFav && bFav -> 1
-                    else -> TextNormalizer.compare(a.title, b.title)
+                    else -> a.collationKey.compareTo(b.collationKey)
                 }
             }
             SortMode.DURATION_DESC -> compareByDescending { it.duration }

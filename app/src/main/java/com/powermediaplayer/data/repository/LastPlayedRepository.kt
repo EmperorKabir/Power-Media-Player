@@ -77,11 +77,14 @@ class LastPlayedRepository @Inject constructor(
     fun observePinnedAlbums(): kotlinx.coroutines.flow.Flow<List<PinnedAlbumItem>> =
         kotlinx.coroutines.flow.combine(
             pinnedAlbumDao.observeAll(),
-            // re-emit on track changes so trackCount stays fresh.
-            kotlinx.coroutines.flow.flowOf(Unit)
-        ) { albums, _ ->
+            // Audit 4.6 — the old combine(flowOf(Unit)) emitted once and
+            // never refreshed counts; this JOIN-count flow re-emits on
+            // Room invalidation of EITHER table, and replaces the N
+            // per-album snapshot queries per emission.
+            pinnedAlbumDao.observeTrackCounts()
+        ) { albums, counts ->
+            val countById = counts.associate { it.id to it.trackCount }
             albums.map { a ->
-                val tracks = pinnedAlbumDao.snapshotTracks(a.id)
                 PinnedAlbumItem(
                     id = a.id,
                     albumKey = a.albumKey,
@@ -90,7 +93,7 @@ class LastPlayedRepository @Inject constructor(
                     artworkUri = a.artworkUri,
                     pinOrder = a.pinOrder,
                     pinnedAtMs = a.pinnedAtMs,
-                    trackCount = tracks.size
+                    trackCount = countById[a.id] ?: 0
                 )
             }
         }

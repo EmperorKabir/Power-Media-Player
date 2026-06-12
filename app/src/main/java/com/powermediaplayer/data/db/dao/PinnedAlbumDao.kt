@@ -14,6 +14,18 @@ interface PinnedAlbumDao {
     @Query("SELECT * FROM pinned_albums ORDER BY pinOrder ASC")
     fun observeAll(): Flow<List<PinnedAlbumEntity>>
 
+    /** Audit 4.6 — per-album trackCount in ONE query. The repository's
+     *  combine(flowOf(Unit)) "refresh" emitted exactly once, so counts
+     *  went stale; Room invalidation on either table re-runs this. */
+    @Query(
+        "SELECT pa.id AS id, " +
+        "(SELECT COUNT(*) FROM pinned_album_tracks t WHERE t.albumId = pa.id) AS trackCount " +
+        "FROM pinned_albums pa"
+    )
+    fun observeTrackCounts(): Flow<List<AlbumTrackCount>>
+
+    data class AlbumTrackCount(val id: Long, val trackCount: Int)
+
     @Query("SELECT * FROM pinned_albums ORDER BY pinOrder ASC")
     suspend fun snapshot(): List<PinnedAlbumEntity>
 

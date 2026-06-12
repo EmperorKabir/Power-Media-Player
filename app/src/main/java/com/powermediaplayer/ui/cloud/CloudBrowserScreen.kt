@@ -48,6 +48,26 @@ fun CloudBrowserScreen(
     onNavigateToPlayer: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // Audit 4.5 - per-row .any{} scans were O(rows x favourites) per
+    // composition pass, and the offline map was read via .value inside
+    // composition (snapshot-invisible -> stale Offline chip). Set
+    // lookups + reactive collection instead.
+    val driveFavFolderIds = remember(uiState.driveFavourites) {
+        uiState.driveFavourites.mapTo(HashSet()) { it.id }
+    }
+    val driveFavTrackIds = remember(uiState.driveFavouriteTracks) {
+        uiState.driveFavouriteTracks.mapTo(HashSet()) { it.id }
+    }
+    val spotifyFavIds = remember(
+        uiState.spotifyFavTracks, uiState.spotifyFavAlbums, uiState.spotifyFavPodcasts
+    ) {
+        HashSet<String>().apply {
+            uiState.spotifyFavTracks.mapTo(this) { it.id }
+            uiState.spotifyFavAlbums.mapTo(this) { it.id }
+            uiState.spotifyFavPodcasts.mapTo(this) { it.id }
+        }
+    }
+    val offlineIds by viewModel.offlineDrivePairs.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<CloudMediaItem?>(null) }
@@ -87,7 +107,11 @@ fun CloudBrowserScreen(
     androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                viewModel.forceRefresh()
+                // Audit 4.7 - a plain resume (notification shade, app
+                // switch) re-listed Drive/Spotify over the network every
+                // time. Stale-gated now; the OAuth-return launcher paths
+                // keep their forced refresh.
+                viewModel.refreshIfStale(5_000)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -788,14 +812,12 @@ fun CloudBrowserScreen(
                         // sub-folder.
                         val canForgetRoot = atDriveRoot && isDriveFolder
                         val isFav = when {
-                            isDriveFolder -> uiState.driveFavourites.any { it.id == item.id }
-                            isDriveTrack -> uiState.driveFavouriteTracks.any { it.id == item.id }
+                            isDriveFolder -> item.id in driveFavFolderIds
+                            isDriveTrack -> item.id in driveFavTrackIds
                             isSpotify -> {
                                 val uri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
                                     else "spotify:track:${item.id}"
-                                uiState.spotifyFavTracks.any { it.id == uri } ||
-                                uiState.spotifyFavAlbums.any { it.id == uri } ||
-                                uiState.spotifyFavPodcasts.any { it.id == uri }
+                                uri in spotifyFavIds
                             }
                             else -> false
                         }
@@ -821,7 +843,7 @@ fun CloudBrowserScreen(
                                 }
                             },
                             onLongClick = { if (!item.isFolder) contextItem = item },
-                            isOffline = isDriveTrack && viewModel.hasOfflineCopy(item.id)
+                            isOffline = isDriveTrack && offlineIds.containsKey(item.id)
                         )
                     }
                     if (uiState.items.isEmpty() && uiState.driveFavourites.isEmpty()) {

@@ -80,7 +80,18 @@ fun MiniPlayerBar(
                     val bmp by produceState<android.graphics.Bitmap?>(initialValue = null, art) {
                         value = withContext(Dispatchers.Default) {
                             runCatching {
-                                android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size)
+                                // Audit 4.4 - a 3000px embedded cover became a
+                                // ~36MB ARGB bitmap behind a 40dp box. Sample
+                                // down to ~160px; the full-screen background
+                                // keeps its own full-res decode.
+                                val bounds = android.graphics.BitmapFactory.Options()
+                                    .apply { inJustDecodeBounds = true }
+                                android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size, bounds)
+                                var sample = 1
+                                while (bounds.outWidth / (sample * 2) >= 160) sample *= 2
+                                val opts = android.graphics.BitmapFactory.Options()
+                                    .apply { inSampleSize = sample }
+                                android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size, opts)
                             }.getOrNull()
                         }
                     }

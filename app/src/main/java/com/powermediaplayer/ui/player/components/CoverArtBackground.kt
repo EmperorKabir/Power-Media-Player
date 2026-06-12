@@ -20,6 +20,7 @@ import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.util.CoverArtColors
 import com.powermediaplayer.util.PaletteHelper
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -41,6 +42,7 @@ fun CoverArtBackground(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit
 ) {
+    val paletteScope = rememberCoroutineScope()
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -77,9 +79,13 @@ fun CoverArtBackground(
 
         if (decoded != null) {
             LaunchedEffect(decoded) {
-                runCatching { PaletteHelper.extractColorSet(decoded!!) }
-                    .getOrNull()
-                    .let(onColorsExtracted)
+                // Palette quantisation off Main (audit 4.3); snapshot
+                // state writes are thread-safe so the callback can fire
+                // from Default.
+                val colors = withContext(Dispatchers.Default) {
+                    runCatching { PaletteHelper.extractColorSet(decoded!!) }.getOrNull()
+                }
+                onColorsExtracted(colors)
             }
             Image(
                 bitmap = decoded!!.asImageBitmap(),
@@ -106,10 +112,19 @@ fun CoverArtBackground(
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { result ->
                     com.powermediaplayer.util.Diag.i("PMP_DIAG", "CoverArt AsyncImage onSuccess uri=$artworkUri")
-                    runCatching {
-                        val bm = (result.result as? SuccessResult)?.image?.toBitmap()
-                        onColorsExtracted(bm?.let { PaletteHelper.extractColorSet(it) })
-                    }.onFailure { onColorsExtracted(null) }
+                    val bm = runCatching {
+                        (result.result as? SuccessResult)?.image?.toBitmap()
+                    }.getOrNull()
+                    if (bm == null) {
+                        onColorsExtracted(null)
+                    } else {
+                        // Coil calls back on Main — quantise off it (audit 4.3).
+                        paletteScope.launch(Dispatchers.Default) {
+                            onColorsExtracted(
+                                runCatching { PaletteHelper.extractColorSet(bm) }.getOrNull()
+                            )
+                        }
+                    }
                 },
                 onError = { err ->
                     com.powermediaplayer.util.Diag.w(

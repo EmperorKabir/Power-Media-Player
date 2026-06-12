@@ -6,6 +6,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.ui.settings.SettingsViewModel
 
 /**
@@ -23,9 +24,9 @@ import com.powermediaplayer.ui.settings.SettingsViewModel
 @Composable
 fun InstallThemeAccent() {
     val vm: SettingsViewModel = hiltViewModel()
-    val state by vm.uiState.collectAsState()
-    LaunchedEffect(state.themeAccentHex) {
-        val hex = state.themeAccentHex
+    val accentHex by vm.themeAccentHexFlow.collectAsStateWithLifecycle()
+    LaunchedEffect(accentHex) {
+        val hex = accentHex
         if (hex.isBlank()) return@LaunchedEffect
         val parsed = parseHexColor(hex) ?: return@LaunchedEffect
         setTealAccentColor(parsed)

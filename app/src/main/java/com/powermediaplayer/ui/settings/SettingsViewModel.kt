@@ -116,6 +116,15 @@ class SettingsViewModel @Inject constructor(
      */
     val isTrueMonoOutput: StateFlow<Boolean> = audioOutputDetector.isTrueMonoOutput
 
+    // Audit 2.5 - the app-root theme used to subscribe to the full
+    // ~75-field uiState combine; any settings write recomposed the theme
+    // scope and the combine stayed hot whenever the app was composed.
+    // The theme needs exactly two values.
+    val fontSizeScaleFlow: StateFlow<Float> = settingsDataStore.fontSizeScale
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1f)
+    val themeAccentHexFlow: StateFlow<String> = settingsDataStore.themeAccentHex
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+
     val uiState: StateFlow<SettingsUiState> = combine(
         listOf<Flow<Any>>(
             settingsDataStore.useDeepScan,

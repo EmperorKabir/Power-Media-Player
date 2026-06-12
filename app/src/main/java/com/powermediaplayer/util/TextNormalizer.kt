@@ -23,9 +23,26 @@ object TextNormalizer {
 
     private val INVISIBLE_FORMATTING = Regex("[\\u200B-\\u200D\\uFEFF]")
 
+    // Audit 4.1 — Collator.getInstance is an expensive ICU construction
+    // and was being built PER COMPARISON inside library sorts. One cached
+    // instance per locale; key generation synchronises on it (Collator is
+    // not thread-safe), key comparison is a lock-free byte compare.
+    @Volatile private var cachedCollator: Collator? = null
+    @Volatile private var cachedCollatorLocale: Locale? = null
+
     /** Collator for the user's current locale. PRIMARY strength → case + accent insensitive. */
-    fun collator(locale: Locale = Locale.getDefault()): Collator =
-        Collator.getInstance(locale).apply { strength = Collator.PRIMARY }
+    fun collator(locale: Locale = Locale.getDefault()): Collator {
+        val c = cachedCollator
+        if (c != null && locale == cachedCollatorLocale) return c
+        return (Collator.getInstance(locale).apply { strength = Collator.PRIMARY })
+            .also { cachedCollator = it; cachedCollatorLocale = locale }
+    }
+
+    /** Thread-safe collation-key generation on the shared collator. */
+    fun collationKey(s: String, locale: Locale = Locale.getDefault()): java.text.CollationKey {
+        val c = collator(locale)
+        synchronized(c) { return c.getCollationKey(s) }
+    }
 
     /**
      * Repair "mojibake" — UTF-8 bytes mistakenly decoded as Windows-1252.

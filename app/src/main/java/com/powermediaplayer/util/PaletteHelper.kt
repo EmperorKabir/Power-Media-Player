@@ -41,6 +41,9 @@ object PaletteHelper {
 
     /**
      * Extract a full color set from cover art for dynamic theming.
+     * One generate() serves every field — the status-bar colour used to
+     * run a SECOND full quantisation pass over the same bitmap
+     * (audit 4.3: tens of ms ×2 per track change, on Main).
      */
     fun extractColorSet(bitmap: Bitmap): CoverArtColors {
         val palette = Palette.from(bitmap).generate()
@@ -52,7 +55,9 @@ object PaletteHelper {
             lightVibrant = palette.lightVibrantSwatch?.let { Color(it.rgb) },
             muted = palette.mutedSwatch?.let { Color(it.rgb) },
             darkMuted = palette.darkMutedSwatch?.let { Color(it.rgb) },
-            statusBarColor = extractStatusBarColor(bitmap)
+            statusBarColor = palette.getDarkVibrantColor(
+                palette.getDarkMutedColor(0xFF000000.toInt())
+            )
         )
     }
 }

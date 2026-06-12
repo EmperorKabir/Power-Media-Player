@@ -606,6 +606,13 @@ fun LibraryScreen(
                 val favouriteFiles = remember(files, favouriteSet) {
                     files.filter { it.uriStr in favouriteSet }
                 }
+                // Audit 4.5 - the favourites strip ran indexOfFirst over
+                // the whole library per row per composition (O(F x N)).
+                val indexById = remember(files) {
+                    HashMap<Long, Int>(files.size).apply {
+                        files.forEachIndexed { i, f -> put(f.id, i) }
+                    }
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -626,8 +633,7 @@ fun LibraryScreen(
                             favouriteFiles,
                             key = { _, f -> "fav_${f.id}" }
                         ) { _, file ->
-                            val originalIndex = files.indexOfFirst { it.id == file.id }
-                                .coerceAtLeast(0)
+                            val originalIndex = indexById[file.id] ?: 0
                             MediaFileItem(
                                 file = file,
                                 isFavorite = true,

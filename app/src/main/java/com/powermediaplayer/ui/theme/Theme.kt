@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.ui.settings.SettingsViewModel
 
 /**
@@ -75,8 +76,8 @@ fun PowerMediaPlayerTheme(
     // sp-based TextStyle grow) AND publish it via LocalPmpScale so
     // composables can scale their touch targets to match.
     val vm: SettingsViewModel = hiltViewModel()
-    val state by vm.uiState.collectAsState()
-    val userScale = state.fontSizeScale.coerceIn(0.85f, 2.0f)
+    val scale by vm.fontSizeScaleFlow.collectAsStateWithLifecycle()
+    val userScale = scale.coerceIn(0.85f, 2.0f)
     val baseDensity = LocalDensity.current
     val scaledDensity = remember(baseDensity, userScale) {
         Density(

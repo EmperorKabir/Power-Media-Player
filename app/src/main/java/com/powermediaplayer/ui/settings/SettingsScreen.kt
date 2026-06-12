@@ -138,11 +138,12 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        // The catalog is structurally static; only uiState (captured by
-        // the content lambdas) changes. Without remember every search
-        // keystroke would re-allocate all 8 groups, 20 items and their
-        // keyword lists on the main thread.
-        val groups = remember(uiState) { listOf(
+        // The catalog is structurally static; the content lambdas read
+        // the DELEGATED uiState property, so they always see the live
+        // value. Audit 4.2: remember(uiState) re-allocated all 8 groups,
+        // 20 items and their keyword lists on EVERY settings write -
+        // including continuous slider drags. Allocate once.
+        val groups = remember { listOf(
             // 1 — Playback (folds old Playback + Crossfade)
             SettingsGroup("Playback", listOf(
                 SettingsItem(

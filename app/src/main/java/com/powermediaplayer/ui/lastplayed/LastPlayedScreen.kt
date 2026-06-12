@@ -333,7 +333,7 @@ private fun PinnedAlbumRow(
 ) {
     var expanded by rememberSaveable(album.id) { mutableStateOf(false) }
     val tracksFlow = remember(album.id) { tracksProvider() }
-    val tracks by tracksFlow.collectAsState(initial = emptyList())
+    val tracks by tracksFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     Surface(
         color = SurfaceElevated,
         shape = RoundedCornerShape(8.dp),
@@ -619,7 +619,7 @@ private fun HistoryRowWithBookmarks(
 ) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     val bookmarksFlow = remember(item.id) { bookmarkProvider() }
-    val bookmarks by bookmarksFlow.collectAsState(initial = emptyList())
+    val bookmarks by bookmarksFlow.collectAsStateWithLifecycle(initialValue = emptyList())
 
     Surface(
         color = if (elevated) TealAccent.copy(alpha = 0.10f) else SurfaceElevated,
