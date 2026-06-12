@@ -56,7 +56,8 @@ private val screens = listOf(
 @Composable
 fun AppNavigation(
     windowSizeClass: WindowSizeClass,
-    initialOpenTab: String? = null
+    initialOpenTab: String? = null,
+    onOpenTabConsumed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -64,15 +65,20 @@ fun AppNavigation(
 
     // §C20 — handle widget tap deep-link. When the widget host launched
     // us with EXTRA_OPEN_TAB="player" (the only value we currently
-    // surface), force-navigate to the Player route. Trigger keyed on
-    // the value so a fresh tap re-fires even if the user had moved off
-    // the route.
+    // surface), force-navigate to the Player route, then CONSUME the
+    // value (audit 6.2: it was never cleared, so any activity
+    // recreation — fold/unfold density change, theme switch, font-size
+    // change — re-fired the navigation and dumped the user onto the
+    // Player tab from wherever they were).
     androidx.compose.runtime.LaunchedEffect(initialOpenTab) {
         when (initialOpenTab) {
-            "player" -> navController.navigate(Screen.Player.route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
+            "player" -> {
+                navController.navigate(Screen.Player.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                onOpenTabConsumed()
             }
         }
     }

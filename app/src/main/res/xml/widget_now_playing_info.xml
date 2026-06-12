@@ -19,9 +19,15 @@
   - maxResize allows the user to grow it to 4×3.
   - widgetFeatures attribute removed (no configure Activity exists).
 -->
+<!-- minResizeWidth/Height 60dp (audit 6.13): without an explicit floor
+     the resize minimum equals minWidth (110dp), so the compact 60dp
+     icon-only variant — the one sized for foldable cover screens — was
+     unreachable by user resize. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="110dp"
     android:minHeight="110dp"
+    android:minResizeWidth="60dp"
+    android:minResizeHeight="60dp"
     android:targetCellWidth="4"
     android:targetCellHeight="2"
     android:maxResizeWidth="320dp"

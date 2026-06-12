@@ -126,7 +126,7 @@
             android:name=".cloud.DrivePickerActivity"
             android:exported="false"
             android:label="Pick a Drive folder"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density"
             android:theme="@style/Theme.PowerMediaPlayer" />
 
         <!-- Tiny foreground service that gives us BAL (background
@@ -268,6 +268,10 @@
         <!-- §C12 — full-screen alarm activity. showWhenLocked + turnScreenOn
              flags are also set imperatively in the activity (they're
              newer / the manifest analogue is API 27+). -->
+        <!-- configChanges parity with MainActivity + density: rotating or
+             folding during a ringing alarm used to RECREATE the activity,
+             restarting the volume ramp / vibration / math challenge from
+             scratch (audit 6.7). -->
         <activity
             android:name=".alarm.FullScreenAlarmActivity"
             android:exported="false"
@@ -275,6 +279,7 @@
             android:turnScreenOn="true"
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density"
             android:theme="@style/Theme.PowerMediaPlayer" />
 
     </application>

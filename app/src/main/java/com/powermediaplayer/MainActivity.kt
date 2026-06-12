@@ -93,12 +93,27 @@ class MainActivity : FragmentActivity() {
         com.powermediaplayer.diag.DiagLog.lifecycle(
             "MainActivity.onCreate savedState=${savedInstanceState != null}"
         )
+        // Audit 6.3 — recreation while in PiP (uiMode/density/locale all
+        // recreate) must not render the full chrome inside the PiP frame.
+        isInPip.value = isInPictureInPictureMode
         // §C20 — first-launch deep-link extra (the widget tap path).
-        intent.getStringExtra(
-            com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB
-        )?.let { pendingOpenTab.value = it }
-        enableEdgeToEdge()
+        // Strip it from the sticky intent too: recreation re-reads the
+        // SAME intent and would re-arm the navigation (audit 6.2).
+        readOpenTabExtra(intent)
+        // Audit 6.5 — bare enableEdgeToEdge() keys bar-icon appearance
+        // off the SYSTEM theme; the app is hard-forced dark, so a
+        // system-light device got dark icons over pure black. Explicit
+        // dark styles regardless of system theme.
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(
+                android.graphics.Color.TRANSPARENT
+            )
+        )
         MainActivityHolder.set(this)
+        // (helpers for the deep-link lifecycle live below onCreate)
         playbackConnection.connect()
         // Playback-session side effects run exactly once per process
         // (audit 3.1/8.4) — idempotent ignition, not lifecycle-bound.
@@ -200,7 +215,8 @@ class MainActivity : FragmentActivity() {
                         ) {
                             AppNavigation(
                                 windowSizeClass = windowSizeClass,
-                                initialOpenTab = pendingOpenTab.value
+                                initialOpenTab = pendingOpenTab.value,
+                                onOpenTabConsumed = { consumeOpenTab() }
                             )
                         }
                     }
@@ -219,9 +235,23 @@ class MainActivity : FragmentActivity() {
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
-        intent.getStringExtra(
+        setIntent(intent)   // the stripped intent becomes the sticky one
+        readOpenTabExtra(intent)
+    }
+
+    private fun readOpenTabExtra(i: android.content.Intent) {
+        i.getStringExtra(
             com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB
-        )?.let { pendingOpenTab.value = it }
+        )?.let {
+            pendingOpenTab.value = it
+            // Recreation re-reads this intent — never re-navigate.
+            i.removeExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB)
+        }
+    }
+
+    /** Called by AppNavigation once the deep-link navigation has fired. */
+    private fun consumeOpenTab() {
+        pendingOpenTab.value = null
     }
 
     override fun onPictureInPictureModeChanged(
