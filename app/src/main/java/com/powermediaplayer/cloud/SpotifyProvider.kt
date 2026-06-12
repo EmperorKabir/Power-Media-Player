@@ -202,7 +202,15 @@ class SpotifyProvider @Inject constructor(
         }
     }
 
-    private val authService: AuthorizationService by lazy { AuthorizationService(context) }
+    // AppAuth documents that AuthorizationService MUST be disposed or its
+    // CustomTabs ServiceConnection stays bound for the process lifetime.
+    // It is needed per token refresh (performActionWithFreshTokens) while
+    // signed in, so it lives as a recreatable singleton disposed on signOut.
+    @Volatile private var authServiceInstance: AuthorizationService? = null
+    private val authService: AuthorizationService
+        get() = authServiceInstance ?: synchronized(this) {
+            authServiceInstance ?: AuthorizationService(context).also { authServiceInstance = it }
+        }
     private val http = OkHttpClient()
 
     private val serviceConfig = AuthorizationServiceConfiguration(
@@ -306,6 +314,12 @@ class SpotifyProvider @Inject constructor(
         // with a fresh AuthState always writes to disk.
         lastSerializedAuthState = null
         _isLoggedIn.value = false
+        // Release the CustomTabs browser binding; a fresh instance is
+        // created lazily on the next sign-in / token refresh.
+        synchronized(this@SpotifyProvider) {
+            runCatching { authServiceInstance?.dispose() }
+            authServiceInstance = null
+        }
         Result.success(Unit)
     }
 

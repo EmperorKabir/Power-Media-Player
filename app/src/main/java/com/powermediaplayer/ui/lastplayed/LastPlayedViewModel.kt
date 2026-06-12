@@ -490,12 +490,17 @@ class LastPlayedViewModel @Inject constructor(
                 // result), and injects via the existing setLocalChapters
                 // path IF the user is still on this item.
                 if (isRemote &&
-                    mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0 &&
-                    // vc32: dedup — concurrent resumes of the same uri
-                    // must not fire duplicate multi-minute parses.
-                    com.powermediaplayer.util.ChapterCache.shared.markFilling(item.mediaUri)
+                    mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0
                 ) {
                     viewModelScope.launch(Dispatchers.IO) {
+                        // vc32: dedup — concurrent resumes of the same uri
+                        // must not fire duplicate multi-minute parses. The
+                        // mark lives INSIDE the coroutine: marking in the
+                        // guard expression strands the uri as "filling"
+                        // forever if the VM clears before this launches.
+                        if (!com.powermediaplayer.util.ChapterCache.shared.markFilling(item.mediaUri)) {
+                            return@launch
+                        }
                         val tFill = com.powermediaplayer.diag.DiagLog.now()
                         val late = try {
                             runCatching {

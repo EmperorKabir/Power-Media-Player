@@ -40,7 +40,12 @@ class AlarmReceiver : BroadcastReceiver() {
         val snoozeCount = intent.getIntExtra(EXTRA_SNOOZE_COUNT, 0)
         if (alarmId < 0) return
 
+        // goAsync: an alarm fire on a dead process must outlive onReceive
+        // or the DataStore read races process teardown and the alarm is
+        // silently dropped.
+        val pending = goAsync()
         scope.launch {
+            try {
             val alarm = settingsDataStore.scheduledAlarms.first()
                 .firstOrNull { it.id == alarmId } ?: return@launch
             if (!alarm.enabled) return@launch
@@ -77,6 +82,9 @@ class AlarmReceiver : BroadcastReceiver() {
                     "days=${alarm.daysLabel} mediaUri=${alarm.mediaUri.ifBlank { "<resume>" }} " +
                     "snoozeCount=$snoozeCount"
             )
+            } finally {
+                pending.finish()
+            }
         }
     }
 

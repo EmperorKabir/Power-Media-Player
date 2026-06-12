@@ -175,6 +175,12 @@ class DrivePickerActivity : ComponentActivity() {
     override fun onDestroy() {
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("PMP_PICKER_BRIDGE")
+            // destroy() on a still-attached WebView is documented-unsupported
+            // and can keep renderer resources alive until window teardown.
+            runCatching {
+                webView.stopLoading()
+                (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+            }
             webView.destroy()
         }
         super.onDestroy()

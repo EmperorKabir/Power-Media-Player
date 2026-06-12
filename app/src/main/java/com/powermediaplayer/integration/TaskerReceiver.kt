@@ -40,7 +40,12 @@ class TaskerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
         if (!action.startsWith("com.powermediaplayer.action.")) return
+        // goAsync: onReceive returns before the coroutine runs; without a
+        // PendingResult the process can be killed mid-command on a cold
+        // receiver wake (automation intents silently dropped).
+        val pending = goAsync()
         scope.launch {
+            try {
             val enabled = settingsDataStore.taskerIntentsEnabled.first()
             if (!enabled) {
                 com.powermediaplayer.util.Diag.i(
@@ -84,6 +89,9 @@ class TaskerReceiver : BroadcastReceiver() {
                 )
             }
             com.powermediaplayer.util.Diag.i("PMP_DIAG", "TaskerReceiver handled '$action'")
+            } finally {
+                pending.finish()
+            }
         }
     }
 }
