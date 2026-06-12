@@ -129,7 +129,7 @@ class FullScreenAlarmActivity : ComponentActivity() {
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    private fun startRinging(alarm: AlarmRecord) {
+    private suspend fun startRinging(alarm: AlarmRecord) {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val maxVol = audioManager?.getStreamMaxVolume(AudioManager.STREAM_ALARM) ?: 7
         // §C12 snoozeRestartFromStart: when this is a snooze fire and the
@@ -152,16 +152,22 @@ class FullScreenAlarmActivity : ComponentActivity() {
             .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        val resolved = resolveAlarmMediaUri(alarm.mediaUri)
-        val uri = if (resolved.isNotBlank()) android.net.Uri.parse(resolved)
-        else android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+        // Audit 5.4 — media resolution (Room read + a possible 2000-row
+        // MediaStore scan for smart-playlist alarms) and prepare() were
+        // blocking Main AT RING TIME. Resolve off-thread and prepare
+        // async; vibration (already started above) covers the ~100ms gap.
+        val uri = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val resolved = resolveAlarmMediaUri(alarm.mediaUri)
+            if (resolved.isNotBlank()) android.net.Uri.parse(resolved)
+            else android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+        }
         runCatching {
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(attrs)
                 isLooping = true
                 setDataSource(this@FullScreenAlarmActivity, uri)
-                prepare()
-                start()
+                setOnPreparedListener { it.start() }
+                prepareAsync()
             }
         }.onFailure {
             com.powermediaplayer.util.Diag.w("PMP_DIAG", "Alarm MediaPlayer failed", it)
@@ -216,7 +222,7 @@ class FullScreenAlarmActivity : ComponentActivity() {
      * playlist's full sequence isn't queued (alarm playback is a
      * single-track ring); we deliberately keep it simple.
      */
-    private fun resolveAlarmMediaUri(input: String): String {
+    private suspend fun resolveAlarmMediaUri(input: String): String {
         if (input.isBlank()) return ""
         if (!input.startsWith("smartplaylist://")) return input
         val id = input.removePrefix("smartplaylist://").toLongOrNull() ?: return ""
@@ -224,7 +230,7 @@ class FullScreenAlarmActivity : ComponentActivity() {
             val deps = dagger.hilt.android.EntryPointAccessors.fromApplication(
                 applicationContext, AlarmDeps::class.java
             )
-            val playlist = kotlinx.coroutines.runBlocking { deps.smartPlaylistDao().getById(id) }
+            val playlist = deps.smartPlaylistDao().getById(id)
                 ?: return ""
             val files = scanLibraryAudioFiles().take(2000)
             val resolved = com.powermediaplayer.playlist.SmartPlaylistResolver.resolve(
