@@ -3,8 +3,12 @@ package com.powermediaplayer.hue
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import com.powermediaplayer.diag.DiagLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -309,8 +313,15 @@ class HueProvider @Inject constructor(
     }
 
     private suspend fun put(path: String, json: String): Boolean {
+        // Single-shot callers: read creds here. Loops (setAll/applyScene)
+        // snapshot once and use the overload — 20 lights used to cost 40
+        // DataStore reads (audit 5.7).
         val ip = settings.hueBridgeIp.first()
         val key = settings.hueAppKey.first()
+        return put(path, json, ip, key)
+    }
+
+    private suspend fun put(path: String, json: String, ip: String, key: String): Boolean {
         if (ip.isBlank() || key.isBlank()) {
             DiagLog.event("HUE", "PUT $path skipped — no bridge / key configured")
             return false
@@ -948,10 +959,26 @@ class HueProvider @Inject constructor(
     }
 
     suspend fun setAll(on: Boolean) {
+        val ip = settings.hueBridgeIp.first()
+        val key = settings.hueAppKey.first()
         val ids = listLightIds()
-        ids.forEach {
-            put("/clip/v2/resource/light/$it", """{"on":{"on":$on}}""")
-        }
+        parallelPut(ids.map { "/clip/v2/resource/light/$it" to """{"on":{"on":$on}}""" }, ip, key)
+    }
+
+    /** Bounded-parallel PUT batch: serial per-light writes made a 20-light
+     *  preset visibly crawl; 4-wide is well inside the bridge's tolerance
+     *  (the dimmable driver's own backoff machinery is untouched). */
+    private suspend fun parallelPut(
+        calls: List<Pair<String, String>>,
+        ip: String,
+        key: String
+    ) = coroutineScope {
+        val sem = Semaphore(4)
+        calls.map { (path, json) ->
+            async {
+                sem.withPermit { put(path, json, ip, key) }
+            }
+        }.forEach { it.await() }
     }
 
     /**
@@ -975,39 +1002,36 @@ class HueProvider @Inject constructor(
     }
 
     suspend fun applyScene(preset: ScenePreset) {
+        val ip = settings.hueBridgeIp.first()
+        val key = settings.hueAppKey.first()
         val ids = listLightIds()
         if (ids.isEmpty()) {
             DiagLog.event("HUE", "applyScene ${preset.name} — no lights, skipped")
             return
         }
         DiagLog.event("HUE", "applyScene ${preset.name} → ${ids.size} lights")
+        fun perLight(json: String) = ids.map { "/clip/v2/resource/light/$it" to json }
         when (preset) {
             ScenePreset.AMBIENT -> {
                 // Warm white. CIE xy ≈ (0.46, 0.41) ≈ 2700K.
-                ids.forEach {
-                    put(
-                        "/clip/v2/resource/light/$it",
-                        """{"on":{"on":true},"dimming":{"brightness":30},"color":{"xy":{"x":0.46,"y":0.41}}}"""
-                    )
-                }
+                parallelPut(
+                    perLight("""{"on":{"on":true},"dimming":{"brightness":30},"color":{"xy":{"x":0.46,"y":0.41}}}"""),
+                    ip, key
+                )
             }
             ScenePreset.CINEMA -> {
                 // Deep red, low brightness.
-                ids.forEach {
-                    put(
-                        "/clip/v2/resource/light/$it",
-                        """{"on":{"on":true},"dimming":{"brightness":15},"color":{"xy":{"x":0.68,"y":0.31}}}"""
-                    )
-                }
+                parallelPut(
+                    perLight("""{"on":{"on":true},"dimming":{"brightness":15},"color":{"xy":{"x":0.68,"y":0.31}}}"""),
+                    ip, key
+                )
             }
             ScenePreset.READING -> {
                 // Cool white ≈ 5000K, CIE xy ≈ (0.34, 0.36).
-                ids.forEach {
-                    put(
-                        "/clip/v2/resource/light/$it",
-                        """{"on":{"on":true},"dimming":{"brightness":80},"color":{"xy":{"x":0.34,"y":0.36}}}"""
-                    )
-                }
+                parallelPut(
+                    perLight("""{"on":{"on":true},"dimming":{"brightness":80},"color":{"xy":{"x":0.34,"y":0.36}}}"""),
+                    ip, key
+                )
             }
             ScenePreset.PARTY -> {
                 // Quick cycle through saturated red/green/blue/magenta.
@@ -1017,25 +1041,18 @@ class HueProvider @Inject constructor(
                     "0.15,0.06",  // blue
                     "0.40,0.18"   // magenta
                 )
-                ids.forEach {
-                    put(
-                        "/clip/v2/resource/light/$it",
-                        """{"on":{"on":true},"dimming":{"brightness":100}}"""
-                    )
-                }
+                parallelPut(perLight("""{"on":{"on":true},"dimming":{"brightness":100}}"""), ip, key)
                 // ~30 s of cycling. Side-effecting coroutine — caller
                 // launches in viewModelScope; cancelling that scope ends
-                // the loop. Each set call is fire-and-forget; OkHttp's
-                // connection pool keeps the bridge socket warm.
+                // the loop. Rounds stay sequential (they're timed); each
+                // round's writes go out in parallel.
                 for (round in 0 until 10) {
                     val xy = palette[round % palette.size]
                     val (x, y) = xy.split(",")
-                    ids.forEach { id ->
-                        put(
-                            "/clip/v2/resource/light/$id",
-                            """{"color":{"xy":{"x":$x,"y":$y}},"dynamics":{"duration":2500}}"""
-                        )
-                    }
+                    parallelPut(
+                        perLight("""{"color":{"xy":{"x":$x,"y":$y}},"dynamics":{"duration":2500}}"""),
+                        ip, key
+                    )
                     delay(3000)
                 }
             }
