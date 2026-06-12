@@ -78,7 +78,10 @@ fun ChapterPickerDialog(
                         .heightIn(max = 400.dp)
                 ) {
                     if (hasChapters) {
-                        itemsIndexed(chapters) { index, chapter ->
+                        itemsIndexed(
+                            chapters,
+                            key = { i, c -> "${i}-${c.startTimeMs}" }
+                        ) { index, chapter ->
                             val isCurrent = index == currentChapterIndex
                             ChapterRow(
                                 index = index + 1,
@@ -92,7 +95,10 @@ fun ChapterPickerDialog(
                             )
                         }
                     } else {
-                        itemsIndexed(playlist) { index, track ->
+                        itemsIndexed(
+                            playlist,
+                            key = { i, t -> "${i}-${t.title}" }
+                        ) { index, track ->
                             val isCurrent = index == currentTrackIndex
                             TrackRow(
                                 index = index + 1,

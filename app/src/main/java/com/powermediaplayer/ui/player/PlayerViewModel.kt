@@ -1153,8 +1153,50 @@ class PlayerViewModel @Inject constructor(
 
     // ── State Mapping ────────────────────────────────────────────
 
+    /**
+     * Audit 3.2 — text normalisation (NFC + mojibake repair + regex)
+     * and the full chapter-list copy ran on EVERY 500ms tick even
+     * though those strings change only on track change. Cached per
+     * track; per-tick work is position maths only. The reference-stable
+     * chapter list also lets the chapter picker's Lazy list diff by
+     * identity instead of re-keying per tick.
+     */
+    private data class NormalisedTrackText(
+        val key: String,
+        val title: String,
+        val artist: String,
+        val album: String,
+        val description: String,
+        val genre: String,
+        val chapters: List<com.powermediaplayer.service.ChapterInfo>,
+        val chaptersSource: List<com.powermediaplayer.service.ChapterInfo>
+    )
+
+    private var normCache: NormalisedTrackText? = null
+
+    private fun normalisedFor(ps: PlayerState): NormalisedTrackText {
+        val key = "${ps.currentMediaUri}|${ps.title}"
+        val cached = normCache
+        // chaptersSource reference check catches late chapter injection
+        // (async fill on remote books swaps the list instance).
+        if (cached != null && cached.key == key && cached.chaptersSource === ps.chapters) {
+            return cached
+        }
+        return NormalisedTrackText(
+            key = key,
+            title = TextNormalizer.normalize(ps.title),
+            artist = TextNormalizer.normalize(ps.artist),
+            album = TextNormalizer.normalize(ps.album),
+            description = TextNormalizer.normalize(ps.description),
+            genre = TextNormalizer.normalize(ps.genre),
+            chapters = ps.chapters.map { it.copy(title = TextNormalizer.normalize(it.title)) },
+            chaptersSource = ps.chapters
+        ).also { normCache = it }
+    }
+
     private fun mapToUiState(playerState: PlayerState, sleepRemainingMs: Long): PlayerUiState {
         val hasMedia = playerState.mediaItemCount > 0
+        val norm = normalisedFor(playerState)
 
         // Chapter-relative track slider — when the file has chapters, the
         // track slider scrubs the CURRENT chapter (start..end) so the user
@@ -1188,13 +1230,14 @@ class PlayerViewModel @Inject constructor(
             hasMedia = hasMedia,
             // Normalize all human-visible strings to repair UTF-8/Latin-1
             // mojibake (e.g. "Philosopherâ€™s" → "Philosopher's") and
-            // collapse curly quotes / invisible formatting.
-            title = TextNormalizer.normalize(playerState.title).ifEmpty { "No media loaded" },
-            artist = TextNormalizer.normalize(playerState.artist),
-            album = TextNormalizer.normalize(playerState.album),
-            description = TextNormalizer.normalize(playerState.description),
+            // collapse curly quotes / invisible formatting. Cached per
+            // track (audit 3.2).
+            title = norm.title.ifEmpty { "No media loaded" },
+            artist = norm.artist,
+            album = norm.album,
+            description = norm.description,
             year = playerState.year,
-            genre = TextNormalizer.normalize(playerState.genre),
+            genre = norm.genre,
             artworkUri = playerState.artworkUri,
             hasCoverArt = playerState.hasCoverArt,
             currentPosition = displayedTrackPos,
@@ -1224,7 +1267,7 @@ class PlayerViewModel @Inject constructor(
             trackIndexDisplay = if (playerState.mediaItemCount > 1) {
                 "${playerState.currentMediaItemIndex + 1} / ${playerState.mediaItemCount}"
             } else "",
-            chapters = playerState.chapters.map { it.copy(title = TextNormalizer.normalize(it.title)) },
+            chapters = norm.chapters,
             currentChapterIndex = playerState.currentChapterIndex,
             hasChapters = playerState.hasChapters,
             controls = ControlsEnabledState(
