@@ -512,11 +512,26 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // Audit 5.6 — intensity arrives per drag movement; every DataStore
+    // edit rewrites + fsyncs the whole preferences file and wakes every
+    // collector. Debounce the write; the engine reads the flow, so the
+    // lights settle ≤300ms after the finger stops — imperceptible next
+    // to the bridge's own rate limiting.
+    private val hueIntensityPersist =
+        kotlinx.coroutines.flow.MutableStateFlow<Int?>(null)
+    private var hueIntensityPersistJob: kotlinx.coroutines.Job? = null
+
     fun setHueReactiveIntensity(v: Int) {
-        viewModelScope.launch {
-            com.powermediaplayer.diag.DiagLog.ui("hue reactiveIntensity=$v")
-            settingsDataStore.setHueReactiveIntensity(v)
+        if (hueIntensityPersistJob?.isActive != true) {
+            hueIntensityPersistJob = viewModelScope.launch {
+                hueIntensityPersist.filterNotNull().collectLatest { value ->
+                    kotlinx.coroutines.delay(300)
+                    com.powermediaplayer.diag.DiagLog.ui("hue reactiveIntensity=$value")
+                    settingsDataStore.setHueReactiveIntensity(value)
+                }
+            }
         }
+        hueIntensityPersist.value = v
     }
 
     fun setHueSyncOffsetMs(v: Int) {

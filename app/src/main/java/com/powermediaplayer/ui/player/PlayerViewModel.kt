@@ -1198,9 +1198,25 @@ class PlayerViewModel @Inject constructor(
         // §C7 slim — persist per-file speed override so the next time
         // the user opens this track it resumes at the chosen speed.
         // Speed 1.0 (default) clears any existing override.
+        // Audit 5.6 — the persist is debounced: a slider drag emits per
+        // movement and each DataStore edit rewrites + fsyncs the whole
+        // preferences file and wakes every collector. The player speed
+        // above still applies instantly; only the WRITE settles.
         val uri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
         if (!uri.isNullOrBlank()) {
-            viewModelScope.launch {
+            ensureSpeedPersister()
+            speedOverridePersist.value = uri to speed
+        }
+    }
+
+    private val speedOverridePersist =
+        kotlinx.coroutines.flow.MutableStateFlow<Pair<String, Float>?>(null)
+    private var speedPersistJob: kotlinx.coroutines.Job? = null
+    private fun ensureSpeedPersister() {
+        if (speedPersistJob?.isActive == true) return
+        speedPersistJob = viewModelScope.launch {
+            speedOverridePersist.filterNotNull().collectLatest { (uri, speed) ->
+                kotlinx.coroutines.delay(300)   // new drag emissions cancel the wait
                 if (kotlin.math.abs(speed - 1.0f) < 0.01f) {
                     settingsDataStore.clearSpeedOverride(uri)
                 } else {
