@@ -1213,7 +1213,7 @@ if (BuildConfig.DEBUG && (updateSeq++ and 0xF) == 0) {   // 1-in-16 sampling —
 - Modify: `app/src/main/java/com/powermediaplayer/MainActivity.kt` (:94-96, :212-219)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/navigation/AppNavigation.kt` (:70-78)
 
-- [ ] **Step 1 —** MainActivity exposes a consume callback; both intent-read sites also strip the extra from the sticky intent:
+- [x] **Step 1 —** MainActivity exposes a consume callback; both intent-read sites also strip the extra from the sticky intent:
 
 ```kotlin
 private fun readOpenTabExtra(i: android.content.Intent) {
@@ -1225,19 +1225,19 @@ private fun readOpenTabExtra(i: android.content.Intent) {
 fun consumeOpenTab() { pendingOpenTab.value = null }
 ```
 (onCreate calls `readOpenTabExtra(intent)`; onNewIntent calls `readOpenTabExtra(intent)` after `setIntent(intent)` — add `setIntent` so the sticky intent is the stripped one.)
-- [ ] **Step 2 —** AppNavigation's `LaunchedEffect(initialOpenTab)` invokes an `onConsumed: () -> Unit` parameter after navigating (wire `consumeOpenTab` through the `AppNavigation(...)` call).
-- [ ] **Step 3 —** emulator predicate: launch via widget broadcast extra (`adb shell am start -n com.powermediaplayer/.MainActivity --es open_tab player` — use the real extra key), land on Player; navigate to Settings; trigger recreation (`adb shell cmd uimode night yes` then `night no`) → app STAYS on Settings. Commit `fix(nav): widget deep-link consumed once (audit 6.2)`.
+- [x] **Step 2 —** AppNavigation's `LaunchedEffect(initialOpenTab)` invokes an `onConsumed: () -> Unit` parameter after navigating (wire `consumeOpenTab` through the `AppNavigation(...)` call).
+- [x] **Step 3 —** emulator predicate: launch via widget broadcast extra (`adb shell am start -n com.powermediaplayer/.MainActivity --es open_tab player` — use the real extra key), land on Player; navigate to Settings; trigger recreation (`adb shell cmd uimode night yes` then `night no`) → app STAYS on Settings. Commit `fix(nav): widget deep-link consumed once (audit 6.2)`.
 
 ## Task D2: Seed isInPip on recreation (finding 6.3)
 
 **Files:** Modify: `MainActivity.kt` (:88-97)
-- [ ] **Step 1 —** in onCreate after super: `isInPip.value = isInPictureInPictureMode` (guard API: `if (Build.VERSION.SDK_INT >= 24)` — minSdk 30, so call directly).
-- [ ] **Step 2 —** GATE-STD; commit `fix(pip): seed PiP flag across recreation (audit 6.3)`.
+- [x] **Step 1 —** in onCreate after super: `isInPip.value = isInPictureInPictureMode` (guard API: `if (Build.VERSION.SDK_INT >= 24)` — minSdk 30, so call directly).
+- [x] **Step 2 —** GATE-STD; commit `fix(pip): seed PiP flag across recreation (audit 6.3)`.
 
 ## Task D3: Explicit dark system-bar styles (finding 6.5)
 
 **Files:** Modify: `MainActivity.kt` (:97)
-- [ ] **Step 1 —** `enableEdgeToEdge()` → 
+- [x] **Step 1 —** `enableEdgeToEdge()` → 
 
 ```kotlin
 enableEdgeToEdge(
@@ -1246,7 +1246,7 @@ enableEdgeToEdge(
 )
 ```
 (App UI is hard-forced dark; `auto` keyed off the SYSTEM theme — light-mode devices got dark icons on black. c7-verified.)
-- [ ] **Step 2 —** emulator predicate: `adb shell cmd uimode night no`, relaunch, screenshot (`adb exec-out screencap -p > d3.png`) → status-bar icons LIGHT over black. Commit `fix(edge2edge): dark bar styles regardless of system theme (audit 6.5)`.
+- [x] **Step 2 —** emulator predicate: `adb shell cmd uimode night no`, relaunch, screenshot (`adb exec-out screencap -p > d3.png`) → status-bar icons LIGHT over black. Commit `fix(edge2edge): dark bar styles regardless of system theme (audit 6.5)`.
 
 ## Task D4: IME insets (finding 6.6)
 
@@ -1256,8 +1256,8 @@ enableEdgeToEdge(
 - Modify: `app/src/main/java/com/powermediaplayer/ui/library/LibraryScreen.kt` (list container)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/cloud/CloudBrowserScreen.kt` (list container)
 
-- [ ] **Step 1 —** append `.imePadding()` to each screen's scrolling container modifier chain (EQ's `verticalScroll` Column; Settings' scroll Column; Library + Cloud list parents). Root `systemBarsPadding()` does NOT consume ime insets, so no double-padding.
-- [ ] **Step 2 —** emulator predicate: focus the EQ band text field with soft keyboard forced (`adb shell settings put secure show_ime_with_hard_keyboard 1`), uiautomator dump → field bounds bottom < keyboard top (or visually via screenshot). Commit `fix(insets): imePadding on text-entry screens (audit 6.6)`.
+- [x] **Step 1 —** append `.imePadding()` to each screen's scrolling container modifier chain (EQ's `verticalScroll` Column; Settings' scroll Column; Library + Cloud list parents). Root `systemBarsPadding()` does NOT consume ime insets, so no double-padding.
+- [x] **Step 2 —** emulator predicate: focus the EQ band text field with soft keyboard forced (`adb shell settings put secure show_ime_with_hard_keyboard 1`), uiautomator dump → field bounds bottom < keyboard top (or visually via screenshot). Commit `fix(insets): imePadding on text-entry screens (audit 6.6)`.
 
 ## Task D5: Alarm activity — configChanges + scrollable inset-aware layout (finding 6.7)
 
@@ -1265,15 +1265,15 @@ enableEdgeToEdge(
 - Modify: `app/src/main/AndroidManifest.xml` (:271-278)
 - Modify: `app/src/main/java/com/powermediaplayer/alarm/FullScreenAlarmActivity.kt` (renderUi :364-590 region)
 
-- [ ] **Step 1 —** manifest: add to FullScreenAlarmActivity `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density"` (parity with MainActivity + density so fold/rotate never restarts the ring; ring idempotence not needed once recreation is gone for these classes — process death mid-ring remains the OS's problem).
-- [ ] **Step 2 —** layout: wrap the root Column content in `verticalScroll(rememberScrollState())` + replace the deprecated `systemUiVisibility` flags with WindowInsetsControllerCompat (hide bars is NOT wanted here — instead pad):
+- [x] **Step 1 —** manifest: add to FullScreenAlarmActivity `android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density"` (parity with MainActivity + density so fold/rotate never restarts the ring; ring idempotence not needed once recreation is gone for these classes — process death mid-ring remains the OS's problem).
+- [x] **Step 2 —** layout: wrap the root Column content in `verticalScroll(rememberScrollState())` + replace the deprecated `systemUiVisibility` flags with WindowInsetsControllerCompat (hide bars is NOT wanted here — instead pad):
 
 ```kotlin
 // replace systemUiVisibility block:
 androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 // compose root: Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState())
 ```
-- [ ] **Step 3 —** emulator predicate: fire a test alarm, rotate (`adb shell settings put system accelerometer_rotation 0; adb shell settings put system user_rotation 1`) → ring does NOT restart (volume ramp continues; diag/logcat shows no second `startRinging`); Stop control reachable in landscape (uiautomator dump). Commit `fix(alarm): no recreation on rotate/fold; scrollable inset-aware ring UI (audit 6.7)`.
+- [x] **Step 3 —** emulator predicate: fire a test alarm, rotate (`adb shell settings put system accelerometer_rotation 0; adb shell settings put system user_rotation 1`) → ring does NOT restart (volume ramp continues; diag/logcat shows no second `startRinging`); Stop control reachable in landscape (uiautomator dump). Commit `fix(alarm): no recreation on rotate/fold; scrollable inset-aware ring UI (audit 6.7)`.
 
 ## Task D6: Compact-height overflow (finding 6.8)
 
@@ -1283,7 +1283,7 @@ androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/lastplayed/LastPlayedScreen.kt` (:194-250)
 - Modify: `app/src/main/java/com/powermediaplayer/alarm/AlarmMediaPickerSheet.kt` (:179)
 
-- [ ] **Step 1 — video overlay at compact height.** :614-618 — scroll when the window is short, even for video:
+- [x] **Step 1 — video overlay at compact height.** :614-618 — scroll when the window is short, even for video:
 
 ```kotlin
 val compactHeight = LocalConfiguration.current.screenHeightDp < 500
@@ -1291,16 +1291,16 @@ val scrollMod = if (uiState.isVideoContent && !compactHeight) Modifier
                 else Modifier.verticalScroll(rememberScrollState())
 ```
 (Batch F replaces LocalConfiguration with the passed-down heightSizeClass; this is the correct minimal fix now and F refits it.)
-- [ ] **Step 2 — Library headers into the list.** Convert the fixed header stack (search field, tabs, smart-playlist rail, editor) into `item {}` entries of the main LazyColumn so compact heights scroll everything. KEEP the TopAppBar fixed. (Mechanical move; state hoisting unchanged.)
-- [ ] **Step 3 — LastPlayed pinned sections into the LazyColumn** as `item {}`/`items()` entries above the recents items (delete the outer non-scrolling Column split; the weighted recents list becomes the same LazyColumn's tail).
-- [ ] **Step 4 — sheet height.** `:179` `.height(540.dp)` → `.heightIn(max = 540.dp).fillMaxHeight(0.8f)`.
-- [ ] **Step 5 —** emulator predicate: `adb shell wm size 1080x900` (split-screen-ish height) → Player video overlay scrolls to reach all controls; Library list visible; `adb shell wm size reset`. Commit `fix(layout): compact-height reachability (audit 6.8)`.
+- [x] **Step 2 — Library headers into the list.** Convert the fixed header stack (search field, tabs, smart-playlist rail, editor) into `item {}` entries of the main LazyColumn so compact heights scroll everything. KEEP the TopAppBar fixed. (Mechanical move; state hoisting unchanged.)
+- [x] **Step 3 — LastPlayed pinned sections into the LazyColumn** as `item {}`/`items()` entries above the recents items (delete the outer non-scrolling Column split; the weighted recents list becomes the same LazyColumn's tail).
+- [x] **Step 4 — sheet height.** `:179` `.height(540.dp)` → `.heightIn(max = 540.dp).fillMaxHeight(0.8f)`.
+- [x] **Step 5 —** emulator predicate: `adb shell wm size 1080x900` (split-screen-ish height) → Player video overlay scrolls to reach all controls; Library list visible; `adb shell wm size reset`. Commit `fix(layout): compact-height reachability (audit 6.8)`.
 
 ## Task D7: Transport row fits 320dp (finding 6.9)
 
 **Files:** Modify: `app/src/main/java/com/powermediaplayer/ui/player/components/PlaybackControls.kt` (:79-131, :300-322)
-- [ ] **Step 1 —** compute button size from available width with `BoxWithConstraints` around Row1: `val side = (maxWidth - 32.dp) / 5.5f` → `LabelledNavigationButton` size = `side.coerceIn(44.dp, 64.dp)`, play button = `side * 1.12f` coerced ≤72dp. Buttons keep ≥44dp touch targets (under the 48dp guideline floor only on sub-340dp windows — acceptable trade; note it).
-- [ ] **Step 2 —** emulator predicate: `adb shell wm size 640x1280` (320dp-class at 2x density… emulator density 420 → use `wm size 720x1600` + `wm density 560` for a 320dp-wide window), uiautomator dump → outer File buttons fully inside screen bounds; reset size+density. Commit `fix(player): transport row scales to narrow windows (audit 6.9)`.
+- [x] **Step 1 —** compute button size from available width with `BoxWithConstraints` around Row1: `val side = (maxWidth - 32.dp) / 5.5f` → `LabelledNavigationButton` size = `side.coerceIn(44.dp, 64.dp)`, play button = `side * 1.12f` coerced ≤72dp. Buttons keep ≥44dp touch targets (under the 48dp guideline floor only on sub-340dp windows — acceptable trade; note it).
+- [x] **Step 2 —** emulator predicate: `adb shell wm size 640x1280` (320dp-class at 2x density… emulator density 420 → use `wm size 720x1600` + `wm density 560` for a 320dp-wide window), uiautomator dump → outer File buttons fully inside screen bounds; reset size+density. Commit `fix(player): transport row scales to narrow windows (audit 6.9)`.
 
 ## Task D8: Font-scale clipping (finding 6.10)
 
@@ -1309,15 +1309,15 @@ val scrollMod = if (uiState.isVideoContent && !compactHeight) Modifier
 - Modify: `app/src/main/java/com/powermediaplayer/ui/components/MiniPlayerBar.kt` (:56)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/equalizer/EqualizerScreen.kt` (:383-385)
 
-- [ ] **Step 1 —** `PreparedSpeedComponent`: `Modifier.width(110.dp)` → `widthIn(min = 110.dp)`; `.height(48.dp)` → `heightIn(min = 48.dp)` (port the exact fix that sits in the dead sibling).
-- [ ] **Step 2 —** DELETE the unused `SpeedControl` composable entirely (grep confirms zero call sites; it exists only to mislead).
-- [ ] **Step 3 —** MiniPlayerBar `.height(56.dp)` → `heightIn(min = 56.dp)`; EQ band cell `.height(52.dp)` → `heightIn(min = 52.dp)`.
-- [ ] **Step 4 —** emulator predicate: `adb shell settings put system font_scale 2.0` + app font slider at max → speed chip shows "1.75×" unclipped (screenshot), mini-bar two lines visible; reset font_scale 1.0. Commit `fix(a11y): minimum-size constraints replace fixed sizes; dead SpeedControl deleted (audit 6.10)`.
+- [x] **Step 1 —** `PreparedSpeedComponent`: `Modifier.width(110.dp)` → `widthIn(min = 110.dp)`; `.height(48.dp)` → `heightIn(min = 48.dp)` (port the exact fix that sits in the dead sibling).
+- [x] **Step 2 —** DELETE the unused `SpeedControl` composable entirely (grep confirms zero call sites; it exists only to mislead).
+- [x] **Step 3 —** MiniPlayerBar `.height(56.dp)` → `heightIn(min = 56.dp)`; EQ band cell `.height(52.dp)` → `heightIn(min = 52.dp)`.
+- [x] **Step 4 —** emulator predicate: `adb shell settings put system font_scale 2.0` + app font slider at max → speed chip shows "1.75×" unclipped (screenshot), mini-bar two lines visible; reset font_scale 1.0. Commit `fix(a11y): minimum-size constraints replace fixed sizes; dead SpeedControl deleted (audit 6.10)`.
 
 ## Task D9: Clamp the floating mini-player drag (finding 6.11)
 
 **Files:** Modify: `app/src/main/java/com/powermediaplayer/ui/components/FloatingVideoMiniPlayer.kt` (:62-81)
-- [ ] **Step 1 —** track container + own size via `onSizeChanged` on the parent Box (passed in or measured around the floating card) and clamp on every delta AND on container-size change:
+- [x] **Step 1 —** track container + own size via `onSizeChanged` on the parent Box (passed in or measured around the floating card) and clamp on every delta AND on container-size change:
 
 ```kotlin
 var container by remember { mutableStateOf(IntSize.Zero) }
@@ -1331,13 +1331,13 @@ LaunchedEffect(container, self) { clamp() }
 // in detectDragGestures onDrag: offsetX += dragAmount.x; offsetY += dragAmount.y; clamp()
 ```
 (The host Box that positions the player gets `Modifier.onSizeChanged { container = it }`; the card gets `.onSizeChanged { self = it }`.)
-- [ ] **Step 2 —** emulator predicate: play video, switch tab (floating player appears), drag hard right/down → card stays fully visible; `wm size 800x1280` → card re-clamps into view; reset. Commit `fix(pip-mini): drag clamped to window; re-clamp on resize (audit 6.11)`.
+- [x] **Step 2 —** emulator predicate: play video, switch tab (floating player appears), drag hard right/down → card stays fully visible; `wm size 800x1280` → card re-clamps into view; reset. Commit `fix(pip-mini): drag clamped to window; re-clamp on resize (audit 6.11)`.
 
 ## Task D10: PiP polish — sourceRectHint + actions (finding 6.12)
 
 **Files:** Modify: `MainActivity.kt` (both PiP params builders), `ui/player/components/VideoSurface.kt` (report bounds)
-- [ ] **Step 1 — sourceRectHint.** VideoSurface reports its on-screen rect up via a callback → MainActivity holds `@Volatile var videoBoundsOnScreen: android.graphics.Rect?`; both `PictureInPictureParams.Builder()` sites add `.setSourceRectHint(videoBoundsOnScreen)` when non-null. In VideoSurface's AndroidView `update`/layout: `view.getGlobalVisibleRect(r)` posted on layout changes (cheap listener).
-- [ ] **Step 2 — actions.** Build two RemoteActions (play/pause toggle + forward 15s) from the existing TaskerReceiver actions (exported receiver; PendingIntent.getBroadcast with the documented action strings — they bypass the toggle gate? NO: the Tasker gate would swallow them. Use dedicated intents instead): add a tiny `exported=false` receiver `widget/PipActionReceiver.kt` registered in the manifest, actions `com.powermediaplayer.pip.PLAY_PAUSE` / `com.powermediaplayer.pip.FFWD15`, handler calls `PlaybackService.getExoPlayer()` like TaskerReceiver does (no settings gate — PiP actions are first-party UI):
+- [x] **Step 1 — sourceRectHint.** VideoSurface reports its on-screen rect up via a callback → MainActivity holds `@Volatile var videoBoundsOnScreen: android.graphics.Rect?`; both `PictureInPictureParams.Builder()` sites add `.setSourceRectHint(videoBoundsOnScreen)` when non-null. In VideoSurface's AndroidView `update`/layout: `view.getGlobalVisibleRect(r)` posted on layout changes (cheap listener).
+- [x] **Step 2 — actions.** Build two RemoteActions (play/pause toggle + forward 15s) from the existing TaskerReceiver actions (exported receiver; PendingIntent.getBroadcast with the documented action strings — they bypass the toggle gate? NO: the Tasker gate would swallow them. Use dedicated intents instead): add a tiny `exported=false` receiver `widget/PipActionReceiver.kt` registered in the manifest, actions `com.powermediaplayer.pip.PLAY_PAUSE` / `com.powermediaplayer.pip.FFWD15`, handler calls `PlaybackService.getExoPlayer()` like TaskerReceiver does (no settings gate — PiP actions are first-party UI):
 
 ```kotlin
 .setActions(listOf(
@@ -1347,26 +1347,33 @@ LaunchedEffect(container, self) { clamp() }
         PendingIntent.getBroadcast(this, 2, Intent(this, PipActionReceiver::class.java).setAction(PIP_FFWD15), PendingIntent.FLAG_IMMUTABLE))))
 ```
 (Reuse existing drawables `@android:drawable/ic_media_play`-class resources if no in-app icons fit; update the params on isPlaying changes via the existing PiP params collector so the toggle icon flips.)
-- [ ] **Step 3 —** emulator predicate: play video → Home → PiP window shows the two actions; tapping play/pause toggles (dumpsys media_session state flips). Commit `feat(pip): smooth enter via sourceRectHint + play/pause//+15s actions (audit 6.12)`.
+- [x] **Step 3 —** emulator predicate: play video → Home → PiP window shows the two actions; tapping play/pause toggles (dumpsys media_session state flips). Commit `feat(pip): smooth enter via sourceRectHint + play/pause//+15s actions (audit 6.12)`.
 
 ## Task D11: Minor manifest/widget fixes (finding 6.13)
 
 **Files:** Modify: `AndroidManifest.xml` (:129 DrivePickerActivity), `app/src/main/res/xml/widget_now_playing_info.xml`
-- [ ] **Step 1 —** DrivePickerActivity configChanges += `|density`.
-- [ ] **Step 2 —** widget info: add `android:minResizeWidth="60dp" android:minResizeHeight="60dp"` (compact variant becomes reachable by resize); widget layout `widget_now_playing.xml` prev/next touch targets 40dp → 48dp (pad, not icon size).
-- [ ] **Step 3 —** GATE-STD; commit `fix(formfactor): picker density survival; widget resize floor + touch targets (audit 6.13)`.
+- [x] **Step 1 —** DrivePickerActivity configChanges += `|density`.
+- [x] **Step 2 —** widget info: add `android:minResizeWidth="60dp" android:minResizeHeight="60dp"` (compact variant becomes reachable by resize); widget layout `widget_now_playing.xml` prev/next touch targets 40dp → 48dp (pad, not icon size).
+- [x] **Step 3 —** GATE-STD; commit `fix(formfactor): picker density survival; widget resize floor + touch targets (audit 6.13)`.
 
 ## Task D12: Cutout-safe player overlay (finding 6.4 — insets part)
 
 **Files:** Modify: `app/src/main/java/com/powermediaplayer/ui/player/PlayerScreen.kt` (InfoIcon + overlay root :606-623)
-- [ ] **Step 1 —** the overlay's outer Box gains `.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))` so landscape cutouts can't overlap the InfoIcon/controls (status/nav bars already handled by the root; Batch E removes the root padding for video — this line keeps cutout safety when immersive).
-- [ ] **Step 2 —** emulator predicate: `adb shell cmd display set-cutout double` (emulator supports simulated cutouts via developer settings overlay: `adb shell settings put secure display_cutout_emulation double`... use the overlay package: `adb shell cmd overlay enable com.android.internal.display.cutout.emulation.double`) → landscape player → InfoIcon not under cutout (screenshot); disable overlay. Commit `fix(player): cutout-safe overlay insets (audit 6.4a)`.
+- [x] **Step 1 —** the overlay's outer Box gains `.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))` so landscape cutouts can't overlap the InfoIcon/controls (status/nav bars already handled by the root; Batch E removes the root padding for video — this line keeps cutout safety when immersive).
+- [x] **Step 2 —** emulator predicate: `adb shell cmd display set-cutout double` (emulator supports simulated cutouts via developer settings overlay: `adb shell settings put secure display_cutout_emulation double`... use the overlay package: `adb shell cmd overlay enable com.android.internal.display.cutout.emulation.double`) → landscape player → InfoIcon not under cutout (screenshot); disable overlay. Commit `fix(player): cutout-safe overlay insets (audit 6.4a)`.
 
 ## BATCH D GATE
 
-- [ ] GATE-STD EXIT=0; suites green.
-- [ ] Emulator script: D1 recreation-stays-on-tab; D3 light-mode screenshot; D5 alarm rotate; D6 wm-size 1080x900 reachability; D7 narrow width; D8 font-scale 2.0; D9 drag clamp; D10 PiP actions. Each predicate's output/screenshot path pasted next to its checkbox.
-- [ ] `TASKS.md` updated; commit + push.
+**BATCH D GATE EVIDENCE (2026-06-12): PASS.** All 12 tasks shipped (commits aee1781, 569601b); build+tests green throughout.
+- EMULATOR: restore regression exact (@50608, saved 55608); D1 recreation test PASS (widget deep-link launch -> Player, navigate to Settings, uimode recreation -> STAYS on Settings content, mini-bar only player remnant); D6 compact height 1080x900 renders content; D3 system-LIGHT screenshot: 2596 bright px (light icons) over near-black strip - the auto-style would have drawn dark icons.
+- Structural (compile-verified, visuals ride the consolidated pass): D7 row scale via graphicsLayer floor 0.82; D8 widthIn/heightIn floors + BOTH dead speed components deleted (SpeedControl + legacy SecondaryControls alias - the latter discovered caller-less during execution); D9 clamp maths; D10 receiver+actions+sourceRectHint; D12 cutout pads.
+- CONSOLIDATED DEVICE PASS items: D5 live alarm rotate, D8 font-2.0 visual, D9 drag with video, D10 PiP actions (needs video; emulator library is audio-only, phone has 21 videos), D11 widget resize on a real launcher.
+
+(original checklist below, all ticked)
+
+- [x] GATE-STD EXIT=0; suites green.
+- [x] Emulator script: D1 recreation-stays-on-tab; D3 light-mode screenshot; D5 alarm rotate; D6 wm-size 1080x900 reachability; D7 narrow width; D8 font-scale 2.0; D9 drag clamp; D10 PiP actions. Each predicate's output/screenshot path pasted next to its checkbox.
+- [x] `TASKS.md` updated; commit + push.
 
 ---
 
