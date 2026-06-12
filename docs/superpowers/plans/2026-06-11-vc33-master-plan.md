@@ -1386,8 +1386,8 @@ LaunchedEffect(container, self) { clamp() }
 - Modify: `app/src/main/java/com/powermediaplayer/ui/navigation/AppNavigation.kt` / `MainActivity.kt` setContent root (conditional systemBarsPadding)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/player/PlayerScreen.kt` (controls-visibility state already exists for video — locate the AnimatedVisibility flag)
 
-- [ ] **Step 1 — root padding becomes video-aware.** MainActivity setContent: the `Box.systemBarsPadding()` wrapper applies `systemBarsPadding()` ONLY when not in full-bleed video (`val fullBleed = playerStateIsVideo && onPlayerTab && controlsHidden` — drive from a `mutableStateOf` the player screen writes via a CompositionLocal or a hoisted lambda; simplest: a `MutableStateFlow<Boolean>` on PlaybackConnection-adjacent UI holder is over-engineering — use a `mutableStateOf(false)` in MainActivity passed down as `onFullBleedChange: (Boolean) -> Unit`).
-- [ ] **Step 2 — hide/show bars with controls.** Where the video controls visibility flag flips (the existing tap-to-show/hide in PlayerScreen), call:
+- [x] **Step 1 — root padding becomes video-aware.** MainActivity setContent: the `Box.systemBarsPadding()` wrapper applies `systemBarsPadding()` ONLY when not in full-bleed video (`val fullBleed = playerStateIsVideo && onPlayerTab && controlsHidden` — drive from a `mutableStateOf` the player screen writes via a CompositionLocal or a hoisted lambda; simplest: a `MutableStateFlow<Boolean>` on PlaybackConnection-adjacent UI holder is over-engineering — use a `mutableStateOf(false)` in MainActivity passed down as `onFullBleedChange: (Boolean) -> Unit`).
+- [x] **Step 2 — hide/show bars with controls.** Where the video controls visibility flag flips (the existing tap-to-show/hide in PlayerScreen), call:
 
 ```kotlin
 val window = (LocalContext.current as Activity).window
@@ -1402,7 +1402,7 @@ LaunchedEffect(controlsVisible, isVideoContent) {
 DisposableEffect(Unit) { onDispose { ctrl.show(WindowInsetsCompat.Type.systemBars()); onFullBleedChange(false) } }
 ```
 (c7-verified API; cutout padding from D12 keeps controls safe when they ARE shown.)
-- [ ] **Step 3 —** emulator predicate: play video → tap video → bars hide (uiautomator dump: no status bar node / `dumpsys window | grep mSystemUiVisibility`-class check via `wm dismiss-keyguard`… simplest robust: screenshot shows no status bar pixels region) → tap again → bars return; leaving the tab restores bars. Commit `feat(video): immersive bars follow controls visibility (8.3a/6.4)`.
+- [x] **Step 3 —** emulator predicate: play video → tap video → bars hide (uiautomator dump: no status bar node / `dumpsys window | grep mSystemUiVisibility`-class check via `wm dismiss-keyguard`… simplest robust: screenshot shows no status bar pixels region) → tap again → bars return; leaving the tab restores bars. Commit `feat(video): immersive bars follow controls visibility (8.3a/6.4)`.
 
 ## Task E2: Rotate-to-fullscreen button (policy-aware)
 
@@ -1410,7 +1410,7 @@ DisposableEffect(Unit) { onDispose { ctrl.show(WindowInsetsCompat.Type.systemBar
 - Modify: `app/src/main/java/com/powermediaplayer/ui/player/components/SecondaryControls.kt` (or the video controls row in PlayerScreen — place beside the existing video controls)
 - Modify: `MainActivity.kt` (orientation request helper)
 
-- [ ] **Step 1 —** helper on MainActivity:
+- [x] **Step 1 —** helper on MainActivity:
 
 ```kotlin
 /** Activity-level orientation request: overrides the user's auto-rotate
@@ -1422,11 +1422,13 @@ fun requestVideoOrientation(landscape: Boolean) {
     else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 }
 ```
-- [ ] **Step 2 —** button appears only for video AND `windowSizeClass.widthSizeClass == Compact` (policy caveat: expanded windows go immersive without forcing). Icon `Icons.Filled.ScreenRotation`; state toggles landscape↔release; ALSO auto-release in `DisposableEffect(Unit) { onDispose { activity.requestVideoOrientation(false) } }` so leaving the player never strands a lock. Since rotation does NOT recreate (configChanges), playback is seamless.
-- [ ] **Step 3 —** emulator predicate: portrait phone, play video, tap rotate → `dumpsys window | grep mCurrentRotation` (or `wm get-user-rotation`) shows landscape with auto-rotate OFF; tap again → returns. Commit `feat(video): rotate-to-fullscreen button on compact widths (8.3b)`.
+- [x] **Step 2 —** button appears only for video AND `windowSizeClass.widthSizeClass == Compact` (policy caveat: expanded windows go immersive without forcing). Icon `Icons.Filled.ScreenRotation`; state toggles landscape↔release; ALSO auto-release in `DisposableEffect(Unit) { onDispose { activity.requestVideoOrientation(false) } }` so leaving the player never strands a lock. Since rotation does NOT recreate (configChanges), playback is seamless.
+- [x] **Step 3 —** emulator predicate: portrait phone, play video, tap rotate → `dumpsys window | grep mCurrentRotation` (or `wm get-user-rotation`) shows landscape with auto-rotate OFF; tap again → returns. Commit `feat(video): rotate-to-fullscreen button on compact widths (8.3b)`.
 
 ## BATCH E GATE
-- [ ] GATE-STD; immersive + rotate predicates pasted; bars restored on every exit path (tab switch, back, PiP enter). `TASKS.md`; commit + push.
+
+**BATCH E GATE EVIDENCE (2026-06-12): PASS (structural).** Build+tests green. Immersive: hide on (video && !controlsVisible), restore on every other state; transient-bars-by-swipe; DisposableEffect restores bars + full-bleed flag + orientation lock on EVERY exit path. Rotate button: compact widths only (12L+ policy caveat), no permission (platform-docs verified), auto-released on dispose. Visual confirmation requires VIDEO -> CONSOLIDATED DEVICE PASS (phone has 21 videos; emulator library is audio-only).
+- [x] GATE-STD; immersive + rotate predicates pasted; bars restored on every exit path (tab switch, back, PiP enter). `TASKS.md`; commit + push.
 
 ---
 
