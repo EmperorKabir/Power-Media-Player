@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -572,7 +575,7 @@ fun LibraryScreen(
                 // Auto-scroll to top whenever the sort mode (or active tab)
                 // changes — otherwise the list keeps its previous scroll
                 // offset which is disorienting when items have re-ordered.
-                val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                val listState = rememberLazyGridState()
                 LaunchedEffect(uiState.sortMode, uiState.selectedTab) {
                     listState.scrollToItem(0)
                 }
@@ -598,7 +601,12 @@ fun LibraryScreen(
                         files.forEachIndexed { i, f -> put(f.id, i) }
                     }
                 }
-                LazyColumn(
+                // Audit 8.1 (F3) — LazyVerticalGrid with Adaptive(360dp) IS the
+                // width switch: phones resolve to one column (identical to the
+                // previous LazyColumn), tablets/unfolded foldables get 2-3.
+                // One code path; headers span the full line.
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 360.dp),
                     state = listState,
                     modifier = Modifier.fillMaxSize().imePadding(),   // audit 6.6
                     contentPadding = PaddingValues(vertical = 8.dp)
@@ -607,7 +615,7 @@ fun LibraryScreen(
                     // as fixed header siblings they starved the file list
                     // at compact window heights. (Both need media files to
                     // be useful, so the has-files branch is the right home.)
-                    item(key = "smart_blocks") {
+                    item(key = "smart_blocks", span = { GridItemSpan(maxLineSpan) }) {
                         Column {
                     // §C6 — saved smart-playlist rail. Tap a chip to play the
                     // resolved track list. Empty state hidden so this never shows
@@ -627,7 +635,7 @@ fun LibraryScreen(
                         }
                     }
                     if (favouriteFiles.isNotEmpty()) {
-                        item(key = "fav_header") {
+                        item(key = "fav_header", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = "Favourite files (${favouriteFiles.size})",
                                 style = MaterialTheme.typography.labelMedium,
@@ -665,7 +673,7 @@ fun LibraryScreen(
                                 onToggleFavorite = { viewModel.toggleFavorite(file.uri) }
                             )
                         }
-                        item(key = "fav_divider") {
+                        item(key = "fav_divider", span = { GridItemSpan(maxLineSpan) }) {
                             HorizontalDivider(
                                 color = SurfaceElevated,
                                 modifier = Modifier.padding(vertical = 8.dp)
