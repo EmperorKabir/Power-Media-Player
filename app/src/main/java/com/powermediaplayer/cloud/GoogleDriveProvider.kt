@@ -288,11 +288,11 @@ class GoogleDriveProvider @Inject constructor(
                     }
                     return@withContext Result.success(items)
                 }
-                val docFile = resolveFolder(folderId)
+                val folderUri = runCatching { Uri.parse(folderId) }.getOrNull()
                     ?: return@withContext Result.failure(
                         IllegalStateException("Cannot open folder (permission revoked?)")
                     )
-                val items = docFile.listFiles()
+                val items = listChildrenFast(folderUri)
                     .mapNotNull { child -> toCloudItem(child, parentId = folderId) }
                     .sortedWith(compareByDescending<CloudMediaItem> { it.isFolder }
                         .thenBy { it.name.lowercase() })
@@ -315,11 +315,19 @@ class GoogleDriveProvider @Inject constructor(
                 val needle = query.lowercase()
                 val roots = settingsDataStore.drivePickedRoots.first()
                 val out = mutableListOf<CloudMediaItem>()
+                // visited[0] caps TRAVERSAL, not just matches — the old
+                // walk kept crawling a 50k-node tree when nothing matched.
+                val visited = intArrayOf(0)
                 for (root in roots) {
-                    val rootDoc = DocumentFile.fromTreeUri(context, Uri.parse(root.treeUri))
-                        ?: continue
-                    walkForSearch(rootDoc, needle, out, parentTreeUri = root.treeUri)
-                    if (out.size >= 200) break
+                    val rootUri = runCatching { Uri.parse(root.treeUri) }.getOrNull() ?: continue
+                    walkForSearch(rootUri, needle, out, parentTreeUri = root.treeUri, visited = visited)
+                    if (out.size >= 200 || visited[0] >= SEARCH_TRAVERSAL_CAP) break
+                }
+                if (visited[0] >= SEARCH_TRAVERSAL_CAP) {
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "Drive search stopped at $SEARCH_TRAVERSAL_CAP nodes — tree larger than the walk budget"
+                    )
                 }
                 Result.success(out.take(200))
             } catch (e: Exception) {
@@ -328,21 +336,21 @@ class GoogleDriveProvider @Inject constructor(
         }
 
     private fun walkForSearch(
-        node: DocumentFile,
+        folderUri: Uri,
         needle: String,
         out: MutableList<CloudMediaItem>,
-        parentTreeUri: String
+        parentTreeUri: String,
+        visited: IntArray
     ) {
-        if (out.size >= 200) return
-        for (child in node.listFiles()) {
-            if (out.size >= 200) return
+        if (out.size >= 200 || visited[0] >= SEARCH_TRAVERSAL_CAP) return
+        for (child in listChildrenFast(folderUri)) {
+            if (out.size >= 200 || visited[0] >= SEARCH_TRAVERSAL_CAP) return
+            visited[0]++
             if (child.isDirectory) {
-                walkForSearch(child, needle, out, parentTreeUri)
+                walkForSearch(child.documentUri, needle, out, parentTreeUri, visited)
             } else {
-                val name = child.name.orEmpty()
-                val mime = child.type.orEmpty()
-                if (!isPlayable(mime, name)) continue
-                if (!name.lowercase().contains(needle)) continue
+                if (!isPlayable(child.mime, child.name)) continue
+                if (!child.name.lowercase().contains(needle)) continue
                 toCloudItem(child, parentId = parentTreeUri)?.let { out.add(it) }
             }
         }
@@ -460,26 +468,67 @@ class GoogleDriveProvider @Inject constructor(
 
     // ── Helpers ─────────────────────────────────────────────────
 
-    private fun resolveFolder(folderId: String): DocumentFile? {
-        val uri = runCatching { Uri.parse(folderId) }.getOrNull() ?: return null
-        // A picked root URI (tree-only) — use fromTreeUri.
-        // A nested folder URI that already includes /document/ — use the
-        // tree's root and walk via children. DocumentFile.fromTreeUri
-        // accepts both forms in practice on AOSP since 23+.
-        return DocumentFile.fromTreeUri(context, uri)
+    private data class ChildDoc(
+        val documentUri: Uri,
+        val name: String,
+        val mime: String,
+        val size: Long
+    ) {
+        val isDirectory: Boolean
+            get() = mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR
     }
 
-    private fun toCloudItem(file: DocumentFile, parentId: String?): CloudMediaItem? {
-        val name = file.name ?: return null
-        val mime = file.type.orEmpty()
-        val isFolder = file.isDirectory
-        if (!isFolder && !isPlayable(mime, name)) return null
+    /**
+     * One ContentResolver query per folder instead of 3-4 binder round
+     * trips per child via DocumentFile (each .name/.type/.length is its
+     * own provider query on TreeDocumentFile — a 300-file Drive folder
+     * cost 1200+ provider calls, each potentially a network hop on cloud
+     * DocumentsProviders).
+     */
+    private fun listChildrenFast(folderUri: Uri): List<ChildDoc> {
+        val parentDocId =
+            if (android.provider.DocumentsContract.isDocumentUri(context, folderUri)) {
+                android.provider.DocumentsContract.getDocumentId(folderUri)
+            } else {
+                android.provider.DocumentsContract.getTreeDocumentId(folderUri)
+            }
+        val childrenUri = android.provider.DocumentsContract
+            .buildChildDocumentsUriUsingTree(folderUri, parentDocId)
+        val out = mutableListOf<ChildDoc>()
+        context.contentResolver.query(
+            childrenUri,
+            arrayOf(
+                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                android.provider.DocumentsContract.Document.COLUMN_SIZE
+            ),
+            null, null, null
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val docId = c.getString(0) ?: continue
+                out += ChildDoc(
+                    documentUri = android.provider.DocumentsContract
+                        .buildDocumentUriUsingTree(folderUri, docId),
+                    name = c.getString(1).orEmpty(),
+                    mime = c.getString(2).orEmpty(),
+                    size = if (c.isNull(3)) 0L else c.getLong(3)
+                )
+            }
+        }
+        return out
+    }
+
+    private fun toCloudItem(child: ChildDoc, parentId: String?): CloudMediaItem? {
+        if (child.name.isEmpty()) return null
+        val isFolder = child.isDirectory
+        if (!isFolder && !isPlayable(child.mime, child.name)) return null
         return CloudMediaItem(
-            id = file.uri.toString(),
-            name = name,
-            mimeType = if (isFolder) MIME_FOLDER else mime,
-            size = if (isFolder) 0L else file.length().coerceAtLeast(0L),
-            downloadUrl = file.uri.toString(),
+            id = child.documentUri.toString(),
+            name = child.name,
+            mimeType = if (isFolder) MIME_FOLDER else child.mime,
+            size = if (isFolder) 0L else child.size.coerceAtLeast(0L),
+            downloadUrl = child.documentUri.toString(),
             sourceProvider = CloudProviderType.GOOGLE_DRIVE,
             isFolder = isFolder,
             parentId = parentId,
@@ -501,6 +550,8 @@ class GoogleDriveProvider @Inject constructor(
 
     companion object {
         private const val MIME_FOLDER = "vnd.android.document/directory"
+        /** Search walks at most this many tree nodes per query. */
+        private const val SEARCH_TRAVERSAL_CAP = 5_000
         private val PLAYABLE_EXTENSIONS = setOf(
             // Audio
             "mp3", "flac", "ogg", "oga", "opus", "wav", "wave", "aac",
