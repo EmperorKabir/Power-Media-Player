@@ -72,7 +72,11 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
         val ids = mgr.getAppWidgetIds(
             ComponentName(context, NowPlayingWidgetProvider::class.java)
         )
-        for (id in ids) mgr.updateAppWidget(id, build(context))
+        if (ids.isEmpty()) return
+        // Build ONCE — the old per-id build re-decoded the album art for
+        // every placed widget instance (audit 3.10).
+        val views = build(context)
+        for (id in ids) mgr.updateAppWidget(id, views)
     }
 
     private fun build(context: Context): RemoteViews {
@@ -119,9 +123,7 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
             // back to the layered placeholder drawable.
             val art = item?.mediaMetadata?.artworkData
             if (art != null && art.isNotEmpty()) {
-                val bmp = runCatching {
-                    android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size)
-                }.getOrNull()
+                val bmp = scaledArt(item.mediaId.orEmpty(), art)
                 if (bmp != null) {
                     views.setImageViewBitmap(R.id.widget_art, bmp)
                 } else {
@@ -206,6 +208,28 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
                 Intent(context, NowPlayingWidgetProvider::class.java)
                     .setAction(ACTION_REFRESH)
             )
+        }
+
+        // One scaled decode per track (audit 3.10): the widget cell is
+        // ~64dp; full-res embedded covers (often 1000px+) were decoded
+        // on the main thread per refresh and shipped whole across the
+        // RemoteViews binder (TransactionTooLarge risk).
+        @Volatile private var artCacheKey: String? = null
+        @Volatile private var artCacheBmp: android.graphics.Bitmap? = null
+
+        internal fun scaledArt(mediaId: String, art: ByteArray): android.graphics.Bitmap? {
+            if (mediaId.isNotEmpty() && mediaId == artCacheKey) return artCacheBmp
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size, bounds)
+            val target = 192 // px - 64dp cell at up to 3x density
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= target) sample *= 2
+            val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+            return runCatching {
+                android.graphics.BitmapFactory.decodeByteArray(art, 0, art.size, opts)
+            }.getOrNull().also {
+                if (mediaId.isNotEmpty()) { artCacheKey = mediaId; artCacheBmp = it }
+            }
         }
     }
 }

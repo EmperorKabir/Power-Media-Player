@@ -87,8 +87,9 @@ fun CastSwitcherButton(
     // open.
     val routes: SnapshotStateList<MediaRouter.RouteInfo> = remember { mutableStateListOf() }
     var selectedRouteId by remember { mutableStateOf(router.selectedRoute.id) }
-    DisposableEffect(Unit) {
-        val cb = object : MediaRouter.Callback() {
+    var sheetOpen by remember { mutableStateOf(false) }
+    val cb = remember {
+        object : MediaRouter.Callback() {
             private fun refresh() {
                 routes.clear()
                 routes.addAll(
@@ -108,13 +109,23 @@ fun CastSwitcherButton(
                 r: MediaRouter, route: MediaRouter.RouteInfo, reason: Int
             ) = refresh()
         }
-        router.addCallback(selector, cb, MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY)
+    }
+    // Audit 3.9 — REQUEST_DISCOVERY keeps Wi-Fi mDNS scanning alive for
+    // the button's whole lifetime (i.e. whenever the Player tab shows).
+    // Passive registration is enough for the icon's connected state;
+    // active scanning runs only while the route sheet is open. Re-adding
+    // the same callback updates its flags in place.
+    DisposableEffect(sheetOpen) {
+        val flags = if (sheetOpen) MediaRouter.CALLBACK_FLAG_REQUEST_DISCOVERY else 0
+        router.addCallback(selector, cb, flags)
         // Seed with the current state.
         cb.onRouteAdded(router, router.selectedRoute)
+        onDispose { }
+    }
+    DisposableEffect(Unit) {
         onDispose { router.removeCallback(cb) }
     }
     val isCasting = !router.selectedRoute.isDefault
-    var sheetOpen by remember { mutableStateOf(false) }
 
     IconButton(
         onClick = { sheetOpen = true },

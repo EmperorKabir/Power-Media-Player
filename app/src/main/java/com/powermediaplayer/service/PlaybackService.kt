@@ -1444,6 +1444,17 @@ class PlaybackService : MediaSessionService() {
     // ramp down. State is recomputed every 100 ms (cheap; only one
     // float multiply + a single setVolume() call when changing).
     private var crossfadeJob: kotlinx.coroutines.Job? = null
+
+    // Audit 3.10 - play/pause + metadata events arrive in bursts; one
+    // widget rebuild per 250ms quiet period instead of one per event.
+    private var widgetRefreshJob: kotlinx.coroutines.Job? = null
+    private fun scheduleWidgetRefresh() {
+        widgetRefreshJob?.cancel()
+        widgetRefreshJob = serviceScope.launch {
+            kotlinx.coroutines.delay(250)
+            com.powermediaplayer.widget.NowPlayingWidgetProvider.refresh(applicationContext)
+        }
+    }
     @Volatile private var trackStartTimestampMs: Long = 0L
 
     /**
@@ -1609,8 +1620,7 @@ class PlaybackService : MediaSessionService() {
                 // MediaOverrideRepository can replace its 750ms poll.
                 currentMediaIdFlow.value = mediaItem?.mediaId.orEmpty()
                 // Phase 8 — refresh home-screen widget on track change.
-                com.powermediaplayer.widget.NowPlayingWidgetProvider
-                    .refresh(applicationContext)
+                scheduleWidgetRefresh()
                 // Union of both timelines: during cast the live queue sits
                 // in CastPlayer while the local player still holds the
                 // originals needed for switch-back.
@@ -1631,8 +1641,7 @@ class PlaybackService : MediaSessionService() {
                 // ramping from where its volume sat.
                 if (isPlaying) crossfadeController.resumeAll()
                 else crossfadeController.pauseAll()
-                com.powermediaplayer.widget.NowPlayingWidgetProvider
-                    .refresh(applicationContext)
+                scheduleWidgetRefresh()
             }
 
             override fun onMediaMetadataChanged(
@@ -1655,8 +1664,7 @@ class PlaybackService : MediaSessionService() {
                 // Widget art arrives AFTER onMediaItemTransition for
                 // most files (ExoPlayer parses tags asynchronously).
                 // Refresh again here so the embedded artwork shows up.
-                com.powermediaplayer.widget.NowPlayingWidgetProvider
-                    .refresh(applicationContext)
+                scheduleWidgetRefresh()
             }
         })
 
