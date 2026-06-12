@@ -16,7 +16,14 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+/** Process-lifetime coroutine scope for playback-session side effects
+ *  (PlaybackSessionCoordinator) — never cancelled by design. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope
 
 /**
  * Hilt module providing application-scoped singletons:
@@ -25,6 +32,15 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    @Provides
+    @Singleton
+    @ApplicationScope
+    fun provideApplicationScope(): kotlinx.coroutines.CoroutineScope =
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() +
+                kotlinx.coroutines.Dispatchers.Main.immediate
+        )
 
     @Provides
     @Singleton

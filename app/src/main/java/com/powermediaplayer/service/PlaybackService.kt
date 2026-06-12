@@ -340,6 +340,34 @@ class PlaybackService : MediaSessionService() {
             applyMixedVolume()
         }
 
+        // ── Chain-gain composition (audit 3.6 / T264 split) ─────────
+        // The user's boost slider and ReplayGain's positive gain are
+        // independent channels composed additively into ONE chain-gain
+        // write. They lived as PlayerViewModel companion fields with a
+        // per-VM applyLoudness; the single-writer home is here, next to
+        // the chain they drive. RG-off zeroes ONLY its own channel.
+        @Volatile private var userBoostMbFlag: Int = 0
+        @Volatile private var rgBoostMbFlag: Int = 0
+
+        fun setUserBoostMb(mb: Int) {
+            userBoostMbFlag = mb.coerceIn(0, 2000)
+            applyChainGain()
+        }
+
+        fun setReplayGainBoostMb(mb: Int) {
+            rgBoostMbFlag = mb.coerceIn(0, 1500)
+            applyChainGain()
+        }
+
+        private fun applyChainGain() {
+            val total = (userBoostMbFlag + rgBoostMbFlag).coerceAtMost(3000)
+            setChainGain(total)
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "Loudness gain=${total}mB (user=$userBoostMbFlag rg=$rgBoostMbFlag) via chain"
+            )
+        }
+
         /** Internal — set by the crossfade controller. */
         internal fun setCrossfadeFactor(factor: Float) {
             crossfadeFactor = factor.coerceIn(0.0f, 1.0f)

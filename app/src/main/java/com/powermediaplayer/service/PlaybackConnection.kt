@@ -259,7 +259,7 @@ class PlaybackConnection @Inject constructor(
                     // PlayerViewModel init (or the next Activity
                     // onCreate -> connect()) can re-attempt restore
                     // against the fresh service instance.
-                    com.powermediaplayer.ui.player.PlayerViewModel.resetColdStartGuard()
+                    com.powermediaplayer.playback.PlaybackSessionCoordinator.resetColdStartGuard()
                     // Local-side cleanup so the UI flips to the
                     // disconnected state instead of acting on a stale
                     // reference. The Activity's next onResume call

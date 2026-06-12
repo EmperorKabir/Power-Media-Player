@@ -57,6 +57,9 @@ class MainActivity : FragmentActivity() {
     lateinit var playbackConnection: PlaybackConnection
 
     @Inject
+    lateinit var sessionCoordinator: com.powermediaplayer.playback.PlaybackSessionCoordinator
+
+    @Inject
     lateinit var settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore
 
     @Inject
@@ -97,6 +100,9 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         MainActivityHolder.set(this)
         playbackConnection.connect()
+        // Playback-session side effects run exactly once per process
+        // (audit 3.1/8.4) — idempotent ignition, not lifecycle-bound.
+        sessionCoordinator.start()
 
         // "Auto-play on launch", status-bar case: closing the app with
         // back/swipe leaves the playback service alive with the item
