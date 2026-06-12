@@ -181,6 +181,15 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3-window-size-class")
+    // ── Adaptive layouts (8.1/8.2) ──────────────────────────────
+    // Navigation suite (bar↔rail by width) is BOM-managed; the pane/
+    // posture artifacts live in their own group. Posture (isTabletop,
+    // hinge bounds) wraps androidx.window — no hand-rolled
+    // WindowInfoTracker needed.
+    implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
+    implementation("androidx.compose.material3.adaptive:adaptive:1.1.0")
+    implementation("androidx.compose.material3.adaptive:adaptive-layout:1.1.0")
+    implementation("androidx.compose.material3.adaptive:adaptive-navigation:1.1.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
