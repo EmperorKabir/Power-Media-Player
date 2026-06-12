@@ -399,6 +399,23 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackService.onCreate START")
 
+        // Audit 2.1 — warm the DataStore with ONE read. The four seed
+        // reads below each paid a sequential cold file read on the main
+        // thread (worst case ~1.2s of service-start budget). DataStore
+        // serves from memory once the first read lands, so after this
+        // block their .first() calls are effectively free. Their own
+        // timeouts/defaults stay as the per-value safety nets.
+        val warmMs = android.os.SystemClock.uptimeMillis()
+        runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(600) { settingsDataStore.snapshot() }
+            }
+        }
+        com.powermediaplayer.diag.DiagLog.perf(
+            "service.prefsWarmup",
+            android.os.SystemClock.uptimeMillis() - warmMs
+        )
+
         // Configure renderers honouring the user's Settings → Software/
         // Hardware decoding toggle. Read with a 200 ms timeout so a
         // sluggish DataStore can never ANR the foreground service

@@ -909,6 +909,17 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
+    /**
+     * One read of the whole preferences file. DataStore keeps the parsed
+     * state in memory after the first collection, so callers that need
+     * several values synchronously (the playback service's cold-start
+     * seeds) warm the store with ONE disk hit and every subsequent
+     * `.first()` is a memory read — instead of N sequential cold reads
+     * on the main thread (audit 2.1).
+     */
+    suspend fun snapshot(): androidx.datastore.preferences.core.Preferences =
+        context.dataStore.data.first()
+
     // Opt-in persistent file logger (see DiagLog). Off by default. When
     // on, writes technical events (BT remote opcodes, audio-effect
     // attach results, key lifecycle) to app-private external storage so
