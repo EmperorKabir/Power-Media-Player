@@ -74,14 +74,37 @@ object DiagLog {
     private var startUptimeMs: Long = 0L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val channel = Channel<String>(capacity = Channel.UNLIMITED)
+    // Bounded + drop-oldest: a stalled writer must shed log lines, not
+    // grow heap without limit (the old UNLIMITED channel could hold hours
+    // of backlog at sustained 25Hz HUE/RESUME bursts).
+    private val channel = Channel<String>(
+        capacity = 4096,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
     private val timeFmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.UK)
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
 
+    /** Last lines formatted while the logger was DISABLED. Never touches
+     *  disk; flushed into the file the moment the user enables logging so
+     *  the lead-up to an enable (and the cold-start window before the
+     *  async settings read lands) isn't lost. */
+    private const val PRE_ENABLE_CAPACITY = 256
+    private val preEnable = ArrayDeque<String>()
+
     init {
         scope.launch {
-            for (line in channel) {
-                runCatching { writeLine(line) }
+            // Drain in batches through one persistent writer: the old
+            // open-append-close per line was ~3 syscall round-trips per
+            // event and couldn't keep up with burst logging.
+            val batch = ArrayList<String>(128)
+            while (true) {
+                batch.clear()
+                batch.add(channel.receive())
+                while (batch.size < 512) {
+                    val next = channel.tryReceive().getOrNull() ?: break
+                    batch.add(next)
+                }
+                runCatching { writeBatch(batch) }
             }
         }
     }
@@ -99,10 +122,20 @@ object DiagLog {
         }
         sessionToken = UUID.randomUUID().toString().take(8)
         startUptimeMs = SystemClock.uptimeMillis()
-        enabled = initiallyEnabled
-        if (initiallyEnabled) {
-            // Header line distinguishes a new process start from a
-            // continuation of the previous log on the same file.
+        // The session header is written by setEnabled(true) — init runs
+        // with the async settings read still in flight (audit 2.3), so
+        // enable always arrives through setEnabled, never here.
+        if (initiallyEnabled) setEnabled(true)
+    }
+
+    fun setEnabled(v: Boolean) {
+        val was = enabled
+        enabled = v
+        if (v && !was) {
+            // Cold-start path: init() now runs with enabled=false (the
+            // settings read is async — audit 2.3), so the session header
+            // belongs to the first enable. Then flush the pre-enable
+            // buffer so the lead-up context lands in the file too.
             event(
                 "SESSION",
                 "── start sess=$sessionToken build=${BuildConfig.VERSION_NAME}" +
@@ -110,13 +143,10 @@ object DiagLog {
                     " android=${Build.VERSION.RELEASE} sdk=${Build.VERSION.SDK_INT}" +
                     " abi=${Build.SUPPORTED_ABIS.firstOrNull() ?: "?"} ──"
             )
-        }
-    }
-
-    fun setEnabled(v: Boolean) {
-        val was = enabled
-        enabled = v
-        if (v && !was) {
+            synchronized(preEnable) {
+                preEnable.forEach { channel.trySend(it) }
+                preEnable.clear()
+            }
             event("SESSION", "logger enabled at runtime")
         } else if (!v && was) {
             event("SESSION", "logger disabled at runtime")
@@ -138,12 +168,39 @@ object DiagLog {
         if (BuildConfig.DEBUG) {
             android.util.Log.i("PMP_DIAG_FILE", "[$tag] $msg")
         }
-        if (!enabled) return
         val now = System.currentTimeMillis()
         val upMs = SystemClock.uptimeMillis() - startUptimeMs
         val line = "${dateFmt.format(Date(now))} ${timeFmt.format(Date(now))} " +
             "[sess=$sessionToken +${upMs}ms] $tag: $msg"
+        if (!enabled) {
+            // Memory-only ring; written to disk only if the user enables.
+            synchronized(preEnable) {
+                if (preEnable.size >= PRE_ENABLE_CAPACITY) preEnable.removeFirst()
+                preEnable.addLast(line)
+            }
+            return
+        }
         runCatching { channel.trySend(line) }
+    }
+
+    /**
+     * Crash-handler path: the process is about to die, so the async
+     * writer may never drain. Append synchronously (and best-effort) in
+     * addition to the normal event the caller also logs.
+     */
+    fun fatalSync(tag: String, msg: String) {
+        if (!enabled) return
+        val d = dir ?: return
+        val now = System.currentTimeMillis()
+        val upMs = SystemClock.uptimeMillis() - startUptimeMs
+        val line = "${dateFmt.format(Date(now))} ${timeFmt.format(Date(now))} " +
+            "[sess=$sessionToken +${upMs}ms] $tag: $msg"
+        runCatching {
+            synchronized(writerLock) {
+                flushAndCloseWriter()
+                File(d, CURRENT).appendText(line + "\n")
+            }
+        }
     }
 
     // ── Structured event helpers ─────────────────────────────────────
@@ -220,8 +277,13 @@ object DiagLog {
     fun clear() {
         runCatching {
             val d = dir ?: return@runCatching
-            File(d, CURRENT).delete()
-            for (i in 1..ROTATION_DEPTH) File(d, "log-prev-$i.txt").delete()
+            synchronized(writerLock) {
+                // Deleting under an open writer strands writes on the
+                // unlinked inode — close first, reopen lazily.
+                flushAndCloseWriter()
+                File(d, CURRENT).delete()
+                for (i in 1..ROTATION_DEPTH) File(d, "log-prev-$i.txt").delete()
+            }
         }
         if (enabled) event("SESSION", "cleared")
     }
@@ -239,23 +301,48 @@ object DiagLog {
     /** Path the user should be told to retrieve. */
     fun directoryPath(): String = dir?.absolutePath ?: "(not initialised)"
 
-    private fun writeLine(line: String) {
+    private val writerLock = Any()
+    private var openWriter: java.io.BufferedWriter? = null
+    private var openWriterBytes: Long = 0L
+
+    private fun writeBatch(lines: List<String>) {
         val d = dir ?: return
-        val cur = File(d, CURRENT)
-        if (cur.exists() && cur.length() >= MAX_FILE_BYTES) {
-            // Cascade rotation: prev-2 → prev-3, prev-1 → prev-2, cur → prev-1.
-            // Oldest file (prev-ROTATION_DEPTH before promotion) is dropped.
-            val oldest = File(d, "log-prev-$ROTATION_DEPTH.txt")
-            if (oldest.exists()) oldest.delete()
-            for (i in ROTATION_DEPTH downTo 2) {
-                val from = File(d, "log-prev-${i - 1}.txt")
-                val to = File(d, "log-prev-$i.txt")
-                if (from.exists()) from.renameTo(to)
+        synchronized(writerLock) {
+            val cur = File(d, CURRENT)
+            if (openWriter == null) {
+                openWriterBytes = if (cur.exists()) cur.length() else 0L
+                openWriter = java.io.BufferedWriter(FileWriter(cur, true))
             }
-            cur.renameTo(File(d, "log-prev-1.txt"))
+            if (openWriterBytes >= MAX_FILE_BYTES) {
+                flushAndCloseWriter()
+                // Cascade rotation: prev-2 → prev-3, prev-1 → prev-2,
+                // cur → prev-1. Oldest is dropped.
+                val oldest = File(d, "log-prev-$ROTATION_DEPTH.txt")
+                if (oldest.exists()) oldest.delete()
+                for (i in ROTATION_DEPTH downTo 2) {
+                    val from = File(d, "log-prev-${i - 1}.txt")
+                    val to = File(d, "log-prev-$i.txt")
+                    if (from.exists()) from.renameTo(to)
+                }
+                cur.renameTo(File(d, "log-prev-1.txt"))
+                openWriterBytes = 0L
+                openWriter = java.io.BufferedWriter(FileWriter(File(d, CURRENT), true))
+            }
+            val w = openWriter ?: return
+            for (line in lines) {
+                w.append(line).append('\n')
+                openWriterBytes += line.length + 1
+            }
+            // Flush per batch: the writer drains the channel dry before
+            // each flush, so a pulled log is at most one in-flight batch
+            // behind the app.
+            w.flush()
         }
-        FileWriter(cur, true).use { w ->
-            w.append(line).append('\n')
-        }
+    }
+
+    private fun flushAndCloseWriter() {
+        runCatching { openWriter?.flush() }
+        runCatching { openWriter?.close() }
+        openWriter = null
     }
 }

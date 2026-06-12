@@ -14,8 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.flow.first
 
 /**
  * Application class annotated for Hilt dependency injection.
@@ -45,16 +43,33 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // Audit 7.2 — log-only StrictMode in debug builds so main-thread
+        // IO and leaked closables surface at commit time instead of in
+        // device profiles. penaltyLog only: the bounded runBlocking seeds
+        // in PlaybackService.onCreate are deliberate and must not crash.
+        if (com.powermediaplayer.BuildConfig.DEBUG) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads().detectDiskWrites().detectNetwork()
+                    .penaltyLog().build()
+            )
+            android.os.StrictMode.setVmPolicy(
+                android.os.StrictMode.VmPolicy.Builder()
+                    .detectLeakedClosableObjects().detectActivityLeaks()
+                    .penaltyLog().build()
+            )
+        }
         // Initialise the opt-in file logger BEFORE installing the
         // uncaught exception handler so any crash during onCreate has
-        // a place to land. Initial state is read synchronously (~1-5 ms
-        // first-hit on DataStore); subsequent toggles are reactive.
-        val startEnabled = runCatching {
-            runBlocking { settingsDataStore.diagLogEnabled.first() }
-        }.getOrDefault(false)
-        DiagLog.init(this, startEnabled)
+        // a place to land. The enabled flag arrives asynchronously —
+        // the first-ever DataStore read is a disk open+parse and has no
+        // business on the cold-start critical path (audit 2.3). Events
+        // logged before the flag lands sit in DiagLog's pre-enable
+        // buffer and flush into the file when (if) it flips on.
+        DiagLog.init(this, initiallyEnabled = false)
         DiagLog.lifecycle("PowerMediaPlayerApp.onCreate (process start)")
-        // Live-track future toggle changes.
+        // Live-track the toggle; the first emission delivers the
+        // persisted cold-start value.
         appScope.launch {
             settingsDataStore.diagLogEnabled.collect { DiagLog.setEnabled(it) }
         }
@@ -65,7 +80,9 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider {
                     "${throwable.message}", throwable)
             // Also write to the persistent log so a crash that nukes
             // the process leaves a breadcrumb the tester can pull.
-            DiagLog.event(
+            // fatalSync appends synchronously — the async writer may
+            // never drain again on this process.
+            DiagLog.fatalSync(
                 "FATAL",
                 "thread=${thread.name} ex=${throwable.javaClass.simpleName} msg=${throwable.message} " +
                     "stack=${throwable.stackTraceToString().take(2000)}"
