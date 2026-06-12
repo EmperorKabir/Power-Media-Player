@@ -12,6 +12,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -52,6 +53,10 @@ class CrossfadeController(
     @Volatile private var secondary: ExoPlayer? = null
     @Volatile private var overlapJob: Job? = null
     @Volatile private var lastInitiatedForItemId: String? = null
+    // §B3 pause contract: the overlap ramp was wall-clock and kept
+    // stepping (then released the secondary) while BOTH players sat
+    // paused (audit 3.5 note). The loop holds while this is set.
+    @Volatile private var paused: Boolean = false
 
     /**
      * Called from [PlaybackService.applyCrossfadeTick]. No-op when:
@@ -147,6 +152,10 @@ class CrossfadeController(
             val tickMs = 50L
             val totalSteps = (crossfadeMs / tickMs).coerceAtLeast(1)
             for (i in 0..totalSteps) {
+                // Hold the ramp while both players are paused — without
+                // this the wall-clock loop finished mid-pause and
+                // released the secondary, breaking the resume contract.
+                while (paused && isActive) delay(50)
                 val volA = com.powermediaplayer.service.PlaybackService
                     .crossfadeFactorRead().coerceIn(0f, 1f)
                 val volB = when (curve) {
@@ -171,10 +180,12 @@ class CrossfadeController(
      * resume() picks up where the volumes were.
      */
     fun pauseAll() {
+        paused = true
         runCatching { secondary?.pause() }
     }
 
     fun resumeAll() {
+        paused = false
         runCatching {
             val s = secondary ?: return
             s.play()
@@ -188,6 +199,9 @@ class CrossfadeController(
         runCatching { secondary?.stop() }
         runCatching { secondary?.release() }
         secondary = null
+        // Re-entering the same track's pre-fade window after an abort
+        // must be able to start a fresh overlap.
+        lastInitiatedForItemId = null
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Crossfade overlap aborted")
     }
 

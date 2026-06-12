@@ -38,6 +38,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -135,6 +136,7 @@ class PlaybackService : MediaSessionService() {
     private var audioBufferLowLatencyFlag: Boolean = false
     @Volatile
     private var crossfadeMsFlag: Int = 0
+    private val crossfadeMsFlow = kotlinx.coroutines.flow.MutableStateFlow(0)
     @Volatile private var crossfadeAlbumModeFlag: Boolean = true
     @Volatile private var crossfadeCurveFlag: String = "EQUAL_POWER"
     @Volatile private var crossfadePreFadeTriggerSFlag: Int = 5
@@ -250,7 +252,12 @@ class PlaybackService : MediaSessionService() {
         @Volatile private var crossfadeFactor: Float = 1.0f
 
         /** §B5 — last auto-revert reason (null when not active). */
+        /** Push-based: the UI used to POLL a static holder for this at
+         *  750ms (audit 3.5/3.11) — a StateFlow costs nothing idle. */
+        val crossfadeAutoRevertReasonFlow =
+            kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
         @Volatile var crossfadeAutoRevertReason: String? = null
+            set(value) { field = value; crossfadeAutoRevertReasonFlow.value = value }
 
         /**
          * Bug fix (user-reported "playback resumes when I sign in to
@@ -639,6 +646,7 @@ class PlaybackService : MediaSessionService() {
                         )
                     }
                     crossfadeMsFlag = effective
+                    crossfadeMsFlow.value = effective
                     // §B5 — record the auto-revert reason on the
                     // companion-object holder so PlayerViewModel can
                     // surface a Snackbar without us needing the
@@ -1652,11 +1660,37 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
+        // Audit 3.5 — the tick used to run at 10Hz for the service's
+        // whole life (disabled, paused, idle in background). Event-gated
+        // now: active only while playing WITH crossfade on; one settle
+        // tick on deactivation keeps the ms==0 force-restore-to-1.0
+        // branch and lands any mid-fade factor (matrix DEP).
         crossfadeJob = serviceScope.launch {
-            while (isActive) {
-                applyCrossfadeTick()
-                kotlinx.coroutines.delay(100)
+            val playingFlow = callbackFlow {
+                val p = player
+                trySend(p?.isPlaying == true)
+                val listener = object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        trySend(isPlaying)
+                    }
+                }
+                p?.addListener(listener)
+                awaitClose { p?.removeListener(listener) }
+            }.distinctUntilChanged()
+            kotlinx.coroutines.flow.combine(playingFlow, crossfadeMsFlow) { playing, ms ->
+                playing && ms > 0
             }
+                .distinctUntilChanged()
+                .collectLatest { active ->
+                    if (active) {
+                        while (kotlin.coroutines.coroutineContext.isActive) {
+                            applyCrossfadeTick()
+                            kotlinx.coroutines.delay(100)
+                        }
+                    } else {
+                        applyCrossfadeTick()
+                    }
+                }
         }
     }
 
