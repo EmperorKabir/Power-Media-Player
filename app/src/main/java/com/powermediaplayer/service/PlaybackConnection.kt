@@ -29,6 +29,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -140,6 +143,7 @@ class PlaybackConnection @Inject constructor(
     private var controller: MediaController? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var positionPollingJob: Job? = null
+    private var metadataLogSeq: Int = 0
 
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -848,22 +852,39 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
-     * Poll position every 250ms to smoothly update sliders without callback storms.
+     * Poll position every 500ms WHILE PLAYING to smoothly update sliders
+     * without callback storms. Paused/idle: one final emit freezes the UI
+     * at the right position and the loop suspends until isPlaying flips —
+     * the old unconditional loop ticked 2×/s for hours after a Home press
+     * (audit 3.7).
      */
     private fun startPositionPolling() {
         positionPollingJob?.cancel()
         positionPollingJob = scope.launch {
-            while (isActive) {
-                controller?.let { c ->
-                    val currentState = _playerState.value
-                    _playerState.value = currentState.copy(
-                        currentPosition = c.currentPosition.coerceAtLeast(0L),
-                        bufferedPercentage = c.bufferedPercentage,
-                        totalPlaylistPosition = cachedPlaylistPosition(c)
-                    )
+            _playerState
+                .map { it.isPlaying }
+                .distinctUntilChanged()
+                .collectLatest { playing ->
+                    if (!playing) {
+                        pollPositionOnce()
+                        return@collectLatest
+                    }
+                    while (isActive) {
+                        pollPositionOnce()
+                        delay(500)
+                    }
                 }
-                delay(500)
-            }
+        }
+    }
+
+    private fun pollPositionOnce() {
+        controller?.let { c ->
+            val currentState = _playerState.value
+            _playerState.value = currentState.copy(
+                currentPosition = c.currentPosition.coerceAtLeast(0L),
+                bufferedPercentage = c.bufferedPercentage,
+                totalPlaylistPosition = cachedPlaylistPosition(c)
+            )
         }
     }
 
@@ -907,7 +928,10 @@ class PlaybackConnection @Inject constructor(
         // CastPlayer-ness directly here. Always log cache hit/miss with
         // a hashCode of the controller-reported metadata so we can
         // correlate per-tick whether the cache fallback is ever firing.
-        if (!rawId.isNullOrEmpty()) {
+        // Audit 7.1 — 1-in-16 sampling: this string assembly (map-key
+        // iteration + joins) ran on every coalesced update in debug
+        // builds, skewing the very profiles used for perf work.
+        if (!rawId.isNullOrEmpty() && (metadataLogSeq++ and 0xF) == 0) {
             val keys = com.powermediaplayer.service.PlaybackService.senderMetadataByMediaId.keys
                 .take(3).joinToString("|") { it.takeLast(40) }
             com.powermediaplayer.util.Diag.i(
