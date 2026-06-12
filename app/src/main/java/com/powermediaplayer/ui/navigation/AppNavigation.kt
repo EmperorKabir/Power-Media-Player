@@ -200,7 +200,9 @@ fun AppNavigation(
                 )
             }
             composable(Screen.Equalizer.route) { EqualizerScreen() }
-            composable(Screen.Settings.route) { SettingsScreen() }
+            composable(Screen.Settings.route) {
+                SettingsScreen(windowSizeClass = windowSizeClass)
+            }
         }
         // In-app picture-in-picture: keep the video visible while the
         // user browses other tabs. Hidden on the Player tab (the full

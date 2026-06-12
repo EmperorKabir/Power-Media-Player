@@ -8,6 +8,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -448,11 +453,12 @@ fun CloudBrowserScreen(
                        uiState.spotifySection == null) {
                 // Spotify section picker — landing screen when entering
                 // Spotify. Each card opens a single Web API endpoint.
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 360.dp),   // audit 8.1 (F4)
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    item(key = "sp_connect_picker") {
+                    item(key = "sp_connect_picker", span = { GridItemSpan(maxLineSpan) }) {
                         // Spotify Connect device picker. Spotify Connect is
                         // its own protocol (not Cast). When the user has
                         // linked Google account in the Google Home app,
@@ -495,7 +501,7 @@ fun CloudBrowserScreen(
                         uiState.spotifyFavAlbums.size +
                         uiState.spotifyFavPodcasts.size
                     if (spotifyFavCount > 0) {
-                        item(key = "sp_fav_header") {
+                        item(key = "sp_fav_header", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = "Favourite tracks/albums/podcasts ($spotifyFavCount)",
                                 style = MaterialTheme.typography.labelMedium,
@@ -503,7 +509,7 @@ fun CloudBrowserScreen(
                                 modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)
                             )
                         }
-                        items(
+                        gridItems(
                             uiState.spotifyFavTracks,
                             key = { "spfavt_${it.id}" }
                         ) { fav ->
@@ -514,7 +520,7 @@ fun CloudBrowserScreen(
                                 onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
                             )
                         }
-                        items(
+                        gridItems(
                             uiState.spotifyFavAlbums,
                             key = { "spfava_${it.id}" }
                         ) { fav ->
@@ -525,7 +531,7 @@ fun CloudBrowserScreen(
                                 onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
                             )
                         }
-                        items(
+                        gridItems(
                             uiState.spotifyFavPodcasts,
                             key = { "spfavp_${it.id}" }
                         ) { fav ->
@@ -536,14 +542,14 @@ fun CloudBrowserScreen(
                                 onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
                             )
                         }
-                        item(key = "sp_fav_divider") {
+                        item(key = "sp_fav_divider", span = { GridItemSpan(maxLineSpan) }) {
                             HorizontalDivider(
                                 color = SurfaceElevated,
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                         }
                     }
-                    items(
+                    gridItems(
                         items = com.powermediaplayer.cloud.SpotifySection.values().toList(),
                         key = { it.name }
                     ) { section ->
@@ -601,11 +607,12 @@ fun CloudBrowserScreen(
                     }
                 }
             } else if (uiState.searchQuery.isNotBlank()) {
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 360.dp),   // audit 8.1 (F4)
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(uiState.searchResults, key = { "search_${it.id}_${it.sourceProvider}" }) { item ->
+                    gridItems(uiState.searchResults, key = { "search_${it.id}_${it.sourceProvider}" }) { item ->
                         CloudItemRow(
                             item = item,
                             onClick = {
@@ -615,7 +622,7 @@ fun CloudBrowserScreen(
                         )
                     }
                     if (uiState.searchResults.isEmpty()) {
-                        item(key = "search_empty") {
+                        item(key = "search_empty", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = "No results for \"${uiState.searchQuery}\"",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -626,7 +633,8 @@ fun CloudBrowserScreen(
                     }
                 }
             } else {
-                LazyColumn(
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 360.dp),   // audit 8.1 (F4)
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
@@ -642,7 +650,7 @@ fun CloudBrowserScreen(
                     val showFavourites = uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE &&
                         (favFolders.isNotEmpty() || favTracks.isNotEmpty())
                     if (showFavourites) {
-                        item(key = "fav_header") {
+                        item(key = "fav_header", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = "Favourite folders/files",
                                 style = MaterialTheme.typography.labelMedium,
@@ -650,7 +658,7 @@ fun CloudBrowserScreen(
                                 modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)
                             )
                         }
-                        items(favFolders, key = { "favfolder_${it.id}" }) { fav ->
+                        gridItems(favFolders, key = { "favfolder_${it.id}" }) { fav ->
                             FavouriteFolderRow(
                                 fav = fav,
                                 onClick = { viewModel.openDriveFavourite(fav) },
@@ -669,7 +677,7 @@ fun CloudBrowserScreen(
                                 }
                             )
                         }
-                        items(favTracks, key = { "favtrack_${it.id}" }) { fav ->
+                        gridItems(favTracks, key = { "favtrack_${it.id}" }) { fav ->
                             FavouriteTrackRow(
                                 fav = fav,
                                 onClick = {
@@ -694,7 +702,7 @@ fun CloudBrowserScreen(
                                 }
                             )
                         }
-                        item(key = "fav_divider") {
+                        item(key = "fav_divider", span = { GridItemSpan(maxLineSpan) }) {
                             HorizontalDivider(
                                 color = SurfaceElevated,
                                 modifier = Modifier.padding(vertical = 8.dp)
@@ -710,7 +718,7 @@ fun CloudBrowserScreen(
                     val atDriveRoot = uiState.activeProvider == CloudProviderType.GOOGLE_DRIVE &&
                         uiState.folderStack.size <= 1
                     if (atDriveRoot) {
-                        item(key = "add_more_folders") {
+                        item(key = "add_more_folders", span = { GridItemSpan(maxLineSpan) }) {
                             Surface(
                                 color = SurfaceElevated,
                                 shape = RoundedCornerShape(8.dp),
@@ -751,7 +759,7 @@ fun CloudBrowserScreen(
                         !it.isFolder && it.mimeType.startsWith("audio/")
                     }
                     if (insideDriveFolder && audioCount > 0) {
-                        item(key = "pin_folder_as_album") {
+                        item(key = "pin_folder_as_album", span = { GridItemSpan(maxLineSpan) }) {
                             val folderLabel = uiState.folderStack.lastOrNull()?.second ?: "Folder"
                             Surface(
                                 color = SurfaceElevated,
@@ -799,7 +807,7 @@ fun CloudBrowserScreen(
                             }
                         }
                     }
-                    itemsIndexed(uiState.items, key = { _, it -> "${it.sourceProvider}_${it.id}" }) { _, item ->
+                    gridItemsIndexed(uiState.items, key = { _, it -> "${it.sourceProvider}_${it.id}" }) { _, item ->
                         val isDriveFolder = item.isFolder &&
                             item.sourceProvider == CloudProviderType.GOOGLE_DRIVE
                         val isDriveTrack = !item.isFolder &&
@@ -847,7 +855,7 @@ fun CloudBrowserScreen(
                         )
                     }
                     if (uiState.items.isEmpty() && uiState.driveFavourites.isEmpty()) {
-                        item(key = "empty_folder") {
+                        item(key = "empty_folder", span = { GridItemSpan(maxLineSpan) }) {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(40.dp),
                                 contentAlignment = Alignment.Center

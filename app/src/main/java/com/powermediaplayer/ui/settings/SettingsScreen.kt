@@ -10,6 +10,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.adaptive.layout.AnimatedPane
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffold
+import androidx.compose.material3.adaptive.layout.ListDetailPaneScaffoldRole
+import androidx.compose.material3.adaptive.navigation.rememberListDetailPaneScaffoldNavigator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.data.preferences.BluetoothMediaActions
+import kotlinx.coroutines.launch
 import com.powermediaplayer.ui.theme.*
 
 /**
@@ -31,6 +38,7 @@ import com.powermediaplayer.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    windowSizeClass: androidx.compose.material3.windowsizeclass.WindowSizeClass? = null,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -88,737 +96,747 @@ fun SettingsScreen(
         )
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(OledBlack)
-            .verticalScroll(rememberScrollState())
-            .imePadding()   // audit 6.6
-    ) {
-        TopAppBar(
-            title = {
+    // vc31 §D-REORG — search field + data-driven 8-group catalog.
+    // Display order is the user-specified 1·3·4·5·2·8·7·6. Every
+    // control from the former flat §D layout is relocated VERBATIM
+    // into an item content() lambda (no behaviour change); the group
+    // header replaces each old SettingsSectionHeader and the render
+    // loop supplies the dividers. A2 inventory guard: SETTINGS_ITEM_IDS.
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+
+    // The catalog is structurally static; the content lambdas read
+    // the DELEGATED uiState property, so they always see the live
+    // value. Audit 4.2: remember(uiState) re-allocated all 8 groups,
+    // 20 items and their keyword lists on EVERY settings write -
+    // including continuous slider drags. Allocate once.
+    val groups = remember { listOf(
+        // 1 — Playback (folds old Playback + Crossfade)
+        SettingsGroup("Playback", listOf(
+            SettingsItem(
+                "playback", "Playback & audio focus",
+                listOf("focus", "call", "notification", "headphone", "autoplay",
+                    "swipe", "gapless", "latency", "buffer", "bluetooth", "resume",
+                    "bookmark", "replay", "cold start", "backoff", "interrupt", "duck",
+                    "restore", "launch", "last played", "autoplay", "auto play")
+            ) {
                 Text(
-                    text = "Settings",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = TealAccent
+                    text = "What this app does when something else needs the speakers — phone calls, alarms, navigation, or another music app.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                AudioFocusRow("Phone call", uiState.audioFocusOnCall) { viewModel.setAudioFocusOnCall(it) }
+                AudioFocusRow("Other notification", uiState.audioFocusOnNotification) { viewModel.setAudioFocusOnNotification(it) }
+                AudioFocusRow("Other media app", uiState.audioFocusOnOtherMedia) { viewModel.setAudioFocusOnOtherMedia(it) }
+                SettingsToggleItem(
+                    title = "Auto-play on headphone connect",
+                    description = "When you plug in headphones (or connect a Bluetooth audio device), " +
+                        "automatically resume playback if a track is paused. Off by default to " +
+                        "avoid surprise audio.",
+                    icon = Icons.Filled.Headphones,
+                    checked = uiState.headphonePlugAutoplay,
+                    onCheckedChange = { viewModel.setHeadphonePlugAutoplay(it) }
+                )
+                SettingsToggleItem(
+                    title = "Stop playback on swipe-away",
+                    description = "When you swipe the app off the Recents list, stop the music. " +
+                        "Off by default — most music apps keep playing in the background " +
+                        "after a swipe-away, which is what you want for podcasts in the car.",
+                    icon = Icons.Filled.Close,
+                    checked = uiState.stopOnTaskRemoved,
+                    onCheckedChange = { viewModel.setStopOnTaskRemoved(it) }
+                )
+                SettingsToggleItem("Gapless playback", "Seamless transitions between tracks.",
+                    Icons.Filled.SkipNext, uiState.gaplessPlayback) { viewModel.setGapless(it) }
+                SettingsToggleItem(
+                    title = "Low-latency audio buffer",
+                    description = "Snappier pitch / speed / effect changes (~50-100 ms quicker " +
+                        "to take effect). May cause brief glitches under CPU load. Apply by " +
+                        "starting a track after toggling.",
+                    icon = Icons.Filled.Speed,
+                    checked = uiState.audioBufferLowLatency,
+                    onCheckedChange = { viewModel.setAudioBufferLowLatency(it) }
+                )
+                SettingsToggleItem("Resume on Bluetooth connect",
+                    "Auto-resume the last track when a BT audio device reconnects.",
+                    Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
+                SliderRow("Bookmark replay context", "${uiState.bookmarkReplayContextSec} s",
+                    uiState.bookmarkReplayContextSec.toFloat(), 0f..30f,
+                    default = 5f) { viewModel.setBookmarkReplayContextSec(it.toInt()) }
+                Text(
+                    text = "Tap a bookmark and the seek lands a few seconds before the saved moment for context. 0 = exact.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                SettingsToggleItem(
+                    title = "Restore last played on launch",
+                    description = "When the app starts, load the most recent " +
+                        "local or Drive item into the player, paused where " +
+                        "you left off. Separate from 'Resume on Bluetooth " +
+                        "connect' and headphone auto-play, which act on " +
+                        "whatever is already in the player.",
+                    icon = Icons.Filled.History,
+                    checked = uiState.restoreLastOnLaunch,
+                    onCheckedChange = { viewModel.setRestoreLastOnLaunch(it) }
+                )
+                // Backoff only matters while the launch restore is on.
+                if (uiState.restoreLastOnLaunch) {
+                    SettingsToggleItem(
+                        title = "Auto-play on launch",
+                        description = "Start playing the moment the app opens, " +
+                            "from where you left off — whether the app was " +
+                            "fully closed or still paused in the status bar. " +
+                            "Off by default so opening the app never makes " +
+                            "unexpected sound.",
+                        icon = Icons.Filled.PlayArrow,
+                        checked = uiState.autoplayOnLaunch,
+                        onCheckedChange = { viewModel.setAutoplayOnLaunch(it) }
+                    )
+                    SliderRow("Cold-start resume backoff", "${uiState.coldStartResumeBackoffSec} s",
+                        uiState.coldStartResumeBackoffSec.toFloat(), 0f..30f,
+                        default = 5f) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
+                    Text(
+                        text = "When re-opening the app after a force-stop, rewind by this many seconds before resuming. Helpful for re-finding context in podcasts and audiobooks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                    )
+                }
+            },
+            SettingsItem(
+                "crossfade", "Crossfade",
+                listOf("fade", "gapless", "transition", "mix", "blend")
+            ) {
+                SliderRow("Crossfade", "${uiState.crossfadeMs} ms",
+                    uiState.crossfadeMs.toFloat(), 0f..10_000f,
+                    default = 0f) { viewModel.setCrossfade(it.toInt()) }
+                Text(
+                    text = "Master crossfade duration. Per-curve and per-trigger sub-toggles live on the Player tab's Crossfade panel.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+            }
+        )),
+        // 3 — Library & cloud
+        SettingsGroup("Library & cloud", listOf(
+            SettingsItem(
+                "library", "Library",
+                listOf("scan", "deep scan", "stats", "listening", "hidden",
+                    "metadata", "enrichment", "musicbrainz", "discogs",
+                    "replaygain", "loudness", "normalise", "normalize")
+            ) {
+                SettingsToggleItem(
+                    title = "Deep Scan",
+                    description = "Reads the full file header (via MediaMetadataRetriever) " +
+                            "when you tap 'Refresh metadata' on individual tracks — finds " +
+                            "tags like artist / album / artwork that MediaStore's faster " +
+                            "index missed. The main library scan always uses the fast " +
+                            "MediaStore path regardless of this setting, so toggling " +
+                            "here doesn't change scan time.",
+                    icon = Icons.Filled.DocumentScanner,
+                    checked = uiState.useDeepScan,
+                    onCheckedChange = { viewModel.setDeepScan(it) }
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showStatsSheet = true }
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.QueryStats, contentDescription = null,
+                        tint = TealAccent, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Listening stats",
+                            style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                        Text("Total plays, time listened, top titles + artists.",
+                            style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showHiddenSheet = true }
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.VisibilityOff, contentDescription = null,
+                        tint = TealAccent, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Hidden files (${uiState.hiddenUris.size})",
+                            style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                        Text("Files hidden from the Library list. Tap to view and unhide.",
+                            style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                    }
+                }
+                SettingsToggleItem(
+                    title = "Online metadata enrichment",
+                    description = "When a track has missing info (artist, album, year, genre, " +
+                        "cover art), look it up on MusicBrainz / Discogs and fill in the blanks. " +
+                        "Off by default to avoid network requests on poorly-tagged libraries.",
+                    icon = Icons.Filled.CloudDownload,
+                    checked = uiState.metadataEnrichmentEnabled,
+                    onCheckedChange = { viewModel.setMetadataEnrichmentEnabled(it) }
+                )
+                com.powermediaplayer.ui.settings.EnrichmentSubToggles()
+                com.powermediaplayer.ui.settings.ReplayGainScanRow()
+                com.powermediaplayer.ui.settings.ReplayGainModeRow()
+                SettingsToggleItem(
+                    title = "Auto-scan ReplayGain on new files",
+                    description = "Calculate loudness for every newly-discovered audio file so " +
+                        "tracks at different volumes play at consistent loudness. Off by default " +
+                        "(scan can be slow on first import).",
+                    icon = Icons.Filled.GraphicEq,
+                    checked = uiState.replayGainAutoScan,
+                    onCheckedChange = { viewModel.setReplayGainAutoScan(it) }
+                )
+                SettingsToggleItem("ReplayGain normalisation",
+                    "Even out loudness across tracks using their REPLAYGAIN tags.",
+                    Icons.Filled.GraphicEq, uiState.replayGainEnabled) { viewModel.setReplayGain(it) }
+            },
+            SettingsItem(
+                "cloud", "Cloud",
+                listOf("offline", "storage", "prefetch", "pre-fetch", "buffer", "drive", "stream")
+            ) {
+                com.powermediaplayer.ui.settings.OfflineStorageLimitRow()
+                SettingsToggleItem("Pre-fetch next cloud track",
+                    "Buffer the next item in a cloud queue for seamless transition.",
+                    Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }
+            }
+        )),
+        // 4 — Connectivity
+        SettingsGroup("Connectivity", listOf(
+            SettingsItem(
+                "bluetooth-car", "Bluetooth car controls",
+                listOf("bluetooth", "car", "stereo", "remote", "button", "prev", "next", "skip")
+            ) {
+                Text(
+                    text = "Remap the Previous and Next buttons on your car stereo " +
+                        "(or any Bluetooth remote) when playing through this app. " +
+                        "Works with any car that already controls media over Bluetooth — " +
+                        "no setup needed in the car.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                BluetoothActionPicker(
+                    label = "Previous button does",
+                    currentAction = uiState.btPrevAction,
+                    seconds = uiState.btSkipBackSeconds,
+                    options = PREV_OPTIONS,
+                    onActionChange = { viewModel.setBtPrevAction(it) },
+                    onSecondsChange = { viewModel.setBtSkipBackSeconds(it) }
+                )
+                BluetoothActionPicker(
+                    label = "Next button does",
+                    currentAction = uiState.btNextAction,
+                    seconds = uiState.btSkipForwardSeconds,
+                    options = NEXT_OPTIONS,
+                    onActionChange = { viewModel.setBtNextAction(it) },
+                    onSecondsChange = { viewModel.setBtSkipForwardSeconds(it) }
                 )
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
-        )
-
-        // vc31 §D-REORG — search field + data-driven 8-group catalog.
-        // Display order is the user-specified 1·3·4·5·2·8·7·6. Every
-        // control from the former flat §D layout is relocated VERBATIM
-        // into an item content() lambda (no behaviour change); the group
-        // header replaces each old SettingsSectionHeader and the render
-        // loop supplies the dividers. A2 inventory guard: SETTINGS_ITEM_IDS.
-        var searchQuery by rememberSaveable { mutableStateOf("") }
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            singleLine = true,
-            placeholder = { Text("Search settings…", color = TextTertiary) },
-            leadingIcon = {
-                Icon(Icons.Filled.Search, contentDescription = null, tint = TextSecondary)
+            SettingsItem(
+                "bt-av-offset", "Bluetooth A/V sync offset",
+                listOf("bluetooth", "offset", "sync", "delay", "lip", "latency", "video", "audio")
+            ) {
+                BtVideoAudioOffsetRow(
+                    valueMs = uiState.btVideoAudioOffsetMs,
+                    onValueChange = { viewModel.setBtVideoAudioOffsetMs(it) }
+                )
+            }
+        )),
+        // 5 — Audio
+        SettingsGroup("Audio", listOf(
+            SettingsItem(
+                "audio-effects", "Audio effects",
+                listOf("eq", "equaliser", "equalizer", "reverb", "echo", "bass",
+                    "stereo", "mono", "passthrough", "volume", "boost", "pitch",
+                    "reverse", "backwards", "headphone")
+            ) {
+                com.powermediaplayer.ui.settings.HeadphoneEqSection()
+                Text(
+                    "Reverb",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary,
+                    modifier = Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp)
+                )
+                val reverbOptions = listOf(
+                    0 to "Off", 1 to "Room", 2 to "Medium hall",
+                    3 to "Large hall", 4 to "Plate", 5 to "Cave"
+                )
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    reverbOptions.forEach { (id, label) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.setReverbPreset(id) }
+                                .padding(vertical = 6.dp)
+                        ) {
+                            RadioButton(
+                                selected = uiState.reverbPreset == id,
+                                onClick = { viewModel.setReverbPreset(id) }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, color = TextPrimary)
+                        }
+                    }
+                }
+                SettingsToggleItem("Stereo flip (L↔R)",
+                    "Swap left and right channels. Useful when headphones are mis-wired or for spatial-audio experiments.",
+                    Icons.Filled.SwapHoriz, uiState.stereoFlip) { viewModel.setStereoFlip(it) }
+                SettingsToggleItem("Mono mix",
+                    "Mix both channels into a centred mono image (still output as stereo so headphones receive the same on both ears).",
+                    Icons.Filled.Adjust, uiState.monoMix) { viewModel.setMonoMix(it) }
+                SettingsToggleItem("Multi-channel passthrough",
+                    "When on, 5.1/7.1/Dolby/DTS audio bitstream is sent to a connected receiver / HDMI sink unchanged so it can decode itself. Off forces software downmix to stereo.",
+                    Icons.Filled.Speaker, uiState.passthroughAudio) { viewModel.setPassthroughAudio(it) }
+                SliderRow("Volume boost", "+${uiState.volumeBoostMb / 100} dB",
+                    uiState.volumeBoostMb.toFloat(), 0f..2000f,
+                    default = 0f) { viewModel.setVolumeBoost(it.toInt()) }
+                SliderRow("Independent pitch", "${"%.2f".format(uiState.pitch)}×",
+                    uiState.pitch, 0.5f..2.0f,
+                    default = 1.0f) { viewModel.setPitch(it) }
+                SettingsToggleItem("Reverse audio (audio only)",
+                    "Plays a song or recording backwards — audio only, one " +
+                        "file at a time. The first play takes a moment while " +
+                        "the file is flipped; after that it's instant. Works " +
+                        "with files on your phone (up to 60 minutes long) and " +
+                        "Drive files (up to 50 MB). Doesn't work with video " +
+                        "or Spotify.",
+                    Icons.Filled.SwapHoriz, uiState.audioReverseLocal) { viewModel.setAudioReverseLocal(it) }
+            }
+        )),
+        // 2 — Video & subtitles (folds Video + Subtitles + Auto-hide)
+        SettingsGroup("Video & subtitles", listOf(
+            SettingsItem(
+                "video", "Video",
+                listOf("decode", "decoding", "software", "hardware", "codec", "audio delay", "sync")
+            ) {
+                SettingsToggleItem(
+                    title = "Software Decoding",
+                    description = "Hardware decoding (default) uses your phone's dedicated video chip " +
+                            "for smooth, battery-efficient playback. Switch to Software decoding if you " +
+                            "see visual corruption, green screens, or freezing — this uses the CPU instead, " +
+                            "which is slower but more compatible.",
+                    icon = Icons.Filled.Memory,
+                    checked = uiState.useSoftwareDecoding,
+                    onCheckedChange = { viewModel.setSoftwareDecoding(it) }
+                )
+                Row(
+                    modifier = Modifier.padding(start = 72.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (uiState.useSoftwareDecoding) Icons.Filled.Warning else Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = if (uiState.useSoftwareDecoding) WarningAmber else SuccessGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (uiState.useSoftwareDecoding) "Using CPU decoding (slower, more compatible)"
+                        else "Using hardware decoding (faster, battery efficient)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (uiState.useSoftwareDecoding) WarningAmber else SuccessGreen
+                    )
+                }
+                SliderRow("Audio delay", "${uiState.audioDelayMs} ms",
+                    uiState.audioDelayMs.toFloat(), -2000f..2000f,
+                    default = 0f) { viewModel.setAudioDelay(it.toInt()) }
             },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = TextSecondary)
+            SettingsItem(
+                "subtitles", "Subtitles",
+                listOf("subtitle", "captions", "caption", "srt", "vtt", "ass", "ssa",
+                    "opensubtitles", "delay", "format")
+            ) {
+                SettingsSectionHeader("Subtitles — OpenSubtitles account")
+                com.powermediaplayer.ui.settings.OpenSubtitlesSection()
+                SettingsSectionHeader("Subtitles — Format Preference")
+                val formats = listOf(
+                    SubtitleFormatInfo(
+                        code = "SRT",
+                        name = "SRT — SubRip Text",
+                        description = "Simple text subtitles. Just words on screen with basic timing. " +
+                                "Works everywhere — the most universally supported format."
+                    ),
+                    SubtitleFormatInfo(
+                        code = "VTT",
+                        name = "VTT — Web Video Text Tracks",
+                        description = "Web-standard subtitles. Supports basic styling like bold and colors. " +
+                                "Used by most streaming services including YouTube and Netflix."
+                    ),
+                    SubtitleFormatInfo(
+                        code = "ASS",
+                        name = "ASS/SSA — Advanced SubStation Alpha",
+                        description = "Advanced subtitles with full typographic control — custom fonts, " +
+                                "positioned text, karaoke effects, and animated styling. " +
+                                "Common in anime fansubs and professional subtitle work."
+                    )
+                )
+                formats.forEach { format ->
+                    SubtitleFormatOption(
+                        format = format,
+                        isSelected = uiState.subtitleFormat == format.code,
+                        onSelect = { viewModel.setSubtitleFormat(format.code) }
+                    )
+                }
+                SliderRow("Subtitle delay", "${uiState.subtitleDelayMs} ms",
+                    uiState.subtitleDelayMs.toFloat(), -5000f..5000f,
+                    default = 0f) { viewModel.setSubtitleDelay(it.toInt()) }
+                Text(
+                    text = "Positive = subtitles appear later; negative = earlier. " +
+                        "Typical nudge is ±100–500 ms.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
+                )
+            },
+            SettingsItem(
+                "autohide", "Auto-hide controls",
+                listOf("auto hide", "hide", "controls", "timeout", "popup", "overlay",
+                    "crossfade panel", "info sheet", "track menu")
+            ) {
+                Text(
+                    text = "How long the on-screen controls stay visible after you " +
+                        "stop touching the screen. 'Never' keeps them until you tap.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                AutoHideRow("Video controls", "Player buttons + slider while watching video.",
+                    uiState.videoControlsHideSec, { viewModel.setVideoControlsHideSec(it) }, true)
+                AutoHideRow("Audio effects popup", "Reverb / stereo flip / mono mix sub-popup.",
+                    uiState.audioEffectsPopupHideSec, { viewModel.setAudioEffectsPopupHideSec(it) }, true)
+                AutoHideRow("Video effects popup", "Mirror / B&W / sepia / rotation sub-popup.",
+                    uiState.videoEffectsPopupHideSec, { viewModel.setVideoEffectsPopupHideSec(it) }, true)
+                AutoHideRow("Crossfade panel", "Master crossfade + 9 sub-toggles popup.",
+                    uiState.crossfadePopupHideSec, { viewModel.setCrossfadePopupHideSec(it) }, true)
+                AutoHideRow("Info sheet (the 'i' icon)", "Per-tab help / explanation sheet.",
+                    uiState.infoSheetHideSec, { viewModel.setInfoSheetHideSec(it) }, true)
+                AutoHideRow("Long-press track menu", "Favourite / Hide / Share / Delete row sheet.",
+                    uiState.trackContextSheetHideSec, { viewModel.setTrackContextSheetHideSec(it) }, true)
+            }
+        )),
+        // 8 — Lighting
+        SettingsGroup("Lighting", listOf(
+            SettingsItem(
+                "hue", "Philips Hue",
+                listOf("hue", "lights", "lighting", "philips", "bulb", "colour", "color",
+                    "bridge", "entertainment", "reactive", "scene")
+            ) {
+                HueSection(
+                    bridgeIp = uiState.hueBridgeIp,
+                    appKey = uiState.hueAppKey,
+                    discoveredIp = viewModel.hueDiscoveredIp.collectAsStateWithLifecycle().value,
+                    pairStatus = viewModel.huePairStatus.collectAsStateWithLifecycle().value,
+                    reactiveIntensity = viewModel.settingsDataStore.hueReactiveIntensity
+                        .collectAsStateWithLifecycle(initialValue = 0).value,
+                    syncOffsetMs = viewModel.settingsDataStore.hueSyncOffsetMs
+                        .collectAsStateWithLifecycle(initialValue = 200).value,
+                    areas = viewModel.hueAreas.collectAsStateWithLifecycle().value,
+                    isRefreshingAreas = viewModel.isRefreshingHueAreas
+                        .collectAsStateWithLifecycle().value,
+                    selectedAreaKey = viewModel.settingsDataStore.hueSelectedArea
+                        .collectAsStateWithLifecycle(initialValue = "").value,
+                    spreadBands = viewModel.settingsDataStore.hueSpreadBands
+                        .collectAsStateWithLifecycle(initialValue = true).value,
+                    driveDimmable = viewModel.settingsDataStore.hueDriveDimmable
+                        .collectAsStateWithLifecycle(initialValue = true).value,
+                    dimmableLagOffsetMs = viewModel.settingsDataStore.hueDimmableLagOffsetMs
+                        .collectAsStateWithLifecycle(initialValue = 0).value,
+                    onRefreshAreas = { viewModel.refreshHueAreas() },
+                    onSelectArea = { viewModel.setHueSelectedArea(it) },
+                    onClearArea = { viewModel.clearHueSelectedArea() },
+                    onSpreadBands = { viewModel.setHueSpreadBands(it) },
+                    onDriveDimmable = { viewModel.setHueDriveDimmable(it) },
+                    onDimmableLagOffset = { viewModel.setHueDimmableLagOffsetMs(it) },
+                    onDiscover = { viewModel.discoverHueBridge() },
+                    onPair = { manualIp -> viewModel.completeHuePair(manualIp) },
+                    onUnpair = { viewModel.unpairHue() },
+                    onAllOn = { viewModel.setHueAll(true) },
+                    onAllOff = { viewModel.setHueAll(false) },
+                    onApplyScene = { viewModel.applyHueScene(it) },
+                    onIntensity = { viewModel.setHueReactiveIntensity(it) },
+                    onSyncOffset = { viewModel.setHueSyncOffsetMs(it) }
+                )
+            },
+            SettingsItem(
+                "smart-home", "Smart home",
+                listOf("smart home", "automation", "matter", "placeholder")
+            ) {
+                SmartHomePlaceholder()
+            }
+        )),
+        // 7 — Automation
+        SettingsGroup("Automation", listOf(
+            SettingsItem(
+                "alarms", "Wake-up alarms",
+                listOf("alarm", "wake", "schedule", "timer", "recurring")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAlarmsSheet = true }
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Alarm, contentDescription = null,
+                        tint = TealAccent, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Wake-up alarms (${uiState.scheduledAlarms.size})",
+                            style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                        Text("Schedule playback at a chosen time. One-shot or recurring days-of-week.",
+                            style = MaterialTheme.typography.bodySmall, color = TextTertiary)
                     }
                 }
             },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = TealAccent,
-                unfocusedBorderColor = DisabledContent,
-                focusedTextColor = TextPrimary,
-                unfocusedTextColor = TextPrimary,
-                cursorColor = TealAccent
-            ),
+            SettingsItem(
+                "webhooks", "Webhooks",
+                listOf("webhook", "ifttt", "http", "automation", "trigger", "url", "event")
+            ) {
+                WebhooksSection(
+                    url = uiState.webhookUrl,
+                    onUrlChange = { viewModel.setWebhookUrl(it) },
+                    onPlay = uiState.webhookOnPlay,
+                    onPause = uiState.webhookOnPause,
+                    onResume = uiState.webhookOnResume,
+                    onSkipNext = uiState.webhookOnSkipNext,
+                    onSkipPrev = uiState.webhookOnSkipPrev,
+                    onEnd = uiState.webhookOnEnd,
+                    setPlay = { viewModel.setWebhookOnPlay(it) },
+                    setPause = { viewModel.setWebhookOnPause(it) },
+                    setResume = { viewModel.setWebhookOnResume(it) },
+                    setSkipNext = { viewModel.setWebhookOnSkipNext(it) },
+                    setSkipPrev = { viewModel.setWebhookOnSkipPrev(it) },
+                    setEnd = { viewModel.setWebhookOnEnd(it) },
+                    testStatus = viewModel.webhookTestStatus.collectAsStateWithLifecycle().value,
+                    onTest = { viewModel.testWebhook() }
+                )
+            },
+            SettingsItem(
+                "external-control", "External app control",
+                listOf("tasker", "macrodroid", "intent", "automation", "external", "api")
+            ) {
+                SettingsToggleItem(
+                    title = "External app control (Tasker / Macrodroid)",
+                    description = "Let other apps trigger play, pause, skip, and seek via Android " +
+                        "intents. Useful for automation workflows. Off by default — turn on only " +
+                        "if you trust the apps you're going to wire it up to.",
+                    icon = Icons.Filled.Code,
+                    checked = uiState.taskerIntentsEnabled,
+                    onCheckedChange = { viewModel.setTaskerIntentsEnabled(it) }
+                )
+            }
+        )),
+        // 6 — Appearance & system
+        SettingsGroup("Appearance & system", listOf(
+            SettingsItem(
+                "display", "Display & cover art",
+                listOf("display", "artwork", "cover", "art", "fit", "fill", "scale")
+            ) {
+                Text(
+                    text = "Choose whether the now-playing cover art shows the " +
+                        "whole image with margins (Fit) or fills the screen, " +
+                        "cropping edges if needed (Fill).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                ArtworkScalePicker(
+                    currentMode = uiState.artworkScaleMode,
+                    onModeChange = { viewModel.setArtworkScaleMode(it) }
+                )
+            },
+            SettingsItem(
+                "font-size", "Font & hitbox size",
+                listOf("font", "text size", "scale", "hitbox", "accessibility", "large")
+            ) {
+                // Hybrid font / hitbox scale. Slider 0.85x..2.00x with live
+                // preview. Drag commits continuously so the rest of the UI
+                // recomposes in real time and the user can see exactly how
+                // every screen looks at the chosen scale.
+                FontSizeScalePicker(
+                    current = uiState.fontSizeScale,
+                    onChange = { viewModel.setFontSizeScale(it) }
+                )
+            },
+            SettingsItem(
+                "theme", "Theme",
+                listOf("theme", "colour", "color", "dark", "oled", "appearance")
+            ) {
+                com.powermediaplayer.ui.settings.ThemeSection()
+            },
+            SettingsItem(
+                "diag-log", "Diagnostic logging",
+                listOf("diagnostic", "debug", "logs", "log", "battery", "trace", "forensic")
+            ) {
+                // Diagnostic logging (opt-in). Off by default. When on, writes
+                // technical events (BT remote opcodes, audio-effect attach
+                // results, key lifecycle, crashes) to app-private external
+                // storage so testers can pull the file via adb or Files app.
+                DiagLogPicker(
+                    enabled = uiState.diagLogEnabled,
+                    path = viewModel.diagLogPath(),
+                    bytes = viewModel.diagLogBytes(),
+                    onToggle = { viewModel.setDiagLogEnabled(it) },
+                    onClear = { viewModel.clearDiagLog() }
+                )
+            },
+            SettingsItem(
+                "about", "About & reset",
+                listOf("about", "version", "reset", "default", "restore", "build")
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                    Text(
+                        text = "Power Media Player",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TealAccent
+                    )
+                    Text(
+                        text = "Version 1.0.0",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Built with Media3 ExoPlayer, FFmpeg, Jetpack Compose",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showResetConfirm = true }
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = null,
+                        tint = ErrorRed, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Reset all settings",
+                            style = MaterialTheme.typography.titleSmall, color = ErrorRed)
+                        Text("Restore every preference to its default. Playback history, bookmarks, and downloaded files are NOT touched.",
+                            style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                    }
+                }
+            }
+        ))
+    ) }
+
+    val q = searchQuery.trim().lowercase()
+    val visibleGroups = groups
+        .map { g -> g to (if (q.isEmpty()) g.items else g.items.filter { it.matches(q) }) }
+        .filter { it.second.isNotEmpty() }
+
+    // Audit 8.1 (F4) — Expanded windows get a ListDetailPaneScaffold
+    // two-pane (group index left, group content right; search results
+    // span the detail pane). Compact/Medium keep the expandable single
+    // column EXACTLY as before — the collapsed-group search semantics
+    // (matrix DEP) live in the compact path unchanged; the two-pane
+    // path renders every item of the selected group, nothing hidden.
+    val twoPane = windowSizeClass?.widthSizeClass ==
+        androidx.compose.material3.windowsizeclass.WindowWidthSizeClass.Expanded
+    if (twoPane) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+                .fillMaxSize()
+                .background(OledBlack)
+                .imePadding()
+        ) {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = TealAccent
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
+            )
+            SettingsSearchField(value = searchQuery, onValueChange = { searchQuery = it })
+            SettingsTwoPane(
+                groups = groups,
+                visibleGroups = visibleGroups,
+                searching = q.isNotEmpty(),
+                query = searchQuery
+            )
+        }
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(OledBlack)
+                .verticalScroll(rememberScrollState())
+                .imePadding()   // audit 6.6
+        ) {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = TealAccent
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
+            )
+        SettingsSearchField(value = searchQuery, onValueChange = { searchQuery = it })
 
-        // The catalog is structurally static; the content lambdas read
-        // the DELEGATED uiState property, so they always see the live
-        // value. Audit 4.2: remember(uiState) re-allocated all 8 groups,
-        // 20 items and their keyword lists on EVERY settings write -
-        // including continuous slider drags. Allocate once.
-        val groups = remember { listOf(
-            // 1 — Playback (folds old Playback + Crossfade)
-            SettingsGroup("Playback", listOf(
-                SettingsItem(
-                    "playback", "Playback & audio focus",
-                    listOf("focus", "call", "notification", "headphone", "autoplay",
-                        "swipe", "gapless", "latency", "buffer", "bluetooth", "resume",
-                        "bookmark", "replay", "cold start", "backoff", "interrupt", "duck",
-                        "restore", "launch", "last played", "autoplay", "auto play")
-                ) {
-                    Text(
-                        text = "What this app does when something else needs the speakers — phone calls, alarms, navigation, or another music app.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                    )
-                    AudioFocusRow("Phone call", uiState.audioFocusOnCall) { viewModel.setAudioFocusOnCall(it) }
-                    AudioFocusRow("Other notification", uiState.audioFocusOnNotification) { viewModel.setAudioFocusOnNotification(it) }
-                    AudioFocusRow("Other media app", uiState.audioFocusOnOtherMedia) { viewModel.setAudioFocusOnOtherMedia(it) }
-                    SettingsToggleItem(
-                        title = "Auto-play on headphone connect",
-                        description = "When you plug in headphones (or connect a Bluetooth audio device), " +
-                            "automatically resume playback if a track is paused. Off by default to " +
-                            "avoid surprise audio.",
-                        icon = Icons.Filled.Headphones,
-                        checked = uiState.headphonePlugAutoplay,
-                        onCheckedChange = { viewModel.setHeadphonePlugAutoplay(it) }
-                    )
-                    SettingsToggleItem(
-                        title = "Stop playback on swipe-away",
-                        description = "When you swipe the app off the Recents list, stop the music. " +
-                            "Off by default — most music apps keep playing in the background " +
-                            "after a swipe-away, which is what you want for podcasts in the car.",
-                        icon = Icons.Filled.Close,
-                        checked = uiState.stopOnTaskRemoved,
-                        onCheckedChange = { viewModel.setStopOnTaskRemoved(it) }
-                    )
-                    SettingsToggleItem("Gapless playback", "Seamless transitions between tracks.",
-                        Icons.Filled.SkipNext, uiState.gaplessPlayback) { viewModel.setGapless(it) }
-                    SettingsToggleItem(
-                        title = "Low-latency audio buffer",
-                        description = "Snappier pitch / speed / effect changes (~50-100 ms quicker " +
-                            "to take effect). May cause brief glitches under CPU load. Apply by " +
-                            "starting a track after toggling.",
-                        icon = Icons.Filled.Speed,
-                        checked = uiState.audioBufferLowLatency,
-                        onCheckedChange = { viewModel.setAudioBufferLowLatency(it) }
-                    )
-                    SettingsToggleItem("Resume on Bluetooth connect",
-                        "Auto-resume the last track when a BT audio device reconnects.",
-                        Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
-                    SliderRow("Bookmark replay context", "${uiState.bookmarkReplayContextSec} s",
-                        uiState.bookmarkReplayContextSec.toFloat(), 0f..30f,
-                        default = 5f) { viewModel.setBookmarkReplayContextSec(it.toInt()) }
-                    Text(
-                        text = "Tap a bookmark and the seek lands a few seconds before the saved moment for context. 0 = exact.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                    )
-                    SettingsToggleItem(
-                        title = "Restore last played on launch",
-                        description = "When the app starts, load the most recent " +
-                            "local or Drive item into the player, paused where " +
-                            "you left off. Separate from 'Resume on Bluetooth " +
-                            "connect' and headphone auto-play, which act on " +
-                            "whatever is already in the player.",
-                        icon = Icons.Filled.History,
-                        checked = uiState.restoreLastOnLaunch,
-                        onCheckedChange = { viewModel.setRestoreLastOnLaunch(it) }
-                    )
-                    // Backoff only matters while the launch restore is on.
-                    if (uiState.restoreLastOnLaunch) {
-                        SettingsToggleItem(
-                            title = "Auto-play on launch",
-                            description = "Start playing the moment the app opens, " +
-                                "from where you left off — whether the app was " +
-                                "fully closed or still paused in the status bar. " +
-                                "Off by default so opening the app never makes " +
-                                "unexpected sound.",
-                            icon = Icons.Filled.PlayArrow,
-                            checked = uiState.autoplayOnLaunch,
-                            onCheckedChange = { viewModel.setAutoplayOnLaunch(it) }
-                        )
-                        SliderRow("Cold-start resume backoff", "${uiState.coldStartResumeBackoffSec} s",
-                            uiState.coldStartResumeBackoffSec.toFloat(), 0f..30f,
-                            default = 5f) { viewModel.setColdStartResumeBackoffSec(it.toInt()) }
-                        Text(
-                            text = "When re-opening the app after a force-stop, rewind by this many seconds before resuming. Helpful for re-finding context in podcasts and audiobooks.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                        )
+            if (visibleGroups.isEmpty()) {
+                Text(
+                    text = "No settings match “${searchQuery.trim()}”",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
+                )
+            } else {
+                visibleGroups.forEach { (group, items) ->
+                    // vc32: every group is expandable. Keyed on the group
+                    // title so collapse states survive the search filter
+                    // removing/reinserting groups (positional rememberSaveable
+                    // would mix states up). Default collapsed — the 8 headers
+                    // form a compact index; flagged for [VISUAL] sign-off.
+                    // While searching, matches are force-shown regardless of
+                    // the remembered state (filtering happens on the DATA
+                    // above, so collapsed groups are still searched).
+                    var expanded by rememberSaveable(key = "grp_${group.title}") {
+                        mutableStateOf(false)
                     }
-                },
-                SettingsItem(
-                    "crossfade", "Crossfade",
-                    listOf("fade", "gapless", "transition", "mix", "blend")
-                ) {
-                    SliderRow("Crossfade", "${uiState.crossfadeMs} ms",
-                        uiState.crossfadeMs.toFloat(), 0f..10_000f,
-                        default = 0f) { viewModel.setCrossfade(it.toInt()) }
-                    Text(
-                        text = "Master crossfade duration. Per-curve and per-trigger sub-toggles live on the Player tab's Crossfade panel.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                    val searching = q.isNotEmpty()
+                    SettingsGroupHeader(
+                        title = group.title,
+                        expanded = expanded,
+                        searching = searching,
+                        onToggle = { expanded = !expanded }
                     )
-                }
-            )),
-            // 3 — Library & cloud
-            SettingsGroup("Library & cloud", listOf(
-                SettingsItem(
-                    "library", "Library",
-                    listOf("scan", "deep scan", "stats", "listening", "hidden",
-                        "metadata", "enrichment", "musicbrainz", "discogs",
-                        "replaygain", "loudness", "normalise", "normalize")
-                ) {
-                    SettingsToggleItem(
-                        title = "Deep Scan",
-                        description = "Reads the full file header (via MediaMetadataRetriever) " +
-                                "when you tap 'Refresh metadata' on individual tracks — finds " +
-                                "tags like artist / album / artwork that MediaStore's faster " +
-                                "index missed. The main library scan always uses the fast " +
-                                "MediaStore path regardless of this setting, so toggling " +
-                                "here doesn't change scan time.",
-                        icon = Icons.Filled.DocumentScanner,
-                        checked = uiState.useDeepScan,
-                        onCheckedChange = { viewModel.setDeepScan(it) }
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showStatsSheet = true }
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    AnimatedVisibility(
+                        visible = expanded || searching,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
                     ) {
-                        Icon(Icons.Filled.QueryStats, contentDescription = null,
-                            tint = TealAccent, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Listening stats",
-                                style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                            Text("Total plays, time listened, top titles + artists.",
-                                style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showHiddenSheet = true }
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.VisibilityOff, contentDescription = null,
-                            tint = TealAccent, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Hidden files (${uiState.hiddenUris.size})",
-                                style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                            Text("Files hidden from the Library list. Tap to view and unhide.",
-                                style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                        }
-                    }
-                    SettingsToggleItem(
-                        title = "Online metadata enrichment",
-                        description = "When a track has missing info (artist, album, year, genre, " +
-                            "cover art), look it up on MusicBrainz / Discogs and fill in the blanks. " +
-                            "Off by default to avoid network requests on poorly-tagged libraries.",
-                        icon = Icons.Filled.CloudDownload,
-                        checked = uiState.metadataEnrichmentEnabled,
-                        onCheckedChange = { viewModel.setMetadataEnrichmentEnabled(it) }
-                    )
-                    com.powermediaplayer.ui.settings.EnrichmentSubToggles()
-                    com.powermediaplayer.ui.settings.ReplayGainScanRow()
-                    com.powermediaplayer.ui.settings.ReplayGainModeRow()
-                    SettingsToggleItem(
-                        title = "Auto-scan ReplayGain on new files",
-                        description = "Calculate loudness for every newly-discovered audio file so " +
-                            "tracks at different volumes play at consistent loudness. Off by default " +
-                            "(scan can be slow on first import).",
-                        icon = Icons.Filled.GraphicEq,
-                        checked = uiState.replayGainAutoScan,
-                        onCheckedChange = { viewModel.setReplayGainAutoScan(it) }
-                    )
-                    SettingsToggleItem("ReplayGain normalisation",
-                        "Even out loudness across tracks using their REPLAYGAIN tags.",
-                        Icons.Filled.GraphicEq, uiState.replayGainEnabled) { viewModel.setReplayGain(it) }
-                },
-                SettingsItem(
-                    "cloud", "Cloud",
-                    listOf("offline", "storage", "prefetch", "pre-fetch", "buffer", "drive", "stream")
-                ) {
-                    com.powermediaplayer.ui.settings.OfflineStorageLimitRow()
-                    SettingsToggleItem("Pre-fetch next cloud track",
-                        "Buffer the next item in a cloud queue for seamless transition.",
-                        Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }
-                }
-            )),
-            // 4 — Connectivity
-            SettingsGroup("Connectivity", listOf(
-                SettingsItem(
-                    "bluetooth-car", "Bluetooth car controls",
-                    listOf("bluetooth", "car", "stereo", "remote", "button", "prev", "next", "skip")
-                ) {
-                    Text(
-                        text = "Remap the Previous and Next buttons on your car stereo " +
-                            "(or any Bluetooth remote) when playing through this app. " +
-                            "Works with any car that already controls media over Bluetooth — " +
-                            "no setup needed in the car.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                    )
-                    BluetoothActionPicker(
-                        label = "Previous button does",
-                        currentAction = uiState.btPrevAction,
-                        seconds = uiState.btSkipBackSeconds,
-                        options = PREV_OPTIONS,
-                        onActionChange = { viewModel.setBtPrevAction(it) },
-                        onSecondsChange = { viewModel.setBtSkipBackSeconds(it) }
-                    )
-                    BluetoothActionPicker(
-                        label = "Next button does",
-                        currentAction = uiState.btNextAction,
-                        seconds = uiState.btSkipForwardSeconds,
-                        options = NEXT_OPTIONS,
-                        onActionChange = { viewModel.setBtNextAction(it) },
-                        onSecondsChange = { viewModel.setBtSkipForwardSeconds(it) }
-                    )
-                },
-                SettingsItem(
-                    "bt-av-offset", "Bluetooth A/V sync offset",
-                    listOf("bluetooth", "offset", "sync", "delay", "lip", "latency", "video", "audio")
-                ) {
-                    BtVideoAudioOffsetRow(
-                        valueMs = uiState.btVideoAudioOffsetMs,
-                        onValueChange = { viewModel.setBtVideoAudioOffsetMs(it) }
-                    )
-                }
-            )),
-            // 5 — Audio
-            SettingsGroup("Audio", listOf(
-                SettingsItem(
-                    "audio-effects", "Audio effects",
-                    listOf("eq", "equaliser", "equalizer", "reverb", "echo", "bass",
-                        "stereo", "mono", "passthrough", "volume", "boost", "pitch",
-                        "reverse", "backwards", "headphone")
-                ) {
-                    com.powermediaplayer.ui.settings.HeadphoneEqSection()
-                    Text(
-                        "Reverb",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(start = 24.dp, top = 8.dp, bottom = 4.dp)
-                    )
-                    val reverbOptions = listOf(
-                        0 to "Off", 1 to "Room", 2 to "Medium hall",
-                        3 to "Large hall", 4 to "Plate", 5 to "Cave"
-                    )
-                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                        reverbOptions.forEach { (id, label) ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.setReverbPreset(id) }
-                                    .padding(vertical = 6.dp)
-                            ) {
-                                RadioButton(
-                                    selected = uiState.reverbPreset == id,
-                                    onClick = { viewModel.setReverbPreset(id) }
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(label, color = TextPrimary)
+                        Column {
+                            items.forEachIndexed { idx, item ->
+                                item.content()
+                                if (idx < items.lastIndex) SettingsDivider()
                             }
                         }
                     }
-                    SettingsToggleItem("Stereo flip (L↔R)",
-                        "Swap left and right channels. Useful when headphones are mis-wired or for spatial-audio experiments.",
-                        Icons.Filled.SwapHoriz, uiState.stereoFlip) { viewModel.setStereoFlip(it) }
-                    SettingsToggleItem("Mono mix",
-                        "Mix both channels into a centred mono image (still output as stereo so headphones receive the same on both ears).",
-                        Icons.Filled.Adjust, uiState.monoMix) { viewModel.setMonoMix(it) }
-                    SettingsToggleItem("Multi-channel passthrough",
-                        "When on, 5.1/7.1/Dolby/DTS audio bitstream is sent to a connected receiver / HDMI sink unchanged so it can decode itself. Off forces software downmix to stereo.",
-                        Icons.Filled.Speaker, uiState.passthroughAudio) { viewModel.setPassthroughAudio(it) }
-                    SliderRow("Volume boost", "+${uiState.volumeBoostMb / 100} dB",
-                        uiState.volumeBoostMb.toFloat(), 0f..2000f,
-                        default = 0f) { viewModel.setVolumeBoost(it.toInt()) }
-                    SliderRow("Independent pitch", "${"%.2f".format(uiState.pitch)}×",
-                        uiState.pitch, 0.5f..2.0f,
-                        default = 1.0f) { viewModel.setPitch(it) }
-                    SettingsToggleItem("Reverse audio (audio only)",
-                        "Plays a song or recording backwards — audio only, one " +
-                            "file at a time. The first play takes a moment while " +
-                            "the file is flipped; after that it's instant. Works " +
-                            "with files on your phone (up to 60 minutes long) and " +
-                            "Drive files (up to 50 MB). Doesn't work with video " +
-                            "or Spotify.",
-                        Icons.Filled.SwapHoriz, uiState.audioReverseLocal) { viewModel.setAudioReverseLocal(it) }
+                    SettingsDivider()
                 }
-            )),
-            // 2 — Video & subtitles (folds Video + Subtitles + Auto-hide)
-            SettingsGroup("Video & subtitles", listOf(
-                SettingsItem(
-                    "video", "Video",
-                    listOf("decode", "decoding", "software", "hardware", "codec", "audio delay", "sync")
-                ) {
-                    SettingsToggleItem(
-                        title = "Software Decoding",
-                        description = "Hardware decoding (default) uses your phone's dedicated video chip " +
-                                "for smooth, battery-efficient playback. Switch to Software decoding if you " +
-                                "see visual corruption, green screens, or freezing — this uses the CPU instead, " +
-                                "which is slower but more compatible.",
-                        icon = Icons.Filled.Memory,
-                        checked = uiState.useSoftwareDecoding,
-                        onCheckedChange = { viewModel.setSoftwareDecoding(it) }
-                    )
-                    Row(
-                        modifier = Modifier.padding(start = 72.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (uiState.useSoftwareDecoding) Icons.Filled.Warning else Icons.Filled.CheckCircle,
-                            contentDescription = null,
-                            tint = if (uiState.useSoftwareDecoding) WarningAmber else SuccessGreen,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (uiState.useSoftwareDecoding) "Using CPU decoding (slower, more compatible)"
-                            else "Using hardware decoding (faster, battery efficient)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (uiState.useSoftwareDecoding) WarningAmber else SuccessGreen
-                        )
-                    }
-                    SliderRow("Audio delay", "${uiState.audioDelayMs} ms",
-                        uiState.audioDelayMs.toFloat(), -2000f..2000f,
-                        default = 0f) { viewModel.setAudioDelay(it.toInt()) }
-                },
-                SettingsItem(
-                    "subtitles", "Subtitles",
-                    listOf("subtitle", "captions", "caption", "srt", "vtt", "ass", "ssa",
-                        "opensubtitles", "delay", "format")
-                ) {
-                    SettingsSectionHeader("Subtitles — OpenSubtitles account")
-                    com.powermediaplayer.ui.settings.OpenSubtitlesSection()
-                    SettingsSectionHeader("Subtitles — Format Preference")
-                    val formats = listOf(
-                        SubtitleFormatInfo(
-                            code = "SRT",
-                            name = "SRT — SubRip Text",
-                            description = "Simple text subtitles. Just words on screen with basic timing. " +
-                                    "Works everywhere — the most universally supported format."
-                        ),
-                        SubtitleFormatInfo(
-                            code = "VTT",
-                            name = "VTT — Web Video Text Tracks",
-                            description = "Web-standard subtitles. Supports basic styling like bold and colors. " +
-                                    "Used by most streaming services including YouTube and Netflix."
-                        ),
-                        SubtitleFormatInfo(
-                            code = "ASS",
-                            name = "ASS/SSA — Advanced SubStation Alpha",
-                            description = "Advanced subtitles with full typographic control — custom fonts, " +
-                                    "positioned text, karaoke effects, and animated styling. " +
-                                    "Common in anime fansubs and professional subtitle work."
-                        )
-                    )
-                    formats.forEach { format ->
-                        SubtitleFormatOption(
-                            format = format,
-                            isSelected = uiState.subtitleFormat == format.code,
-                            onSelect = { viewModel.setSubtitleFormat(format.code) }
-                        )
-                    }
-                    SliderRow("Subtitle delay", "${uiState.subtitleDelayMs} ms",
-                        uiState.subtitleDelayMs.toFloat(), -5000f..5000f,
-                        default = 0f) { viewModel.setSubtitleDelay(it.toInt()) }
-                    Text(
-                        text = "Positive = subtitles appear later; negative = earlier. " +
-                            "Typical nudge is ±100–500 ms.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
-                    )
-                },
-                SettingsItem(
-                    "autohide", "Auto-hide controls",
-                    listOf("auto hide", "hide", "controls", "timeout", "popup", "overlay",
-                        "crossfade panel", "info sheet", "track menu")
-                ) {
-                    Text(
-                        text = "How long the on-screen controls stay visible after you " +
-                            "stop touching the screen. 'Never' keeps them until you tap.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                    )
-                    AutoHideRow("Video controls", "Player buttons + slider while watching video.",
-                        uiState.videoControlsHideSec, { viewModel.setVideoControlsHideSec(it) }, true)
-                    AutoHideRow("Audio effects popup", "Reverb / stereo flip / mono mix sub-popup.",
-                        uiState.audioEffectsPopupHideSec, { viewModel.setAudioEffectsPopupHideSec(it) }, true)
-                    AutoHideRow("Video effects popup", "Mirror / B&W / sepia / rotation sub-popup.",
-                        uiState.videoEffectsPopupHideSec, { viewModel.setVideoEffectsPopupHideSec(it) }, true)
-                    AutoHideRow("Crossfade panel", "Master crossfade + 9 sub-toggles popup.",
-                        uiState.crossfadePopupHideSec, { viewModel.setCrossfadePopupHideSec(it) }, true)
-                    AutoHideRow("Info sheet (the 'i' icon)", "Per-tab help / explanation sheet.",
-                        uiState.infoSheetHideSec, { viewModel.setInfoSheetHideSec(it) }, true)
-                    AutoHideRow("Long-press track menu", "Favourite / Hide / Share / Delete row sheet.",
-                        uiState.trackContextSheetHideSec, { viewModel.setTrackContextSheetHideSec(it) }, true)
-                }
-            )),
-            // 8 — Lighting
-            SettingsGroup("Lighting", listOf(
-                SettingsItem(
-                    "hue", "Philips Hue",
-                    listOf("hue", "lights", "lighting", "philips", "bulb", "colour", "color",
-                        "bridge", "entertainment", "reactive", "scene")
-                ) {
-                    HueSection(
-                        bridgeIp = uiState.hueBridgeIp,
-                        appKey = uiState.hueAppKey,
-                        discoveredIp = viewModel.hueDiscoveredIp.collectAsStateWithLifecycle().value,
-                        pairStatus = viewModel.huePairStatus.collectAsStateWithLifecycle().value,
-                        reactiveIntensity = viewModel.settingsDataStore.hueReactiveIntensity
-                            .collectAsStateWithLifecycle(initialValue = 0).value,
-                        syncOffsetMs = viewModel.settingsDataStore.hueSyncOffsetMs
-                            .collectAsStateWithLifecycle(initialValue = 200).value,
-                        areas = viewModel.hueAreas.collectAsStateWithLifecycle().value,
-                        isRefreshingAreas = viewModel.isRefreshingHueAreas
-                            .collectAsStateWithLifecycle().value,
-                        selectedAreaKey = viewModel.settingsDataStore.hueSelectedArea
-                            .collectAsStateWithLifecycle(initialValue = "").value,
-                        spreadBands = viewModel.settingsDataStore.hueSpreadBands
-                            .collectAsStateWithLifecycle(initialValue = true).value,
-                        driveDimmable = viewModel.settingsDataStore.hueDriveDimmable
-                            .collectAsStateWithLifecycle(initialValue = true).value,
-                        dimmableLagOffsetMs = viewModel.settingsDataStore.hueDimmableLagOffsetMs
-                            .collectAsStateWithLifecycle(initialValue = 0).value,
-                        onRefreshAreas = { viewModel.refreshHueAreas() },
-                        onSelectArea = { viewModel.setHueSelectedArea(it) },
-                        onClearArea = { viewModel.clearHueSelectedArea() },
-                        onSpreadBands = { viewModel.setHueSpreadBands(it) },
-                        onDriveDimmable = { viewModel.setHueDriveDimmable(it) },
-                        onDimmableLagOffset = { viewModel.setHueDimmableLagOffsetMs(it) },
-                        onDiscover = { viewModel.discoverHueBridge() },
-                        onPair = { manualIp -> viewModel.completeHuePair(manualIp) },
-                        onUnpair = { viewModel.unpairHue() },
-                        onAllOn = { viewModel.setHueAll(true) },
-                        onAllOff = { viewModel.setHueAll(false) },
-                        onApplyScene = { viewModel.applyHueScene(it) },
-                        onIntensity = { viewModel.setHueReactiveIntensity(it) },
-                        onSyncOffset = { viewModel.setHueSyncOffsetMs(it) }
-                    )
-                },
-                SettingsItem(
-                    "smart-home", "Smart home",
-                    listOf("smart home", "automation", "matter", "placeholder")
-                ) {
-                    SmartHomePlaceholder()
-                }
-            )),
-            // 7 — Automation
-            SettingsGroup("Automation", listOf(
-                SettingsItem(
-                    "alarms", "Wake-up alarms",
-                    listOf("alarm", "wake", "schedule", "timer", "recurring")
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showAlarmsSheet = true }
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.Alarm, contentDescription = null,
-                            tint = TealAccent, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Wake-up alarms (${uiState.scheduledAlarms.size})",
-                                style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                            Text("Schedule playback at a chosen time. One-shot or recurring days-of-week.",
-                                style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                        }
-                    }
-                },
-                SettingsItem(
-                    "webhooks", "Webhooks",
-                    listOf("webhook", "ifttt", "http", "automation", "trigger", "url", "event")
-                ) {
-                    WebhooksSection(
-                        url = uiState.webhookUrl,
-                        onUrlChange = { viewModel.setWebhookUrl(it) },
-                        onPlay = uiState.webhookOnPlay,
-                        onPause = uiState.webhookOnPause,
-                        onResume = uiState.webhookOnResume,
-                        onSkipNext = uiState.webhookOnSkipNext,
-                        onSkipPrev = uiState.webhookOnSkipPrev,
-                        onEnd = uiState.webhookOnEnd,
-                        setPlay = { viewModel.setWebhookOnPlay(it) },
-                        setPause = { viewModel.setWebhookOnPause(it) },
-                        setResume = { viewModel.setWebhookOnResume(it) },
-                        setSkipNext = { viewModel.setWebhookOnSkipNext(it) },
-                        setSkipPrev = { viewModel.setWebhookOnSkipPrev(it) },
-                        setEnd = { viewModel.setWebhookOnEnd(it) },
-                        testStatus = viewModel.webhookTestStatus.collectAsStateWithLifecycle().value,
-                        onTest = { viewModel.testWebhook() }
-                    )
-                },
-                SettingsItem(
-                    "external-control", "External app control",
-                    listOf("tasker", "macrodroid", "intent", "automation", "external", "api")
-                ) {
-                    SettingsToggleItem(
-                        title = "External app control (Tasker / Macrodroid)",
-                        description = "Let other apps trigger play, pause, skip, and seek via Android " +
-                            "intents. Useful for automation workflows. Off by default — turn on only " +
-                            "if you trust the apps you're going to wire it up to.",
-                        icon = Icons.Filled.Code,
-                        checked = uiState.taskerIntentsEnabled,
-                        onCheckedChange = { viewModel.setTaskerIntentsEnabled(it) }
-                    )
-                }
-            )),
-            // 6 — Appearance & system
-            SettingsGroup("Appearance & system", listOf(
-                SettingsItem(
-                    "display", "Display & cover art",
-                    listOf("display", "artwork", "cover", "art", "fit", "fill", "scale")
-                ) {
-                    Text(
-                        text = "Choose whether the now-playing cover art shows the " +
-                            "whole image with margins (Fit) or fills the screen, " +
-                            "cropping edges if needed (Fill).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                    )
-                    ArtworkScalePicker(
-                        currentMode = uiState.artworkScaleMode,
-                        onModeChange = { viewModel.setArtworkScaleMode(it) }
-                    )
-                },
-                SettingsItem(
-                    "font-size", "Font & hitbox size",
-                    listOf("font", "text size", "scale", "hitbox", "accessibility", "large")
-                ) {
-                    // Hybrid font / hitbox scale. Slider 0.85x..2.00x with live
-                    // preview. Drag commits continuously so the rest of the UI
-                    // recomposes in real time and the user can see exactly how
-                    // every screen looks at the chosen scale.
-                    FontSizeScalePicker(
-                        current = uiState.fontSizeScale,
-                        onChange = { viewModel.setFontSizeScale(it) }
-                    )
-                },
-                SettingsItem(
-                    "theme", "Theme",
-                    listOf("theme", "colour", "color", "dark", "oled", "appearance")
-                ) {
-                    com.powermediaplayer.ui.settings.ThemeSection()
-                },
-                SettingsItem(
-                    "diag-log", "Diagnostic logging",
-                    listOf("diagnostic", "debug", "logs", "log", "battery", "trace", "forensic")
-                ) {
-                    // Diagnostic logging (opt-in). Off by default. When on, writes
-                    // technical events (BT remote opcodes, audio-effect attach
-                    // results, key lifecycle, crashes) to app-private external
-                    // storage so testers can pull the file via adb or Files app.
-                    DiagLogPicker(
-                        enabled = uiState.diagLogEnabled,
-                        path = viewModel.diagLogPath(),
-                        bytes = viewModel.diagLogBytes(),
-                        onToggle = { viewModel.setDiagLogEnabled(it) },
-                        onClear = { viewModel.clearDiagLog() }
-                    )
-                },
-                SettingsItem(
-                    "about", "About & reset",
-                    listOf("about", "version", "reset", "default", "restore", "build")
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-                        Text(
-                            text = "Power Media Player",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TealAccent
-                        )
-                        Text(
-                            text = "Version 1.0.0",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Built with Media3 ExoPlayer, FFmpeg, Jetpack Compose",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showResetConfirm = true }
-                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.RestartAlt, contentDescription = null,
-                            tint = ErrorRed, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Reset all settings",
-                                style = MaterialTheme.typography.titleSmall, color = ErrorRed)
-                            Text("Restore every preference to its default. Playback history, bookmarks, and downloaded files are NOT touched.",
-                                style = MaterialTheme.typography.bodySmall, color = TextTertiary)
-                        }
-                    }
-                }
-            ))
-        ) }
-
-        val q = searchQuery.trim().lowercase()
-        val visibleGroups = groups
-            .map { g -> g to (if (q.isEmpty()) g.items else g.items.filter { it.matches(q) }) }
-            .filter { it.second.isNotEmpty() }
-
-        if (visibleGroups.isEmpty()) {
-            Text(
-                text = "No settings match “${searchQuery.trim()}”",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
-            )
-        } else {
-            visibleGroups.forEach { (group, items) ->
-                // vc32: every group is expandable. Keyed on the group
-                // title so collapse states survive the search filter
-                // removing/reinserting groups (positional rememberSaveable
-                // would mix states up). Default collapsed — the 8 headers
-                // form a compact index; flagged for [VISUAL] sign-off.
-                // While searching, matches are force-shown regardless of
-                // the remembered state (filtering happens on the DATA
-                // above, so collapsed groups are still searched).
-                var expanded by rememberSaveable(key = "grp_${group.title}") {
-                    mutableStateOf(false)
-                }
-                val searching = q.isNotEmpty()
-                SettingsGroupHeader(
-                    title = group.title,
-                    expanded = expanded,
-                    searching = searching,
-                    onToggle = { expanded = !expanded }
-                )
-                AnimatedVisibility(
-                    visible = expanded || searching,
-                    enter = expandVertically(),
-                    exit = shrinkVertically()
-                ) {
-                    Column {
-                        items.forEachIndexed { idx, item ->
-                            item.content()
-                            if (idx < items.lastIndex) SettingsDivider()
-                        }
-                    }
-                }
-                SettingsDivider()
             }
-        }
 
-        // vc31: was 80dp — marginal above a 3-button nav bar under
-        // edge-to-edge. 96dp keeps the Reset button clear of the bar.
-        Spacer(modifier = Modifier.height(96.dp))
+            // vc31: was 80dp — marginal above a 3-button nav bar under
+            // edge-to-edge. 96dp keeps the Reset button clear of the bar.
+            Spacer(modifier = Modifier.height(96.dp))
+        }
     }
 }
 
@@ -2336,3 +2354,134 @@ private fun HueSection(
         }
     }
 }
+
+
+// ── F4 (audit 8.1): adaptive Settings ────────────────────────────
+
+@Composable
+private fun SettingsSearchField(value: String, onValueChange: (String) -> Unit) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            placeholder = { Text("Search settings…", color = TextTertiary) },
+            leadingIcon = {
+                Icon(Icons.Filled.Search, contentDescription = null, tint = TextSecondary)
+            },
+            trailingIcon = {
+                if (value.isNotEmpty()) {
+                    IconButton(onClick = { onValueChange("") }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear search", tint = TextSecondary)
+                    }
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = TealAccent,
+                unfocusedBorderColor = DisabledContent,
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary,
+                cursorColor = TealAccent
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+}
+
+@OptIn(androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi::class)
+@Composable
+private fun SettingsTwoPane(
+    groups: List<SettingsGroup>,
+    visibleGroups: List<Pair<SettingsGroup, List<SettingsItem>>>,
+    searching: Boolean,
+    query: String,
+) {
+    val navigator = rememberListDetailPaneScaffoldNavigator<String>()
+    val scope = rememberCoroutineScope()
+    ListDetailPaneScaffold(
+        directive = navigator.scaffoldDirective,
+        value = navigator.scaffoldValue,
+        listPane = {
+            AnimatedPane {
+                val selectedKey = navigator.currentDestination?.contentKey ?: groups.first().title
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(groups, key = { it.title }) { group ->
+                        val selected = group.title == selectedKey
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch {
+                                        navigator.navigateTo(
+                                            ListDetailPaneScaffoldRole.Detail,
+                                            group.title
+                                        )
+                                    }
+                                }
+                                .padding(horizontal = 24.dp, vertical = 16.dp)
+                        ) {
+                            Text(
+                                text = group.title,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (selected) TealAccent else TextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "${group.items.size}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TextTertiary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        detailPane = {
+            AnimatedPane {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    if (searching) {
+                        // Search results span the detail pane — every match
+                        // across every group, grouped under small headers.
+                        if (visibleGroups.isEmpty()) {
+                            Text(
+                                text = "No settings match \u201c${query.trim()}\u201d",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp)
+                            )
+                        } else {
+                            visibleGroups.forEach { (group, matchedItems) ->
+                                Text(
+                                    text = group.title,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TealAccent,
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                                )
+                                matchedItems.forEachIndexed { idx, item ->
+                                    item.content()
+                                    if (idx < matchedItems.lastIndex) SettingsDivider()
+                                }
+                                SettingsDivider()
+                            }
+                        }
+                    } else {
+                        val key = navigator.currentDestination?.contentKey ?: groups.first().title
+                        val group = groups.firstOrNull { it.title == key } ?: groups.first()
+                        // The selected group renders always-expanded here.
+                        group.items.forEachIndexed { idx, item ->
+                            item.content()
+                            if (idx < group.items.lastIndex) SettingsDivider()
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(96.dp))
+                }
+            }
+        }
+    )
+}
+

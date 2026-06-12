@@ -6,6 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed as gridItemsIndexed
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -193,8 +197,14 @@ fun LastPlayedScreen(
             // window heights and the recents list collapsed to zero. The
             // reorderable pinned list stays one item (it is its own
             // bounded-height LazyColumn, max 360dp - nestable).
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                item(key = "pinned_albums_block") {
+            // Audit 8.1 (F4) — Adaptive(360dp) = 1 column on phones (identical
+            // to the old LazyColumn), 2-3 on tablets. Pinned blocks + headers
+            // span the full line; recents tile into columns.
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 360.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                item(key = "pinned_albums_block", span = { GridItemSpan(maxLineSpan) }) {
                     Column {
                     if (pinnedAlbums.isNotEmpty()) {
                         SectionHeader(
@@ -215,7 +225,7 @@ fun LastPlayedScreen(
                     }
                     }
                 }
-                item(key = "pinned_tracks_block") {
+                item(key = "pinned_tracks_block", span = { GridItemSpan(maxLineSpan) }) {
                     Column {
                     if (pinned.isNotEmpty()) {
                         SectionHeader(
@@ -247,14 +257,14 @@ fun LastPlayedScreen(
                     }
                     }
                 }
-                item(key = "recents_header") {
+                item(key = "recents_header", span = { GridItemSpan(maxLineSpan) }) {
                 RecentsSectionHeader(
                     visible = dynamic.isNotEmpty(),
                     emptyLabel = "No recent items",
                     onClearAll = { showClearAllConfirm = true }
                 )
                 }
-                itemsIndexed(dynamic, key = { _, it -> "dyn_${it.id}" }) { _, item ->
+                gridItemsIndexed(dynamic, key = { _, it -> "dyn_${it.id}" }) { _, item ->
                     SwipeToDismissRow(
                         onDismissed = {
                             viewModel.deleteRecentsRow(item.id)
