@@ -43,6 +43,39 @@ object MainActivityHolder {
     private var ref: java.lang.ref.WeakReference<android.app.Activity>? = null
     fun set(a: android.app.Activity) { ref = java.lang.ref.WeakReference(a) }
     fun get(): android.app.Activity? = ref?.get()
+
+    /**
+     * Audit 6.4/8.3 — true while immersive video has the system bars
+     * hidden; the activity root drops its systemBarsPadding so the
+     * video really is full-bleed. Written by the player's controls-
+     * visibility effect, read by setContent.
+     */
+    val fullBleedVideo = androidx.compose.runtime.mutableStateOf(false)
+
+    /**
+     * 8.3 — rotate-to-fullscreen toggle. An activity-level orientation
+     * request overrides the user's auto-rotate quick-setting on phones
+     * with NO permission (verified against current platform docs);
+     * Android 12L+ large-screen devices may ignore it by policy, which
+     * is why the button only shows on compact widths.
+     */
+    fun toggleVideoOrientation() {
+        val a = get() ?: return
+        a.requestedOrientation =
+            if (a.requestedOrientation ==
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            ) {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            } else {
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+    }
+
+    /** Leaving the player must never strand an orientation lock. */
+    fun releaseVideoOrientation() {
+        get()?.requestedOrientation =
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
 }
 
 @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
@@ -218,7 +251,13 @@ class MainActivity : FragmentActivity() {
                         androidx.compose.foundation.layout.Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .systemBarsPadding()
+                                // Audit 6.4 — immersive video drops the bar
+                                // padding so the frame is truly full-bleed;
+                                // everything else keeps the inset chrome.
+                                .then(
+                                    if (MainActivityHolder.fullBleedVideo.value) Modifier
+                                    else Modifier.systemBarsPadding()
+                                )
                         ) {
                             AppNavigation(
                                 windowSizeClass = windowSizeClass,

@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -465,6 +466,38 @@ private fun PlayerScreenCompact(
         if (!uiState.isVideoContent) controlsVisible = true
     }
 
+    // Audit 6.4 / 8.3a — immersive: system bars follow the video
+    // controls. Hidden controls = hidden bars + full-bleed root; any
+    // other state (controls shown, audio, leaving the screen) restores
+    // them. Swipe shows transient bars per platform convention.
+    val immersiveActivity = androidx.compose.ui.platform.LocalContext.current
+        as? android.app.Activity
+    LaunchedEffect(uiState.isVideoContent, controlsVisible) {
+        val window = immersiveActivity?.window ?: return@LaunchedEffect
+        val ctrl = androidx.core.view.WindowCompat
+            .getInsetsController(window, window.decorView)
+        if (uiState.isVideoContent && !controlsVisible) {
+            ctrl.systemBarsBehavior = androidx.core.view
+                .WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            ctrl.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        } else {
+            ctrl.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+        com.powermediaplayer.MainActivityHolder.fullBleedVideo.value =
+            uiState.isVideoContent && !controlsVisible
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            immersiveActivity?.window?.let { w ->
+                androidx.core.view.WindowCompat.getInsetsController(w, w.decorView)
+                    .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+            com.powermediaplayer.MainActivityHolder.fullBleedVideo.value = false
+            // 8.3b — leaving the player never strands an orientation lock.
+            com.powermediaplayer.MainActivityHolder.releaseVideoOrientation()
+        }
+    }
+
     // No parent tap-detector — the previous Modifier.clickable on the
     // parent Box caused recompositions per tap that surfaced as
     // controls-row jumps and stutter. Auto-hide (4 s) is the sole
@@ -625,6 +658,27 @@ private fun OverlayContent(
                 .align(Alignment.TopEnd)
                 .padding(top = 8.dp, end = 8.dp)
         )
+        // 8.3b — rotate-to-fullscreen for video on COMPACT widths only:
+        // 12L+ large-screen devices may ignore orientation requests by
+        // policy, and wide windows already show video large. No
+        // permission needed — activity-level requests override the
+        // auto-rotate quick-setting on phones.
+        val compactWidth = androidx.compose.ui.platform.LocalConfiguration
+            .current.screenWidthDp < 600
+        if (uiState.isVideoContent && compactWidth) {
+            androidx.compose.material3.IconButton(
+                onClick = { com.powermediaplayer.MainActivityHolder.toggleVideoOrientation() },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 8.dp, start = 8.dp)
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Filled.ScreenRotation,
+                    contentDescription = "Rotate video to fullscreen",
+                    tint = com.powermediaplayer.ui.theme.TealAccent
+                )
+            }
+        }
     }
     // Audit 6.8 - the video overlay's ~500dp control stack clipped at
     // compact window heights (split screen, landscape phones): controls
