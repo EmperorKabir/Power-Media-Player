@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +86,8 @@ fun MediaOverridesPopup(
         containerColor = Color.Black
     ) {
         Column(modifier = Modifier
+            .widthIn(max = 560.dp)   // audit 8.1 (F5) — no full-width tablet sheet
+            .align(Alignment.CenterHorizontally)
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(

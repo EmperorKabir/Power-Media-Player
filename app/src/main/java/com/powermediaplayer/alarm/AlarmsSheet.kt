@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -68,7 +69,11 @@ fun AlarmsSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.Black
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier
+            .widthIn(max = 560.dp)   // audit 8.1 (F5) — no full-width tablet sheet
+            .align(Alignment.CenterHorizontally)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)) {
             // §C12 — full-screen-intent permission banner. Locked spec
             // says it appears on the FIRST alarm save. We surface it
             // when alarms.isNotEmpty() (post-save) AND the permission

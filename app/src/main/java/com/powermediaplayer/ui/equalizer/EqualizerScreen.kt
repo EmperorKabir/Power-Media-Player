@@ -62,10 +62,17 @@ fun EqualizerScreen(
         )
     }
 
-    Column(
+    // Audit 8.1 (F5) — content capped at 720dp and centred so the band
+    // grid and sliders don't stretch edge-to-edge on tablets.
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(OledBlack)
+            .background(OledBlack),
+        contentAlignment = Alignment.TopCenter
+    ) {
+    Column(
+        modifier = Modifier
+            .widthIn(max = 720.dp)
             .verticalScroll(rememberScrollState())
             .imePadding()   // audit 6.6 - keyboard must not cover band fields
     ) {
@@ -274,6 +281,7 @@ fun EqualizerScreen(
         HeadphonePresetsSection(viewModel = viewModel)
 
         Spacer(modifier = Modifier.height(80.dp))
+    }
     }
 
     // ── Save Preset Dialog ──────────────────────────────────────
