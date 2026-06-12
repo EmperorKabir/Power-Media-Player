@@ -239,6 +239,12 @@
                 android:resource="@xml/widget_now_playing_info" />
         </receiver>
 
+        <!-- Audit 6.12 — PiP window transport actions. exported=false:
+             only our own PendingIntents target it. -->
+        <receiver
+            android:name=".widget.PipActionReceiver"
+            android:exported="false" />
+
         <!-- §C12 — wake-up alarms. exported=false: only fired by the
              AlarmManager PendingIntent we own. -->
         <receiver

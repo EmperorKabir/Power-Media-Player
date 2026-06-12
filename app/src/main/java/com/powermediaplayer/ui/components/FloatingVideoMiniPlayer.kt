@@ -1,6 +1,8 @@
 package com.powermediaplayer.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -61,9 +63,26 @@ fun FloatingVideoMiniPlayer(
 
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+    // Audit 6.11 — raw delta accumulation could drag the window (and its
+    // ✕) fully off-screen, and a fold/resize stranded saved offsets
+    // outside the new bounds. Clamp on every drag AND on size change.
+    var containerSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var selfSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    fun clampOffsets() {
+        // Anchored BottomEnd: legal offsets are ≤0 (leftwards/upwards).
+        val maxLeft = (containerSize.width - selfSize.width).coerceAtLeast(0).toFloat()
+        val maxUp = (containerSize.height - selfSize.height).coerceAtLeast(0).toFloat()
+        offsetX = offsetX.coerceIn(-maxLeft, 0f)
+        offsetY = offsetY.coerceIn(-maxUp, 0f)
+    }
+    LaunchedEffect(containerSize, selfSize) { clampOffsets() }
 
     // The container does not consume touches — only the window does.
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { containerSize = it }
+    ) {
         Surface(
             shape = RoundedCornerShape(10.dp),
             color = OledBlack,
@@ -73,11 +92,13 @@ fun FloatingVideoMiniPlayer(
                 .padding(end = 12.dp, bottom = 12.dp)
                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
                 .size(width = 192.dp, height = 108.dp)
+                .onSizeChanged { selfSize = it }
                 .pointerInput(Unit) {
                     detectDragGestures { change, drag ->
                         change.consume()
                         offsetX += drag.x
                         offsetY += drag.y
+                        clampOffsets()
                     }
                 }
         ) {

@@ -155,94 +155,6 @@ fun VolumeAndBrightnessControls(
 }
 
 /**
- * Playback speed dropdown — Material 3 ExposedDropdownMenuBox.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SpeedControl(
-    playbackSpeed: Float,
-    onSpeedChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var speedMenuExpanded by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = "Speed",
-            style = MaterialTheme.typography.labelMedium,
-            color = TextSecondary
-        )
-
-        ExposedDropdownMenuBox(
-            expanded = speedMenuExpanded,
-            onExpandedChange = { speedMenuExpanded = it },
-            // widthIn(min=…) lets the dropdown grow with the user's
-            // font scale — a hard width(110.dp) clips "1.75×" / "2.5×"
-            // at scale ≥ 1.4×.
-            modifier = Modifier.widthIn(min = 110.dp)
-        ) {
-            OutlinedTextField(
-                value = formatSpeed(playbackSpeed),
-                onValueChange = {},
-                readOnly = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = speedMenuExpanded) },
-                modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                    .height(48.dp),
-                textStyle = MaterialTheme.typography.labelLarge,
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = TealAccent,
-                    unfocusedBorderColor = DisabledContent,
-                    focusedTextColor = TealAccent,
-                    unfocusedTextColor = TextPrimary,
-                    focusedContainerColor = SurfaceElevated,
-                    unfocusedContainerColor = SurfaceElevated,
-                    focusedTrailingIconColor = TealAccent,
-                    unfocusedTrailingIconColor = TextSecondary
-                ),
-                shape = RoundedCornerShape(10.dp)
-            )
-
-            ExposedDropdownMenu(
-                expanded = speedMenuExpanded,
-                onDismissRequest = { speedMenuExpanded = false },
-                modifier = Modifier.background(SurfaceElevated)
-            ) {
-                SPEED_OPTIONS.forEach { speed ->
-                    val isSelected = kotlin.math.abs(playbackSpeed - speed) < 0.01f
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = formatSpeed(speed),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isSelected) TealAccent else TextPrimary
-                            )
-                        },
-                        onClick = {
-                            onSpeedChange(speed)
-                            speedMenuExpanded = false
-                        },
-                        trailingIcon = if (isSelected) {
-                            { Icon(Icons.Filled.Check, contentDescription = null, tint = TealAccent, modifier = Modifier.size(16.dp)) }
-                        } else null,
-                        modifier = Modifier.background(
-                            if (isSelected) TealAccent.copy(alpha = 0.1f) else SurfaceElevated
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
  * A prepared, modular speed control component.
  * Places the 'Speed' text nearer to the setting alongside a running guy icon.
  * Intended to be placed by the coordinator agent.
@@ -280,7 +192,11 @@ fun PreparedSpeedComponent(
         ExposedDropdownMenuBox(
             expanded = enabled && speedMenuExpanded,
             onExpandedChange = { if (enabled) speedMenuExpanded = it },
-            modifier = Modifier.width(110.dp)
+            // widthIn(min=...) grows with the user's font scale - a hard
+            // width(110.dp) clips "1.75x" / "2.5x" at scale >= 1.4x
+            // (audit 6.10: this fix originally landed in a component
+            // nothing called; ported to the live one, dead twin deleted).
+            modifier = Modifier.widthIn(min = 110.dp)
         ) {
             OutlinedTextField(
                 value = formatSpeed(playbackSpeed),
@@ -290,7 +206,7 @@ fun PreparedSpeedComponent(
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = enabled && speedMenuExpanded) },
                 modifier = Modifier
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = enabled)
-                    .height(48.dp),
+                    .heightIn(min = 48.dp),
                 textStyle = MaterialTheme.typography.labelLarge,
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
@@ -398,20 +314,6 @@ fun SleepTimerButton(
 
 private fun formatSpeed(speed: Float): String {
     return if (speed == speed.toLong().toFloat()) "${speed.toLong()}x" else "${speed}x"
-}
-
-// ── Legacy alias kept for backward compatibility ──────────────────────
-// (SecondaryControls was the old combined composable; split into
-//  SpeedControl + VolumeAndBrightnessControls + SleepTimerButton)
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SecondaryControls(
-    playbackSpeed: Float,
-    onSpeedChange: (Float) -> Unit,
-    brightnessEnabled: Boolean,
-    modifier: Modifier = Modifier
-) {
-    SpeedControl(playbackSpeed = playbackSpeed, onSpeedChange = onSpeedChange, modifier = modifier)
 }
 
 @Composable

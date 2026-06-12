@@ -1,6 +1,11 @@
 package com.powermediaplayer.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -601,12 +606,19 @@ private fun OverlayContent(
             .fillMaxSize()
             .background(scrim)
     )
+    // Audit 6.4 — landscape cutouts (corner punch-holes) can overlap the
+    // overlay's edge controls; horizontal cutout padding keeps them clear
+    // without disturbing the vertical bottom-anchor.
+    val cutoutPad = Modifier.windowInsetsPadding(
+        androidx.compose.foundation.layout.WindowInsets.displayCutout
+            .only(androidx.compose.foundation.layout.WindowInsetsSides.Horizontal)
+    )
     // Info icon top-right. Inside this OverlayContent (which is wrapped
     // in AnimatedVisibility for video) the icon hides with controls per
     // Q1 LOCKED. For audio mode (no AnimatedVisibility wrapper) the
     // icon stays visible. Q2 LOCKED Option A: scrim hides with controls,
     // independent layer not required — current arch already correct.
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().then(cutoutPad)) {
         InfoIcon(
             onClick = onShowInfo,
             modifier = Modifier
@@ -614,7 +626,12 @@ private fun OverlayContent(
                 .padding(top = 8.dp, end = 8.dp)
         )
     }
-    val scrollMod = if (uiState.isVideoContent) {
+    // Audit 6.8 - the video overlay's ~500dp control stack clipped at
+    // compact window heights (split screen, landscape phones): controls
+    // above the bottom anchor became unreachable. Scroll when short.
+    val compactHeight =
+        androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
+    val scrollMod = if (uiState.isVideoContent && !compactHeight) {
         Modifier
     } else {
         Modifier.verticalScroll(rememberScrollState())
@@ -622,6 +639,7 @@ private fun OverlayContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .then(cutoutPad)
             .then(scrollMod)
             .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

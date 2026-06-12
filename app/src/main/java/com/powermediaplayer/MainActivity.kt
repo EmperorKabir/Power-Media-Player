@@ -177,6 +177,13 @@ class MainActivity : FragmentActivity() {
                                 .setAspectRatio(safe)
                                 .setSeamlessResizeEnabled(true)
                                 .setAutoEnterEnabled(isVideo && isPlaying)
+                                // Audit 6.12 — enter animates from the video
+                                // frame; transport actions in the window
+                                // (Media3 adds none automatically).
+                                .setSourceRectHint(
+                                    com.powermediaplayer.ui.player.components.PipBoundsHolder.rect
+                                )
+                                .setActions(pipActions(isPlaying))
                                 .build()
                             setPictureInPictureParams(params)
                         }
@@ -254,6 +261,39 @@ class MainActivity : FragmentActivity() {
         pendingOpenTab.value = null
     }
 
+    /** Audit 6.12 — PiP transport actions (play/pause toggle + 15s
+     *  forward). The collector refreshes params on isPlaying changes so
+     *  the toggle icon flips while in PiP. */
+    private fun pipActions(isPlaying: Boolean): List<android.app.RemoteAction> {
+        fun pi(code: Int, action: String) = android.app.PendingIntent.getBroadcast(
+            this, code,
+            android.content.Intent(this, com.powermediaplayer.widget.PipActionReceiver::class.java)
+                .setAction(action),
+            android.app.PendingIntent.FLAG_IMMUTABLE or
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return listOf(
+            android.app.RemoteAction(
+                android.graphics.drawable.Icon.createWithResource(
+                    this,
+                    if (isPlaying) android.R.drawable.ic_media_pause
+                    else android.R.drawable.ic_media_play
+                ),
+                if (isPlaying) "Pause" else "Play",
+                "Play or pause",
+                pi(1, com.powermediaplayer.widget.PipActionReceiver.ACTION_PLAY_PAUSE)
+            ),
+            android.app.RemoteAction(
+                android.graphics.drawable.Icon.createWithResource(
+                    this, android.R.drawable.ic_media_ff
+                ),
+                "+15s",
+                "Forward 15 seconds",
+                pi(2, com.powermediaplayer.widget.PipActionReceiver.ACTION_FFWD15)
+            )
+        )
+    }
+
     override fun onPictureInPictureModeChanged(
         isInPictureInPictureMode: Boolean,
         newConfig: android.content.res.Configuration
@@ -305,6 +345,10 @@ class MainActivity : FragmentActivity() {
                 } else aspect
                 val builder = android.app.PictureInPictureParams.Builder()
                     .setAspectRatio(safeAspect)
+                    .setSourceRectHint(
+                        com.powermediaplayer.ui.player.components.PipBoundsHolder.rect
+                    )
+                    .setActions(pipActions(isPlaying))
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     builder.setSeamlessResizeEnabled(true)
                     builder.setAutoEnterEnabled(true)

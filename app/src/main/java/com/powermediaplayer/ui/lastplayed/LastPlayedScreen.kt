@@ -188,66 +188,72 @@ fun LastPlayedScreen(
                 )
             }
 
-            // Pinned albums sub-section — sister of pinned tracks,
-            // shares the 10-pin cap. Each row expands to reveal member
-            // tracks (locked design: tap row → expand, not auto-play).
-            if (pinnedAlbums.isNotEmpty()) {
-                SectionHeader(
-                    "Pinned albums " +
-                        "(${pinnedAlbums.size + pinned.size}/10)"
-                )
-                pinnedAlbums.forEach { album ->
-                    PinnedAlbumRow(
-                        album = album,
-                        tracksProvider = { viewModel.observePinnedAlbumTracks(album.id) },
-                        onPlayTrack = { trackUri, title ->
-                            viewModel.playAlbumTrack(trackUri, title)
-                            onNavigateToPlayer()
-                        },
-                        onUnpin = { viewModel.unpinAlbum(album.id) }
-                    )
-                }
-            }
-
-            // Pinned section — drag-to-reorder.
-            if (pinned.isNotEmpty()) {
-                SectionHeader(
-                    if (pinnedAlbums.isEmpty()) "Pinned (${pinned.size}/10)"
-                    else "Pinned tracks"
-                )
-                ReorderablePinnedList(
-                    items = pinned,
-                    onMove = { from, to ->
-                        val movedFavId = pinned[from].id
-                        viewModel.reorderPinned(movedFavId, to)
-                    },
-                    onLongClick = { item ->
-                        contextItem = item
-                        contextFromRecents = false
-                    },
-                    onTap = { item ->
-                        viewModel.playLocalAt(item)
-                        onNavigateToPlayer()
-                    },
-                    onTapBookmark = { item, bookmark ->
-                        viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
-                        onNavigateToPlayer()
-                    },
-                    onDeleteBookmark = { id -> viewModel.deletePinnedBookmark(id) },
-                    onUnpin = { favId -> viewModel.unpin(favId) },
-                    bookmarkProvider = { favId -> viewModel.pinnedBookmarksFor(favId) }
-                )
-            }
-
-            // Recent (dynamic) section header. Clear-all button on the
-            // trailing edge wipes every Recents row + their session
-            // bookmarks. Pinned snapshots are independent and survive.
-            RecentsSectionHeader(
-                visible = dynamic.isNotEmpty(),
-                emptyLabel = "No recent items",
-                onClearAll = { showClearAllConfirm = true }
-            )
+            // Audit 6.8 - pinned sections live INSIDE the LazyColumn:
+            // rendered as fixed siblings, 10 pins alone exceeded compact
+            // window heights and the recents list collapsed to zero. The
+            // reorderable pinned list stays one item (it is its own
+            // bounded-height LazyColumn, max 360dp - nestable).
             LazyColumn(modifier = Modifier.weight(1f)) {
+                item(key = "pinned_albums_block") {
+                    Column {
+                    if (pinnedAlbums.isNotEmpty()) {
+                        SectionHeader(
+                            "Pinned albums " +
+                                "(${pinnedAlbums.size + pinned.size}/10)"
+                        )
+                        pinnedAlbums.forEach { album ->
+                            PinnedAlbumRow(
+                                album = album,
+                                tracksProvider = { viewModel.observePinnedAlbumTracks(album.id) },
+                                onPlayTrack = { trackUri, title ->
+                                    viewModel.playAlbumTrack(trackUri, title)
+                                    onNavigateToPlayer()
+                                },
+                                onUnpin = { viewModel.unpinAlbum(album.id) }
+                            )
+                        }
+                    }
+                    }
+                }
+                item(key = "pinned_tracks_block") {
+                    Column {
+                    if (pinned.isNotEmpty()) {
+                        SectionHeader(
+                            if (pinnedAlbums.isEmpty()) "Pinned (${pinned.size}/10)"
+                            else "Pinned tracks"
+                        )
+                        ReorderablePinnedList(
+                            items = pinned,
+                            onMove = { from, to ->
+                                val movedFavId = pinned[from].id
+                                viewModel.reorderPinned(movedFavId, to)
+                            },
+                            onLongClick = { item ->
+                                contextItem = item
+                                contextFromRecents = false
+                            },
+                            onTap = { item ->
+                                viewModel.playLocalAt(item)
+                                onNavigateToPlayer()
+                            },
+                            onTapBookmark = { item, bookmark ->
+                                viewModel.playLocalAt(item, atPositionMs = bookmark.positionMs)
+                                onNavigateToPlayer()
+                            },
+                            onDeleteBookmark = { id -> viewModel.deletePinnedBookmark(id) },
+                            onUnpin = { favId -> viewModel.unpin(favId) },
+                            bookmarkProvider = { favId -> viewModel.pinnedBookmarksFor(favId) }
+                        )
+                    }
+                    }
+                }
+                item(key = "recents_header") {
+                RecentsSectionHeader(
+                    visible = dynamic.isNotEmpty(),
+                    emptyLabel = "No recent items",
+                    onClearAll = { showClearAllConfirm = true }
+                )
+                }
                 itemsIndexed(dynamic, key = { _, it -> "dyn_${it.id}" }) { _, item ->
                     SwipeToDismissRow(
                         onDismissed = {

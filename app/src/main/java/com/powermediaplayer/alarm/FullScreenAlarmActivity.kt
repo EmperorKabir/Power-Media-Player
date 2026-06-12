@@ -18,6 +18,11 @@ import android.os.VibratorManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.offset
@@ -366,12 +371,12 @@ class FullScreenAlarmActivity : ComponentActivity() {
     }
 
     private fun renderUi(alarm: AlarmRecord) {
-        // Edge-to-edge per locked spec.
+        // Edge-to-edge per locked spec. WindowCompat replaces the
+        // deprecated systemUiVisibility flags; the content pads itself
+        // with safeDrawing so the clock never sits under a cutout or
+        // status bar (audit 6.7).
         runCatching {
-            window.decorView.systemUiVisibility = (
-                android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                )
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         }
         setContent {
             val time = remember { java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
@@ -411,6 +416,14 @@ class FullScreenAlarmActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color(0xFF000000))
+                    // safeDrawing: clock clear of cutout/status bar; scroll:
+                    // the fixed ~500dp control stack clipped at compact
+                    // heights — landscape docks and folded cover screens
+                    // could push the Stop control off-screen (audit 6.7).
+                    .windowInsetsPadding(
+                        androidx.compose.foundation.layout.WindowInsets.safeDrawing
+                    )
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {

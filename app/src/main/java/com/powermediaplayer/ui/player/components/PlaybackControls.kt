@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeJoin
@@ -76,10 +77,23 @@ fun PlaybackControls(
         // ── Row 1: Primary Controls ──────────────────────────────
         // Five buttons: |◀◀ file| |◀ ch| ▶/⏸ |ch ▶| |file ▶▶|
         // File buttons greyed (not hidden) when not in a multi-file queue.
+        // Audit 6.9 - five fixed-size buttons need >=344dp; on 320dp-class
+        // windows (small phones, split-screen halves, narrow desktop
+        // windows) the outer File buttons clipped off both edges. Scale
+        // the whole row down when the window can't fit it; touch targets
+        // bottom out at ~44dp via the 0.82 floor.
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val rowScale = (maxWidth / 360.dp).coerceIn(0.82f, 1f)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 8.dp)
+                .graphicsLayer {
+                    scaleX = rowScale
+                    scaleY = rowScale
+                },
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -128,6 +142,7 @@ fun PlaybackControls(
                 onClick = onNextFile,
                 label = fileLabel
             )
+        }
         }
 
         Spacer(modifier = Modifier.height(4.dp))

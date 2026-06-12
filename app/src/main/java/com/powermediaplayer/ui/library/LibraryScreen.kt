@@ -496,22 +496,6 @@ fun LibraryScreen(
             )
         }
 
-        // §C6 — saved smart-playlist rail. Tap a chip to play the
-        // resolved track list. Empty state hidden so this never shows
-        // unless the user has actually created one.
-        com.powermediaplayer.ui.smartplaylists.SmartPlaylistRail(
-            onPlayResolved = { resolved ->
-                if (resolved.isNotEmpty()) {
-                    viewModel.playFiles(resolved, 0)
-                    onNavigateToPlayer()
-                }
-            }
-        )
-        // §C10 fix — smart-playlist editor (create/list/delete) now
-        // sits next to the rail in the Library tab per the locked
-        // spec, replacing the prior Settings-tab placement.
-        com.powermediaplayer.ui.smartplaylists.SmartPlaylistsSection()
-
         // ── Content ──────────────────────────────────────────────
         if (!hasPermission) {
             // Permission not granted
@@ -619,6 +603,29 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxSize().imePadding(),   // audit 6.6
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
+                    // Audit 6.8 - rail + editor scroll WITH the content:
+                    // as fixed header siblings they starved the file list
+                    // at compact window heights. (Both need media files to
+                    // be useful, so the has-files branch is the right home.)
+                    item(key = "smart_blocks") {
+                        Column {
+                    // §C6 — saved smart-playlist rail. Tap a chip to play the
+                    // resolved track list. Empty state hidden so this never shows
+                    // unless the user has actually created one.
+                    com.powermediaplayer.ui.smartplaylists.SmartPlaylistRail(
+                        onPlayResolved = { resolved ->
+                            if (resolved.isNotEmpty()) {
+                                viewModel.playFiles(resolved, 0)
+                                onNavigateToPlayer()
+                            }
+                        }
+                    )
+                    // §C10 fix — smart-playlist editor (create/list/delete) now
+                    // sits next to the rail in the Library tab per the locked
+                    // spec, replacing the prior Settings-tab placement.
+                    com.powermediaplayer.ui.smartplaylists.SmartPlaylistsSection()
+                        }
+                    }
                     if (favouriteFiles.isNotEmpty()) {
                         item(key = "fav_header") {
                             Text(

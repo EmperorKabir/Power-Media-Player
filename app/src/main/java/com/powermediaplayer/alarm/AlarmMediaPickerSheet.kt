@@ -1,6 +1,8 @@
 package com.powermediaplayer.alarm
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -176,7 +178,10 @@ fun AlarmMediaPickerSheet(
         Column(modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .height(540.dp)) {
+            // heightIn (audit 6.8): a fixed 540dp exceeded landscape-
+            // phone window heights, clipping the sheet's own controls.
+            .heightIn(max = 540.dp)
+            .fillMaxHeight(0.8f)) {
             Text(
                 "Pick alarm sound",
                 style = MaterialTheme.typography.titleMedium,

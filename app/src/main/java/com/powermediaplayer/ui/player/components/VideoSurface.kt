@@ -111,6 +111,13 @@ fun VideoSurface(
                 TextureView(ctx).apply {
                     isOpaque = true
                     VideoSurfaceBinding.bind(this)
+                    // Audit 6.12 — publish on-screen bounds so PiP enter
+                    // can animate from the video frame (sourceRectHint)
+                    // instead of jump-cutting.
+                    addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                        val r = android.graphics.Rect()
+                        if (v.getGlobalVisibleRect(r)) PipBoundsHolder.rect = r
+                    }
                 }
             },
             update = { view ->
@@ -197,4 +204,13 @@ object VideoSurfaceBinding {
             }
         }
     }
+}
+
+/**
+ * Audit 6.12 — latest on-screen rect of the live video surface, read by
+ * MainActivity when building PictureInPictureParams (sourceRectHint).
+ */
+object PipBoundsHolder {
+    @Volatile
+    var rect: android.graphics.Rect? = null
 }
