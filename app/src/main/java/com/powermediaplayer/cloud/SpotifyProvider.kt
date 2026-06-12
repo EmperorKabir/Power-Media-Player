@@ -108,8 +108,9 @@ class SpotifyProvider @Inject constructor(
 
     // Mirror of what's playing on the active Spotify device. null when
     // nothing is playing or polling hasn't started. Updated at 1 Hz by
-    // [pollJob] which starts on the first successful playTrack call and
-    // stops automatically when the app is backgrounded for >30 s.
+    // [pollJob] which starts on the first successful playTrack call,
+    // pauses 30 s after the app backgrounds (mirror state retained) and
+    // resumes with the warm burst when the app foregrounds.
     private val _spotifyState = MutableStateFlow<SpotifyPlaybackState?>(null)
     val spotifyState: StateFlow<SpotifyPlaybackState?> = _spotifyState.asStateFlow()
 
@@ -150,6 +151,53 @@ class SpotifyProvider @Inject constructor(
 
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var pollJob: Job? = null
+
+    // Audit 3.8/8.7 — the class doc promised a ">30s backgrounded" poll
+    // stop that was never implemented: Home with an active mirror meant
+    // indefinite 1Hz HTTPS + radio wakes. The mirror STATE survives the
+    // pause (notification UI keeps its track); only the network poll
+    // stops, and foregrounding restarts it through the normal warm burst.
+    @Volatile private var pausedByBackground = false
+    private var backgroundStopJob: Job? = null
+
+    init {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
+                object : androidx.lifecycle.DefaultLifecycleObserver {
+                    override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+                        backgroundStopJob?.cancel()
+                        backgroundStopJob = pollScope.launch {
+                            delay(30_000)
+                            if (pollJob?.isActive == true) {
+                                pausedByBackground = true
+                                stopPlaybackPollingKeepingState()
+                            }
+                        }
+                    }
+                    override fun onStart(owner: androidx.lifecycle.LifecycleOwner) {
+                        backgroundStopJob?.cancel()
+                        backgroundStopJob = null
+                        if (pausedByBackground) {
+                            pausedByBackground = false
+                            startPlaybackPolling()
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    /** Cancels the poll WITHOUT tearing down the mirror — backgrounding
+     *  must not blank the overlay state (vc32 provisional-mirror DEP);
+     *  contrast [stopPlaybackPolling], which is the explicit teardown. */
+    private fun stopPlaybackPollingKeepingState() {
+        pollGen++
+        pollJob?.cancel()
+        pollJob = null
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG", "Spotify poll paused (backgrounded 30s) gen=$pollGen"
+        )
+    }
 
     /**
      * vc32: install a provisional mirror state AT TAP TIME so
@@ -1366,12 +1414,21 @@ class SpotifyProvider @Inject constructor(
      *  session this saves ~3600 disk writes/hour. */
     @Volatile private var lastSerializedAuthState: String? = null
 
+    /** Audit 3.8 — the 1Hz poll deserialised the multi-KB AuthState JSON
+     *  EVERY second. One parse per token CHANGE instead. */
+    @Volatile private var cachedAuthState: AuthState? = null
+    @Volatile private var cachedAuthStateJson: String? = null
+
     /**
      * Returns a fresh access token, refreshing if needed.
      */
     private suspend fun currentAccessToken(): String? = withContext(Dispatchers.IO) {
         val json = tokenStore.read() ?: return@withContext null
-        val state = AuthState.jsonDeserialize(json)
+        val state = cachedAuthState?.takeIf { json == cachedAuthStateJson }
+            ?: AuthState.jsonDeserialize(json).also {
+                cachedAuthState = it
+                cachedAuthStateJson = json
+            }
         suspendCancellableCoroutine { cont ->
             state.performActionWithFreshTokens(authService) { token, _, ex ->
                 if (token != null) {
@@ -1382,6 +1439,10 @@ class SpotifyProvider @Inject constructor(
                     // valid.
                     if (refreshed != lastSerializedAuthState) {
                         lastSerializedAuthState = refreshed
+                        // Keep the object cache coherent with the rotated
+                        // state so the next poll skips the re-parse too.
+                        cachedAuthState = state
+                        cachedAuthStateJson = refreshed
                         pollScope.launch { runCatching { tokenStore.write(refreshed) } }
                     }
                     _isLoggedIn.value = true
