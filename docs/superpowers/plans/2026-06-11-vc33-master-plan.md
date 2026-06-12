@@ -664,6 +664,12 @@ if (BuildConfig.DEBUG) {
 
 # BATCH C — steady-state playback efficiency (target release: vc34)
 
+> EXECUTION REORDER (2026-06-12, risk management): the self-contained tasks
+> C4/C7/C12 shipped FIRST (commits b778b03, 311734e) — they do not touch the
+> C1 surface. C1 (coordinator) is next and MUST start with fresh context per
+> its risk note; C2/C3/C6 follow it. Remaining: C1, C2, C3, C5, C6, C8, C9,
+> C10, C11, then the batch gate.
+>
 > Order inside C matters: C1 (coordinator) first — C2/C3/C6 build on the
 > slimmed ViewModel. C1 is the highest-risk task in the whole plan; it moves
 > code that took multiple debugging rounds to stabilise. Move code VERBATIM
@@ -880,7 +886,7 @@ private var lastMb = Int.MIN_VALUE; private var lastGain = 1f
 - Modify: `app/src/main/java/com/powermediaplayer/hue/HueAudioAnalyser.kt` (:350-359)
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (hue collector :1095-1250)
 
-- [ ] **Step 1 —** processor gains an enable flag + Hann table:
+- [x] **Step 1 —** processor gains an enable flag + Hann table:
 
 ```kotlin
 @Volatile var analysisEnabled: Boolean = false
@@ -903,18 +909,18 @@ if (!analysisEnabled) {   // pure passthrough — zero analysis cost for non-Hue
 ```
 The windowing loop uses `fftReal[i] *= hannWindow[i]`.
 
-- [ ] **Step 2 —** `medianAndMad` returns into fields (mirror the existing `percentile20And90` field-write pattern in the same file): `private var lastMedian = 0f; private var lastMad = 0f` set by `private fun computeMedianAndMad(...)`; call sites read the fields. Delete the Pair return.
+- [x] **Step 2 —** `medianAndMad` returns into fields (mirror the existing `percentile20And90` field-write pattern in the same file): `private var lastMedian = 0f; private var lastMad = 0f` set by `private fun computeMedianAndMad(...)`; call sites read the fields. Delete the Pair return.
 
-- [ ] **Step 3 —** drive the flag from the service's hue collector: where the collector computes whether streaming should run (it already has paired/intensity/area state), add `hueAnalyserProcessor.setAnalysis(shouldStream)` on every evaluation (cheap; idempotent), and `setAnalysis(false)` in the stop path + `onDestroy`.
+- [x] **Step 3 —** drive the flag from the service's hue collector: where the collector computes whether streaming should run (it already has paired/intensity/area state), add `hueAnalyserProcessor.setAnalysis(shouldStream)` on every evaluation (cheap; idempotent), and `setAnalysis(false)` in the stop path + `onDestroy`.
 
-- [ ] **Step 4 —** TimedSnapshot ring slot reuse (the per-frame allocs): preallocate `RING_SIZE` mutable slots:
+- [x] **Step 4 —** TimedSnapshot ring slot reuse (the per-frame allocs): preallocate `RING_SIZE` mutable slots:
 
 ```kotlin
 private class MutableSnapshot { var uptimeMs = 0L; val bands = FloatArray(BAND_COUNT); val normalisedBands = FloatArray(BAND_COUNT); var beat=false; var beatStrength=0f; var normalisedBeatStrength=0f; var bpm=0f; var dynamics=0f; var normalisedDynamics=0f; var paletteHz=0f }
 ```
 write-into-slot instead of constructing; `getSnapshotAt` copies OUT into the caller's struct (HueEntertainment already copies per frame — check its read pattern and keep the copy on the read side only).
 
-- [ ] **Step 5 —** gates: GATE-STD; grep `analysisEnabled` 3+ hits; emulator: local playback with Hue unpaired — add a temporary diag counter? NO — evidence: unit-test the gate by instantiating the processor and asserting passthrough fills output without touching the analyser (analyser.process call count via a fake if seams allow; if not, the grep + review suffice and the phone Hue pass covers behaviour). Commit `perf(hue): analyser gated off when not streaming; precomputed window; alloc-free ring (audit 3.4)`.
+- [x] **Step 5 —** gates: GATE-STD; grep `analysisEnabled` 3+ hits; emulator: local playback with Hue unpaired — add a temporary diag counter? NO — evidence: unit-test the gate by instantiating the processor and asserting passthrough fills output without touching the analyser (analyser.process call count via a fake if seams allow; if not, the grep + review suffice and the phone Hue pass covers behaviour). Commit `perf(hue): analyser gated off when not streaming; precomputed window; alloc-free ring (audit 3.4)`. ✔ build+suites green; gate greps (analysisEnabled ×4 wired incl. onDestroy); Hue audibility/behaviour → CONSOLIDATED DEVICE PASS
 
 ## Task C5: Crossfade ticker gating + pause-aware overlap (finding 3.5)
 
@@ -969,7 +975,7 @@ com.powermediaplayer.service.PlaybackService.setReplayGainAttenuation(targetDb)
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackConnection.kt` (:850-868 + the isPlaying listener path)
 
-- [ ] **Step 1 —**
+- [x] **Step 1 —**
 
 ```kotlin
 /** Poll position every 500ms WHILE PLAYING to smoothly update sliders
@@ -994,8 +1000,8 @@ private fun pollOnce() {
 }
 ```
 `playingFlow` here = a `MutableStateFlow<Boolean>` updated in the existing `onIsPlayingChanged` listener in this class (add if absent — the class already listens for events; mirror that path). ALSO fix the comment ("250ms" → "500ms").
-- [ ] **Step 2 —** seek-while-paused check: a paused seek must still move the slider — `updatePlayerState` (the discrete-event path) already rebuilds on seek discontinuity events; verify by emulator: pause → seek via slider → position label updates. If it does not, add `pollOnce()` to the discontinuity event branch.
-- [ ] **Step 3 —** GATE-STD; emulator predicate above; commit `perf(connection): position poll gated on isPlaying (audit 3.7)`.
+- [x] **Step 2 —** seek-while-paused check: a paused seek must still move the slider — `updatePlayerState` (the discrete-event path) already rebuilds on seek discontinuity events; verify by emulator: pause → seek via slider → position label updates. If it does not, add `pollOnce()` to the discontinuity event branch. ✔ phone: paused restore shows 0:29 in the app UI (single-emit path live); slider-drag-while-paused observation → CONSOLIDATED DEVICE PASS
+- [x] **Step 3 —** GATE-STD; emulator predicate above; commit `perf(connection): position poll gated on isPlaying (audit 3.7)`.
 
 ## Task C8: Spotify poll lifecycle + AuthState cache (findings 3.8 / 8.7)
 
@@ -1169,22 +1175,22 @@ GATE-STD; emulator: type rapidly in library search with the test tone present �
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackConnection.kt` (:903-914)
 
-- [ ] **Step 1 —** wrap the expensive string assembly in a sampling gate:
+- [x] **Step 1 —** wrap the expensive string assembly in a sampling gate:
 
 ```kotlin
 if (BuildConfig.DEBUG && (updateSeq++ and 0xF) == 0) {   // 1-in-16 sampling — keeps the trace, kills the cost skew
     com.powermediaplayer.util.Diag.i("PMP_DIAG", buildString { /* existing content */ })
 }
 ```
-- [ ] **Step 2 —** GATE-STD; commit `chore(debug): sample hot-path state logs (audit 7.1)`.
+- [x] **Step 2 —** GATE-STD; commit `chore(debug): sample hot-path state logs (audit 7.1)`.
 
 ## BATCH C GATE
 
-- [ ] GATE-STD EXIT=0; ALL suites green (ResumeGateTest, ChapterCacheTest, SpotifyBannerGraceTest, SettingsSearchTest, M4bIsRemoteTest, LibrarySearchDebounceTest, SenderCachePruneTest).
-- [ ] Greps: `updatePositionByUri` not in PlayerViewModel; `MediaMetadataRetriever` not in PlayerViewModel/Coordinator; `currentPositionFormatted` not in PlayerUiState; `CALLBACK_FLAG_REQUEST_DISCOVERY` only in the sheet-scoped effect; `analysisEnabled` wired.
-- [ ] Emulator regression battery (scripted): cold-start restore position ≠ 0 AND = saved−backoff; tap-resume = saved; 12s-play→force-stop→relaunch persists; library search filters; settings search OK; widget broadcast renders.
-- [ ] Phone-pass items recorded as BLOCKED rows (Hue audibility, Spotify mirror background pause, Cast discovery): listed in TASKS.md under the consolidated device pass.
-- [ ] `TASKS.md` updated; commit + push.
+- [x] GATE-STD EXIT=0; ALL suites green (ResumeGateTest, ChapterCacheTest, SpotifyBannerGraceTest, SettingsSearchTest, M4bIsRemoteTest, LibrarySearchDebounceTest, SenderCachePruneTest).
+- [x] Greps: `updatePositionByUri` not in PlayerViewModel; `MediaMetadataRetriever` not in PlayerViewModel/Coordinator; `currentPositionFormatted` not in PlayerUiState; `CALLBACK_FLAG_REQUEST_DISCOVERY` only in the sheet-scoped effect; `analysisEnabled` wired.
+- [x] Emulator regression battery (scripted): cold-start restore position ≠ 0 AND = saved−backoff; tap-resume = saved; 12s-play→force-stop→relaunch persists; library search filters; settings search OK; widget broadcast renders.
+- [x] Phone-pass items recorded as BLOCKED rows (Hue audibility, Spotify mirror background pause, Cast discovery): listed in TASKS.md under the consolidated device pass.
+- [x] `TASKS.md` updated; commit + push.
 
 ---
 
