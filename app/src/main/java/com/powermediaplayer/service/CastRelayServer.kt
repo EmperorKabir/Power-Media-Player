@@ -43,7 +43,12 @@ open class CastRelayServer(
 ) : NanoHTTPD(port) {
 
     private val tokenCounter = AtomicLong(0)
-    private val items: MutableMap<String, RelayItem> = mutableMapOf()
+    // ConcurrentHashMap: serve() reads from NanoHTTPD worker threads while
+    // register() writes from the cast-switch path — a plain map has no
+    // visibility guarantee across those threads, so a fresh token could
+    // read as absent (spurious 404 → receiver error → cast flakiness).
+    private val items: java.util.concurrent.ConcurrentHashMap<String, RelayItem> =
+        java.util.concurrent.ConcurrentHashMap()
     private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -103,14 +108,22 @@ open class CastRelayServer(
                 Diag.w("PMP_DIAG", "CastRelay Local 404: openInputStream null uri=${item.uri}")
                 return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "no stream")
             }
-        if (start > 0) input.skipFully(start)
         val contentLength = if (end >= 0 && totalLength > 0) (end - start + 1) else -1L
         val status = if (rangeHeader != null && totalLength > 0)
             Response.Status.PARTIAL_CONTENT else Response.Status.OK
-        val resp = if (contentLength > 0) {
-            newFixedLengthResponse(status, item.mimeType, input, contentLength)
-        } else {
-            newChunkedResponse(status, item.mimeType, input)
+        // NanoHTTPD owns the stream only once it's wrapped in a Response;
+        // a throw before that (skipFully on a dying SAF provider) must
+        // close it here or the fd leaks per failed request.
+        val resp = try {
+            if (start > 0) input.skipFully(start)
+            if (contentLength > 0) {
+                newFixedLengthResponse(status, item.mimeType, input, contentLength)
+            } else {
+                newChunkedResponse(status, item.mimeType, input)
+            }
+        } catch (t: Throwable) {
+            runCatching { input.close() }
+            throw t
         }
         if (rangeHeader != null && totalLength > 0) {
             resp.addHeader("Content-Range", "bytes $start-${if (end >= 0) end else totalLength - 1}/$totalLength")
