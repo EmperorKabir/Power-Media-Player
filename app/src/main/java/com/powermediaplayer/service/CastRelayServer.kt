@@ -49,9 +49,11 @@ open class CastRelayServer(
     // read as absent (spurious 404 → receiver error → cast flakiness).
     private val items: java.util.concurrent.ConcurrentHashMap<String, RelayItem> =
         java.util.concurrent.ConcurrentHashMap()
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = com.powermediaplayer.util.SharedHttp.base.newBuilder()  // shared pool (audit 5.3)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(0, TimeUnit.SECONDS)  // media streams run as long as playback
+        .cache(null)                       // ranged media must not enter the HTTP cache
         .build()
 
     sealed class RelayItem(val mimeType: String) {

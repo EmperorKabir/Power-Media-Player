@@ -30,7 +30,7 @@ class OpenSubtitlesClient(
     private val httpClient: OkHttpClient = defaultClient
 ) {
     companion object {
-        private val defaultClient = OkHttpClient.Builder()
+        private val defaultClient = com.powermediaplayer.util.SharedHttp.base.newBuilder()  // shared pool/cache (audit 5.3)
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()

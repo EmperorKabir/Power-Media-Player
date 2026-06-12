@@ -18,6 +18,8 @@ import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.util.M4bChapterParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1292,11 +1294,18 @@ class CloudViewModel @Inject constructor(
             val provider = _uiState.value.activeProvider
             val results = when {
                 query.isBlank() -> emptyList()
-                provider == CloudProviderType.GOOGLE_DRIVE -> {
-                    val safMatches = driveProvider.searchFiles(query).getOrDefault(emptyList())
-                    val driveMatches = driveOAuthProvider.searchFiles(query).getOrDefault(emptyList())
-                    safMatches + driveMatches
-                }
+                provider == CloudProviderType.GOOGLE_DRIVE ->
+                    coroutineScope {
+                        // SAF walk and Drive REST search are independent —
+                        // run together (audit 5.3).
+                        val saf = async {
+                            driveProvider.searchFiles(query).getOrDefault(emptyList())
+                        }
+                        val oauth = async {
+                            driveOAuthProvider.searchFiles(query).getOrDefault(emptyList())
+                        }
+                        saf.await() + oauth.await()
+                    }
                 provider == CloudProviderType.SPOTIFY ->
                     spotifyProvider.search(query).getOrDefault(emptyList())
                 else -> emptyList()

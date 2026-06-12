@@ -68,6 +68,9 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider {
         // buffer and flush into the file when (if) it flips on.
         DiagLog.init(this, initiallyEnabled = false)
         DiagLog.lifecycle("PowerMediaPlayerApp.onCreate (process start)")
+        // Shared OkHttp cache home (audit 5.3) — must land before any
+        // client class initialises.
+        com.powermediaplayer.util.SharedHttp.installCacheDir(cacheDir)
         // Live-track the toggle; the first emission delivers the
         // persisted cold-start value.
         appScope.launch {

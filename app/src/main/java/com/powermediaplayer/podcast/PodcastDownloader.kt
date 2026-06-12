@@ -23,9 +23,10 @@ class PodcastDownloader(
     private val httpClient: OkHttpClient = defaultClient
 ) {
     companion object {
-        private val defaultClient = OkHttpClient.Builder()
+        private val defaultClient = com.powermediaplayer.util.SharedHttp.base.newBuilder()  // shared pool/cache (audit 5.3)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)  // episode downloads run long
             .build()
     }
 

@@ -12,6 +12,8 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -61,7 +63,7 @@ class DriveOAuthProvider @Inject constructor(
     override val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val http = OkHttpClient()
+    private val http = com.powermediaplayer.util.SharedHttp.base  // shared pool/cache (audit 5.3)
 
     private val signInOptions: GoogleSignInOptions = GoogleSignInOptions
         .Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -248,33 +250,41 @@ class DriveOAuthProvider @Inject constructor(
             val picked = settingsDataStore.driveOauthPickedFolders.first()
             if (picked.isEmpty()) return@withContext Result.success(emptyList())
             try {
-                val out = mutableListOf<CloudMediaItem>()
                 val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
-                for (root in picked) {
-                    if (out.size >= 200) break
-                    val q = "'${root.id}' in parents and name contains '$escaped' " +
-                        "and trashed = false " +
-                        "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
-                        "or mimeType = '$MIME_FOLDER')"
-                    val url = "https://www.googleapis.com/drive/v3/files?" +
-                        "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
-                        "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
-                        "&pageSize=100"
-                    val req = Request.Builder().url(url)
-                        .addHeader("Authorization", "Bearer $token").build()
-                    http.newCall(req).execute().use { resp ->
-                        if (!resp.isSuccessful) return@use
-                        val body = resp.body?.string().orEmpty()
-                        val root2 = JsonParser.parseString(body).asJsonObject
-                        val arr = root2.getAsJsonArray("files") ?: return@use
-                        for (el in arr) {
-                            val f = el.asJsonObject
-                            toCloudItem(f, parentId = root.id)?.let { out.add(it) }
-                            if (out.size >= 200) return@use
+                // One Drive REST call per picked folder — independent
+                // queries, so run them together (audit 5.3).
+                val lists = coroutineScope {
+                    picked.map { root ->
+                        async {
+                            val out = mutableListOf<CloudMediaItem>()
+                            val q = "'${root.id}' in parents and name contains '$escaped' " +
+                                "and trashed = false " +
+                                "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
+                                "or mimeType = '$MIME_FOLDER')"
+                            val url = "https://www.googleapis.com/drive/v3/files?" +
+                                "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
+                                "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
+                                "&pageSize=100"
+                            val req = Request.Builder().url(url)
+                                .addHeader("Authorization", "Bearer $token").build()
+                            runCatching {
+                                http.newCall(req).execute().use { resp ->
+                                    if (!resp.isSuccessful) return@use
+                                    val body = resp.body?.string().orEmpty()
+                                    val root2 = JsonParser.parseString(body).asJsonObject
+                                    val arr = root2.getAsJsonArray("files") ?: return@use
+                                    for (el in arr) {
+                                        val f = el.asJsonObject
+                                        toCloudItem(f, parentId = root.id)?.let { out.add(it) }
+                                        if (out.size >= 200) return@use
+                                    }
+                                }
+                            }
+                            out
                         }
-                    }
+                    }.map { it.await() }
                 }
-                Result.success(out.take(200))
+                Result.success(lists.flatten().take(200))
             } catch (e: Exception) {
                 Result.failure(e)
             }

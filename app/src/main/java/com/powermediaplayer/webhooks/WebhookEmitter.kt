@@ -44,10 +44,11 @@ class WebhookEmitter @Inject constructor(
     private val settings: SettingsDataStore
 ) {
 
-    private val http: OkHttpClient = OkHttpClient.Builder()
+    private val http: OkHttpClient = com.powermediaplayer.util.SharedHttp.base.newBuilder()  // shared pool (audit 5.3)
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(4, TimeUnit.SECONDS)
         .writeTimeout(4, TimeUnit.SECONDS)
+        .callTimeout(5, TimeUnit.SECONDS)
         .retryOnConnectionFailure(false)
         .build()
 

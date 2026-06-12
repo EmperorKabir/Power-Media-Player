@@ -8,6 +8,8 @@ import android.net.Uri
 import com.google.gson.JsonParser
 import com.powermediaplayer.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -211,7 +213,7 @@ class SpotifyProvider @Inject constructor(
         get() = authServiceInstance ?: synchronized(this) {
             authServiceInstance ?: AuthorizationService(context).also { authServiceInstance = it }
         }
-    private val http = OkHttpClient()
+    private val http = com.powermediaplayer.util.SharedHttp.base  // shared pool/cache (audit 5.3)
 
     private val serviceConfig = AuthorizationServiceConfiguration(
         Uri.parse("https://accounts.spotify.com/authorize"),
@@ -475,34 +477,40 @@ class SpotifyProvider @Inject constructor(
         }
     }
 
-    private fun fetchPerType(token: String): Result<List<CloudMediaItem>> {
-        val items = mutableListOf<CloudMediaItem>()
-        val endpoints = listOf(
-            "track" to "https://api.spotify.com/v1/me/tracks?limit=50",
-            "album" to "https://api.spotify.com/v1/me/albums?limit=50",
-            "playlist" to "https://api.spotify.com/v1/me/playlists?limit=50"
-        )
-        for ((type, url) in endpoints) {
-            val req = Request.Builder()
-                .url(url)
-                .addHeader("Authorization", "Bearer $token")
-                .build()
-            try {
-                http.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) return@use
-                    val body = resp.body?.string().orEmpty()
-                    val root = JsonParser.parseString(body).asJsonObject
-                    val arr = root.getAsJsonArray("items") ?: return@use
-                    for (el in arr) {
-                        val obj = el.asJsonObject
-                        val core = obj.getAsJsonObject(type) ?: obj
-                        items.add(jsonToCloudItem(core, type))
-                    }
+    private suspend fun fetchPerType(token: String): Result<List<CloudMediaItem>> =
+        coroutineScope {
+            // The three endpoints are independent — serial fetches made the
+            // section load pay three sequential round-trips (audit 5.3).
+            val endpoints = listOf(
+                "track" to "https://api.spotify.com/v1/me/tracks?limit=50",
+                "album" to "https://api.spotify.com/v1/me/albums?limit=50",
+                "playlist" to "https://api.spotify.com/v1/me/playlists?limit=50"
+            )
+            val lists = endpoints.map { (type, url) ->
+                async(Dispatchers.IO) {
+                    val out = mutableListOf<CloudMediaItem>()
+                    val req = Request.Builder()
+                        .url(url)
+                        .addHeader("Authorization", "Bearer $token")
+                        .build()
+                    try {
+                        http.newCall(req).execute().use { resp ->
+                            if (!resp.isSuccessful) return@use
+                            val body = resp.body?.string().orEmpty()
+                            val root = JsonParser.parseString(body).asJsonObject
+                            val arr = root.getAsJsonArray("items") ?: return@use
+                            for (el in arr) {
+                                val obj = el.asJsonObject
+                                val core = obj.getAsJsonObject(type) ?: obj
+                                out.add(jsonToCloudItem(core, type))
+                            }
+                        }
+                    } catch (_: Exception) { /* skip endpoint on failure */ }
+                    out
                 }
-            } catch (_: Exception) { /* skip endpoint on failure */ }
+            }.map { it.await() }
+            Result.success(lists.flatten())
         }
-        return Result.success(items)
-    }
 
     private fun jsonToCloudItem(obj: com.google.gson.JsonObject, type: String): CloudMediaItem {
         val id = obj.get("id")?.asString ?: ""
