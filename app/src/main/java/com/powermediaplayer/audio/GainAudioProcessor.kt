@@ -24,6 +24,11 @@ class GainAudioProcessor(
 ) : BaseAudioProcessor() {
 
     private var curGain = 1f
+    // Audit 3.11 — pow() ran per buffer even at unity; the supplier read
+    // stays per-buffer BY DESIGN (live toggling), the transcendental
+    // recomputes only when the mB value changes.
+    private var lastMb = Int.MIN_VALUE
+    private var lastTargetGain = 1f
 
     override fun onConfigure(input: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (input.encoding != C.ENCODING_PCM_16BIT) return AudioProcessor.AudioFormat.NOT_SET
@@ -33,8 +38,12 @@ class GainAudioProcessor(
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
-        val targetGain =
-            Math.pow(10.0, gainMbSupplier().coerceIn(0, 3000) / 2000.0).toFloat()
+        val mb = gainMbSupplier().coerceIn(0, 3000)
+        if (mb != lastMb) {
+            lastMb = mb
+            lastTargetGain = Math.pow(10.0, mb / 2000.0).toFloat()
+        }
+        val targetGain = lastTargetGain
 
         // Settled at unity → exact pass-through, zero cost.
         if (targetGain == 1f && kotlin.math.abs(curGain - 1f) < 0.0005f) {

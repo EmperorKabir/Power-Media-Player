@@ -23,11 +23,27 @@ internal fun setTealAccentColor(c: Color) {
 // with a fixed L mapped to the Material 50→900 lightness ramp. So
 // when the user picks a different accent, the entire palette tracks
 // it. TealBright = the accent itself shifted to 60% lightness.
+// Audit 3.11 — the get() properties allocated a FloatArray + two
+// colour-space conversions PER READ, dozens of times per player
+// recomposition. Cached per accent; reading the accent State inside
+// shadeOfAccent keeps live-recolour recomposition semantics (the
+// snapshot read subscribes the caller exactly as before).
+private var shadeCacheAccent: Int = 1 // never a real ARGB → first read fills
+private val shadeCache = HashMap<Int, Color>(16)
 private fun shadeOfAccent(lightness: Float): Color {
-    val hsl = FloatArray(3)
-    ColorUtils.colorToHSL(TealAccent.toArgb(), hsl)
-    hsl[2] = lightness.coerceIn(0f, 1f)
-    return Color(ColorUtils.HSLToColor(hsl))
+    val accent = TealAccent.toArgb()   // State read — recolour still recomposes readers
+    synchronized(shadeCache) {
+        if (accent != shadeCacheAccent) {
+            shadeCache.clear()
+            shadeCacheAccent = accent
+        }
+        return shadeCache.getOrPut((lightness * 1000).toInt()) {
+            val hsl = FloatArray(3)
+            ColorUtils.colorToHSL(accent, hsl)
+            hsl[2] = lightness.coerceIn(0f, 1f)
+            Color(ColorUtils.HSLToColor(hsl))
+        }
+    }
 }
 val Teal50: Color get() = shadeOfAccent(0.94f)
 val Teal100: Color get() = shadeOfAccent(0.86f)

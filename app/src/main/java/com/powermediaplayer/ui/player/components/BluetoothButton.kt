@@ -48,12 +48,20 @@ fun BluetoothButton(modifier: Modifier = Modifier) {
         context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
     }
     var a2dpActive by remember { mutableStateOf(audioManager.isBluetoothA2dpOn) }
-    // Poll lightly so the icon updates as the user pairs / unpairs.
-    androidx.compose.runtime.LaunchedEffect(enabledState) {
-        while (true) {
-            a2dpActive = enabledState && audioManager.isBluetoothA2dpOn
-            kotlinx.coroutines.delay(2000)
+    // Audit 3.11 — event-driven instead of a 2s binder poll: routing
+    // adds/removes fire AudioDeviceCallback the moment a BT sink
+    // connects or drops.
+    androidx.compose.runtime.DisposableEffect(enabledState) {
+        val cb = object : android.media.AudioDeviceCallback() {
+            private fun refresh() {
+                a2dpActive = enabledState && audioManager.isBluetoothA2dpOn
+            }
+            override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>?) = refresh()
+            override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>?) = refresh()
         }
+        a2dpActive = enabledState && audioManager.isBluetoothA2dpOn
+        audioManager.registerAudioDeviceCallback(cb, null)
+        onDispose { runCatching { audioManager.unregisterAudioDeviceCallback(cb) } }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(

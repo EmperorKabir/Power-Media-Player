@@ -593,6 +593,9 @@ private fun OverlayContent(
     onShowChapterPicker: () -> Unit,
     onShowInfo: () -> Unit
 ) {
+    // Audit 3.11 - hardware volume as state; the old per-recomposition
+    // getStreamVolume calls were 4Hz binder traffic during playback.
+    val volumeUi by viewModel.volumeUi.collectAsStateWithLifecycle()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -629,22 +632,9 @@ private fun OverlayContent(
         Spacer(modifier = Modifier.height(12.dp))
         ChapterPickerChip(uiState, onShowChapterPicker)
         Spacer(modifier = Modifier.height(4.dp))
-        ProgressSliders(
-            trackPosition = uiState.trackProgress,
-            trackPositionFormatted = uiState.currentPositionFormatted,
-            trackDurationFormatted = uiState.durationFormatted,
-            trackRemainingFormatted = uiState.trackRemainingFormatted,
-            trackSliderEnabled = uiState.controls.trackSlider,
-            onTrackSeek = { fraction ->
-                val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
-                viewModel.seekTo(target)
-            },
-            playlistPosition = uiState.playlistProgress,
-            playlistPositionFormatted = uiState.playlistPositionFormatted,
-            playlistDurationFormatted = uiState.playlistDurationFormatted,
-            playlistRemainingFormatted = uiState.playlistRemainingFormatted,
-            playlistSliderEnabled = uiState.controls.playlistSlider,
-            onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
+        PositionSection(
+            viewModel = viewModel,
+            controls = uiState.controls,
             trackIndexDisplay = uiState.trackIndexDisplay
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -682,8 +672,8 @@ private fun OverlayContent(
         }
         Spacer(modifier = Modifier.height(4.dp))
         TertiaryControls(
-            currentVolume = viewModel.getCurrentVolume(),
-            maxVolume = viewModel.getMaxVolume(),
+            currentVolume = volumeUi.first,
+            maxVolume = volumeUi.second,
             onVolumeChange = { viewModel.setVolume(it) },
             sleepTimerActive = uiState.sleepTimerActive,
             sleepTimerFormatted = uiState.sleepTimerFormatted,
@@ -863,6 +853,8 @@ private fun PlayerScreenExpanded(
     // Z Fold 6 inner display crashed with "LocalOpenPopupCount not provided".
     val openPopupCount = remember { androidx.compose.runtime.mutableIntStateOf(0) }
     androidx.compose.runtime.CompositionLocalProvider(LocalOpenPopupCount provides openPopupCount) {
+    // Audit 3.11 — hardware volume as state (see OverlayContent's twin).
+    val volumeUi by viewModel.volumeUi.collectAsStateWithLifecycle()
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -904,22 +896,9 @@ private fun PlayerScreenExpanded(
             Spacer(modifier = Modifier.height(12.dp))
             ChapterPickerChip(uiState, onShowChapterPicker)
             Spacer(modifier = Modifier.height(8.dp))
-            ProgressSliders(
-                trackPosition = uiState.trackProgress,
-                trackPositionFormatted = uiState.currentPositionFormatted,
-                trackDurationFormatted = uiState.durationFormatted,
-                trackRemainingFormatted = uiState.trackRemainingFormatted,
-                trackSliderEnabled = uiState.controls.trackSlider,
-                onTrackSeek = { fraction ->
-                    val target = uiState.chapterStartMs + (fraction * uiState.duration).toLong()
-                    viewModel.seekTo(target)
-                },
-                playlistPosition = uiState.playlistProgress,
-                playlistPositionFormatted = uiState.playlistPositionFormatted,
-                playlistDurationFormatted = uiState.playlistDurationFormatted,
-                playlistRemainingFormatted = uiState.playlistRemainingFormatted,
-                playlistSliderEnabled = uiState.controls.playlistSlider,
-                onPlaylistSeek = { fraction -> viewModel.seekToPlaylistPosition((fraction * uiState.totalPlaylistDuration).toLong()) },
+            PositionSection(
+                viewModel = viewModel,
+                controls = uiState.controls,
                 trackIndexDisplay = uiState.trackIndexDisplay
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -944,8 +923,8 @@ private fun PlayerScreenExpanded(
             )
             Spacer(modifier = Modifier.height(4.dp))
             TertiaryControls(
-                currentVolume = viewModel.getCurrentVolume(),
-                maxVolume = viewModel.getMaxVolume(),
+                currentVolume = volumeUi.first,
+                maxVolume = volumeUi.second,
                 onVolumeChange = { viewModel.setVolume(it) },
                 sleepTimerActive = uiState.sleepTimerActive,
                 sleepTimerFormatted = uiState.sleepTimerFormatted,
@@ -1169,9 +1148,12 @@ private fun TrackInfoSection(
         }
         if (uiState.syncedLyrics.isNotEmpty()) {
             Spacer(modifier = Modifier.height(8.dp))
+            // Audit 3.3 - live highlight position from positionUi; the
+            // surrounding uiState no longer carries per-tick positions.
+            val livePos by viewModel.positionUi.collectAsStateWithLifecycle()
             SyncedLyricsPanel(
                 lines = uiState.syncedLyrics,
-                positionMs = uiState.currentPosition,
+                positionMs = livePos.positionMs,
                 onLineTap = { /* set in caller */ }
             )
         } else if (uiState.lyrics.isNotEmpty()) {
@@ -1524,3 +1506,37 @@ private fun SleepTimerDialog(
     )
 }
 
+
+
+/**
+ * Audit 3.3 - the ONLY composable that recomposes at tick rate. Sliders
+ * read [PlayerViewModel.positionUi]; the rest of the player tree sees
+ * position-stripped uiState emissions.
+ */
+@Composable
+private fun PositionSection(
+    viewModel: PlayerViewModel,
+    controls: ControlsEnabledState,
+    trackIndexDisplay: String
+) {
+    val pos by viewModel.positionUi.collectAsStateWithLifecycle()
+    ProgressSliders(
+        trackPosition = pos.trackProgress,
+        trackPositionFormatted = pos.positionFormatted,
+        trackDurationFormatted = pos.durationFormatted,
+        trackRemainingFormatted = pos.remainingFormatted,
+        trackSliderEnabled = controls.trackSlider,
+        onTrackSeek = { fraction ->
+            viewModel.seekTo(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
+        },
+        playlistPosition = pos.playlistProgress,
+        playlistPositionFormatted = pos.playlistPositionFormatted,
+        playlistDurationFormatted = pos.playlistDurationFormatted,
+        playlistRemainingFormatted = pos.playlistRemainingFormatted,
+        playlistSliderEnabled = controls.playlistSlider,
+        onPlaylistSeek = { fraction ->
+            viewModel.seekToPlaylistPosition((fraction * pos.totalPlaylistDurationMs).toLong())
+        },
+        trackIndexDisplay = trackIndexDisplay
+    )
+}

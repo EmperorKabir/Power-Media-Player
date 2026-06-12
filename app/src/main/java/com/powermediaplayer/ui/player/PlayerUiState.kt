@@ -126,6 +126,28 @@ data class PlayerUiState(
 )
 
 /**
+ * Audit 3.3 — position-derived fields ride their own flow, collected
+ * only by the slider section and the synced-lyrics panel. uiState
+ * filters position-only ticks out of its emissions, so the rest of the
+ * player tree recomposes on REAL state changes only.
+ */
+@Immutable
+data class PositionUi(
+    val trackProgress: Float = 0f,
+    val positionFormatted: String = "0:00",
+    val durationFormatted: String = "0:00",
+    val remainingFormatted: String = "-0:00",
+    val playlistProgress: Float = 0f,
+    val playlistPositionFormatted: String = "0:00",
+    val playlistDurationFormatted: String = "0:00",
+    val playlistRemainingFormatted: String = "-0:00",
+    val chapterStartMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val totalPlaylistDurationMs: Long = 0L,
+    val positionMs: Long = 0L
+)
+
+/**
  * Coarse content type used only for control labelling. Independent of
  * playback wiring — purely a display hint.
  */

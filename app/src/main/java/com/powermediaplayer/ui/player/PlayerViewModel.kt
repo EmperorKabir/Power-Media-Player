@@ -13,6 +13,7 @@ import com.powermediaplayer.util.TimeFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
@@ -402,15 +403,124 @@ class PlayerViewModel @Inject constructor(
             isSpotifyActive = spotify != null,
             isCasting = isCasting
         )
-    }.stateIn(
+    }
+        // Audit 3.3 — position-only ticks no longer reach the UI tree:
+        // emissions whose position-stripped copies are equal are
+        // suppressed. Sliders + synced lyrics read [positionUi] instead.
+        .distinctUntilChanged { old, new ->
+            old.positionStripped() == new.positionStripped()
+        }
+        .stateIn(
         scope = viewModelScope,
         // Eagerly keeps the combiner running so navigation to the player
         // tab finds the latest state already mapped — eliminates the
         // brief WhileSubscribed initial-value flash that swapped the
         // layout between Expanded (audio default) and Compact (video).
+        // Per-tick cost is neutralised by the normalisation cache
+        // (audit 3.2) + the playing-gated poller (3.7).
         started = SharingStarted.Eagerly,
         initialValue = mapToUiState(playbackConnection.playerState.value, 0L)
     )
+
+    /** The eight per-tick-varying fields, zeroed for the equality check. */
+    private fun PlayerUiState.positionStripped() = copy(
+        currentPosition = 0L,
+        currentPositionFormatted = "",
+        trackRemainingFormatted = "",
+        trackProgress = 0f,
+        totalPlaylistPosition = 0L,
+        playlistPositionFormatted = "",
+        playlistRemainingFormatted = "",
+        playlistProgress = 0f
+    )
+
+    /** Position-derived state at full tick rate — collected ONLY by the
+     *  slider section and the synced-lyrics panel (audit 3.3). */
+    val positionUi: StateFlow<PositionUi> = combine(
+        playbackConnection.playerState,
+        spotifyProvider.spotifyState
+    ) { ps, spotify -> computePositionUi(ps, spotify) }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PositionUi())
+
+    private fun computePositionUi(
+        ps: PlayerState,
+        s: SpotifyPlaybackState?
+    ): PositionUi {
+        if (s != null) {
+            val pos = s.positionMs.coerceAtLeast(0L)
+            val dur = s.durationMs.coerceAtLeast(0L)
+            val rem = (dur - pos).coerceAtLeast(0L)
+            val prog = if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
+            return PositionUi(
+                trackProgress = prog,
+                positionFormatted = TimeFormatter.formatDuration(pos),
+                durationFormatted = TimeFormatter.formatDuration(dur),
+                remainingFormatted = "-" + TimeFormatter.formatDuration(rem),
+                playlistProgress = prog,
+                playlistPositionFormatted = TimeFormatter.formatDuration(pos),
+                playlistDurationFormatted = TimeFormatter.formatDuration(dur),
+                playlistRemainingFormatted = "-" + TimeFormatter.formatDuration(rem),
+                chapterStartMs = 0L,
+                durationMs = dur,
+                totalPlaylistDurationMs = dur,
+                positionMs = pos
+            )
+        }
+        // Chapter-relative maths — mirrors mapToUiState's slider scope.
+        val currentChapter = ps.chapters.getOrNull(ps.currentChapterIndex)
+        val inChapter = ps.hasChapters && currentChapter != null
+        val chapterStart = currentChapter?.startTimeMs?.takeIf { inChapter } ?: 0L
+        val chapterEnd = currentChapter?.endTimeMs?.takeIf { inChapter } ?: ps.duration
+        val chapterDuration = (chapterEnd - chapterStart).coerceAtLeast(0L)
+        val chapterPos = (ps.currentPosition - chapterStart).coerceIn(0L, chapterDuration)
+        val trackProgress = if (inChapter && chapterDuration > 0) {
+            (chapterPos.toFloat() / chapterDuration.toFloat()).coerceIn(0f, 1f)
+        } else if (ps.duration > 0) {
+            (ps.currentPosition.toFloat() / ps.duration.toFloat()).coerceIn(0f, 1f)
+        } else 0f
+        val playlistProgress = if (ps.totalPlaylistDuration > 0) {
+            (ps.totalPlaylistPosition.toFloat() / ps.totalPlaylistDuration.toFloat()).coerceIn(0f, 1f)
+        } else 0f
+        val displayedPos = if (inChapter) chapterPos else ps.currentPosition
+        val displayedDur = if (inChapter) chapterDuration else ps.duration
+        val trackRemaining = (displayedDur - displayedPos).coerceAtLeast(0L)
+        val playlistRemaining =
+            (ps.totalPlaylistDuration - ps.totalPlaylistPosition).coerceAtLeast(0L)
+        return PositionUi(
+            trackProgress = trackProgress,
+            positionFormatted = TimeFormatter.formatDuration(displayedPos),
+            durationFormatted = TimeFormatter.formatDuration(displayedDur),
+            remainingFormatted = "-" + TimeFormatter.formatDuration(trackRemaining),
+            playlistProgress = playlistProgress,
+            playlistPositionFormatted = TimeFormatter.formatDuration(ps.totalPlaylistPosition),
+            playlistDurationFormatted = TimeFormatter.formatDuration(ps.totalPlaylistDuration),
+            playlistRemainingFormatted = "-" + TimeFormatter.formatDuration(playlistRemaining),
+            chapterStartMs = chapterStart,
+            durationMs = displayedDur,
+            totalPlaylistDurationMs = ps.totalPlaylistDuration,
+            positionMs = displayedPos
+        )
+    }
+
+    /** Hardware volume as state (audit 3.11) — the overlay used to make
+     *  two AudioManager binder calls per recomposition. */
+    val volumeUi: StateFlow<Pair<Int, Int>> = callbackFlow {
+        fun snap() = trySend(
+            audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) to
+                audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        )
+        snap()
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: Context?, i: android.content.Intent?) { snap() }
+        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            context, receiver,
+            android.content.IntentFilter("android.media.VOLUME_CHANGED_ACTION"),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        awaitClose { runCatching { context.unregisterReceiver(receiver) } }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0 to 15)
 
     /**
      * Whether Spotify is the active source — drives the Player tab to

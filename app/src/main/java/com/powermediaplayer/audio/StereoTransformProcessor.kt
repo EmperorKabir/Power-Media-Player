@@ -59,16 +59,17 @@ class StereoTransformProcessor(
         if (byteCount <= 0) return
 
         val out = replaceOutputBuffer(byteCount).order(ByteOrder.LITTLE_ENDIAN)
-        val src = inputBuffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
-        src.position(position)
 
         if (!flipEnabled && !monoEnabled) {
-            // Fast pass-through.
-            out.put(src)
-            inputBuffer.position(limit)
+            // Fast pass-through — no duplicate() wrapper on the hot
+            // identity path (audit 3.11: ~50-90 allocs/s for nothing).
+            out.put(inputBuffer)
             out.flip()
             return
         }
+
+        val src = inputBuffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        src.position(position)
 
         // Iterate by frame (4 bytes = 1 frame: int16 L + int16 R).
         // Avoid per-frame Pair<Int,Int> allocations: at 48 kHz/2ch
