@@ -178,6 +178,10 @@ class PlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
+    // CastContext is process-static: a listener left registered pins this
+    // service generation (and its released CastPlayer) until process death.
+    private var castSessionListener:
+        com.google.android.gms.cast.framework.SessionManagerListener<com.google.android.gms.cast.framework.CastSession>? = null
     private var headphonePlugReceiver: android.content.BroadcastReceiver? = null
     private var mediaSession: MediaSession? = null
 
@@ -299,6 +303,21 @@ class PlaybackService : MediaSessionService() {
          */
         val senderItemByMediaId: java.util.concurrent.ConcurrentHashMap<String, androidx.media3.common.MediaItem> =
             java.util.concurrent.ConcurrentHashMap()
+
+        /**
+         * Evict sender-cache entries whose mediaId is no longer reachable
+         * from any player timeline. Both caches retain artworkData (often
+         * 100KB-2MB per track), so without eviction a long session accretes
+         * unbounded heap. Live-queue ids must SURVIVE — cast artwork echo
+         * and the cleartext-URI restore read them — so callers pass the
+         * union of every live timeline and an empty set is treated as
+         * "don't know, keep everything".
+         */
+        fun pruneSenderCaches(liveIds: Set<String>) {
+            if (liveIds.isEmpty()) return
+            senderMetadataByMediaId.keys.retainAll(liveIds)
+            senderItemByMediaId.keys.retainAll(liveIds)
+        }
 
         /** ReplayGain attenuation for negative track-gain tags
          *  (LoudnessEnhancer can only boost). 1.0 = no attenuation. */
@@ -1330,25 +1349,27 @@ class PlaybackService : MediaSessionService() {
             // last loaded URL — Google Home / Nest receivers happily
             // keep playing it. Hook SessionManagerListener so we can
             // explicitly clearMediaItems() before the channel closes.
-            castContext.sessionManager.addSessionManagerListener(
-                object : com.google.android.gms.cast.framework.SessionManagerListener<com.google.android.gms.cast.framework.CastSession> {
-                    override fun onSessionEnding(session: com.google.android.gms.cast.framework.CastSession) {
-                        runCatching {
-                            cp.clearMediaItems()
-                            com.powermediaplayer.util.Diag.i(
-                                "PMP_DIAG", "Cast onSessionEnding -> clearMediaItems"
-                            )
-                        }
+            val sessionListener = object : com.google.android.gms.cast.framework.SessionManagerListener<com.google.android.gms.cast.framework.CastSession> {
+                override fun onSessionEnding(session: com.google.android.gms.cast.framework.CastSession) {
+                    runCatching {
+                        cp.clearMediaItems()
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG", "Cast onSessionEnding -> clearMediaItems"
+                        )
                     }
-                    override fun onSessionEnded(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
-                    override fun onSessionStarted(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
-                    override fun onSessionStarting(s: com.google.android.gms.cast.framework.CastSession) {}
-                    override fun onSessionResumed(s: com.google.android.gms.cast.framework.CastSession, w: Boolean) {}
-                    override fun onSessionResuming(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
-                    override fun onSessionResumeFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
-                    override fun onSessionStartFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
-                    override fun onSessionSuspended(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
-                },
+                }
+                override fun onSessionEnded(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+                override fun onSessionStarted(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
+                override fun onSessionStarting(s: com.google.android.gms.cast.framework.CastSession) {}
+                override fun onSessionResumed(s: com.google.android.gms.cast.framework.CastSession, w: Boolean) {}
+                override fun onSessionResuming(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
+                override fun onSessionResumeFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+                override fun onSessionStartFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+                override fun onSessionSuspended(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
+            }
+            castSessionListener = sessionListener
+            castContext.sessionManager.addSessionManagerListener(
+                sessionListener,
                 com.google.android.gms.cast.framework.CastSession::class.java
             )
         } catch (_: Exception) {
@@ -1404,6 +1425,7 @@ class PlaybackService : MediaSessionService() {
     // Pre-O devices fall back to the deprecated requestAudioFocus()
     // shape; we use AudioManagerCompat for source-compat across both.
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
+    private var audioFocusListener: android.media.AudioManager.OnAudioFocusChangeListener? = null
     @Volatile private var pausedDueToFocus: Boolean = false
     @Volatile private var duckedDueToFocus: Boolean = false
     // vc29.26 — audio-focus policy cached (was 2 async + 2 launch per
@@ -1422,6 +1444,7 @@ class PlaybackService : MediaSessionService() {
         val listener = android.media.AudioManager.OnAudioFocusChangeListener { focusChange ->
             handleAudioFocusChange(focusChange)
         }
+        audioFocusListener = listener
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             audioFocusRequest = android.media.AudioFocusRequest.Builder(
                 android.media.AudioManager.AUDIOFOCUS_GAIN
@@ -1528,6 +1551,18 @@ class PlaybackService : MediaSessionService() {
                 // Phase 8 — refresh home-screen widget on track change.
                 com.powermediaplayer.widget.NowPlayingWidgetProvider
                     .refresh(applicationContext)
+                // Union of both timelines: during cast the live queue sits
+                // in CastPlayer while the local player still holds the
+                // originals needed for switch-back.
+                val liveIds = buildSet {
+                    player?.let { p ->
+                        for (i in 0 until p.mediaItemCount) add(p.getMediaItemAt(i).mediaId)
+                    }
+                    castPlayer?.let { c ->
+                        for (i in 0 until c.mediaItemCount) add(c.getMediaItemAt(i).mediaId)
+                    }
+                }
+                pruneSenderCaches(liveIds)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -1980,7 +2015,12 @@ class PlaybackService : MediaSessionService() {
         // Settings, we stop unconditionally.
         val stopUnconditionally = runCatching {
             kotlinx.coroutines.runBlocking {
-                settingsDataStore.stopOnTaskRemoved.first()
+                // Bounded: an unbounded read here blocks the main thread
+                // during task removal (ANR vector). Timeout → false = the
+                // safer default (don't stop playback on a failed read).
+                kotlinx.coroutines.withTimeoutOrNull(200) {
+                    settingsDataStore.stopOnTaskRemoved.first()
+                } ?: false
             }
         }.getOrDefault(false)
         val player = mediaSession?.player
@@ -2006,6 +2046,32 @@ class PlaybackService : MediaSessionService() {
             runCatching { getSystemService(android.media.AudioManager::class.java)?.unregisterAudioDeviceCallback(it) }
         }
         audioDeviceCallback = null
+        // The focus registration outlives the service inside AudioManager
+        // otherwise — one leaked service generation per restart.
+        runCatching {
+            val am = getSystemService(android.media.AudioManager::class.java)
+            val req = audioFocusRequest
+            if (android.os.Build.VERSION.SDK_INT >= 26 && req != null) {
+                am?.abandonAudioFocusRequest(req)
+            } else {
+                @Suppress("DEPRECATION")
+                audioFocusListener?.let { am?.abandonAudioFocus(it) }
+            }
+        }
+        audioFocusRequest = null
+        audioFocusListener = null
+        runCatching {
+            castSessionListener?.let {
+                com.google.android.gms.cast.framework.CastContext.getSharedInstance()
+                    ?.sessionManager?.removeSessionManagerListener(
+                        it, com.google.android.gms.cast.framework.CastSession::class.java)
+            }
+        }
+        castSessionListener = null
+        // The Hue engine runs in its own singleton scope — cancelling
+        // serviceScope only kills the COLLECTOR, not the 25Hz stream.
+        runCatching { hueEntertainment.stop() }
+        runCatching { crossfadeController.shutdown() }
         serviceScope.cancel()
         stopCastRelay()
         headphonePlugReceiver?.let { runCatching { unregisterReceiver(it) } }

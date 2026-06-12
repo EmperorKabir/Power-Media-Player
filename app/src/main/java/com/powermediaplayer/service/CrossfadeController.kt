@@ -9,6 +9,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -188,5 +189,15 @@ class CrossfadeController(
         runCatching { secondary?.release() }
         secondary = null
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Crossfade overlap aborted")
+    }
+
+    /**
+     * Service teardown: without this the secondary ExoPlayer (two live
+     * decoders) and the step coroutine can outlive the service for up to
+     * a full crossfade window.
+     */
+    fun shutdown() {
+        abort()
+        scope.cancel()
     }
 }
