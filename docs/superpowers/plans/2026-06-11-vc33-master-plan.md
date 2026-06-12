@@ -57,7 +57,7 @@ listed flows, pull `files/diag/log-current.txt` if assertions need it).
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (~:1404-1448 request site; ~:2003-2026 onDestroy)
 
-- [ ] **Step 1 — hold the request + listener in fields.** In the audio-focus install block (where `am.requestAudioFocus(req)` is called at ~:1440), the `AudioFocusRequest` (O+ path) and the listener are currently locals. Promote them:
+- [x] **Step 1 — hold the request + listener in fields.** In the audio-focus install block (where `am.requestAudioFocus(req)` is called at ~:1440), the `AudioFocusRequest` (O+ path) and the listener are currently locals. Promote them:
 
 ```kotlin
 // fields near the other service-scoped audio state
@@ -66,7 +66,7 @@ private var audioFocusListener: android.media.AudioManager.OnAudioFocusChangeLis
 ```
 Assign both where they are built (`audioFocusListener = listener`, and in the `Build.VERSION >= O` branch `audioFocusRequest = req`).
 
-- [ ] **Step 2 — abandon in onDestroy.** Add to `onDestroy()` teardown (alongside the existing receiver unregistrations):
+- [x] **Step 2 — abandon in onDestroy.** Add to `onDestroy()` teardown (alongside the existing receiver unregistrations):
 
 ```kotlin
 runCatching {
@@ -80,24 +80,24 @@ runCatching {
 }
 ```
 
-- [ ] **Step 3 — predicate.** Run:
+- [x] **Step 3 — predicate.** Run:
 `grep -rn "abandonAudioFocus" app/src/main/java/` → expect ≥1 hit in PlaybackService.kt onDestroy. Build green (GATE-STD compile only is fine here; full gate at batch end).
 
-- [ ] **Step 4 — commit** `fix(service): abandon audio focus on destroy (audit 1.1)`.
+- [x] **Step 4 — commit** `fix(service): abandon audio focus on destroy (audit 1.1)`.
 
 ## Task A2: Remove the Cast SessionManagerListener (finding 1.2)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (~:1333-1353 add site; onDestroy)
 
-- [ ] **Step 1 — name the listener.** Replace the anonymous `object : SessionManagerListener<CastSession>` with a field:
+- [x] **Step 1 — name the listener.** Replace the anonymous `object : SessionManagerListener<CastSession>` with a field:
 
 ```kotlin
 private var castSessionListener: com.google.android.gms.cast.framework.SessionManagerListener<com.google.android.gms.cast.framework.CastSession>? = null
 ```
 At the add site: build the object into a local `val l = object : SessionManagerListener<CastSession> { ... }`, then `castSessionListener = l; castContext.sessionManager.addSessionManagerListener(l, CastSession::class.java)` (keep the existing class argument exactly as currently written).
 
-- [ ] **Step 2 — remove in onDestroy:**
+- [x] **Step 2 — remove in onDestroy:**
 
 ```kotlin
 runCatching {
@@ -109,9 +109,9 @@ runCatching {
 ```
 (Use the same CastContext acquisition pattern the add site uses — if it holds a `castContext` field, prefer that.)
 
-- [ ] **Step 3 — predicate.** `grep -rn "removeSessionManagerListener" app/src/main/java/` → ≥1 hit. Build green.
+- [x] **Step 3 — predicate.** `grep -rn "removeSessionManagerListener" app/src/main/java/` → ≥1 hit. Build green.
 
-- [ ] **Step 4 — commit** `fix(cast): unregister session listener on service destroy (audit 1.2)`.
+- [x] **Step 4 — commit** `fix(cast): unregister session listener on service destroy (audit 1.2)`.
 
 ## Task A3: Bound the sender metadata/item caches (finding 1.3)
 
@@ -120,7 +120,7 @@ runCatching {
 
 **Constraint (matrix DEP):** never evict ids present in the live queue — the caches are load-bearing for cast artwork survival and the cleartext-URI restore on cast-stop.
 
-- [ ] **Step 1 — add an eviction helper** next to the companion maps:
+- [x] **Step 1 — add an eviction helper** next to the companion maps:
 
 ```kotlin
 /** Evict cache entries whose mediaId is no longer in the player's timeline.
@@ -133,7 +133,7 @@ fun pruneSenderCaches(liveIds: Set<String>) {
 }
 ```
 
-- [ ] **Step 2 — call it on every media-item transition.** In the service's `onMediaItemTransition` Player.Listener (the block that already calls `NowPlayingWidgetProvider.refresh`), append:
+- [x] **Step 2 — call it on every media-item transition.** In the service's `onMediaItemTransition` Player.Listener (the block that already calls `NowPlayingWidgetProvider.refresh`), append:
 
 ```kotlin
 val p = exoPlayerRef?.get()
@@ -146,7 +146,7 @@ if (p != null) {
 ```
 Use whatever non-null player reference the surrounding listener already uses (it receives events from the session player — mirror the existing access pattern in that listener rather than `exoPlayerRef` if the listener body uses a different handle; when casting, the CastPlayer timeline ids are the live set, which is exactly right).
 
-- [ ] **Step 3 — unit test** (JVM, no Robolectric needed — extract the retain logic if the inline version resists testing):
+- [x] **Step 3 — unit test** (JVM, no Robolectric needed — extract the retain logic if the inline version resists testing):
 Test file: `app/src/test/java/com/powermediaplayer/SenderCachePruneTest.kt`
 
 ```kotlin
@@ -163,9 +163,9 @@ class SenderCachePruneTest {
 ```
 Run: `.\gradlew testDebugUnitTest --tests "*SenderCachePruneTest*"` → PASS.
 
-- [ ] **Step 4 — device predicate (batch gate):** play 3 different tracks on the emulator, then `adb shell dumpsys meminfo com.powermediaplayer | grep TOTAL` recorded before/after (informational), and assert via DiagLog/debugger is NOT required — the unit test + transition wiring grep (`grep -n "pruneSenderCaches" PlaybackService.kt` → 2 hits: definition + call) is the evidence.
+- [x] **Step 4 — device predicate (batch gate):** play 3 different tracks on the emulator, then `adb shell dumpsys meminfo com.powermediaplayer | grep TOTAL` recorded before/after (informational), and assert via DiagLog/debugger is NOT required — the unit test + transition wiring grep (`grep -n "pruneSenderCaches" PlaybackService.kt` → 2 hits: definition + call) is the evidence.
 
-- [ ] **Step 5 — commit** `fix(service): evict sender caches to live-queue ids (audit 1.3)`.
+- [x] **Step 5 — commit** `fix(service): evict sender caches to live-queue ids (audit 1.3)`.
 
 ## Task A4: HueEntertainment try/finally + handshake socket safety (finding 1.4)
 
@@ -174,7 +174,7 @@ Run: `.\gradlew testDebugUnitTest --tests "*SenderCachePruneTest*"` → PASS.
 
 **Why this likely feeds the open disconnect→reconnect regression:** the send-failure `cancel()` skips the close + `stopEntertainmentStream` PUT, so the bridge still believes a stream is active when the next start arrives.
 
-- [ ] **Step 1 — wrap the streaming body.** Inside `streamJob = scope.launch { ... }`, wrap everything from after the handshake through the `while` loop in `try { ... } finally { ... }` and move the existing cleanup lines (currently after the loop at ~:478-481) into the `finally`:
+- [x] **Step 1 — wrap the streaming body.** Inside `streamJob = scope.launch { ... }`, wrap everything from after the handshake through the `while` loop in `try { ... } finally { ... }` and move the existing cleanup lines (currently after the loop at ~:478-481) into the `finally`:
 
 ```kotlin
 try {
@@ -194,7 +194,7 @@ try {
 ```
 Keep `stop()` as-is (it cancels the job → the finally now runs; its own close calls become harmless no-ops on nulled fields — keep them for the not-yet-started case).
 
-- [ ] **Step 2 — close the socket on handshake failure.** In `connectDtls`, wrap from socket creation to handshake:
+- [x] **Step 2 — close the socket on handshake failure.** In `connectDtls`, wrap from socket creation to handshake:
 
 ```kotlin
 val sock = DatagramSocket()
@@ -210,20 +210,20 @@ try {
 }
 ```
 
-- [ ] **Step 3 — predicate.** `grep -n "finally" app/src/main/java/com/powermediaplayer/hue/HueEntertainment.kt` → ≥2 hits (stream body + connectDtls). Build green.
+- [x] **Step 3 — predicate.** `grep -n "finally" app/src/main/java/com/powermediaplayer/hue/HueEntertainment.kt` → ≥2 hits (stream body + connectDtls). Build green.
 
 - [ ] **Step 4 — device predicate (batch gate, needs Hue hardware → run on the PHONE pass):** with diag logging on: start Hue stream → kill Wi-Fi mid-stream → re-enable → re-pick area → lights respond. Diag shows `entertainment STOPPED (finally)` after the send failure. If phone unavailable, record `BLOCKED(needs Hue bridge → phone device pass)` on THIS STEP ONLY; steps 1-3 still complete the code task.
 
-- [ ] **Step 5 — commit** `fix(hue): stream cleanup in finally + handshake socket safety (audit 1.4)`.
+- [x] **Step 5 — commit** `fix(hue): stream cleanup in finally + handshake socket safety (audit 1.4)`.
 
 ## Task A5: Stop the Hue stream in service onDestroy (finding 1.5)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (onDestroy ~:2003-2026)
 
-- [ ] **Step 1 —** add `runCatching { hueEntertainment.stop() }` to `onDestroy()` before `serviceScope.cancel()` (the field is already injected — same instance the collector uses at :1152/:1247).
-- [ ] **Step 2 — predicate.** `grep -n "hueEntertainment.stop()" PlaybackService.kt` → ≥3 hits (2 collector + 1 onDestroy). Build green.
-- [ ] **Step 3 — commit** `fix(hue): stop entertainment stream on service destroy (audit 1.5)`.
+- [x] **Step 1 —** add `runCatching { hueEntertainment.stop() }` to `onDestroy()` before `serviceScope.cancel()` (the field is already injected — same instance the collector uses at :1152/:1247).
+- [x] **Step 2 — predicate.** `grep -n "hueEntertainment.stop()" PlaybackService.kt` → ≥3 hits (2 collector + 1 onDestroy). Build green.
+- [x] **Step 3 — commit** `fix(hue): stop entertainment stream on service destroy (audit 1.5)`.
 
 ## Task A6: CrossfadeController teardown (finding 5.11g)
 
@@ -231,7 +231,7 @@ try {
 - Modify: `app/src/main/java/com/powermediaplayer/service/CrossfadeController.kt` (:50 scope)
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (onDestroy)
 
-- [ ] **Step 1 —** add to CrossfadeController:
+- [x] **Step 1 —** add to CrossfadeController:
 
 ```kotlin
 /** Service is dying: abort any in-flight overlap (releases the secondary
@@ -243,16 +243,16 @@ fun shutdown() {
 ```
 (`abort()` already exists — it is called at the skip-command sites; verify it releases the secondary player; if `abort()` only cancels the job, add `secondary?.release(); secondary = null` inside it guarded by `runCatching`.)
 
-- [ ] **Step 2 —** call `runCatching { crossfadeController.shutdown() }` in `PlaybackService.onDestroy()`.
-- [ ] **Step 3 — predicate.** grep `shutdown()` 2 hits; build green. Commit `fix(crossfade): release secondary player on service destroy (audit 5.11)`.
+- [x] **Step 2 —** call `runCatching { crossfadeController.shutdown() }` in `PlaybackService.onDestroy()`.
+- [x] **Step 3 — predicate.** grep `shutdown()` 2 hits; build green. Commit `fix(crossfade): release secondary player on service destroy (audit 5.11)`.
 
 ## Task A7: CastRelayServer race + stream hygiene (finding 5.10)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/service/CastRelayServer.kt` (:46 map; serve() :76-130)
 
-- [ ] **Step 1 —** `private val items: MutableMap<String, RelayItem> = mutableMapOf()` → `java.util.concurrent.ConcurrentHashMap<String, RelayItem>()`. Remove now-redundant `@Synchronized` from pure-read paths only if any exist; keep it on compound write methods.
-- [ ] **Step 2 —** in `serve()`, ensure the opened `InputStream` is closed on every failure path between `openInputStream` and the `newChunkedResponse` handover:
+- [x] **Step 1 —** `private val items: MutableMap<String, RelayItem> = mutableMapOf()` → `java.util.concurrent.ConcurrentHashMap<String, RelayItem>()`. Remove now-redundant `@Synchronized` from pure-read paths only if any exist; keep it on compound write methods.
+- [x] **Step 2 —** in `serve()`, ensure the opened `InputStream` is closed on every failure path between `openInputStream` and the `newChunkedResponse` handover:
 
 ```kotlin
 val input = resolver.openInputStream(item.uri) ?: return notFound()
@@ -265,7 +265,7 @@ try {
 }
 ```
 (Adapt names to the actual local structure — the rule: any throw after open and before a Response wraps the stream must close it.)
-- [ ] **Step 3 — predicate.** grep `ConcurrentHashMap` in CastRelayServer.kt → 1 hit; build green. Commit `fix(cast-relay): concurrent token map + close stream on failed serve (audit 5.10)`.
+- [x] **Step 3 — predicate.** grep `ConcurrentHashMap` in CastRelayServer.kt → 1 hit; build green. Commit `fix(cast-relay): concurrent token map + close stream on failed serve (audit 5.10)`.
 
 ## Task A8: goAsync in manifest receivers (finding 5.9)
 
@@ -274,7 +274,7 @@ try {
 - Modify: `app/src/main/java/com/powermediaplayer/alarm/AlarmReceiver.kt` (:36-43)
 - Modify: `app/src/main/java/com/powermediaplayer/alarm/BootCompletedReceiver.kt` (:28 area)
 
-- [ ] **Step 1 —** identical pattern in each `onReceive` (TaskerReceiver shown; mirror in the other two with their existing bodies):
+- [x] **Step 1 —** identical pattern in each `onReceive` (TaskerReceiver shown; mirror in the other two with their existing bodies):
 
 ```kotlin
 override fun onReceive(context: Context, intent: Intent) {
@@ -291,14 +291,14 @@ override fun onReceive(context: Context, intent: Intent) {
 }
 ```
 (BootCompletedReceiver keeps its own action filtering; the `goAsync` + `finally finish` wrapper is the change.)
-- [ ] **Step 2 — predicate.** `grep -rn "goAsync" app/src/main/java/` → 3 hits. Build green. Commit `fix(receivers): goAsync so work survives process teardown (audit 5.9)`.
+- [x] **Step 2 — predicate.** `grep -rn "goAsync" app/src/main/java/` → 3 hits. Build green. Commit `fix(receivers): goAsync so work survives process teardown (audit 5.9)`.
 
 ## Task A9: onTaskRemoved timeout (finding 2.2)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (:1981-1985)
 
-- [ ] **Step 1 —** wrap the read:
+- [x] **Step 1 —** wrap the read:
 
 ```kotlin
 val stopUnconditionally = runCatching {
@@ -308,7 +308,7 @@ val stopUnconditionally = runCatching {
 }.getOrDefault(false)
 ```
 (Default false = the safer behaviour: do not stop playback if the read can't complete.)
-- [ ] **Step 2 — predicate.** grep `withTimeoutOrNull` in the onTaskRemoved region → 1 hit. Build green. Commit `fix(service): bound onTaskRemoved DataStore read (audit 2.2)`.
+- [x] **Step 2 — predicate.** grep `withTimeoutOrNull` in the onTaskRemoved region → 1 hit. Build green. Commit `fix(service): bound onTaskRemoved DataStore read (audit 2.2)`.
 
 ## Task A10: AppAuth dispose + WebView detach + ChapterCache markFilling (findings 5.11)
 
@@ -317,8 +317,8 @@ val stopUnconditionally = runCatching {
 - Modify: `app/src/main/java/com/powermediaplayer/cloud/DrivePickerActivity.kt` (:175-181)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/lastplayed/LastPlayedViewModel.kt` (:490-506)
 
-- [ ] **Step 1 — AppAuth.** Replace the `by lazy` singleton with create-per-flow: make `authService` a `private var authService: AuthorizationService? = null`; add `private fun authService(): AuthorizationService = authService ?: AuthorizationService(context).also { authService = it }` used at the existing call sites; add `fun disposeAuthService() { runCatching { authService?.dispose() }; authService = null }` and call it (a) at the end of the OAuth completion path (after token exchange persists) and (b) in `signOut()`.
-- [ ] **Step 2 — WebView.** In `DrivePickerActivity.onDestroy()` before `webView.destroy()`:
+- [x] **Step 1 — AppAuth.** Replace the `by lazy` singleton with create-per-flow: make `authService` a `private var authService: AuthorizationService? = null`; add `private fun authService(): AuthorizationService = authService ?: AuthorizationService(context).also { authService = it }` used at the existing call sites; add `fun disposeAuthService() { runCatching { authService?.dispose() }; authService = null }` and call it (a) at the end of the OAuth completion path (after token exchange persists) and (b) in `signOut()`.
+- [x] **Step 2 — WebView.** In `DrivePickerActivity.onDestroy()` before `webView.destroy()`:
 
 ```kotlin
 runCatching {
@@ -326,7 +326,7 @@ runCatching {
     (webView.parent as? android.view.ViewGroup)?.removeView(webView)
 }
 ```
-- [ ] **Step 3 — markFilling placement.** At LastPlayedViewModel :490-506, the dedup mark currently happens in the guard expression while `unmarkFilling` lives inside the launched coroutine's `finally`. Move the mark inside the coroutine:
+- [x] **Step 3 — markFilling placement.** At LastPlayedViewModel :490-506, the dedup mark currently happens in the guard expression while `unmarkFilling` lives inside the launched coroutine's `finally`. Move the mark inside the coroutine:
 
 ```kotlin
 if (isRemote && mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0) {
@@ -341,14 +341,16 @@ if (isRemote && mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0)
     }
 }
 ```
-- [ ] **Step 4 — predicates.** grep `dispose()` in SpotifyProvider → ≥1; grep `removeView` in DrivePickerActivity → 1; grep `markFilling` inside the launch in LastPlayedViewModel (read the region). Build green. Commit `fix(lifecycle): AppAuth dispose, WebView detach-before-destroy, markFilling inside fill coroutine (audit 5.11)`.
+- [x] **Step 4 — predicates.** grep `dispose()` in SpotifyProvider → ≥1; grep `removeView` in DrivePickerActivity → 1; grep `markFilling` inside the launch in LastPlayedViewModel (read the region). Build green. Commit `fix(lifecycle): AppAuth dispose, WebView detach-before-destroy, markFilling inside fill coroutine (audit 5.11)`.
 
 ## BATCH A GATE
 
-- [ ] GATE-STD green (`assembleDebug testDebugUnitTest` EXIT=0) — paste output line.
-- [ ] Predicate greps (one command, all must hit): `grep -rn "abandonAudioFocus|removeSessionManagerListener|pruneSenderCaches|goAsync|withTimeoutOrNull(200)" app/src/main/java/ | wc -l` ≥ 7.
-- [ ] Emulator smoke: install, launch, play local test tone, force-stop, relaunch → restore still lands at saved−backoff (T279 regression check; dumpsys position ≠ 0).
-- [ ] `TASKS.md` row updated with evidence; commit `docs(ledger)`; push.
+- [x] GATE-STD green (`assembleDebug testDebugUnitTest` EXIT=0) — paste output line.
+- [x] Predicate greps (one command, all must hit): `grep -rn "abandonAudioFocus|removeSessionManagerListener|pruneSenderCaches|goAsync|withTimeoutOrNull(200)" app/src/main/java/ | wc -l` ≥ 7.
+- [x] Device smoke (PHONE RFCY70BARDJ, debug install after consented wipe): played to 36132ms → force-stop → relaunch → PMP_DIAG "Cold-start restored '...And We March On' @ 29405ms (saved=34405ms, backoff=5s)" + dumpsys position=29405 EXACTLY. T279 regression PASS on physical device.
+- [x] `TASKS.md` row updated with evidence; commit `docs(ledger)`; push.
+
+**BATCH A GATE EVIDENCE (2026-06-12):** assembleDebug+testDebugUnitTest EXIT=0 (52 tests, 0 failed; SenderCachePruneTest 2/2). Gate greps: 13 hits (required ≥7). Commits a40f088, 3feb0cb, 60eb9ec, ef7892a pushed. Execution amendment: BootCompletedReceiver ALREADY had goAsync (audit 5.9 over-claimed it); TaskerReceiver + AlarmReceiver fixed. Open: A4 Step 4 Hue behaviour check → consolidated device pass (needs Hue bridge interaction).
 
 ---
 
