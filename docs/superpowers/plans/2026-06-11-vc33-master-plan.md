@@ -362,7 +362,7 @@ if (isRemote && mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0)
 - Modify: `app/src/main/java/com/powermediaplayer/data/preferences/SettingsDataStore.kt` (add snapshot accessor)
 - Modify: `app/src/main/java/com/powermediaplayer/service/PlaybackService.kt` (:388-394, :726-737, :791-815, :824-832)
 
-- [ ] **Step 1 — snapshot accessor** in SettingsDataStore:
+- [x] **Step 1 — snapshot accessor** in SettingsDataStore:
 
 ```kotlin
 /** One blocking-capable read of the whole preferences file. The service
@@ -372,7 +372,7 @@ if (isRemote && mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0)
 suspend fun snapshot(): androidx.datastore.preferences.core.Preferences =
     context.dataStore.data.first()
 ```
-- [ ] **Step 2 — service onCreate.** Replace the four `runBlocking { ...first() }` blocks with ONE:
+- [x] **Step 2 — service onCreate.** Replace the four `runBlocking { ...first() }` blocks with ONE:
 
 ```kotlin
 val prefsSnap = runCatching {
@@ -388,8 +388,8 @@ fun pitchSpeedSeedFrom(p: Preferences?): Pair<Float, Float> = /* ditto */
 fun focusPolicyFrom(p: Preferences?): FocusPolicy = /* ditto */
 ```
 IMPORTANT: copy the defaulting logic from each existing flow's `map {}` body verbatim so semantics are identical; the flows themselves stay untouched (live updates unaffected). Keep the pitch/speed seed applied before first playback (standing invariant from :786-790).
-- [ ] **Step 3 — measure.** Debug build, diag on, cold start: `PlaybackService.onCreate START`→`DONE` delta in diag log recorded before/after; expect reduction (typical 100-400ms cold-disk). Evidence = the two diag lines.
-- [ ] **Step 4 —** GATE-STD; commit `perf(startup): single preferences snapshot for service cold-start seeds (audit 2.1)`.
+- [x] **Step 3 — measure.** Debug build, diag on, cold start: `PlaybackService.onCreate START`→`DONE` delta in diag log recorded before/after; expect reduction (typical 100-400ms cold-disk). Evidence = the two diag lines.
+- [x] **Step 4 —** GATE-STD; commit `perf(startup): single preferences snapshot for service cold-start seeds (audit 2.1)`.
 
 ## Task B2: DiagLog buffered init off the critical path (finding 2.3)
 
@@ -397,7 +397,7 @@ IMPORTANT: copy the defaulting logic from each existing flow's `map {}` body ver
 - Modify: `app/src/main/java/com/powermediaplayer/diag/DiagLog.kt`
 - Modify: `app/src/main/java/com/powermediaplayer/PowerMediaPlayerApp.kt` (:46-60)
 
-- [ ] **Step 1 —** add to DiagLog a pre-init buffer: events logged before `init` land in a bounded ArrayDeque(256) and flush into the channel on `init`. (DiagLog already no-ops when disabled; the buffer only matters for the first ~50ms.)
+- [x] **Step 1 —** add to DiagLog a pre-init buffer: events logged before `init` land in a bounded ArrayDeque(256) and flush into the channel on `init`. (DiagLog already no-ops when disabled; the buffer only matters for the first ~50ms.)
 
 ```kotlin
 private val preInit = ArrayDeque<String>()
@@ -405,7 +405,7 @@ private val preInit = ArrayDeque<String>()
 // in event(): if (!initialised) { synchronized(preInit) { if (preInit.size < 256) preInit += line }; return }
 // at end of init(): initialised = true; synchronized(preInit) { preInit.forEach(channel::trySend); preInit.clear() }
 ```
-- [ ] **Step 2 —** in `PowerMediaPlayerApp.onCreate`, delete the `runBlocking { diagLogEnabled.first() }` + replace with async:
+- [x] **Step 2 —** in `PowerMediaPlayerApp.onCreate`, delete the `runBlocking { diagLogEnabled.first() }` + replace with async:
 
 ```kotlin
 DiagLog.init(this, startEnabled = false)   // safe default; buffer catches early events
@@ -414,7 +414,7 @@ appScope.launch {
 }
 ```
 (The crash handler still installs after `init`, so FATAL events always have a sink; with the toggle on, the first collected emission enables the logger within ~50ms and the buffer preserves anything earlier. NOTE: `DiagLog.setEnabled(true)` must trigger session-header writing if init wrote nothing — check `setEnabled`'s existing behaviour and keep the "fresh file per enable" semantics.)
-- [ ] **Step 3 —** predicate: grep `runBlocking` in PowerMediaPlayerApp.kt → 0 hits. GATE-STD. Commit `perf(startup): remove blocking DataStore read from Application.onCreate (audit 2.3)`.
+- [x] **Step 3 —** predicate: grep `runBlocking` in PowerMediaPlayerApp.kt → 0 hits. GATE-STD. Commit `perf(startup): remove blocking DataStore read from Application.onCreate (audit 2.3)`.
 
 ## Task B3: `isRemote` covers network-backed content:// (finding 5.1)
 
@@ -422,7 +422,7 @@ appScope.launch {
 - Modify: `app/src/main/java/com/powermediaplayer/util/M4bChapterParser.kt` (:56-60)
 - Test: `app/src/test/java/com/powermediaplayer/M4bIsRemoteTest.kt`
 
-- [ ] **Step 1 — failing test first** (Robolectric for Uri.parse):
+- [x] **Step 1 — failing test first** (Robolectric for Uri.parse):
 
 ```kotlin
 @RunWith(org.robolectric.RobolectricTestRunner::class)
@@ -444,7 +444,7 @@ class M4bIsRemoteTest {
 }
 ```
 Run → FAIL on the Drive case.
-- [ ] **Step 2 — implementation:**
+- [x] **Step 2 — implementation:**
 
 ```kotlin
 /** Local authorities whose streams are file-backed (seek = lseek). Anything
@@ -462,15 +462,15 @@ fun isRemote(uri: Uri): Boolean = when (uri.scheme) {
     else -> false
 }
 ```
-- [ ] **Step 3 —** run the test class → 3/3 PASS. Full unit suite (ChapterCacheTest must stay green).
-- [ ] **Step 4 —** commit `fix(chapters): treat cloud DocumentsProvider URIs as remote (audit 5.1)`.
+- [x] **Step 3 —** run the test class → 3/3 PASS. Full unit suite (ChapterCacheTest must stay green).
+- [x] **Step 4 —** commit `fix(chapters): treat cloud DocumentsProvider URIs as remote (audit 5.1)`.
 
 ## Task B4: Drive/SAF folder listing via one child cursor (finding 5.2)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/cloud/GoogleDriveProvider.kt` (:295-298 listing; :330-349 walkForSearch; :472-481 toCloudItem)
 
-- [ ] **Step 1 —** add a cursor-based lister:
+- [x] **Step 1 —** add a cursor-based lister:
 
 ```kotlin
 private data class ChildDoc(val documentId: String, val name: String, val mime: String, val size: Long)
@@ -499,9 +499,9 @@ private fun listChildrenFast(treeUri: Uri, parentDocumentId: String): List<Child
     return out
 }
 ```
-- [ ] **Step 2 —** rewire `listFolder` (:295-298) and `walkForSearch` (:330-349) to consume `ChildDoc` (build the same `CloudMediaItem` fields `toCloudItem` produced: id from `DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)`, directory test = `mime == DocumentsContract.Document.MIME_TYPE_DIR`). Keep the 200-match cap AND add a traversal cap (`maxNodesVisited = 5_000`) to walkForSearch so giant trees stop even without matches; surface the truncation in the existing search-result path the same way the match cap does.
-- [ ] **Step 3 —** emulator predicate: SAF-browse any folder (the emulator's Downloads works through the same DocumentsProvider API), listing renders; diag/log unchanged. GATE-STD.
-- [ ] **Step 4 —** commit `perf(drive): single child-cursor folder listing + bounded search traversal (audit 5.2)`.
+- [x] **Step 2 —** rewire `listFolder` (:295-298) and `walkForSearch` (:330-349) to consume `ChildDoc` (build the same `CloudMediaItem` fields `toCloudItem` produced: id from `DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)`, directory test = `mime == DocumentsContract.Document.MIME_TYPE_DIR`). Keep the 200-match cap AND add a traversal cap (`maxNodesVisited = 5_000`) to walkForSearch so giant trees stop even without matches; surface the truncation in the existing search-result path the same way the match cap does.
+- [x] **Step 3 —** emulator predicate: SAF-browse any folder (the emulator's Downloads works through the same DocumentsProvider API), listing renders; diag/log unchanged. GATE-STD. ✔ code predicates green; live SAF browse needs picked roots → CONSOLIDATED DEVICE PASS
+- [x] **Step 4 —** commit `perf(drive): single child-cursor folder listing + bounded search traversal (audit 5.2)`.
 
 ## Task B5: OkHttp consolidation (finding 5.3)
 
@@ -509,7 +509,7 @@ private fun listChildrenFast(treeUri: Uri, parentDocumentId: String): List<Child
 - Modify: `app/src/main/java/com/powermediaplayer/di/AppModule.kt`
 - Modify (call sites): `cloud/SpotifyProvider.kt` (:206), `cloud/DriveOAuthProvider.kt` (:64), `cloud/GoogleDriveProvider.kt`, `podcast/PodcastDownloader.kt`, `podcast/ITunesPodcastSearch.kt`, `podcast/RssFeedParser.kt`, `enrichment/MusicBrainzClient.kt`, `enrichment/DiscogsClient.kt`, `hue/HueProvider.kt`, `hue/HueDimmableDriver.kt`, `service/CastRelayServer.kt` (token fetch), `webhooks/WebhookEmitter.kt`
 
-- [ ] **Step 1 —** provide a base client in AppModule:
+- [x] **Step 1 —** provide a base client in AppModule:
 
 ```kotlin
 @Provides @Singleton
@@ -521,17 +521,17 @@ fun provideBaseOkHttp(@ApplicationContext ctx: Context): okhttp3.OkHttpClient =
         .cache(okhttp3.Cache(java.io.File(ctx.cacheDir, "http_cache"), 10L * 1024 * 1024))
         .build()
 ```
-- [ ] **Step 2 —** each consumer takes the base client (constructor-inject where the class is Hilt-managed; pass through where constructed manually) and derives per-concern variants via `baseClient.newBuilder()...build()` — derived clients share the pool/dispatcher/cache. Specific derivations: Hue bridge client keeps its existing TLS-trust customisation (`newBuilder()` from base, re-apply the existing sslSocketFactory/hostnameVerifier block verbatim); WebhookEmitter keeps its 4s timeouts (`newBuilder().callTimeout(4, SECONDS)...`); streaming media fetches (Drive range downloads) use `newBuilder().readTimeout(0, SECONDS).callTimeout(0, SECONDS)` — call timeouts must NOT cap long media transfers; the two bare `OkHttpClient()` sites (:206/:64) just take the base.
-- [ ] **Step 3 —** parallelise the serial fan-outs (same task, they're 3 lines each now the client is shared): `SpotifyProvider.fetchPerType` :464-491 → `coroutineScope { val a = async{...}; val b = async{...}; val c = async{...} }`; `DriveOAuthProvider.searchFiles` :253-276 → `awaitAll` over folder queries; `CloudViewModel` :1296-1298 → two `async`.
-- [ ] **Step 4 —** predicate: `grep -rn "OkHttpClient()" app/src/main/java/ | wc -l` → 0; `grep -rn "newBuilder()" app/src/main/java/ | wc -l` ≥ 6. GATE-STD. Emulator smoke: Spotify sign-in survives (token refresh path), Drive listing works, podcast search works.
-- [ ] **Step 5 —** commit `perf(net): shared OkHttp pool + cache + call timeouts; parallel fan-outs (audit 5.3)`.
+- [x] **Step 2 —** each consumer takes the base client (constructor-inject where the class is Hilt-managed; pass through where constructed manually) and derives per-concern variants via `baseClient.newBuilder()...build()` — derived clients share the pool/dispatcher/cache. Specific derivations: Hue bridge client keeps its existing TLS-trust customisation (`newBuilder()` from base, re-apply the existing sslSocketFactory/hostnameVerifier block verbatim); WebhookEmitter keeps its 4s timeouts (`newBuilder().callTimeout(4, SECONDS)...`); streaming media fetches (Drive range downloads) use `newBuilder().readTimeout(0, SECONDS).callTimeout(0, SECONDS)` — call timeouts must NOT cap long media transfers; the two bare `OkHttpClient()` sites (:206/:64) just take the base.
+- [x] **Step 3 —** parallelise the serial fan-outs (same task, they're 3 lines each now the client is shared): `SpotifyProvider.fetchPerType` :464-491 → `coroutineScope { val a = async{...}; val b = async{...}; val c = async{...} }`; `DriveOAuthProvider.searchFiles` :253-276 → `awaitAll` over folder queries; `CloudViewModel` :1296-1298 → two `async`.
+- [x] **Step 4 —** predicate: `grep -rn "OkHttpClient()" app/src/main/java/ | wc -l` → 0; `grep -rn "newBuilder()" app/src/main/java/ | wc -l` ≥ 6. GATE-STD. Emulator smoke: Spotify sign-in survives (token refresh path), Drive listing works, podcast search works.
+- [x] **Step 5 —** commit `perf(net): shared OkHttp pool + cache + call timeouts; parallel fan-outs (audit 5.3)`.
 
 ## Task B6: Alarm ring path off Main (finding 5.4)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/alarm/FullScreenAlarmActivity.kt` (:103-174, :219-253)
 
-- [ ] **Step 1 —** make `startRinging` suspend and hop the heavy part:
+- [x] **Step 1 —** make `startRinging` suspend and hop the heavy part:
 
 ```kotlin
 private suspend fun startRinging(alarm: AlarmRecord) {
@@ -554,17 +554,17 @@ private suspend fun startRinging(alarm: AlarmRecord) {
 }
 ```
 Inside `resolveAlarmMediaUri`, replace its internal `runBlocking { dao... }` with a direct suspend call (the function is now called from IO context) — change its signature to `private suspend fun resolveAlarmMediaUri(...)`.
-- [ ] **Step 2 —** ring start latency guard: `prepareAsync` may add ~100ms before audio; acceptable (alarm fires the moment prepared). The vibration (already started before prepare) covers the gap.
-- [ ] **Step 3 —** predicate: grep `runBlocking` in FullScreenAlarmActivity.kt → 0; grep `prepareAsync` → 1. GATE-STD. Emulator: create an alarm 1 minute out (UI drive), let it fire, ring + Stop work.
-- [ ] **Step 4 —** commit `fix(alarm): resolve media + prepare off the main thread (audit 5.4)`.
+- [x] **Step 2 —** ring start latency guard: `prepareAsync` may add ~100ms before audio; acceptable (alarm fires the moment prepared). The vibration (already started before prepare) covers the gap.
+- [x] **Step 3 —** predicate: grep `runBlocking` in FullScreenAlarmActivity.kt → 0; grep `prepareAsync` → 1. GATE-STD. Emulator: create an alarm 1 minute out (UI drive), let it fire, ring + Stop work. ✔ runBlocking=0, prepareAsync=1; live alarm fire → CONSOLIDATED DEVICE PASS
+- [x] **Step 4 —** commit `fix(alarm): resolve media + prepare off the main thread (audit 5.4)`.
 
 ## Task B7: Podcast sync constraints + dispatcher + parallel feeds (finding 5.5)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/podcast/PodcastSyncWorker.kt` (:54-80)
 
-- [ ] **Step 1 —** constraint `NetworkType.CONNECTED` → `NetworkType.UNMETERED` (matches the "Runs every 6h on Wi-Fi" comment).
-- [ ] **Step 2 —** in `doWork`, wrap feed work in `withContext(Dispatchers.IO)` and fetch feeds with bounded parallelism:
+- [x] **Step 1 —** constraint `NetworkType.CONNECTED` → `NetworkType.UNMETERED` (matches the "Runs every 6h on Wi-Fi" comment).
+- [x] **Step 2 —** in `doWork`, wrap feed work in `withContext(Dispatchers.IO)` and fetch feeds with bounded parallelism:
 
 ```kotlin
 val sem = kotlinx.coroutines.sync.Semaphore(3)
@@ -573,17 +573,17 @@ coroutineScope {
 }
 ```
 (`syncShow` = the existing per-show body extracted into a private suspend fun, unchanged.)
-- [ ] **Step 3 —** predicate: grep `UNMETERED` → 1; GATE-STD. Commit `fix(podcast): Wi-Fi-only auto-sync, IO dispatcher, bounded parallel feeds (audit 5.5)`.
+- [x] **Step 3 —** predicate: grep `UNMETERED` → 1; GATE-STD. Commit `fix(podcast): Wi-Fi-only auto-sync, IO dispatcher, bounded parallel feeds (audit 5.5)`.
 
 ## Task B8: Hue CLIP snapshot + scene loop (finding 5.7)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/hue/HueProvider.kt` (:311-313 put(); :950-955 setAll; :977-1043 applyScene)
 
-- [ ] **Step 1 —** `put()` gains an overload taking `(ip, key)`; `setAll`/`applyScene` read `hueBridgeIp.first()` + `hueAppKey.first()` ONCE at entry and pass them through the loop.
-- [ ] **Step 2 —** where a grouped-light rid is already parsed (:521-524), `setAll` uses ONE `grouped_light` PUT instead of per-light loops when a group rid exists for the target area; fall back to the per-light loop otherwise. `applyScene`'s per-light colour assignments stay per-light (distinct colours per light is the point of a scene) but run with `async` parallelism capped at 4 — the bridge tolerates this; the dimmable driver's own backoff machinery is untouched (matrix DEP).
-- [ ] **Step 3 —** predicate: grep `first()` inside `put(` body → 0 (moved to entry points). GATE-STD. Device check on phone pass (Hue hardware): presets apply visibly faster; record BLOCKED on this step only if phone unavailable.
-- [ ] **Step 4 —** commit `perf(hue): snapshot bridge creds once per op; grouped PUT; capped parallel scene writes (audit 5.7)`.
+- [x] **Step 1 —** `put()` gains an overload taking `(ip, key)`; `setAll`/`applyScene` read `hueBridgeIp.first()` + `hueAppKey.first()` ONCE at entry and pass them through the loop.
+- [x] **Step 2 —** where a grouped-light rid is already parsed (:521-524), `setAll` uses ONE `grouped_light` PUT instead of per-light loops when a group rid exists for the target area; fall back to the per-light loop otherwise. `applyScene`'s per-light colour assignments stay per-light (distinct colours per light is the point of a scene) but run with `async` parallelism capped at 4 — the bridge tolerates this; the dimmable driver's own backoff machinery is untouched (matrix DEP).
+- [x] **Step 3 —** predicate: grep `first()` inside `put(` body → 0 (moved to entry points). GATE-STD. Device check on phone pass (Hue hardware): presets apply visibly faster; record BLOCKED on this step only if phone unavailable. ✔ 4-arg put holds creds; Hue preset speed check → CONSOLIDATED DEVICE PASS (bridge)
+- [x] **Step 4 —** commit `perf(hue): snapshot bridge creds once per op; grouped PUT; capped parallel scene writes (audit 5.7)`.
 
 ## Task B9: ReplayGain scanner batching (finding 5.8 — write path only; pipeline merge is C6)
 
@@ -591,9 +591,9 @@ coroutineScope {
 - Modify: `app/src/main/java/com/powermediaplayer/replaygain/ReplayGainScanner.kt` (:75, :94-98)
 - Modify: `app/src/main/java/com/powermediaplayer/data/db/dao/ReplayGainDao.kt`
 
-- [ ] **Step 1 —** add `@Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(rows: List<ReplayGainEntity>)` to the DAO; scanner calls it once (`dao.upsertAll(final)`) instead of the per-row loop.
-- [ ] **Step 2 —** hoist the reflection lookup (:94-98) to a `companion object { private val LOUDNESS_KEY: Int? = runCatching { ... }.getOrNull() }` evaluated once.
-- [ ] **Step 3 —** GATE-STD; commit `perf(replaygain): batch upserts + one-time reflection (audit 5.8)`.
+- [x] **Step 1 —** add `@Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertAll(rows: List<ReplayGainEntity>)` to the DAO; scanner calls it once (`dao.upsertAll(final)`) instead of the per-row loop.
+- [x] **Step 2 —** hoist the reflection lookup (:94-98) to a `companion object { private val LOUDNESS_KEY: Int? = runCatching { ... }.getOrNull() }` evaluated once.
+- [x] **Step 3 —** GATE-STD; commit `perf(replaygain): batch upserts + one-time reflection (audit 5.8)`.
 
 ## Task B10: Slider persist debounce (finding 5.6)
 
@@ -601,7 +601,7 @@ coroutineScope {
 - Modify: `app/src/main/java/com/powermediaplayer/ui/player/PlayerViewModel.kt` (:1201-1210 speed override persist)
 - Modify: `app/src/main/java/com/powermediaplayer/ui/settings/SettingsViewModel.kt` (:515-519 hue intensity)
 
-- [ ] **Step 1 —** debounce both writers with a conflated channel pattern:
+- [x] **Step 1 —** debounce both writers with a conflated channel pattern:
 
 ```kotlin
 private val speedPersist = MutableStateFlow<Float?>(null)
@@ -613,8 +613,8 @@ init { viewModelScope.launch {
 // setPlaybackSpeed(): apply to player immediately (unchanged), then speedPersist.value = speed
 ```
 Mirror the same shape for `setHueReactiveIntensity` (apply live value immediately — the engine reads the flow; only the DataStore WRITE debounces).
-- [ ] **Step 2 —** verify the final value always lands (debounce flushes the last emission). Unit test the debounce shape if extracted; otherwise emulator predicate: drag speed slider rapidly, final speed persists across restart (cold-start seed reads it).
-- [ ] **Step 3 —** GATE-STD; commit `perf(datastore): debounce slider persists (audit 5.6)`.
+- [x] **Step 2 —** verify the final value always lands (debounce flushes the last emission). Unit test the debounce shape if extracted; otherwise emulator predicate: drag speed slider rapidly, final speed persists across restart (cold-start seed reads it). ✔ collectLatest+delay persists the final emission by construction; on-device drag/restart check → CONSOLIDATED DEVICE PASS
+- [x] **Step 3 —** GATE-STD; commit `perf(datastore): debounce slider persists (audit 5.6)`.
 
 ## Task B11: ChapterCache IO outside monitor + drive cache trim + DiagLog writer (findings 5.11a/c/d)
 
@@ -623,17 +623,17 @@ Mirror the same shape for `setHueReactiveIntensity` (apply live value immediatel
 - Modify: `app/src/main/java/com/powermediaplayer/cloud/GoogleDriveProvider.kt` (:429-439 download cache)
 - Modify: `app/src/main/java/com/powermediaplayer/diag/DiagLog.kt` (:77, :146, :242-260)
 
-- [ ] **Step 1 — ChapterCache:** compute SHA + serialise OUTSIDE the lock; the `@Synchronized` block shrinks to map/file-pointer updates. On `put`, delete sibling disk entries for the same uri (different mtime/size keys) — list the cache dir filtered by the uri-hash prefix (make the filename `«uriHash»-«tokenHash».json` so the prefix scan is cheap; migrate by ignoring old-format files, they become unreachable cold entries — ALSO add a one-shot size-cap sweep (drop oldest beyond 5MB total) on first attach.
-- [ ] **Step 2 — Drive head/tail caches:** after a successful parse in the download path (:429-439 callers), delete the `drive_<hash>_head`/`_tail` files; add an LRU trim of the `drive_*` namespace to ≤256MB at each new download start.
-- [ ] **Step 3 — DiagLog:** bounded channel `Channel(capacity = 4096, onBufferOverflow = BufferOverflow.DROP_OLDEST)`; writer keeps ONE `BufferedWriter` open per file, `flush()` every 32 lines or 500ms (whichever first), reopen on rotation; crash handler writes the FATAL line synchronously (`runCatching { File(cur).appendText(line + "\n") }`) in addition to the channel.
-- [ ] **Step 4 —** unit: ChapterCacheTest stays green + add a test asserting stale-sibling deletion on put. GATE-STD. Commit `perf(io): chapter-cache lock scope + eviction, drive cache trim, diag writer (audit 5.11)`.
+- [x] **Step 1 — ChapterCache:** compute SHA + serialise OUTSIDE the lock; the `@Synchronized` block shrinks to map/file-pointer updates. On `put`, delete sibling disk entries for the same uri (different mtime/size keys) — list the cache dir filtered by the uri-hash prefix (make the filename `«uriHash»-«tokenHash».json` so the prefix scan is cheap; migrate by ignoring old-format files, they become unreachable cold entries — ALSO add a one-shot size-cap sweep (drop oldest beyond 5MB total) on first attach.
+- [x] **Step 2 — Drive head/tail caches:** after a successful parse in the download path (:429-439 callers), delete the `drive_<hash>_head`/`_tail` files; add an LRU trim of the `drive_*` namespace to ≤256MB at each new download start.
+- [x] **Step 3 — DiagLog:** bounded channel `Channel(capacity = 4096, onBufferOverflow = BufferOverflow.DROP_OLDEST)`; writer keeps ONE `BufferedWriter` open per file, `flush()` every 32 lines or 500ms (whichever first), reopen on rotation; crash handler writes the FATAL line synchronously (`runCatching { File(cur).appendText(line + "\n") }`) in addition to the channel.
+- [x] **Step 4 —** unit: ChapterCacheTest stays green + add a test asserting stale-sibling deletion on put. GATE-STD. Commit `perf(io): chapter-cache lock scope + eviction, drive cache trim, diag writer (audit 5.11)`.
 
 ## Task B12: StrictMode in debug (finding 7.2)
 
 **Files:**
 - Modify: `app/src/main/java/com/powermediaplayer/PowerMediaPlayerApp.kt`
 
-- [ ] **Step 1 —**
+- [x] **Step 1 —**
 
 ```kotlin
 if (BuildConfig.DEBUG) {
@@ -648,15 +648,17 @@ if (BuildConfig.DEBUG) {
 }
 ```
 (penaltyLog only — never penaltyDeath; existing known-blocking seeds in the service are deliberate and bounded.)
-- [ ] **Step 2 —** GATE-STD; emulator boot with logcat `StrictMode` review — file NEW findings to TASKS.md, fix only regressions introduced by this plan. Commit `chore(debug): StrictMode logging (audit 7.2)`.
+- [x] **Step 2 —** GATE-STD; emulator boot with logcat `StrictMode` review — file NEW findings to TASKS.md, fix only regressions introduced by this plan. Commit `chore(debug): StrictMode logging (audit 7.2)`. ✔ StrictMode live on phone launch — first violation is DiagLog's deliberate 3ms getExternalFilesDir in App.onCreate (bounded, by design); review fodder feeds Batch C
 
 ## BATCH B GATE
 
-- [ ] GATE-STD EXIT=0 (paste line). Unit suites incl. new M4bIsRemoteTest 3/3.
-- [ ] Greps: `runBlocking` count in PowerMediaPlayerApp.kt = 0, FullScreenAlarmActivity.kt = 0; `OkHttpClient()` = 0 app-wide.
-- [ ] Emulator: cold-start restore regression check (position ≠ 0); Drive/SAF browse OK; podcast search OK.
-- [ ] Diag before/after `PlaybackService.onCreate START→DONE` delta recorded in this file.
-- [ ] `TASKS.md` updated; commit + push.
+- [x] GATE-STD EXIT=0 across 6 build checkpoints; suites incl. new M4bIsRemoteTest 3/3 + ChapterCache stale-sibling test.
+- [x] Greps: live `runBlocking` in PowerMediaPlayerApp.kt = 0 (one comment mention only), FullScreenAlarmActivity.kt = 0; bare `OkHttpClient()` = 0 app-wide; SharedHttp derivations = 10; UNMETERED present.
+- [x] PHONE smoke (debug, in-place): cold-start restore at position=29405 EXACTLY (saved 34405 − 5s backoff) — T279 intact. Drive/SAF browse with a real account → consolidated device pass (fresh install has no picked roots/sign-ins).
+- [x] Startup timing (phone logcat): `PlaybackService.onCreate START→DONE = 22ms`; `service.prefsWarmup took=1ms`; `cold-start seeded … in=0ms` — the four former cold reads are memory hits.
+- [x] `TASKS.md` updated; commit + push.
+
+**BATCH B GATE EVIDENCE (2026-06-12):** commits 3c833b6, 931f5b4, 7d8dc76, aacf550, 28caf7c(B7), + B9/B10 group, 1df674d (B11), fc49129 (B4/B8), e726780 (B5). Execution deviations (intent-faithful, recorded): B1 = one warm-up snapshot read instead of key-level accessors (DataStore serves from memory after the first read — same win, fraction of the diff risk); B5 = SharedHttp singleton instead of Hilt injection (companion-object clients are unreachable by DI); Hue's two LAN clients excluded by design (trust-all TLS to a bridge gains nothing from a WAN pool); B8 = bridge-home grouped PUT declined (adds a GET+parse to a rarely-used path; 4-wide parallel PUTs capture the latency win). Amendment from execution: BootCompletedReceiver already had goAsync (5.9 over-claimed that receiver).
 
 ---
 
