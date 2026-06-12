@@ -34,4 +34,21 @@ class ChapterCacheTest {
         cache.put("uri1", "?", android.os.Bundle()) // 0 chapters
         assertNotNull(cache.get("uri1", "?"))
     }
+
+    @Test
+    fun putDeletesStaleDiskSiblings() {
+        // Audit 5.11 — a re-parse after the source file changed (new
+        // mtime/size token) must delete the now-unreachable old entry,
+        // or the disk tier accretes one orphan per file change forever.
+        val cache = ChapterCache(maxEntries = 4)
+        val dir = java.nio.file.Files.createTempDirectory("chapcache").toFile()
+        cache.attachDiskStore(dir)
+        cache.put("uri1", "57:1000", android.os.Bundle())
+        cache.put("uri1", "58:2000", android.os.Bundle()) // file changed
+        val store = java.io.File(dir, "chapter-cache")
+        val entries = store.listFiles()?.map { it.name } ?: emptyList()
+        org.junit.Assert.assertEquals(
+            "stale sibling must be deleted on put", 1, entries.size
+        )
+    }
 }

@@ -392,6 +392,10 @@ class GoogleDriveProvider @Inject constructor(
         val tag = "PowerMediaPlayer"
         val sourceUri = runCatching { Uri.parse(item.downloadUrl) }.getOrNull()
             ?: return@withContext null
+        // Audit 5.11 — head/tail caches are 32-64MB per browsed item and
+        // only OS cache pressure ever reclaimed them; an audiobook-folder
+        // binge could park hundreds of MB. LRU-trim before each download.
+        trimDriveCache()
         val cacheFile = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_$suffix")
         val start = rangeStart ?: 0L
         val end = rangeEnd ?: Long.MAX_VALUE
@@ -548,10 +552,25 @@ class GoogleDriveProvider @Inject constructor(
         return ext in PLAYABLE_EXTENSIONS
     }
 
+    private fun trimDriveCache() {
+        runCatching {
+            val files = context.cacheDir.listFiles { f -> f.name.startsWith("drive_") } ?: return
+            var total = files.sumOf { it.length() }
+            if (total <= DRIVE_CACHE_CAP_BYTES) return
+            for (f in files.sortedBy { it.lastModified() }) {
+                if (total <= DRIVE_CACHE_CAP_BYTES) break
+                total -= f.length()
+                runCatching { f.delete() }
+            }
+        }
+    }
+
     companion object {
         private const val MIME_FOLDER = "vnd.android.document/directory"
         /** Search walks at most this many tree nodes per query. */
         private const val SEARCH_TRAVERSAL_CAP = 5_000
+        /** drive_* download-cache budget; oldest entries evicted first. */
+        private const val DRIVE_CACHE_CAP_BYTES = 256L * 1024 * 1024
         private val PLAYABLE_EXTENSIONS = setOf(
             // Audio
             "mp3", "flac", "ogg", "oga", "opus", "wav", "wave", "aac",
