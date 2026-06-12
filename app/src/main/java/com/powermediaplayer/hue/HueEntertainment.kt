@@ -186,6 +186,13 @@ class HueEntertainment @Inject constructor(
                 hueProvider.stopEntertainmentStream(area)
                 return@launch
             }
+            // From here the bridge believes a stream is live and we own a
+            // DTLS socket. The send-failure path cancels this coroutine
+            // from INSIDE the loop, so cleanup must sit in a finally —
+            // anything after the loop is skipped on cancellation, leaking
+            // the socket and leaving the bridge stuck "streaming" (it then
+            // refuses the next start: the disconnect→reconnect failure).
+            try {
             // Mode decision: SPREAD when there are enough colour lights
             // to give each band a slot AND the user toggle agrees;
             // COHERENT otherwise. COHERENT looks more unified across
@@ -475,10 +482,18 @@ class HueEntertainment @Inject constructor(
                 }
                 delay(frameMs)
             }
-            runCatching { dtls?.close() }
-            runCatching { socket?.close() }
-            hueProvider.stopEntertainmentStream(area)
-            DiagLog.event("HUE", "entertainment STOPPED")
+            } finally {
+                runCatching { dimmableDriver.stop() }
+                runCatching { dtls?.close() }
+                runCatching { socket?.close() }
+                dtls = null
+                socket = null
+                // Suspend calls throw inside a cancelled coroutine's
+                // finally — fire the stop PUT from the engine scope so the
+                // bridge always learns the stream ended.
+                scope.launch { runCatching { hueProvider.stopEntertainmentStream(area) } }
+                DiagLog.event("HUE", "entertainment STOPPED (finally)")
+            }
         }
     }
 
@@ -504,6 +519,7 @@ class HueEntertainment @Inject constructor(
     private fun connectDtls(ip: String, identity: String, psk: ByteArray): Boolean {
         val address = InetAddress.getByName(ip)
         val sock = DatagramSocket()
+        try {
         sock.connect(address, BRIDGE_DTLS_PORT)
         socket = sock
         val transport: DatagramTransport = UDPTransport(sock, 1500)
@@ -530,6 +546,13 @@ class HueEntertainment @Inject constructor(
         dtls = DTLSClientProtocol().connect(client, transport)
         DiagLog.event("HUE", "DTLS handshake OK (id len=${identityBytes.size} psk len=${psk.size})")
         return true
+        } catch (t: Throwable) {
+            // Wi-Fi flap / bridge reboot retries leak one fd per failed
+            // handshake without this close.
+            runCatching { sock.close() }
+            socket = null
+            throw t
+        }
     }
 
     // ── Wire-format helpers ────────────────────────────────────────
