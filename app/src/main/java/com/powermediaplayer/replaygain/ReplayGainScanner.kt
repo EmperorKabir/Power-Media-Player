@@ -72,8 +72,18 @@ class ReplayGainScanner @Inject constructor(
             }
         }
         val final = rows.map { r -> r.copy(albumGainDb = byAlbum[r.albumKey] ?: ReplayGainEntity.ABSENT) }
-        final.forEach { dao.upsert(it) }
+        dao.upsertAll(final)
         final.size
+    }
+
+    private companion object {
+        /** Reflection resolved once, not per file (audit 5.8).
+         *  METADATA_KEY_LOUDNESS exists from API 34; null below. */
+        val LOUDNESS_KEY: Int? = runCatching {
+            MediaMetadataRetriever::class.java
+                .getField("METADATA_KEY_LOUDNESS")
+                .getInt(null)
+        }.getOrNull()
     }
 
     private fun analyse(uri: Uri): Pair<Double, String> {
@@ -91,12 +101,8 @@ class ReplayGainScanner @Inject constructor(
             // integrated loudness in LUFS as a float string. Convert to
             // a ReplayGain-style "target -18 LUFS" gain.
             val loudnessStr = if (android.os.Build.VERSION.SDK_INT >= 34)
-                runCatching {
-                    val key = MediaMetadataRetriever::class.java
-                        .getField("METADATA_KEY_LOUDNESS")
-                        .getInt(null)
-                    mmr.extractMetadata(key)
-                }.getOrNull() else null
+                LOUDNESS_KEY?.let { runCatching { mmr.extractMetadata(it) }.getOrNull() }
+            else null
             // Locked spec target: -14 LUFS (matches the standard ReplayGain
             // 2.0 reference point). Earlier code targeted -18 LUFS which
             // was an unilateral choice; corrected to spec.

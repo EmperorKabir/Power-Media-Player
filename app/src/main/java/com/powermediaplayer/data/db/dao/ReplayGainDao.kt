@@ -18,6 +18,11 @@ interface ReplayGainDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(row: ReplayGainEntity)
 
+    /** Whole-library scans write hundreds of rows; one transaction
+     *  instead of one-per-row (audit 5.8). */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(rows: List<ReplayGainEntity>)
+
     @Query("DELETE FROM replay_gain")
     suspend fun clearAll()
 
