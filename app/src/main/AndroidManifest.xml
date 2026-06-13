@@ -101,7 +101,7 @@
             android:exported="true"
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|screenSize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|density"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PowerMediaPlayer">
             <intent-filter>
