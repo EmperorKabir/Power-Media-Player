@@ -30,7 +30,7 @@ data class AdaptiveInfo(
 fun rememberAdaptiveInfo(windowSizeClass: WindowSizeClass): AdaptiveInfo {
     val posture = currentWindowAdaptiveInfo().windowPosture
     val hinge = posture.hingeList.firstOrNull()
-    return AdaptiveInfo(
+    val info = AdaptiveInfo(
         widthClass = windowSizeClass.widthSizeClass,
         heightClass = windowSizeClass.heightSizeClass,
         isTabletop = posture.isTabletop,
@@ -38,4 +38,18 @@ fun rememberAdaptiveInfo(windowSizeClass: WindowSizeClass): AdaptiveInfo {
         hingeIsVertical = hinge?.isVertical == true,
         hingeIsSeparating = hinge?.isSeparating == true,
     )
+    // DIAGNOSTIC (F8) — log what material3-adaptive actually computes from
+    // the posture, so a fold shows whether isTabletop ever flips for the
+    // app (cross-check against the raw FoldingFeature logged in MainActivity).
+    androidx.compose.runtime.LaunchedEffect(
+        info.isTabletop, info.hingeBounds, info.widthClass, info.heightClass
+    ) {
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "[POSTURE] adaptiveInfo isTabletop=${info.isTabletop} " +
+                "hingeBounds=${info.hingeBounds} vertical=${info.hingeIsVertical} " +
+                "separating=${info.hingeIsSeparating} width=${info.widthClass} height=${info.heightClass}"
+        )
+    }
+    return info
 }

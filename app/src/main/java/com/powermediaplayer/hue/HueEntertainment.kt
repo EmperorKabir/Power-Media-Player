@@ -490,7 +490,8 @@ class HueEntertainment @Inject constructor(
                 socket = null
                 // Suspend calls throw inside a cancelled coroutine's
                 // finally — fire the stop PUT from the engine scope so the
-                // bridge always learns the stream ended.
+                // bridge always learns the stream ended. This is the SINGLE
+                // teardown path; stop() only cancels the job (see below).
                 scope.launch { runCatching { hueProvider.stopEntertainmentStream(area) } }
                 DiagLog.event("HUE", "entertainment STOPPED (finally)")
             }
@@ -500,18 +501,14 @@ class HueEntertainment @Inject constructor(
     fun stop() {
         if (streamJob == null) return
         DiagLog.event("HUE", "entertainment.stop() requested")
+        // SINGLE teardown path: cancelling the stream job runs its finally
+        // (above), which stops the dimmable driver, deactivates the bridge
+        // config FIRST and only then closes the socket. Previously stop()
+        // ALSO did all of that, so on disconnect everything fired twice
+        // (double stopEntertainmentStream) AND closed the socket before the
+        // config was deactivated — the colour-light drift regression.
         streamJob?.cancel()
         streamJob = null
-        // Stop the parallel dimmable driver too — keeps the two paths
-        // started + stopped together.
-        dimmableDriver.stop()
-        runCatching { dtls?.close() }
-        runCatching { socket?.close() }
-        dtls = null
-        socket = null
-        scope.launch {
-            if (areaId.isNotBlank()) hueProvider.stopEntertainmentStream(areaId)
-        }
     }
 
     // ── DTLS-PSK handshake ─────────────────────────────────────────

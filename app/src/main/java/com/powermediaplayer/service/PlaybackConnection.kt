@@ -144,6 +144,10 @@ class PlaybackConnection @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var positionPollingJob: Job? = null
     private var metadataLogSeq: Int = 0
+    // DIAGNOSTIC (album-art stale bug) — last mediaId we logged art sources
+    // for, so the per-track art-source breakdown fires once per track, not
+    // per position tick.
+    private var lastArtLogId: String? = null
 
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -1037,6 +1041,21 @@ class PlaybackConnection @Inject constructor(
             audioFormatLabel = cachedAudioFormatLabel,
             currentMediaUri = c.currentMediaItem?.mediaId.orEmpty()
         )
+        // DIAGNOSTIC (album-art stale bug) — once per track, log every art
+        // source feeding the state so a no-art track reveals whether stale
+        // art survives via metadata or the itemMetadata/cache fallback.
+        val artLogId = rawId
+        if (artLogId != lastArtLogId) {
+            lastArtLogId = artLogId
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "[ART] id=${artLogId?.takeLast(28)} override(uri=${overArtwork != null},bytes=${overArtworkBytes != null}) " +
+                    "metadata(uri=${metadata.artworkUri != null},data=${metadata.artworkData != null}) " +
+                    "itemMeta(uri=${itemMetadata?.artworkUri != null},data=${itemMetadata?.artworkData != null}) " +
+                    "cached=${cached != null} → FINAL uri=${(overArtwork ?: metadata.artworkUri ?: itemMetadata?.artworkUri) != null} " +
+                    "bytes=${(overArtworkBytes ?: metadata.artworkData ?: itemMetadata?.artworkData) != null}"
+            )
+        }
     }
 
     /**

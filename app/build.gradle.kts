@@ -191,6 +191,9 @@ dependencies {
     implementation("androidx.compose.material3.adaptive:adaptive:1.1.0")
     implementation("androidx.compose.material3.adaptive:adaptive-layout:1.1.0")
     implementation("androidx.compose.material3.adaptive:adaptive-navigation:1.1.0")
+    // Direct WindowInfoTracker access for the fold-posture diagnostic
+    // logger (same source material3-adaptive reads transitively).
+    implementation("androidx.window:window:1.3.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

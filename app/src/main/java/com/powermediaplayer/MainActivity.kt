@@ -152,6 +152,33 @@ class MainActivity : FragmentActivity() {
         // (audit 3.1/8.4) — idempotent ignition, not lifecycle-bound.
         sessionCoordinator.start()
 
+        // DIAGNOSTIC (F8 fold posture) — log the RAW FoldingFeature from
+        // androidx.window (the same source material3-adaptive reads) on
+        // every posture change, so a physical fold shows exactly what the
+        // device reports: state HALF_OPENED/FLAT, orientation, separating.
+        // If isTabletop never flips, this proves whether the OEM extension
+        // even surfaces the half-open posture to the app.
+        lifecycleScope.launch {
+            androidx.window.layout.WindowInfoTracker.getOrCreate(this@MainActivity)
+                .windowLayoutInfo(this@MainActivity)
+                .collect { info ->
+                    val folds = info.displayFeatures
+                        .filterIsInstance<androidx.window.layout.FoldingFeature>()
+                    if (folds.isEmpty()) {
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "[POSTURE] flat/slab — no FoldingFeature (features=${info.displayFeatures.size})"
+                        )
+                    } else folds.forEach { f ->
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "[POSTURE] FoldingFeature state=${f.state} orientation=${f.orientation} " +
+                                "isSeparating=${f.isSeparating} occlusion=${f.occlusionType} bounds=${f.bounds}"
+                        )
+                    }
+                }
+        }
+
         // "Auto-play on launch", status-bar case: closing the app with
         // back/swipe leaves the playback service alive with the item
         // PAUSED in the notification — the cold-start restore then sees
