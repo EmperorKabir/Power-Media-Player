@@ -182,6 +182,7 @@ fun AppNavigation(
             composable(Screen.Player.route) {
                 PlayerScreen(
                     windowSizeClass = windowSizeClass,
+                    adaptive = com.powermediaplayer.ui.adaptive.rememberAdaptiveInfo(windowSizeClass),
                     onNavigateToLibrary = navigateToLibrary
                 )
             }

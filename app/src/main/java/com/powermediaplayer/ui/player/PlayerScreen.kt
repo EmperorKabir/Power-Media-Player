@@ -65,6 +65,16 @@ val LocalOpenPopupCount = compositionLocalOf<androidx.compose.runtime.MutableInt
 }
 
 /**
+ * Audit 8.1/8.2 (F6/F7/F8) — adaptive layout facts (width/height size
+ * class, foldable posture, hinge geometry) made ambient so the deep
+ * player sub-composables (OverlayContent, PlayerScreenExpanded, video
+ * branch) can read them without threading through every signature.
+ * null on the rare path where PlayerScreen wasn't given one.
+ */
+val LocalAdaptiveInfo =
+    compositionLocalOf<com.powermediaplayer.ui.adaptive.AdaptiveInfo?> { null }
+
+/**
  * Main player screen — fully adaptive layout.
  *
  * Compact (phone portrait): single column, controls at bottom
@@ -74,6 +84,7 @@ val LocalOpenPopupCount = compositionLocalOf<androidx.compose.runtime.MutableInt
 @Composable
 fun PlayerScreen(
     windowSizeClass: WindowSizeClass,
+    adaptive: com.powermediaplayer.ui.adaptive.AdaptiveInfo? = null,
     onNavigateToLibrary: () -> Unit = {},
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -118,7 +129,17 @@ fun PlayerScreen(
         !uiState.cloudFetchInProgress && !uiState.isVideoContent &&
         !uiState.isSpotifyActive
 
+    // Audit 8.1 (F6) — Expanded width always two-pane; Medium two-pane
+    // only in landscape (a portrait unfolded-fold stays single column).
+    // Video always fills via the Compact layout regardless of size.
+    val cfg = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = cfg.screenWidthDp >= cfg.screenHeightDp
+    val twoPanePlayer =
+        windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded ||
+            (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium && isLandscape)
+
     Box(modifier = Modifier.fillMaxSize()) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalAdaptiveInfo provides adaptive) {
         // Video ALWAYS uses the Compact layout regardless of screen size,
         // so the picture fills the whole screen on phones, tablets, and
         // unfolded foldables. Audio uses the size-appropriate layout.
@@ -136,7 +157,7 @@ fun PlayerScreen(
                 onShowInfo = { showInfoSheet = true },
                 horizontalPadding = 0
             )
-            windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded -> PlayerScreenExpanded(
+            twoPanePlayer -> PlayerScreenExpanded(
                 uiState = uiState,
                 artworkBytes = artworkBytes,
                 artworkContentScale = artworkContentScale,
@@ -171,6 +192,7 @@ fun PlayerScreen(
                 onShowInfo = { showInfoSheet = true },
                 horizontalPadding = 0
             )
+        }
         }
 
         // Cloud-fetch banner + error banner — top-level so they render
@@ -440,6 +462,12 @@ private fun PlayerScreenCompact(
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
+    // Audit 8.2 (F8) — tabletop foldable: video occupies the top leaf,
+    // controls the bottom leaf. Immersive auto-hide is suspended here
+    // (bars + controls stay shown) since the picture isn't full-bleed.
+    val adaptive = LocalAdaptiveInfo.current
+    val tabletopVideo = uiState.isVideoContent &&
+        adaptive?.isTabletop == true && adaptive.hingeBounds != null
     // Bug fix (user-reported "popup goes away when its timeout is set
     // to longer than the controls timeout"): every popup-launching
     // button used to keep its showSheet state inside its own composable.
@@ -454,7 +482,7 @@ private fun PlayerScreenCompact(
         openPopupCount.intValue
     ) {
         if (uiState.isVideoContent && controlsVisible &&
-            videoHideSec > 0 && openPopupCount.intValue == 0
+            videoHideSec > 0 && openPopupCount.intValue == 0 && !tabletopVideo
         ) {
             delay(videoHideSec * 1000L)
             // Re-check after delay — a popup may have opened in the
@@ -523,6 +551,18 @@ private fun PlayerScreenCompact(
             .fillMaxSize()
             .then(parentTapModifier)
     ) {
+        if (tabletopVideo && adaptive != null) {
+            TabletopVideoLayout(
+                adaptive = adaptive,
+                uiState = uiState,
+                coverColors = coverColors,
+                viewModel = viewModel,
+                horizontalPadding = horizontalPadding,
+                onShowSleepTimer = onShowSleepTimer,
+                onShowChapterPicker = onShowChapterPicker,
+                onShowInfo = onShowInfo
+            )
+        } else {
         if (uiState.isVideoContent) {
             // Video content: render the actual video frames
             // VideoSurface attaches directly to the ExoPlayer in PlaybackService
@@ -608,8 +648,100 @@ private fun PlayerScreenCompact(
                 onShowInfo = onShowInfo
             )
         }
+        }
     }
     } // closes CompositionLocalProvider
+}
+
+/**
+ * Audit 8.2 (F8) — tabletop foldable video layout. The device is propped
+ * half-open (book/laptop posture, horizontal hinge); we put the picture
+ * in the TOP leaf (its bottom edge at the hinge) and the transport
+ * controls in the BOTTOM leaf, so the screen reads like a tiny laptop.
+ * The bottom-leaf overlay is given a Compact height class so its control
+ * stack scrolls within the leaf rather than clipping.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TabletopVideoLayout(
+    adaptive: com.powermediaplayer.ui.adaptive.AdaptiveInfo,
+    uiState: PlayerUiState,
+    coverColors: CoverArtColors?,
+    viewModel: PlayerViewModel,
+    horizontalPadding: Int,
+    onShowSleepTimer: () -> Unit,
+    onShowChapterPicker: () -> Unit,
+    onShowInfo: () -> Unit
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val hinge = adaptive.hingeBounds
+    val topLeafDp = if (hinge != null) with(density) { hinge.top.toDp() } else 0.dp
+    val hingeGapDp =
+        if (hinge != null) with(density) { (hinge.bottom - hinge.top).toDp() } else 0.dp
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(OledBlack)
+    ) {
+        // Top leaf — video, frame bottom edge resting on the hinge.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(topLeafDp)
+        ) {
+            VideoSurface(
+                isVideoContent = true,
+                videoWidth = uiState.videoWidth,
+                videoHeight = uiState.videoHeight,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        // Physical hinge gap.
+        if (hingeGapDp > 0.dp) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(hingeGapDp)
+                    .background(OledBlack)
+            )
+        }
+        // Bottom leaf — controls, always visible (no immersive auto-hide).
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            val scrim = remember {
+                Brush.verticalGradient(
+                    listOf(
+                        Color.Transparent,
+                        OledBlack.copy(alpha = 0.40f),
+                        OledBlack.copy(alpha = 0.85f),
+                        OledBlack.copy(alpha = 0.97f)
+                    )
+                )
+            }
+            // Force a Compact height class for the leaf subtree so
+            // OverlayContent enables its internal scroll (the leaf is
+            // ~half the window — the full control stack would clip).
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalAdaptiveInfo provides adaptive.copy(
+                    heightClass = androidx.compose.material3.windowsizeclass.WindowHeightSizeClass.Compact
+                )
+            ) {
+                OverlayContent(
+                    uiState = uiState,
+                    coverColors = coverColors,
+                    scrim = scrim,
+                    horizontalPadding = horizontalPadding,
+                    viewModel = viewModel,
+                    onShowSleepTimer = onShowSleepTimer,
+                    onShowChapterPicker = onShowChapterPicker,
+                    onShowInfo = onShowInfo
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -683,8 +815,13 @@ private fun OverlayContent(
     // Audit 6.8 - the video overlay's ~500dp control stack clipped at
     // compact window heights (split screen, landscape phones): controls
     // above the bottom anchor became unreachable. Scroll when short.
-    val compactHeight =
-        androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500
+    // Audit 8.1 (F7) — now keyed off the window HEIGHT size class
+    // (Compact = <480dp) instead of a raw 500dp LocalConfiguration read,
+    // so it tracks the same size-class system the rest of the layout
+    // uses. Falls back to the raw read when no AdaptiveInfo is provided.
+    val compactHeight = LocalAdaptiveInfo.current?.let {
+        it.heightClass == androidx.compose.material3.windowsizeclass.WindowHeightSizeClass.Compact
+    } ?: (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 500)
     val scrollMod = if (uiState.isVideoContent && !compactHeight) {
         Modifier
     } else {
@@ -927,6 +1064,18 @@ private fun PlayerScreenExpanded(
     androidx.compose.runtime.CompositionLocalProvider(LocalOpenPopupCount provides openPopupCount) {
     // Audit 3.11 — hardware volume as state (see OverlayContent's twin).
     val volumeUi by viewModel.volumeUi.collectAsStateWithLifecycle()
+    // Audit 8.1/8.2 (F6) — when a vertical separating hinge crosses the
+    // window (book-posture foldable / Surface Duo), pin the split AT the
+    // hinge: art fills the left leaf, controls the right, gap left clear.
+    // Slab tablets / continuous-display folds get a 45/55 art:controls
+    // ratio instead of a flat 50/50 (controls need the room).
+    val adaptive = LocalAdaptiveInfo.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val hinge = adaptive?.hingeBounds
+    val useHinge = hinge != null && adaptive.hingeIsVertical && adaptive.hingeIsSeparating
+    val hingeLeftDp = if (useHinge && hinge != null) with(density) { hinge.left.toDp() } else 0.dp
+    val hingeWidthDp =
+        if (useHinge && hinge != null) with(density) { (hinge.right - hinge.left).toDp() } else 0.dp
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -935,8 +1084,7 @@ private fun PlayerScreenExpanded(
         // Left panel: cover art only — video uses the Compact layout for
         // full-screen playback regardless of size class.
         Box(
-            modifier = Modifier
-                .weight(1f)
+            modifier = (if (useHinge) Modifier.width(hingeLeftDp) else Modifier.weight(0.45f))
                 .fillMaxHeight()
         ) {
             CoverArtBackground(
@@ -948,12 +1096,17 @@ private fun PlayerScreenExpanded(
             )
         }
 
+        // Hinge occlusion gap — only when a physically separating hinge
+        // sits between the leaves; zero-width (skipped) otherwise.
+        if (useHinge && hingeWidthDp > 0.dp) {
+            Spacer(modifier = Modifier.width(hingeWidthDp).fillMaxHeight())
+        }
+
         // Right panel: all controls. Wrapped in Box so the InfoIcon
         // can anchor top-right of the panel without disturbing the
         // centred control column.
         Box(
-            modifier = Modifier
-                .weight(1f)
+            modifier = (if (useHinge) Modifier.weight(1f) else Modifier.weight(0.55f))
                 .fillMaxHeight()
         ) {
         Column(
