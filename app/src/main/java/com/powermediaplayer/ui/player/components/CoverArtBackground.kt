@@ -85,7 +85,17 @@ fun CoverArtBackground(
             }
         }
 
-        if (decoded != null) {
+        // The embedded-bytes path wins ONLY when the current track has no
+        // usable artwork URI. Media3's player.mediaMetadata.artworkData
+        // PERSISTS across track changes, so once an embedded-art track
+        // (e.g. an M4B) plays, that stale bitmap would otherwise override
+        // every subsequent track's real cover — including MediaStore and
+        // Drive tracks that can't even have embedded bytes (the "album art
+        // stays / wrong on switch" bug on both Player and Last Played).
+        // Gating on (no valid URI) makes the URI the current-track
+        // authority and confines the bytes path to genuine embedded-only
+        // audio (M4B audiobooks).
+        if (decoded != null && !(hasCoverArt && artworkUri != null)) {
             LaunchedEffect(decoded) {
                 // Palette quantisation off Main (audit 4.3); snapshot
                 // state writes are thread-safe so the callback can fire
