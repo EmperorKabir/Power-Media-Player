@@ -1618,6 +1618,7 @@ class BaselineProfileGenerator {
 ## Task G4: Consolidated on-device pass (phone)
 
 - [ ] AWAITING-USER(phone wipe consent or Play-build install): run the accumulated `[DEVICE]` list — T257 backlog + Hue A4/B8/C4 audibility/behaviour + Spotify C8 background pause + Cast C9 discovery + D-batch visuals on the physical phone + fold checks if a foldable is available. Record per-item evidence in TASKS.md.
+  **PARTIALLY DONE this session on the user's unlocked Z Fold (debug vc32 installed):** ✅ adaptive Batch F (rail, Library 2-col grid, Settings two-pane, Cloud grid, EQ width-cap, Player two-pane both orientations) — real-device dumps; ✅ E1 immersive video (controls-hide → system "Viewing full screen" + full-bleed flag observed); ✅ E2 rotate (video auto-rotated to landscape); ✅ **D7/D9/D10 video PiP** (Home with video playing → `Task mode=pinned` + `mLastReportedPictureInPictureMode=true` + screenshot shows the live video in a PiP window over the home screen). STILL AWAITING-USER (need the user's hardware/accounts, can't be adb-driven): Hue bridge mid-stream Wi-Fi-drop (Batch-D Hue step 4) + Hue audibility, Spotify C8 background-pause (needs their Spotify session), Cast C9 discovery (Living Area TV / Kabir Stereo only), D5 alarm-rotate, D8 font visual sign-off, plus the T257 visual backlog.
 
 ---
 
