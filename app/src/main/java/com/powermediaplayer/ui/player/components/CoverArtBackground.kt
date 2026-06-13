@@ -102,11 +102,23 @@ fun CoverArtBackground(
                 "PMP_DIAG",
                 "CoverArt AsyncImage building uri=$artworkUri"
             )
+            // Bug fix (stale album art): MediaStore can report a non-null
+            // albumart URI whose FILE IS MISSING (dangling) — so hasCoverArt
+            // is true but the load fails with FileNotFoundException. Coil's
+            // AsyncImage keeps the PREVIOUS track's painter on error, so the
+            // old cover survives onto a track that has none. key(artworkUri)
+            // forces a FRESH AsyncImage per URI, so a failed/dangling load
+            // has no prior painter to inherit and the OLED-black background
+            // shows through instead of stale art. `error`/`fallback` paint
+            // that background explicitly as a belt-and-braces clear.
+            androidx.compose.runtime.key(artworkUri) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(artworkUri)
                     .allowHardware(false)
                     .build(),
+                error = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
+                fallback = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
                 contentDescription = "Album cover art",
                 contentScale = contentScale,
                 modifier = Modifier.fillMaxSize(),
@@ -134,6 +146,7 @@ fun CoverArtBackground(
                     onColorsExtracted(null)
                 }
             )
+            }
         } else {
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
