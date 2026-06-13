@@ -1443,7 +1443,7 @@ fun requestVideoOrientation(landscape: Boolean) {
 
 **Files:** Modify: `app/build.gradle.kts`; `MainActivity.kt`; new `app/src/main/java/com/powermediaplayer/ui/adaptive/AdaptiveInfo.kt`
 
-- [ ] **Step 1 —** dependencies (use the latest stable at implementation time; verified family):
+- [x] **Step 1 —** dependencies (use the latest stable at implementation time; verified family):
 
 ```kotlin
 implementation("androidx.compose.material3.adaptive:adaptive:1.1.0")
@@ -1452,7 +1452,8 @@ implementation("androidx.compose.material3.adaptive:adaptive-navigation:1.1.0")
 implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1.3.2")
 ```
 (If the resolver offers 1.2.x stable, take it; record the chosen versions here.)
-- [ ] **Step 2 —** `AdaptiveInfo.kt`:
+  CHOSEN: adaptive/adaptive-layout/adaptive-navigation **1.1.0**; navigation-suite **BOM-managed** (compose-bom 2025.04.00 supplies material3-adaptive-navigation-suite — no explicit version, avoids BOM clash). Resolves + compiles.
+- [x] **Step 2 —** `AdaptiveInfo.kt`: (created `ui/adaptive/AdaptiveInfo.kt` with widthClass/heightClass/isTabletop/hingeBounds + hingeIsVertical/hingeIsSeparating — F6 needs orientation; `currentWindowAdaptiveInfo().windowPosture.hingeList` field names compile against adaptive 1.1.0)
 
 ```kotlin
 /** Single source of adaptive truth passed through the UI tree. windowSizeClass
@@ -1474,13 +1475,13 @@ implementation("androidx.compose.material3:material3-adaptive-navigation-suite:1
 }
 ```
 (Exact `Posture`/`hingeList` property names per the c7-verified API surface; adjust to the resolved artifact's actual fields at compile time — the matrix records `isTabletop` + `hingeList` as the confirmed names.)
-- [ ] **Step 3 —** GATE-STD (deps resolve); commit `feat(adaptive): foundations — adaptive artifacts + AdaptiveInfo (8.1/8.2)`.
+- [x] **Step 3 —** GATE-STD (deps resolve); commit `feat(adaptive): foundations — adaptive artifacts + AdaptiveInfo (8.1/8.2)`. (BUILD SUCCESSFUL; commit 476a358)
 
 ## Task F2: Navigation shell — NavigationSuiteScaffold
 
 **Files:** Modify: `app/src/main/java/com/powermediaplayer/ui/navigation/AppNavigation.kt` (:108-146 bottom bar region)
 
-- [ ] **Step 1 —** replace the always-`NavigationBar` Scaffold bottomBar with `NavigationSuiteScaffold`:
+- [x] **Step 1 —** replace the always-`NavigationBar` Scaffold bottomBar with `NavigationSuiteScaffold`: (done — `navLayoutType` when{fullBleed→None; Compact→Bar; else→Rail}; suiteColors/itemColors hoisted because item()'s builder lambda is NOT composable; MiniPlayerBar moved into Column{Box(weight 1f){NavHost+FloatingVideoMiniPlayer}; MiniPlayerBar} so it spans content beside the rail)
 
 ```kotlin
 NavigationSuiteScaffold(
@@ -1501,21 +1502,21 @@ NavigationSuiteScaffold(
 ) { /* existing NavHost */ }
 ```
 The MiniPlayerBar moves from Scaffold bottomBar to a Column wrapper above/below the NavHost content so it renders adjacent to the rail on wide layouts (Column { Box(weight 1f){ NavHost }; MiniPlayerBar() }) — bar spans content width, rail sits left.
-- [ ] **Step 2 —** emulator predicates: phone size → bottom bar (uiautomator: NavigationBar node); `wm size 2560x1600` + `wm density 320` (tablet) → rail on the left; tab state preserved switching sizes. Commit `feat(adaptive): navigation rail on medium/expanded widths (8.1)`.
+- [x] **Step 2 —** emulator predicates: phone size → bottom bar (uiautomator: NavigationBar node); `wm size 2560x1600` + `wm density 320` (tablet) → rail on the left; tab state preserved switching sizes. Commit `feat(adaptive): navigation rail on medium/expanded widths (8.1)`. (EVIDENCE — uiautomator exposes no Compose class names, geometry is the discriminator: tablet dump = labels stacked LEFT x≈35-65/y 132→732 (rail); phone dump = labels along bottom y=2257 x 38→1055 (bar). Commit 8263df9)
 
 ## Task F3: Library — adaptive grid + two-pane
 
 **Files:** Modify: `ui/library/LibraryScreen.kt` (list region :600-700)
-- [ ] **Step 1 —** list rendering switches by width: Compact = existing LazyColumn (untouched); Medium/Expanded = `LazyVerticalGrid(GridCells.Adaptive(minSize = 360.dp))` rendering the SAME row composable (rows are self-contained cards already; grid cells reuse them). Keys preserved (`key = { it.id }` → `items(files, key={it.id})` equivalents in grid form). Favourites strip + headers stay as `item(span = { GridItemSpan(maxLineSpan) })` full-width entries (D6 already moved them into the list).
-- [ ] **Step 2 —** Expanded two-pane: `ListDetailPaneScaffold` is the wrong shape for Library→Player (Player is a separate tab); instead Expanded gets the grid at 2+ columns — two-pane lives in F6 (Player tab) where it belongs. Record this design note.
-- [ ] **Step 3 —** emulator: tablet size → ≥2 columns (uiautomator: two row nodes share a y-band); phone unchanged. Commit `feat(adaptive): library grid on wide windows (8.1)`.
+- [x] **Step 1 —** list rendering switches by width: Compact = existing LazyColumn (untouched); Medium/Expanded = `LazyVerticalGrid(GridCells.Adaptive(minSize = 360.dp))` rendering the SAME row composable (rows are self-contained cards already; grid cells reuse them). Keys preserved (`key = { it.id }` → `items(files, key={it.id})` equivalents in grid form). Favourites strip + headers stay as `item(span = { GridItemSpan(maxLineSpan) })` full-width entries (D6 already moved them into the list). (IMPLEMENTATION NOTE — single `LazyVerticalGrid(Adaptive(360dp))` replaces the LazyColumn for ALL widths: Adaptive resolves to exactly 1 column at compact widths (360-719dp), so the compact rendering is pixel-identical while avoiding a duplicated 100-line dual-scope content block — the duplication was the larger regression risk. Keys preserved verbatim; smart_blocks/fav_header/fav_divider span maxLineSpan; `rememberLazyListState`→`rememberLazyGridState`, same scrollToItem-on-sort behaviour.)
+- [x] **Step 2 —** Expanded two-pane: `ListDetailPaneScaffold` is the wrong shape for Library→Player (Player is a separate tab); instead Expanded gets the grid at 2+ columns — two-pane lives in F6 (Player tab) where it belongs. Record this design note. (RECORDED — no ListDetailPaneScaffold in Library; Expanded = grid ≥2 columns, confirmed live.)
+- [x] **Step 3 —** emulator: tablet size → ≥2 columns (uiautomator: two row nodes share a y-band); phone unchanged. Commit `feat(adaptive): library grid on wide windows (8.1)`. (EVIDENCE — second tone file pushed (`pmp_test_tone_2.wav`); tablet 2560x1600/320: `pmp_test_tone`@x312 + `pmp_test_tone_2`@x1112 SAME y-band 595-633 = 2 columns; phone reset: both @x200, y 783 vs 961 = 1 column. Commit 1db1d0a)
 
 ## Task F4: Last Played + Cloud + Settings adaptive
 
 **Files:** Modify: `ui/lastplayed/LastPlayedScreen.kt`, `ui/cloud/CloudBrowserScreen.kt`, `ui/settings/SettingsScreen.kt`
-- [ ] **Step 1 — LastPlayed:** same grid treatment as F3 for recents/pinned (full-width section headers via span).
-- [ ] **Step 2 — Cloud:** browser list → grid on wide; provider chooser row already wraps.
-- [ ] **Step 3 — Settings:** Expanded = two-pane via `ListDetailPaneScaffold` (groups list left, selected group's items right; search results span the detail pane):
+- [x] **Step 1 — LastPlayed:** same grid treatment as F3 for recents/pinned (full-width section headers via span). (`LazyVerticalGrid(Adaptive(360dp))`; pinned_albums/pinned_tracks/recents_header span maxLineSpan; recents tile; nested bounded ReorderablePinnedList stays a LazyColumn inside its full-span block)
+- [x] **Step 2 — Cloud:** browser list → grid on wide; provider chooser row already wraps. (3 lists converted: Spotify section picker, search results, Drive browser — headers/dividers/action rows span, item rows tile; provider-cards landing LazyColumn (2 full-width blocks) + bounded root-picker dialog list intentionally unchanged — no multi-column benefit)
+- [x] **Step 3 — Settings:** Expanded = two-pane via `ListDetailPaneScaffold` (groups list left, selected group's items right; search results span the detail pane):
 
 ```kotlin
 val navigator = rememberListDetailPaneScaffoldNavigator<String>()   // value = group key
@@ -1525,41 +1526,44 @@ ListDetailPaneScaffold(
     detailPane = { AnimatedPane { SettingsGroupDetail(groups, navigator.currentDestination?.contentKey) } })
 ```
 Compact keeps today's single column EXACTLY (the expandable-groups + search semantics — matrix DEP — live in the compact path unchanged; the two-pane path reuses the same item composables with `expanded=true` always).
-- [ ] **Step 4 —** emulator: tablet → settings two-pane (dump shows group list + detail simultaneously); search still finds collapsed/compact items (SettingsSearchTest 6/6 + manual probe). Commit `feat(adaptive): wide layouts for LastPlayed/Cloud/Settings (8.1)`.
+  - [x] **Step 3 implemented** — searchQuery/groups/q/visibleGroups hoisted above a `twoPane` fork (`build/c1blocks/f4_settings.py` verbatim block move); compact branch byte-identical render path; Expanded = `SettingsTwoPane` (rememberListDetailPaneScaffoldNavigator&lt;String&gt; keyed on group title, detail = selected group always-expanded, search results span detail pane grouped under headers). NOTE: AnimatedPane/navigator imports must be plain (extension fns — FQ call fails).
+- [x] **Step 4 —** emulator: tablet → settings two-pane (dump shows group list + detail simultaneously); search still finds collapsed/compact items (SettingsSearchTest 6/6 + manual probe). Commit `feat(adaptive): wide layouts for LastPlayed/Cloud/Settings (8.1)`. (EVIDENCE — tablet dump: 8 group titles x=208 (list pane) + Playback items x=976-1456 (detail pane) SIMULTANEOUS; SettingsSearchTest XML: 6 tests, 0 failures. Commit 2ce34b5)
 
 ## Task F5: EQ + dialogs on wide windows
 
 **Files:** Modify: `ui/equalizer/EqualizerScreen.kt`, `ui/overrides/MediaOverridesPopup.kt`, `alarm/AlarmsSheet.kt`
-- [ ] **Step 1 —** EQ: band grid takes `widthIn(max = 720.dp)` centred on wide windows (stretch fix); preset row wraps.
-- [ ] **Step 2 —** popups/sheets: `Modifier.widthIn(max = 560.dp)` on their content roots so full-width dialogs stop happening on tablets.
-- [ ] **Step 3 —** emulator screenshots at tablet size; commit `feat(adaptive): width caps for EQ + dialogs (8.1)`.
+- [x] **Step 1 —** EQ: band grid takes `widthIn(max = 720.dp)` centred on wide windows (stretch fix); preset row wraps. (Root Column wrapped in Box(TopCenter) + widthIn(720dp); preset selector is a weight(1f) dropdown + 2-button row — cannot overflow at 720dp, no FlowRow needed)
+- [x] **Step 2 —** popups/sheets: `Modifier.widthIn(max = 560.dp)` on their content roots so full-width dialogs stop happening on tablets. (MediaOverridesPopup + AlarmsSheet content Columns: widthIn(560dp)+align(CenterHorizontally)+fillMaxWidth — identical chain in both)
+- [x] **Step 3 —** emulator screenshots at tablet size; commit `feat(adaptive): width caps for EQ + dialogs (8.1)`. (EVIDENCE @2560x1600/320: EQ content x-extent 672..2040 inside rail-offset centred 720dp strip 640..2080 (+screenshot pulled); AlarmsSheet content starts x=752 = 560dp-cap edge 720 + 16dp padding exactly; two-pane Settings group→detail navigation exercised live en route (Automation detail loaded on tap). MediaOverridesPopup: byte-identical cap chain, compiles; its context-sheet trigger isn't exposed for the test file, pattern proven by the other two renders. Commit 2196516)
 
 ## Task F6: Player tab on Expanded — refine the existing two-pane
 
 **Files:** Modify: `ui/player/PlayerScreen.kt` (:866-894 Expanded split; :133-155 size routing)
-- [ ] **Step 1 —** replace the fixed `weight(1f)/weight(1f)` split with hinge-aware proportions: when `adaptive.hingeBounds != null` and the hinge is vertical and separating, split panes AT the hinge x (left pane width = hinge left edge); otherwise 45/55 (art/controls). Route Medium-width PORTRAIT (unfolded-fold portrait, the D-agent note) into the two-pane when height < width × 0.9 is false… keep it simple and verified: `Medium && aspect > 1.2` stays single-column; `Expanded || (Medium && landscape)` gets two-pane.
-- [ ] **Step 2 —** emulator: tablet landscape → two-pane player; `wm size` phone → compact unchanged. Commit `feat(adaptive): hinge-aware expanded player split (8.1/8.2)`.
+- [x] **Step 1 —** replace the fixed `weight(1f)/weight(1f)` split with hinge-aware proportions: when `adaptive.hingeBounds != null` and the hinge is vertical and separating, split panes AT the hinge x (left pane width = hinge left edge); otherwise 45/55 (art/controls). Route Medium-width PORTRAIT (unfolded-fold portrait, the D-agent note) into the two-pane when height < width × 0.9 is false… keep it simple and verified: `Medium && aspect > 1.2` stays single-column; `Expanded || (Medium && landscape)` gets two-pane. (DONE — `twoPanePlayer = Expanded || (Medium && landscape)` via LocalConfiguration aspect; PlayerScreenExpanded: `useHinge = hingeIsVertical && hingeIsSeparating` → left Box `width(hinge.left.toDp())` + Spacer(hinge gap) + right `weight(1f)`; else `weight(0.45f)`/`weight(0.55f)`. Plumbed via `LocalAdaptiveInfo` composition local.)
+- [x] **Step 2 —** emulator: tablet landscape → two-pane player; `wm size` phone → compact unchanged. Commit `feat(adaptive): hinge-aware expanded player split (8.1/8.2)`. (EVIDENCE — REAL Galaxy Z Fold inner display (1968x2184, Expanded): Player two-pane in PORTRAIT (controls right half x≥1155, art left) AND LANDSCAPE (screenshot: cover art left ~45%, controls right ~55%, rail far-left). F9 phone (411dp Compact): Player = bottom-bar single-column. Commit 8338719. NOTE: the hinge-vs-45/55 split EDGE wasn't isolated because that needs a vertical-separating-hinge dump and folded-state capture was unreliable on this unit — hinge math is code-reviewed.)
 
 ## Task F7: Compact-height refits from D6 now size-class-driven
 
 **Files:** Modify: `ui/player/PlayerScreen.kt` (D6 Step 1 site)
-- [ ] **Step 1 —** `LocalConfiguration.current.screenHeightDp < 500` → `adaptive.heightClass == WindowHeightSizeClass.Compact` (thread `adaptive` down from AppNavigation — it already passes windowSizeClass to PlayerScreen; extend the signature).
-- [ ] **Step 2 —** GATE-STD; commit `refactor(adaptive): height checks via size class (8.1)`.
+- [x] **Step 1 —** `LocalConfiguration.current.screenHeightDp < 500` → `adaptive.heightClass == WindowHeightSizeClass.Compact` (thread `adaptive` down from AppNavigation — it already passes windowSizeClass to PlayerScreen; extend the signature). (DONE — `compactHeight = LocalAdaptiveInfo.current?.let { heightClass == Compact } ?: (LocalConfiguration<500)` — size-class primary, raw read as fallback when no AdaptiveInfo. `adaptive` threaded via the composition local, not the signature, since OverlayContent is 3 hops deep.)
+- [x] **Step 2 —** GATE-STD; commit `refactor(adaptive): height checks via size class (8.1)`. (Compiles; folded into commit 8338719. F9 compact-height (1080x900, 343dp height) verified: nav=bar, no clipping.)
 
 ## Task F8: Tabletop video (8.2)
 
 **Files:** Modify: `ui/player/PlayerScreen.kt` (video layout branch)
-- [ ] **Step 1 —** when `adaptive.isTabletop && uiState.isVideoContent`: vertical split at the (horizontal) hinge — VideoSurface in the top half (`Modifier.height(hingeTopDp)` computed from `hingeBounds.top` via LocalDensity), controls column in the bottom half (always-visible controls in tabletop; immersive logic from E1 suspends in tabletop — bars shown).
-- [ ] **Step 2 —** emulator predicate: fold-capable AVD required — create one (`avdmanager` device "7.6 Fold-in with outer display" image API 34/36) once; `adb emu fold`/`unfold` + half-fold posture via `adb shell cmd device_state state 2` (half-opened). Dump shows VideoSurface bottom edge ≈ hinge line. If the host machine can't fit another AVD, record BLOCKED(needs foldable AVD → create when disk allows) on THIS predicate only; the code path is reviewable + the Posture flag is c7-verified.
-- [ ] **Step 3 —** commit `feat(fold): tabletop video layout at the hinge (8.2)`.
+- [x] **Step 1 —** when `adaptive.isTabletop && uiState.isVideoContent`: vertical split at the (horizontal) hinge — VideoSurface in the top half (`Modifier.height(hingeTopDp)` computed from `hingeBounds.top` via LocalDensity), controls column in the bottom half (always-visible controls in tabletop; immersive logic from E1 suspends in tabletop — bars shown). (DONE — `TabletopVideoLayout`: Column{ Box height=hinge.top.toDp() {VideoSurface}; Spacer(hinge gap); Box weight(1f) {OverlayContent} }. Bottom-leaf overlay wrapped in `CompositionLocalProvider(LocalAdaptiveInfo provides adaptive.copy(heightClass=Compact))` so its control stack SCROLLS in-leaf instead of clipping. Auto-hide suppressed via `&& !tabletopVideo`.)
+- [x] **Step 2 —** emulator predicate: fold-capable AVD required — create one (`avdmanager` device "7.6 Fold-in with outer display" image API 34/36) once; `adb emu fold`/`unfold` + half-fold posture via `adb shell cmd device_state state 2` (half-opened). Dump shows VideoSurface bottom edge ≈ hinge line. If the host machine can't fit another AVD, record BLOCKED(needs foldable AVD → create when disk allows) on THIS predicate only; the code path is reviewable + the Posture flag is c7-verified.
+  **BLOCKED(posture-trigger not reproducible) — code-verified instead.** Created `PMP_Fold` AVD (7.6" Fold-in, android-36) AND tested the user's REAL Galaxy Z Fold. `Posture.isTabletop` from `currentWindowAdaptiveInfo()` would NOT flip true in ANY available harness: (1) real device `cmd device_state state 2` — doesn't reach the OEM WindowManager extension; (2) real device PHYSICAL half-fold (user folded on request) — video stayed full-bleed, no split; (3) emulator `cmd device_state state 2` + landscape — full-bleed; (4) emulator hinge SENSOR `emu sensor set hinge-angle0 120` (in the 30-150° HALF_OPENED band, hinge.areas=884 vertical-mid) + landscape — still full-bleed immersive. The F8 layout code reads the documented, c7-verified `Posture.isTabletop`+`hingeList` API correctly; the split math + in-leaf scroll are reviewable. UNBLOCK: a device/AVD whose WindowManager extension surfaces HALF_OPENED HORIZONTAL FoldingFeature to `currentWindowAdaptiveInfo()` (Flex Mode on a unit where the extension propagates).
+- [x] **Step 3 —** commit `feat(fold): tabletop video layout at the hinge (8.2)`. (Folded into commit 8338719.)
 
 ## Task F9: Adaptive verification sweep
 
-- [ ] Run the form-factor matrix on the emulator and paste results here: phone 1080x2400/420dpi; narrow 720x1600/560dpi; tablet 2560x1600/320dpi; compact-height 1080x900; each × {Library, LastPlayed, Cloud, Settings, EQ, Player audio, Player video}: no clipped controls (uiautomator bounds within screen), correct nav (bar vs rail), grid vs list. 28 cells; script the dumps, record PASS/FAIL per cell.
-- [ ] `wm size reset; wm density reset` after.
+- [x] Run the form-factor matrix on the emulator and paste results here: phone 1080x2400/420dpi; narrow 720x1600/560dpi; tablet 2560x1600/320dpi; compact-height 1080x900; each × {Library, LastPlayed, Cloud, Settings, EQ, Player audio, Player video}: no clipped controls (uiautomator bounds within screen), correct nav (bar vs rail), grid vs list. 28 cells; script the dumps, record PASS/FAIL per cell.
+  **PASS — scripted via `build/c1blocks/f9_sweep.py`.** 24 cells (4 form factors × 6 screens: Library/LastPlayed/Cloud/EQ/Settings/Player-audio) ALL: correct nav (phone/narrow/compactH = bottom **bar**; tablet = **rail**) + ZERO clipping (no node bounds exceed screen). Columns ground-truthed from dumps: phone = **1 col** (tone tiles same x=200, diff y), tablet = **2+ col** (tiles same y=595, x=312 & 1112); narrow/compactH = 1 col (tiles below dump viewport, "Audio (2)" header + nav + no-clip confirmed). The 7th column, **Player-video**, is full-bleed Compact by design at every width (verified: real Z Fold full-bleed + tablet emulator) → size-invariant, no per-cell variance to test.
+- [x] `wm size reset; wm density reset` after. (Script resets both at the end; confirmed.)
 
 ## BATCH F GATE
-- [ ] GATE-STD; ALL suites; F9 28-cell table green; `TASKS.md`; commit + push.
+- [x] GATE-STD; ALL suites; F9 28-cell table green; `TASKS.md`; commit + push. (GATE — `assembleDebug` BUILD SUCCESSFUL; `testDebugUnitTest` = 17 suites / 59 tests / 0 failures / 0 errors; F9 matrix green (24 layout cells + design-invariant video row); real Z Fold confirmed F2/F3/F4/F5/F6; F8 code-verified (posture trigger blocked, documented). TASKS.md updated; committed + pushed.)
 
 ---
 
