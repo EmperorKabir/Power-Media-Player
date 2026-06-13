@@ -53,6 +53,14 @@ fun CoverArtBackground(
             initialValue = null,
             key1 = artworkBytes
         ) {
+            // Clear the previous track's bitmap IMMEDIATELY on a track
+            // change. produceState otherwise keeps the last `value` until
+            // the new decode finishes, so switching away from an
+            // embedded-art track left the OLD cover on screen (the
+            // "album art stays when switching tracks" bug) — and because
+            // the decoded-bitmap path is checked before the URI path +
+            // returns early, the new track's URI art never got a chance.
+            value = null
             val bytes = artworkBytes
             value = if (bytes != null && bytes.isNotEmpty()) {
                 withContext(Dispatchers.Default) {

@@ -1049,8 +1049,14 @@ class CloudViewModel @Inject constructor(
         if (item.sourceProvider != CloudProviderType.SPOTIFY &&
             spotifyProvider.spotifyState.value != null
         ) {
+            // PAUSE — NOT togglePlayPause. toggle reads the (possibly stale)
+            // mirror state and can RESUME Spotify instead of pausing it
+            // (observed: PUT /me/player/play → 403 while Spotify was already
+            // playing → Spotify kept playing UNDER the new Drive/local track
+            // = the "two audio streams at once" bug). Library + LastPlayed
+            // already pause() unconditionally on a source switch; match them.
+            runCatching { spotifyProvider.pause() }
             spotifyProvider.stopPlaybackPolling()
-            runCatching { spotifyProvider.togglePlayPause() }
         }
         // §C28 — if a Drive item has an offline copy on disk, route to
         // the local file URI immediately. Skips the bearer-token /
