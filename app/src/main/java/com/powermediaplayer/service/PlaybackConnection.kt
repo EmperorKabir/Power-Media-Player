@@ -149,6 +149,19 @@ class PlaybackConnection @Inject constructor(
     // per position tick.
     private var lastArtLogId: String? = null
 
+    // Stale embedded-art guard. Media3's player.mediaMetadata.artworkData is
+    // STICKY: once an embedded-art track (e.g. an M4B audiobook) is parsed,
+    // those bytes persist verbatim onto every subsequent track's metadata —
+    // even tracks that have no embedded art at all (the "old cover stays /
+    // wrong cover on switch" bug). The bytes for a genuinely new track arrive
+    // as a DIFFERENT byte array; sticky carry-over is the SAME array. So we
+    // record which mediaId first introduced the current artworkData and only
+    // honour player.mediaMetadata.artworkData while that owner is the current
+    // track. Audiobook art (whose only source is this sticky field) still
+    // shows for its own track; no-art / URI tracks no longer inherit it.
+    private var lastEmbeddedArt: ByteArray? = null
+    private var embeddedArtOwnerId: String? = null
+
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
@@ -998,6 +1011,24 @@ class PlaybackConnection @Inject constructor(
         // Per-tick log removed — was firing 5–10×/sec on large video files
         // and contributed measurable jank during playback.
 
+        // Resolve the CURRENT track's embedded art, filtering out Media3's
+        // sticky carry-over (see lastEmbeddedArt/embeddedArtOwnerId). When the
+        // player surfaces genuinely new bytes (a different array) we adopt them
+        // and tag the current track as their owner; identical bytes on a new
+        // track are stale and contribute nothing.
+        val rawMetaBytes = metadata.artworkData
+        if (rawMetaBytes != null && !rawMetaBytes.contentEquals(lastEmbeddedArt)) {
+            lastEmbeddedArt = rawMetaBytes
+            embeddedArtOwnerId = rawId
+        }
+        val ownedMetaBytes = if (embeddedArtOwnerId != null && embeddedArtOwnerId == rawId) {
+            rawMetaBytes
+        } else {
+            null
+        }
+        val resolvedArtUri = overArtwork ?: metadata.artworkUri ?: itemMetadata?.artworkUri
+        val resolvedArtBytes = overArtworkBytes ?: ownedMetaBytes ?: itemMetadata?.artworkData
+
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
             currentPosition = c.currentPosition.coerceAtLeast(0L),
@@ -1015,8 +1046,8 @@ class PlaybackConnection @Inject constructor(
                 .ifBlank { itemMetadata?.artist?.toString() ?: "" },
             album = overAlbum ?: metadata.albumTitle?.toString().orEmpty()
                 .ifBlank { itemMetadata?.albumTitle?.toString() ?: "" },
-            artworkUri = overArtwork ?: metadata.artworkUri ?: itemMetadata?.artworkUri,
-            artworkBytes = overArtworkBytes ?: metadata.artworkData ?: itemMetadata?.artworkData,
+            artworkUri = resolvedArtUri,
+            artworkBytes = resolvedArtBytes,
             playbackSpeed = c.playbackParameters.speed,
             currentMediaItemIndex = c.currentMediaItemIndex,
             mediaItemCount = c.mediaItemCount,
@@ -1034,8 +1065,7 @@ class PlaybackConnection @Inject constructor(
             videoWidth = preservedVw,
             videoHeight = preservedVh,
             isPartOfPlaylist = c.mediaItemCount > 1,
-            hasCoverArt = (overArtwork ?: metadata.artworkUri) != null ||
-                (overArtworkBytes ?: metadata.artworkData) != null,
+            hasCoverArt = resolvedArtUri != null || resolvedArtBytes != null,
             isVideoContent = hasVideoTrack,
             isSeekable = c.isCurrentMediaItemSeekable,
             audioFormatLabel = cachedAudioFormatLabel,
@@ -1052,8 +1082,8 @@ class PlaybackConnection @Inject constructor(
                 "[ART] id=${artLogId?.takeLast(28)} override(uri=${overArtwork != null},bytes=${overArtworkBytes != null}) " +
                     "metadata(uri=${metadata.artworkUri != null},data=${metadata.artworkData != null}) " +
                     "itemMeta(uri=${itemMetadata?.artworkUri != null},data=${itemMetadata?.artworkData != null}) " +
-                    "cached=${cached != null} → FINAL uri=${(overArtwork ?: metadata.artworkUri ?: itemMetadata?.artworkUri) != null} " +
-                    "bytes=${(overArtworkBytes ?: metadata.artworkData ?: itemMetadata?.artworkData) != null}"
+                    "stickyOwner=${embeddedArtOwnerId?.takeLast(12)} owned=${ownedMetaBytes != null} " +
+                    "→ FINAL uri=${resolvedArtUri != null} bytes=${resolvedArtBytes != null}"
             )
         }
     }
