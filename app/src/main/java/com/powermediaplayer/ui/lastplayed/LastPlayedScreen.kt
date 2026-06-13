@@ -378,6 +378,10 @@ private fun PinnedAlbumRow(
                     if (album.artworkUri != null) {
                         coil3.compose.AsyncImage(
                             model = album.artworkUri,
+                            // Dangling/missing album-art URIs must clear to
+                            // black, not inherit a recycled row's cover.
+                            error = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
+                            fallback = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -722,6 +726,11 @@ private fun HistoryHeaderRow(
             if (item.artworkUri != null) {
                 coil3.compose.AsyncImage(
                     model = item.artworkUri,
+                    // Dangling/missing album-art URIs must clear to black,
+                    // not inherit a recycled row's cover (the "residual art"
+                    // in Last Played the user reported).
+                    error = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
+                    fallback = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize()
                 )

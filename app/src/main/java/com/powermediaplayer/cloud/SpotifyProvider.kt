@@ -1401,10 +1401,20 @@ class SpotifyProvider @Inject constructor(
 
     private fun execControl(req: Request): Result<Unit> = try {
         http.newCall(req).execute().use { resp ->
+            // DIAGNOSTIC (Spotify overlap bug): log every Connect control
+            // call + its HTTP code so we can see whether pause()/play()
+            // actually reached Spotify on a source switch.
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "[SPCTL] ${req.method} ${req.url.encodedPath} http=${resp.code}"
+            )
             if (resp.code in 200..299) Result.success(Unit)
             else Result.failure(IllegalStateException("Spotify HTTP ${resp.code}"))
         }
     } catch (e: Exception) {
+        com.powermediaplayer.util.Diag.w(
+            "PMP_DIAG", "[SPCTL] ${req.url.encodedPath} FAILED ${e.message}"
+        )
         Result.failure(e)
     }
 
