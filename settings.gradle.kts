@@ -26,3 +26,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "PowerMediaPlayer"
 include(":app")
+include(":baselineprofile")

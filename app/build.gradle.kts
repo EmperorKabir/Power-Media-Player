@@ -7,6 +7,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+    id("androidx.baselineprofile")   // §8.6 (G1)
 }
 
 // Read OAuth credentials from local.properties (gitignored).
@@ -195,6 +196,12 @@ dependencies {
 
     // ── Reorderable lists (Last Played favourites drag-to-reorder) ──
     implementation("sh.calvin.reorderable:reorderable:2.5.0")
+
+    // ── Baseline profile (§8.6 / G1) ─────────────────────────────
+    // profileinstaller embeds + installs the generated profile at
+    // first run; the :baselineprofile module generates it.
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    baselineProfile(project(":baselineprofile"))
 
     // ── Core AndroidX ────────────────────────────────────────────
     implementation("androidx.core:core-ktx:1.16.0")
