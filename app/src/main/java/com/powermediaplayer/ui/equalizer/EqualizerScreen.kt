@@ -3,7 +3,8 @@ package com.powermediaplayer.ui.equalizer
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -233,7 +234,9 @@ fun EqualizerScreen(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(130.dp)
+                // Taller than before — bigger drag target + finer vertical
+                // control for setting band levels by hand.
+                .height(190.dp)
                 .padding(horizontal = 24.dp)
         )
 
@@ -470,26 +473,38 @@ private fun FrequencyResponseCurve(
                     return (maxLevel - normalizedY * range).toInt()
                         .coerceIn(minLevel, maxLevel)
                 }
-                // Lock the band on touch-down and only track the finger's Y for
-                // the rest of the gesture. Re-picking the band every move meant a
-                // tiny sideways drift while dragging a MIDDLE dot up switched to
-                // the neighbour, so the dot you grabbed wouldn't move — the
-                // "middle dots are hard to drag" problem. Locking removes drift.
-                var activeBand = -1
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        if (canvasWidth > 0f && canvasHeight > 0f) {
-                            activeBand = bandAt(offset.x)
-                            onBandChange(activeBand, levelAt(offset.y))
-                        }
-                    },
-                    onDragEnd = { activeBand = -1 },
-                    onDragCancel = { activeBand = -1 }
-                ) { change, _ ->
-                    change.consume()
-                    if (activeBand >= 0 && canvasHeight > 0f) {
-                        onBandChange(activeBand, levelAt(change.position.y))
+                // The curve lives inside the EQ screen's verticalScroll.
+                // detectDragGestures only claims the touch AFTER it passes the
+                // slop threshold, so the parent scroll grabbed vertical drags
+                // first — the dots wouldn't move, they'd scroll the page. Claim
+                // the gesture on finger-DOWN (consume) so the scroll can't steal
+                // it; the band is locked from the down X, then only the finger's
+                // Y matters (so sideways drift can't switch bands). A plain tap
+                // also sets the band at the touch point.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (canvasWidth <= 0f || canvasHeight <= 0f) return@awaitEachGesture
+                    val band = bandAt(down.position.x)
+                    down.consume()
+                    onBandChange(band, levelAt(down.position.y))
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "EQ touch DOWN band=$band x=${down.position.x.roundToInt()} " +
+                            "y=${down.position.y.roundToInt()} cw=${canvasWidth.roundToInt()} " +
+                            "ch=${canvasHeight.roundToInt()} level=${levelAt(down.position.y)}"
+                    )
+                    var moves = 0
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        change.consume()
+                        onBandChange(band, levelAt(change.position.y))
+                        moves++
                     }
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG", "EQ touch UP band=$band moves=$moves"
+                    )
                 }
             }
     ) {
