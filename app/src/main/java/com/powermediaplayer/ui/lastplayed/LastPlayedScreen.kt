@@ -723,12 +723,17 @@ private fun HistoryHeaderRow(
                 .background(OledBlack),
             contentAlignment = Alignment.Center
         ) {
+            // Per-track art. The stored artworkUri is suppressed at the
+            // source (LibraryViewModel scan + history backfill) when it is
+            // MediaStore's BORROWED album-level cover — i.e. an albumId that
+            // buckets unrelated files sharing a generic album tag (e.g.
+            // album="Music", album_artist=NULL) into one cover. Legitimate
+            // single-album covers and cloud http covers still flow through.
             if (item.artworkUri != null) {
                 coil3.compose.AsyncImage(
                     model = item.artworkUri,
                     // Dangling/missing album-art URIs must clear to black,
-                    // not inherit a recycled row's cover (the "residual art"
-                    // in Last Played the user reported).
+                    // not inherit a recycled row's cover.
                     error = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
                     fallback = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
                     contentDescription = null,

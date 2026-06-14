@@ -186,6 +186,16 @@ class LastPlayedRepository @Inject constructor(
     }
 
     /**
+     * Backfill: clear stored borrowed album-art URIs from existing history
+     * rows (the library scan now suppresses these covers at source). No-op
+     * when the set is empty.
+     */
+    suspend fun clearBorrowedArtwork(borrowedAlbumArtUris: Set<String>) {
+        if (borrowedAlbumArtUris.isEmpty()) return
+        historyDao.clearArtworkFor(borrowedAlbumArtUris.toList())
+    }
+
+    /**
      * Adopt an existing history row as the current session so subsequent
      * Player-tab bookmark adds mirror into ITS snapshot table — without
      * creating a duplicate Recents row. Used by:

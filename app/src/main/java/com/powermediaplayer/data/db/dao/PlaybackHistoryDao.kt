@@ -53,6 +53,15 @@ interface PlaybackHistoryDao {
     @Query("DELETE FROM playback_history WHERE id IN (:ids)")
     suspend fun deleteMany(ids: List<Long>)
 
+    /**
+     * Null out artworkUri on rows that captured a BORROWED MediaStore
+     * album-art cover (an albumId bucketing unrelated files) before the
+     * library scan started suppressing it — so old Last Played rows stop
+     * showing the wrong cover without a manual "Clear all".
+     */
+    @Query("UPDATE playback_history SET artworkUri = NULL WHERE artworkUri IN (:uris)")
+    suspend fun clearArtworkFor(uris: List<String>)
+
     @Query("SELECT * FROM playback_history WHERE id = :id")
     suspend fun get(id: Long): PlaybackHistoryEntity?
 

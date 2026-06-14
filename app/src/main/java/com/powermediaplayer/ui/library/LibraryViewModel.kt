@@ -188,6 +188,11 @@ class LibraryViewModel @Inject constructor(
     private var rawAudio: List<MediaFileInfo> = emptyList()
     private var rawVideo: List<MediaFileInfo> = emptyList()
 
+    // albumart URIs suppressed by the last scan because their albumId is a
+    // BORROWED bucket (unrelated files sharing a generic album tag). Used to
+    // backfill old Last Played rows that captured the cover before the fix.
+    private var borrowedAlbumArtUris: Set<String> = emptySet()
+
     init {
         // Restore last sort mode from DataStore on startup. Survives
         // app restart, navigating away from the Library tab, etc.
@@ -674,6 +679,10 @@ class LibraryViewModel @Inject constructor(
             rawAudio = scanAudioFiles()
             rawVideo = scanVideoFiles()
 
+            // Scrub borrowed album-art the scan just identified from old
+            // Last Played rows so they stop showing the wrong cover.
+            runCatching { lastPlayedRepo.clearBorrowedArtwork(borrowedAlbumArtUris) }
+
             val state = _uiState.value
             _uiState.value = state.copy(
                 audioFiles = applySort(rawAudio, state.sortMode, state.favorites),
@@ -683,8 +692,13 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    private data class RawAudioRow(
+        val id: Long, val title: String, val artist: String, val album: String,
+        val albumArtist: String?, val duration: Long, val mime: String,
+        val size: Long, val date: Long, val albumId: Long
+    )
+
     private fun scanAudioFiles(): List<MediaFileInfo> {
-        val files = mutableListOf<MediaFileInfo>()
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
 
         val projection = arrayOf(
@@ -692,6 +706,7 @@ class LibraryViewModel @Inject constructor(
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.ALBUM_ARTIST,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.SIZE,
@@ -701,6 +716,7 @@ class LibraryViewModel @Inject constructor(
 
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
+        val rows = mutableListOf<RawAudioRow>()
         context.contentResolver.query(
             collection, projection, null, null, sortOrder
         )?.use { cursor ->
@@ -708,6 +724,7 @@ class LibraryViewModel @Inject constructor(
             val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val albumCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+            val albumArtistCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ARTIST)
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
@@ -715,33 +732,77 @@ class LibraryViewModel @Inject constructor(
             val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
 
             while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol)
-                val albumId = cursor.getLong(albumIdCol)
-                val contentUri = ContentUris.withAppendedId(collection, id)
-                val albumArtUri = ContentUris.withAppendedId(
-                    Uri.parse("content://media/external/audio/albumart"),
-                    albumId
-                )
-
-                files.add(
-                    MediaFileInfo(
-                        id = id,
-                        uri = contentUri,
+                rows.add(
+                    RawAudioRow(
+                        id = cursor.getLong(idCol),
                         title = cursor.getString(titleCol) ?: "Unknown",
                         artist = cursor.getString(artistCol) ?: "Unknown Artist",
                         album = cursor.getString(albumCol) ?: "Unknown Album",
+                        albumArtist = if (albumArtistCol >= 0) cursor.getString(albumArtistCol) else null,
                         duration = cursor.getLong(durationCol),
-                        mimeType = cursor.getString(mimeCol) ?: "",
+                        mime = cursor.getString(mimeCol) ?: "",
                         size = cursor.getLong(sizeCol),
-                        dateModified = cursor.getLong(dateCol),
-                        isVideo = false,
-                        albumArtUri = albumArtUri
+                        date = cursor.getLong(dateCol),
+                        albumId = cursor.getLong(albumIdCol)
                     )
                 )
             }
         }
 
-        return files
+        // BORROWED album-art detection. MediaStore's albumart/<albumId> URI
+        // is ALBUM-level; files with a generic tag (observed: album="Music",
+        // album_artist=NULL) collapse to ONE albumId and share ONE cover
+        // taken from an arbitrary member — so unrelated tracks (e.g. a sports
+        // anthem and a children's track) all display the same borrowed
+        // image. Flag an albumId as borrowed when it spans >=2 distinct
+        // artists AND no member carries an album_artist. Real "Various
+        // Artists" compilations set album_artist and are spared; genuine
+        // single-artist albums have one artist and stay. For borrowed
+        // albumIds the cover is suppressed (null) so art stays per-track.
+        val artistsByAlbum = HashMap<Long, MutableSet<String>>()
+        val albumHasAlbumArtist = HashMap<Long, Boolean>()
+        for (r in rows) {
+            val a = r.artist.trim()
+            if (a.isNotEmpty()) {
+                artistsByAlbum.getOrPut(r.albumId) { mutableSetOf() }.add(a.lowercase())
+            }
+            val aa = r.albumArtist?.trim()
+            if (!aa.isNullOrEmpty() && !aa.equals("<unknown>", ignoreCase = true)) {
+                albumHasAlbumArtist[r.albumId] = true
+            }
+        }
+        val borrowedAlbumIds = rows.asSequence()
+            .map { it.albumId }
+            .toHashSet()
+            .filter { id ->
+                (artistsByAlbum[id]?.size ?: 0) >= 2 && albumHasAlbumArtist[id] != true
+            }
+            .toHashSet()
+        borrowedAlbumArtUris = borrowedAlbumIds
+            .map { "content://media/external/audio/albumart/$it" }
+            .toHashSet()
+
+        return rows.map { r ->
+            val albumArtUri =
+                if (r.albumId in borrowedAlbumIds) null
+                else ContentUris.withAppendedId(
+                    Uri.parse("content://media/external/audio/albumart"),
+                    r.albumId
+                )
+            MediaFileInfo(
+                id = r.id,
+                uri = ContentUris.withAppendedId(collection, r.id),
+                title = r.title,
+                artist = r.artist,
+                album = r.album,
+                duration = r.duration,
+                mimeType = r.mime,
+                size = r.size,
+                dateModified = r.date,
+                isVideo = false,
+                albumArtUri = albumArtUri
+            )
+        }
     }
 
     private fun scanVideoFiles(): List<MediaFileInfo> {
