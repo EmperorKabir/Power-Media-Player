@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -36,6 +37,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.powermediaplayer.data.db.dao.SmartPlaylistDao
 import com.powermediaplayer.data.db.entity.SmartPlaylistEntity
+import com.powermediaplayer.ui.theme.DisabledGrey
 import com.powermediaplayer.ui.theme.ErrorRed
 import com.powermediaplayer.ui.theme.OledBlack
 import com.powermediaplayer.ui.theme.TealAccent
@@ -79,6 +81,20 @@ class SmartPlaylistsViewModel @Inject constructor(
         }
     }
 
+    fun update(id: Long, name: String, rulesJson: String) {
+        if (name.isBlank() || rulesJson.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = dao.getById(id) ?: return@launch
+            dao.update(
+                existing.copy(
+                    name = name.trim(),
+                    rulesJson = rulesJson.trim(),
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
     fun delete(playlist: SmartPlaylistEntity) {
         viewModelScope.launch(Dispatchers.IO) { dao.delete(playlist) }
     }
@@ -90,6 +106,10 @@ fun SmartPlaylistsSection(
 ) {
     val playlists by vm.playlists.collectAsState()
     var showEditor by remember { mutableStateOf(false) }
+    // Non-null while editing an existing playlist; null = creating a new one.
+    var editingPlaylist by remember { mutableStateOf<SmartPlaylistEntity?>(null) }
+    // Which row's overflow menu is open (by id), null = none.
+    var openMenuId by remember { mutableStateOf<Long?>(null) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -101,7 +121,7 @@ fun SmartPlaylistsSection(
                     // Tapping the header (not just the "+") opens the editor —
                     // with no playlists the rail is hidden, so the label was
                     // the obvious thing to tap yet did nothing.
-                    .clickable { showEditor = true }
+                    .clickable { editingPlaylist = null; showEditor = true }
             ) {
                 Text(
                     "Smart playlists (${playlists.size}/20)",
@@ -119,7 +139,7 @@ fun SmartPlaylistsSection(
                     color = TextTertiary
                 )
             }
-            IconButton(onClick = { showEditor = true }) {
+            IconButton(onClick = { editingPlaylist = null; showEditor = true }) {
                 Icon(Icons.Filled.Add, contentDescription = "Add", tint = TealAccent)
             }
         }
@@ -142,9 +162,36 @@ fun SmartPlaylistsSection(
                             maxLines = 2
                         )
                     }
-                    IconButton(onClick = { vm.delete(p) }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Delete",
-                            tint = ErrorRed)
+                    // Overflow menu — Edit + Delete (replaces the bare × so a
+                    // saved playlist can be edited, not only deleted).
+                    Box {
+                        IconButton(onClick = { openMenuId = p.id }) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = "More",
+                                tint = TextSecondary
+                            )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = openMenuId == p.id,
+                            onDismissRequest = { openMenuId = null }
+                        ) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Edit", color = TextPrimary) },
+                                onClick = {
+                                    editingPlaylist = p
+                                    showEditor = true
+                                    openMenuId = null
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Delete", color = ErrorRed) },
+                                onClick = {
+                                    vm.delete(p)
+                                    openMenuId = null
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -153,9 +200,12 @@ fun SmartPlaylistsSection(
 
     if (showEditor) {
         SmartPlaylistEditor(
+            existing = editingPlaylist,
             onCancel = { showEditor = false },
             onSave = { name, json ->
-                vm.upsert(name, json)
+                val editing = editingPlaylist
+                if (editing != null) vm.update(editing.id, name, json)
+                else vm.upsert(name, json)
                 showEditor = false
             }
         )
@@ -172,18 +222,33 @@ fun SmartPlaylistsSection(
 @Composable
 private fun SmartPlaylistEditor(
     onCancel: () -> Unit,
-    onSave: (String, String) -> Unit
+    onSave: (String, String) -> Unit,
+    existing: SmartPlaylistEntity? = null
 ) {
-    var name by remember { mutableStateOf("") }
-    val rules = remember { mutableStateListOf<RuleRow>(
-        RuleRow(field = "isFavourite", op = "eq", value = "true")
-    ) }
-    var sort by remember { mutableStateOf("lastPlayed") }
-    var limit by remember { mutableStateOf("50") }
+    // Pre-fill from the existing playlist when editing; otherwise start with
+    // a single favourites rule. `remember(existing)` re-seeds if the dialog
+    // is reused for a different playlist.
+    val seed = remember(existing) { existing?.let { parseRules(it.rulesJson) } }
+    var name by remember(existing) { mutableStateOf(existing?.name ?: "") }
+    val rules = remember(existing) {
+        mutableStateListOf<RuleRow>().apply {
+            val seededRules = seed?.first
+            if (!seededRules.isNullOrEmpty()) addAll(seededRules)
+            else add(RuleRow(field = "isFavourite", op = "eq", value = "true"))
+        }
+    }
+    var sort by remember(existing) { mutableStateOf(seed?.second ?: "lastPlayed") }
+    var limit by remember(existing) { mutableStateOf(seed?.third ?: "50") }
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = { Text("New smart playlist", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
+        title = {
+            Text(
+                if (existing != null) "Edit smart playlist" else "New smart playlist",
+                color = TealAccent,
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -214,10 +279,20 @@ private fun SmartPlaylistEditor(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val json = buildJson(rules, sort, limit)
-                onSave(name, json)
-            }) { Text("Save", color = TealAccent) }
+            // Disabled until a name is entered — saving nameless silently
+            // discarded the playlist (upsert/update bail on a blank name) yet
+            // the dialog still closed, which read as a broken Save. Cancel
+            // still lets you back out without creating anything.
+            val canSave = name.isNotBlank()
+            TextButton(
+                onClick = {
+                    val json = buildJson(rules, sort, limit)
+                    onSave(name, json)
+                },
+                enabled = canSave
+            ) {
+                Text("Save", color = if (canSave) TealAccent else DisabledGrey)
+            }
         },
         dismissButton = {
             TextButton(onClick = onCancel) {
@@ -316,6 +391,34 @@ private fun summariseRules(rulesJson: String): String {
     val sort = sortLabel(root.optString("sort", "name"))
     val limit = root.optInt("limit", 0)
     return body + "  ·  sorted by " + sort + if (limit > 0) "  ·  max $limit" else ""
+}
+
+/**
+ * Inverse of [buildJson] for the editor: parse a stored rules-JSON blob back
+ * into editable rows + sort + limit. Length is stored in ms but edited in
+ * seconds, so it is divided back down here.
+ */
+private fun parseRules(rulesJson: String): Triple<List<RuleRow>, String, String> {
+    val root = runCatching { org.json.JSONObject(rulesJson) }.getOrNull()
+        ?: return Triple(emptyList(), "lastPlayed", "50")
+    val arr = root.optJSONArray("rules")
+    val rows = ArrayList<RuleRow>()
+    if (arr != null) for (i in 0 until arr.length()) {
+        val r = arr.optJSONObject(i) ?: continue
+        val field = r.optString("field")
+        val op = r.optString("op")
+        val raw = r.opt("value")
+        val value = when {
+            raw is Boolean -> raw.toString()
+            field == "duration" ->
+                ((raw?.toString()?.toLongOrNull() ?: 0L) / 1000L).toString()
+            else -> raw?.toString().orEmpty()
+        }
+        rows.add(RuleRow(field = field, op = op, value = value))
+    }
+    val sort = root.optString("sort", "lastPlayed")
+    val limit = root.optInt("limit", 50).toString()
+    return Triple(rows, sort, limit)
 }
 
 @Composable

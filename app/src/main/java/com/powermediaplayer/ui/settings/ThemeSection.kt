@@ -14,11 +14,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,23 +93,34 @@ fun ThemeSection(
                     .clip(CircleShape)
                     .background(parsed)
             )
+            // Reset to the default accent — same RestartAlt icon used by the
+            // EQ / other reset controls, so it reads as a reset, not a colour.
+            IconButton(onClick = {
+                hexInput = ""
+                viewModel.setThemeAccentHex("")
+            }) {
+                Icon(
+                    Icons.Filled.RestartAlt,
+                    contentDescription = "Reset accent to default",
+                    tint = TextSecondary
+                )
+            }
         }
         Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = hexInput,
-                onValueChange = { hexInput = it },
-                label = { Text("#RRGGBB") },
-                singleLine = true,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(8.dp))
-            TextButton(onClick = {
-                if (parseHexColor(hexInput) != null) {
-                    viewModel.setThemeAccentHex(hexInput)
+        // No Apply button — a valid #RRGGBB applies live as you type, the
+        // same way tapping a preset swatch does.
+        OutlinedTextField(
+            value = hexInput,
+            onValueChange = { newVal ->
+                hexInput = newVal
+                if (parseHexColor(newVal) != null) {
+                    viewModel.setThemeAccentHex(newVal)
                 }
-            }) { Text("Apply", color = TealAccent) }
-        }
+            },
+            label = { Text("#RRGGBB") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
         Spacer(Modifier.height(8.dp))
         Text(
             "Presets:",
@@ -132,13 +144,6 @@ fun ThemeSection(
                         }
                 )
             }
-        }
-        Spacer(Modifier.height(8.dp))
-        TextButton(onClick = {
-            hexInput = ""
-            viewModel.setThemeAccentHex("")
-        }) {
-            Text("Reset to default teal", color = TextSecondary)
         }
     }
 }

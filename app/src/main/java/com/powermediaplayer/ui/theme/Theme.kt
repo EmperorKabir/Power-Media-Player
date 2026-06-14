@@ -18,8 +18,15 @@ import com.powermediaplayer.ui.settings.SettingsViewModel
 /**
  * Power Media Player Material 3 dark theme.
  * Teal primary with pure OLED black backgrounds to disable pixels.
+ *
+ * Built per-composition (keyed on the live [TealAccent]) rather than as a
+ * static val — otherwise `colorScheme.primary` froze at the accent's value
+ * at class-load, so any component using the DEFAULT Material colours (a
+ * Slider/Switch without an explicit `colors =`) stayed teal forever while
+ * the user's chosen accent only reached the call-sites that read TealAccent
+ * directly. Keying on TealAccent recolours the whole Material surface.
  */
-private val PowerDarkColorScheme = darkColorScheme(
+private fun powerDarkColorScheme() = darkColorScheme(
     primary = TealAccent,
     onPrimary = OledBlack,
     primaryContainer = Teal800,
@@ -86,12 +93,17 @@ fun PowerMediaPlayerTheme(
         )
     }
 
+    // Rebuilt whenever the accent changes so every Material default-coloured
+    // surface (sliders, switches, etc.) recolours, not just TealAccent
+    // call-sites.
+    val colorScheme = remember(TealAccent) { powerDarkColorScheme() }
+
     CompositionLocalProvider(
         LocalDensity provides scaledDensity,
         LocalPmpScale provides userScale
     ) {
         MaterialTheme(
-            colorScheme = PowerDarkColorScheme,
+            colorScheme = colorScheme,
             typography = PowerTypography,
             content = content
         )
