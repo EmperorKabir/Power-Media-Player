@@ -453,32 +453,43 @@ private fun FrequencyResponseCurve(
                 canvasHeight = size.height.toFloat()
             }
             .pointerInput(bandLevels.size, minLevel, maxLevel) {
-                detectDragGestures { change, _ ->
-                    change.consume()
-                    if (canvasWidth <= 0f || canvasHeight <= 0f) return@detectDragGestures
-
-                    // Inset the band axis so the first/last dots aren't pinned
-                    // to the canvas edge. Without it the edge bands (esp. the
-                    // rightmost 16 kHz) get only a half-width hit region right
-                    // on the boundary and are hard to grab. The coerce below
-                    // means touches in the inset margins still select the edge
-                    // band, so they get a FULL-width, easy-to-hit region.
+                // Band axis is inset so the first/last dots aren't pinned to the
+                // canvas edge (those would otherwise get a half-width hit region
+                // on the boundary). The coerce means touches in the inset margins
+                // still select the edge band, giving every band a full hit width.
+                fun bandAt(x: Float): Int {
                     val inset = CURVE_INSET.toPx()
                     val usable = (canvasWidth - 2 * inset).coerceAtLeast(1f)
                     val stepX = usable / (bandLevels.size - 1).coerceAtLeast(1)
-                    // Find the nearest band index based on horizontal drag position
-                    val bandIndex = ((change.position.x - inset) / stepX)
-                        .roundToInt()
+                    return ((x - inset) / stepX).roundToInt()
                         .coerceIn(0, bandLevels.size - 1)
-
-                    // Map Y position to level: top = maxLevel, bottom = minLevel
+                }
+                fun levelAt(y: Float): Int {
                     val range = (maxLevel - minLevel).toFloat()
-                    val normalizedY = (change.position.y / canvasHeight).coerceIn(0f, 1f)
-                    val newLevel = (maxLevel - normalizedY * range)
-                        .toInt()
+                    val normalizedY = (y / canvasHeight).coerceIn(0f, 1f)
+                    return (maxLevel - normalizedY * range).toInt()
                         .coerceIn(minLevel, maxLevel)
-
-                    onBandChange(bandIndex, newLevel)
+                }
+                // Lock the band on touch-down and only track the finger's Y for
+                // the rest of the gesture. Re-picking the band every move meant a
+                // tiny sideways drift while dragging a MIDDLE dot up switched to
+                // the neighbour, so the dot you grabbed wouldn't move — the
+                // "middle dots are hard to drag" problem. Locking removes drift.
+                var activeBand = -1
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        if (canvasWidth > 0f && canvasHeight > 0f) {
+                            activeBand = bandAt(offset.x)
+                            onBandChange(activeBand, levelAt(offset.y))
+                        }
+                    },
+                    onDragEnd = { activeBand = -1 },
+                    onDragCancel = { activeBand = -1 }
+                ) { change, _ ->
+                    change.consume()
+                    if (activeBand >= 0 && canvasHeight > 0f) {
+                        onBandChange(activeBand, levelAt(change.position.y))
+                    }
                 }
             }
     ) {
