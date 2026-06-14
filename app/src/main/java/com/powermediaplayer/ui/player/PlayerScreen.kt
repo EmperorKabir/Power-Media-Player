@@ -1745,6 +1745,16 @@ private fun PositionSection(
     trackIndexDisplay: String
 ) {
     val pos by viewModel.positionUi.collectAsStateWithLifecycle()
+    // Live A-B loop markers on the Track bar. A/B are absolute ms; map each
+    // into the current chapter's [start, start+duration] window as a 0..1
+    // fraction, dropping any marker that falls outside the visible track.
+    val abStart by viewModel.abLoopStart.collectAsStateWithLifecycle()
+    val abEnd by viewModel.abLoopEnd.collectAsStateWithLifecycle()
+    fun abFraction(ms: Long?): Float? {
+        if (ms == null || pos.durationMs <= 0L) return null
+        val f = (ms - pos.chapterStartMs).toFloat() / pos.durationMs.toFloat()
+        return if (f in 0f..1f) f else null
+    }
     ProgressSliders(
         trackPosition = pos.trackProgress,
         trackPositionFormatted = pos.positionFormatted,
@@ -1754,6 +1764,8 @@ private fun PositionSection(
         onTrackSeek = { fraction ->
             viewModel.seekTo(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
         },
+        abStartFraction = abFraction(abStart),
+        abEndFraction = abFraction(abEnd),
         playlistPosition = pos.playlistProgress,
         playlistPositionFormatted = pos.playlistPositionFormatted,
         playlistDurationFormatted = pos.playlistDurationFormatted,
