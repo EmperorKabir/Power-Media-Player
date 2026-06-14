@@ -113,9 +113,10 @@ val libraryInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Smart playlists",
             bullets = listOf(
-                "Strip below the search bar — Saved smart playlists. Tap a chip to play the resolved track list.",
-                "Create — Tap the \"+\" on the strip. Form-based editor: name, rules (field × operator × value, AND-combined), sort, limit. No JSON to hand-craft.",
-                "Available fields — title, artist, album, duration, playCount, lastPlayedDays, isFavourite, isHidden, mediaKind. Operators include eq / contains / gt / lt / between."
+                "What they are — Auto-playlists built from rules, not a fixed song list. Each time you open one it re-checks your whole library, so e.g. \"played in the last 14 days\" stays current.",
+                "Play — Saved playlists appear above the library list. Tap one to play its tracks.",
+                "Create — Tap the \"Smart playlists\" header or the \"+\". Pick a name, add one or more rules (e.g. Favourite = Yes, Play count at least 3), choose how to sort and a max number of tracks. Rules combine with AND (all must match).",
+                "Rule fields — Title, Artist, Album, Length, Play count, Last played, Favourite, Bookmarked. Length is in seconds; Last played is in days."
             )
         )
     )

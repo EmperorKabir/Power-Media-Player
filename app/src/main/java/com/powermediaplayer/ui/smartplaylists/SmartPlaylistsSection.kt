@@ -95,15 +95,26 @@ fun SmartPlaylistsSection(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.PlaylistPlay, contentDescription = null, tint = TealAccent)
             Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    // Tapping the header (not just the "+") opens the editor —
+                    // with no playlists the rail is hidden, so the label was
+                    // the obvious thing to tap yet did nothing.
+                    .clickable { showEditor = true }
+            ) {
                 Text(
                     "Smart playlists (${playlists.size}/20)",
                     style = MaterialTheme.typography.titleSmall,
                     color = TextPrimary
                 )
                 Text(
-                    "Saved-search style: rules combine with AND, sort + " +
-                        "limit configurable. Cap 20 per locked spec.",
+                    if (playlists.isEmpty())
+                        "Auto-playlists built from rules (e.g. favourites, " +
+                            "most-played, recently added). Tap to create one."
+                    else
+                        "Tap a playlist above the library list to play it. " +
+                            "Tap here or + to add another.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
@@ -125,10 +136,10 @@ fun SmartPlaylistsSection(
                         Text(p.name, color = TextPrimary,
                             style = MaterialTheme.typography.titleSmall)
                         Text(
-                            p.rulesJson.take(80) + if (p.rulesJson.length > 80) "…" else "",
+                            summariseRules(p.rulesJson),
                             color = TextTertiary,
                             style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1
+                            maxLines = 2
                         )
                     }
                     IconButton(onClick = { vm.delete(p) }) {
@@ -238,6 +249,75 @@ private fun opsFor(field: String) = when (field) {
     else -> OPS_STRING
 }
 
+// ── End-user-facing labels ───────────────────────────────────────────
+// The rule engine speaks in field/operator CODES; the editor and the
+// saved-playlist summary show these plain-English labels instead.
+private val FIELD_LABELS = mapOf(
+    "title" to "Title", "artist" to "Artist", "album" to "Album",
+    "duration" to "Length", "playCount" to "Play count",
+    "lastPlayedDays" to "Last played", "isFavourite" to "Favourite",
+    "hasBookmark" to "Bookmarked"
+)
+private val OP_LABELS = mapOf(
+    "contains" to "contains", "not_contains" to "doesn't contain",
+    "equals" to "is", "not_equals" to "is not",
+    "eq" to "is", "lt" to "under", "lte" to "at most",
+    "gt" to "over", "gte" to "at least"
+)
+private val SORT_LABELS = mapOf(
+    "name" to "Name", "dateAdded" to "Date added", "lastPlayed" to "Last played",
+    "playCount" to "Play count", "duration" to "Length", "random" to "Shuffle"
+)
+
+private fun fieldLabel(code: String) = FIELD_LABELS[code] ?: code
+private fun opLabel(code: String) = OP_LABELS[code] ?: code
+private fun sortLabel(code: String) = SORT_LABELS[code] ?: code
+private fun isBoolField(field: String) = field == "isFavourite" || field == "hasBookmark"
+private fun unitFor(field: String) = when (field) {
+    "lastPlayedDays" -> "days"
+    "duration" -> "seconds"
+    else -> ""
+}
+
+/**
+ * Turn a rules-JSON blob into a one-line, plain-English summary for the
+ * saved-playlist list — e.g. "Favourite: Yes · Play count at least 3 ·
+ * sorted by Last played · max 50". Falls back gracefully on odd JSON.
+ */
+private fun summariseRules(rulesJson: String): String {
+    val root = runCatching { org.json.JSONObject(rulesJson) }.getOrNull()
+        ?: return "Custom rules"
+    val arr = root.optJSONArray("rules")
+    val parts = ArrayList<String>()
+    if (arr != null) for (i in 0 until arr.length()) {
+        val r = arr.optJSONObject(i) ?: continue
+        val field = r.optString("field")
+        val op = r.optString("op")
+        val value = r.opt("value")
+        val fl = fieldLabel(field)
+        parts += when {
+            isBoolField(field) -> {
+                val yes = value == true ||
+                    value?.toString().equals("true", ignoreCase = true)
+                "$fl: ${if (yes) "Yes" else "No"}"
+            }
+            field == "duration" -> {
+                val secs = (value?.toString()?.toLongOrNull() ?: 0L) / 1000
+                "$fl ${opLabel(op)} ${secs}s"
+            }
+            else -> {
+                val unit = unitFor(field).let { if (it.isNotEmpty()) " $it" else "" }
+                val v = if (value is String) "“$value”" else value.toString()
+                "$fl ${opLabel(op)} $v$unit"
+            }
+        }
+    }
+    val body = if (parts.isEmpty()) "All tracks" else parts.joinToString("  ·  ")
+    val sort = sortLabel(root.optString("sort", "name"))
+    val limit = root.optInt("limit", 0)
+    return body + "  ·  sorted by " + sort + if (limit > 0) "  ·  max $limit" else ""
+}
+
 @Composable
 private fun RuleRowEditor(
     row: RuleRow,
@@ -251,23 +331,59 @@ private fun RuleRowEditor(
         DropdownPill(
             value = row.field,
             options = FIELDS,
-            onPick = { onChange(row.copy(field = it, op = opsFor(it).first())) },
+            display = ::fieldLabel,
+            onPick = { f ->
+                onChange(
+                    row.copy(
+                        field = f,
+                        op = opsFor(f).first(),
+                        value = if (isBoolField(f)) "true" else ""
+                    )
+                )
+            },
             modifier = Modifier.weight(1f)
         )
         Spacer(Modifier.width(4.dp))
         DropdownPill(
             value = row.op,
             options = opsFor(row.field),
+            display = ::opLabel,
             onPick = { onChange(row.copy(op = it)) },
             modifier = Modifier.weight(0.8f)
         )
         Spacer(Modifier.width(4.dp))
-        OutlinedTextField(
-            value = row.value,
-            onValueChange = { onChange(row.copy(value = it)) },
-            singleLine = true,
-            modifier = Modifier.weight(1f)
-        )
+        if (isBoolField(row.field)) {
+            // Favourite / Bookmarked are yes/no — a free-text "true/false"
+            // box is the kind of code-y UX end users trip over.
+            DropdownPill(
+                value = row.value.ifBlank { "true" },
+                options = listOf("true", "false"),
+                display = { if (it == "true") "Yes" else "No" },
+                onPick = { onChange(row.copy(value = it)) },
+                modifier = Modifier.weight(1f)
+            )
+        } else {
+            Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                OutlinedTextField(
+                    value = row.value,
+                    onValueChange = { onChange(row.copy(value = it)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                val unit = unitFor(row.field)
+                if (unit.isNotEmpty()) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        unit,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                }
+            }
+        }
         IconButton(onClick = onDelete) {
             Icon(
                 Icons.Filled.Close,
@@ -288,6 +404,7 @@ private fun SortAndLimit(
         Spacer(Modifier.width(4.dp))
         DropdownPill(
             value = sort, options = SORTS, onPick = onSort,
+            display = ::sortLabel,
             modifier = Modifier.weight(1f)
         )
         Spacer(Modifier.width(8.dp))
@@ -307,7 +424,8 @@ private fun DropdownPill(
     value: String,
     options: List<String>,
     onPick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    display: (String) -> String = { it }
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -315,7 +433,7 @@ private fun DropdownPill(
             onClick = { expanded = true },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(value, style = MaterialTheme.typography.labelMedium)
+            Text(display(value), style = MaterialTheme.typography.labelMedium)
         }
         androidx.compose.material3.DropdownMenu(
             expanded = expanded,
@@ -323,7 +441,7 @@ private fun DropdownPill(
         ) {
             options.forEach { opt ->
                 androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(opt) },
+                    text = { Text(display(opt)) },
                     onClick = { onPick(opt); expanded = false }
                 )
             }
@@ -336,7 +454,12 @@ private fun buildJson(rules: List<RuleRow>, sort: String, limit: String): String
         val v = when {
             r.value.equals("true", ignoreCase = true) -> "true"
             r.value.equals("false", ignoreCase = true) -> "false"
-            r.value.toIntOrNull() != null -> r.value
+            r.value.toIntOrNull() != null -> {
+                val n = r.value.toInt()
+                // Length is entered in seconds but the engine compares the
+                // track duration in milliseconds.
+                if (r.field == "duration") (n * 1000).toString() else n.toString()
+            }
             else -> "\"${r.value.replace("\"", "\\\"")}\""
         }
         "{\"field\":\"${r.field}\",\"op\":\"${r.op}\",\"value\":$v}"

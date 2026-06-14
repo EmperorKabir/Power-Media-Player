@@ -332,7 +332,9 @@ class PlayerViewModel @Inject constructor(
                         val abOverrides = runCatching {
                             settingsDataStore.abLoopOverrides.first()
                         }.getOrNull().orEmpty()
-                        abOverrides[uri]?.let { (a, b) ->
+                        val saved = abOverrides[uri]
+                        if (saved != null) {
+                            val (a, b) = saved
                             if (_abLoopStart.value != a || _abLoopEnd.value != b) {
                                 _abLoopStart.value = a
                                 _abLoopEnd.value = b
@@ -352,6 +354,19 @@ class PlayerViewModel @Inject constructor(
                                     "Restored saved A-B loop $a..${b}ms for uri=$uri"
                                 )
                             }
+                        } else if (_abLoopStart.value != null || _abLoopEnd.value != null) {
+                            // The new track has NO saved A-B loop — clear any
+                            // loop carried over in memory from the previous
+                            // track so its A/B markers don't keep seeking this
+                            // one (the "doing an A-B loop I never set" bug).
+                            _abLoopStart.value = null
+                            _abLoopEnd.value = null
+                            abLoopJob?.cancel()
+                            abLoopJob = null
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Cleared carried-over A-B loop on track change to uri=$uri"
+                            )
                         }
                     }
                 }

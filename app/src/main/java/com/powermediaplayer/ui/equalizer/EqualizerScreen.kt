@@ -34,6 +34,13 @@ import com.powermediaplayer.ui.theme.*
 import kotlin.math.roundToInt
 
 /**
+ * Horizontal inset for the frequency-response curve so the first/last band
+ * dots aren't pinned to the canvas edge — gives the edge bands (esp. the
+ * rightmost 16 kHz) a proper, easy-to-grab hit region.
+ */
+private val CURVE_INSET = 16.dp
+
+/**
  * 10-band equalizer screen.
  *
  * Layout:
@@ -450,9 +457,17 @@ private fun FrequencyResponseCurve(
                     change.consume()
                     if (canvasWidth <= 0f || canvasHeight <= 0f) return@detectDragGestures
 
-                    val stepX = canvasWidth / (bandLevels.size - 1).coerceAtLeast(1)
+                    // Inset the band axis so the first/last dots aren't pinned
+                    // to the canvas edge. Without it the edge bands (esp. the
+                    // rightmost 16 kHz) get only a half-width hit region right
+                    // on the boundary and are hard to grab. The coerce below
+                    // means touches in the inset margins still select the edge
+                    // band, so they get a FULL-width, easy-to-hit region.
+                    val inset = CURVE_INSET.toPx()
+                    val usable = (canvasWidth - 2 * inset).coerceAtLeast(1f)
+                    val stepX = usable / (bandLevels.size - 1).coerceAtLeast(1)
                     // Find the nearest band index based on horizontal drag position
-                    val bandIndex = (change.position.x / stepX)
+                    val bandIndex = ((change.position.x - inset) / stepX)
                         .roundToInt()
                         .coerceIn(0, bandLevels.size - 1)
 
@@ -482,17 +497,20 @@ private fun FrequencyResponseCurve(
 
         if (bandLevels.isNotEmpty()) {
             val path = Path()
-            val stepX = width / (bandLevels.size - 1).coerceAtLeast(1)
+            // Match the gesture's inset so each dot sits over its hit region.
+            val inset = CURVE_INSET.toPx()
+            val usable = (width - 2 * inset).coerceAtLeast(1f)
+            val stepX = usable / (bandLevels.size - 1).coerceAtLeast(1)
 
             bandLevels.forEachIndexed { index, level ->
-                val x = index * stepX
+                val x = inset + index * stepX
                 val normalizedLevel = (maxLevel - level) / range
                 val y = normalizedLevel * height
 
                 if (index == 0) {
                     path.moveTo(x, y)
                 } else {
-                    val prevX = (index - 1) * stepX
+                    val prevX = inset + (index - 1) * stepX
                     val prevLevel = bandLevels[index - 1]
                     val prevY = (maxLevel - prevLevel) / range * height
                     val cpX = (prevX + x) / 2
@@ -504,7 +522,7 @@ private fun FrequencyResponseCurve(
 
             // Dots at band positions — slightly larger to be more tappable
             bandLevels.forEachIndexed { index, level ->
-                val x = index * stepX
+                val x = inset + index * stepX
                 val normalizedLevel = (maxLevel - level) / range
                 val y = normalizedLevel * height
                 drawCircle(color = teal300Color, radius = 7.dp.toPx(), center = Offset(x, y))
