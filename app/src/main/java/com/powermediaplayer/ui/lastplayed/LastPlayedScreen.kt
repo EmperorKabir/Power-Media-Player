@@ -723,25 +723,35 @@ private fun HistoryHeaderRow(
                 .background(OledBlack),
             contentAlignment = Alignment.Center
         ) {
-            // Per-track art. The stored artworkUri is suppressed at the
-            // source (LibraryViewModel scan + history backfill) when it is
-            // MediaStore's BORROWED album-level cover — i.e. an albumId that
-            // buckets unrelated files sharing a generic album tag (e.g.
-            // album="Music", album_artist=NULL) into one cover. Legitimate
-            // single-album covers and cloud http covers still flow through.
-            if (item.artworkUri != null) {
+            // Per-track art. Base layer is the MusicNote placeholder; the
+            // cover (when one exists) is overlaid on top. For LOCAL rows the
+            // model resolves the file's OWN embedded picture first, then a
+            // legitimate (non-borrowed) album-art URI — MediaStore's borrowed
+            // album-level covers are nulled upstream (scan + backfill), so a
+            // track that only had a borrowed cover stays on the MusicNote.
+            // Cloud rows use their real http cover. A failed/absent load
+            // paints transparent so the MusicNote shows through.
+            Icon(Icons.Filled.MusicNote, contentDescription = null,
+                tint = TealAccent, modifier = Modifier.size(20.dp))
+            val artModel: Any? = when (item.source) {
+                Source.LOCAL ->
+                    item.mediaUri.takeIf { it.isNotBlank() }?.let {
+                        com.powermediaplayer.util.LocalTrackArt(it, item.artworkUri)
+                    }
+                else -> item.artworkUri
+            }
+            if (artModel != null) {
                 coil3.compose.AsyncImage(
-                    model = item.artworkUri,
-                    // Dangling/missing album-art URIs must clear to black,
-                    // not inherit a recycled row's cover.
-                    error = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
-                    fallback = androidx.compose.ui.graphics.painter.ColorPainter(OledBlack),
+                    model = artModel,
+                    error = androidx.compose.ui.graphics.painter.ColorPainter(
+                        androidx.compose.ui.graphics.Color.Transparent
+                    ),
+                    fallback = androidx.compose.ui.graphics.painter.ColorPainter(
+                        androidx.compose.ui.graphics.Color.Transparent
+                    ),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize()
                 )
-            } else {
-                Icon(Icons.Filled.MusicNote, contentDescription = null,
-                    tint = TealAccent, modifier = Modifier.size(20.dp))
             }
         }
         Spacer(Modifier.width(10.dp))

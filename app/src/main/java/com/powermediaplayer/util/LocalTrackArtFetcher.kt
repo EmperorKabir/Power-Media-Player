@@ -1,0 +1,114 @@
+package com.powermediaplayer.util
+
+import android.content.Context
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import coil3.ImageLoader
+import coil3.decode.DataSource
+import coil3.decode.ImageSource
+import coil3.fetch.FetchResult
+import coil3.fetch.Fetcher
+import coil3.fetch.SourceFetchResult
+import coil3.key.Keyer
+import coil3.request.Options
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okio.Buffer
+
+/**
+ * Art model for a LOCAL audio row that resolves the cover STRICTLY per
+ * track, in the same order the player does:
+ *
+ *   1. the file's OWN embedded picture (ID3 APIC / MP4 covr) — the only
+ *      truly per-file source, and
+ *   2. a [fallbackArtUri] (the track's MediaStore album-art) ONLY when that
+ *      cover is legitimate — borrowed buckets are already nulled upstream by
+ *      the library scan, so this never re-introduces a neighbour's cover.
+ *
+ * Why both: a generic-tag bucket (album="Music") shares one MediaStore
+ * albumart URI across unrelated files. Some members (e.g. "Hey cuddle
+ * monkey") carry their OWN embedded cover — MediaStore even derived the
+ * bucket thumbnail from it — while others (e.g. "San Diego Super Chargers")
+ * have none and merely borrow it. Embedded-first shows the real owner its
+ * art and leaves the borrower blank; the cleaned-URI fallback preserves
+ * covers for legitimate albums that store art outside the file (audiobooks,
+ * folder art) like "The Lost World".
+ */
+data class LocalTrackArt(
+    val mediaUri: String,
+    val fallbackArtUri: String?,
+)
+
+class LocalTrackArtFetcher(
+    private val data: LocalTrackArt,
+    private val options: Options,
+    private val context: Context,
+) : Fetcher {
+
+    override suspend fun fetch(): FetchResult = withContext(Dispatchers.IO) {
+        // 1) Per-file embedded picture.
+        if (data.mediaUri !in noEmbedded) {
+            val embedded = runCatching {
+                val mmr = MediaMetadataRetriever()
+                try {
+                    mmr.setDataSource(context, Uri.parse(data.mediaUri))
+                    mmr.embeddedPicture
+                } finally {
+                    runCatching { mmr.release() }
+                }
+            }.getOrNull()
+            if (embedded != null && embedded.isNotEmpty()) {
+                return@withContext sourceResult(embedded)
+            }
+            noEmbedded.add(data.mediaUri)
+        }
+
+        // 2) Legitimate (non-borrowed) album-art URI fallback.
+        val fb = data.fallbackArtUri
+        if (!fb.isNullOrBlank()) {
+            val bytes = runCatching {
+                context.contentResolver.openInputStream(Uri.parse(fb))?.use { it.readBytes() }
+            }.getOrNull()
+            if (bytes != null && bytes.isNotEmpty()) {
+                return@withContext sourceResult(bytes)
+            }
+        }
+
+        throw NoTrackArtException(data.mediaUri)
+    }
+
+    private fun sourceResult(bytes: ByteArray): FetchResult = SourceFetchResult(
+        source = ImageSource(
+            source = Buffer().apply { write(bytes) },
+            fileSystem = options.fileSystem,
+        ),
+        mimeType = null,
+        dataSource = DataSource.DISK,
+    )
+
+    class NoTrackArtException(mediaUri: String) :
+        RuntimeException("No per-track art for $mediaUri")
+
+    class Factory(context: Context) : Fetcher.Factory<LocalTrackArt> {
+        private val appContext = context.applicationContext
+        override fun create(
+            data: LocalTrackArt,
+            options: Options,
+            imageLoader: ImageLoader,
+        ): Fetcher = LocalTrackArtFetcher(data, options, appContext)
+    }
+
+    /** Stable memory/disk cache key so the row art is cached per track. */
+    class ArtKeyer : Keyer<LocalTrackArt> {
+        override fun key(data: LocalTrackArt, options: Options): String =
+            "localart:${data.mediaUri}|${data.fallbackArtUri ?: ""}"
+    }
+
+    private companion object {
+        // Process-lifetime negative cache of mediaUris with no embedded
+        // picture, so a no-embedded-art row doesn't re-open the (expensive)
+        // retriever on every rebind. The URI fallback still runs.
+        val noEmbedded: MutableSet<String> =
+            java.util.concurrent.ConcurrentHashMap.newKeySet()
+    }
+}

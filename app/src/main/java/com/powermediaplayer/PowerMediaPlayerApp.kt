@@ -29,7 +29,8 @@ import kotlinx.coroutines.launch
  * [PodcastSyncWorker]) to take constructor-injected dependencies.
  */
 @HiltAndroidApp
-class PowerMediaPlayerApp : Application(), Configuration.Provider {
+class PowerMediaPlayerApp : Application(), Configuration.Provider,
+    coil3.SingletonImageLoader.Factory {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var settingsDataStore: SettingsDataStore
@@ -39,6 +40,20 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .setMinimumLoggingLevel(android.util.Log.INFO)
+            .build()
+
+    /**
+     * Per-track album art: register [com.powermediaplayer.util.LocalTrackArt]
+     * Fetcher + Keyer so LOCAL rows resolve the file's OWN embedded picture
+     * (then a legitimate album-art fallback), never a borrowed album-level
+     * cover. Cloud http covers keep Coil's stock fetchers.
+     */
+    override fun newImageLoader(context: android.content.Context): coil3.ImageLoader =
+        coil3.ImageLoader.Builder(context)
+            .components {
+                add(com.powermediaplayer.util.LocalTrackArtFetcher.ArtKeyer())
+                add(com.powermediaplayer.util.LocalTrackArtFetcher.Factory(context))
+            }
             .build()
 
     override fun onCreate() {
