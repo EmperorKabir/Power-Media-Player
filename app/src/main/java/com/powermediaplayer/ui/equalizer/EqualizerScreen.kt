@@ -42,6 +42,14 @@ import kotlin.math.roundToInt
 private val CURVE_INSET = 16.dp
 
 /**
+ * Vertical inset so a band pinned to ±15 dB doesn't sit on the very top/
+ * bottom edge of the canvas — without it a bottomed-out dot is right on the
+ * boundary with no room to land a finger on it and drag it back up. The
+ * margins map to min/max, so touching anywhere in them grabs the edge dot.
+ */
+private val VCURVE_INSET = 18.dp
+
+/**
  * 10-band equalizer screen.
  *
  * Layout:
@@ -371,9 +379,12 @@ private fun BandInputCell(
                     val newDb = (levelDb + 1).coerceIn(minDb, maxDb)
                     onLevelChange(newDb * 100)
                 },
-                modifier = Modifier.size(28.dp)
+                // Full cell width + taller = a far bigger tap target than the
+                // old 28 dp square; still bounded by the cell (6 dp gap to the
+                // neighbour) so adjacent steppers never overlap.
+                modifier = Modifier.fillMaxWidth().height(36.dp)
             ) {
-                Icon(Icons.Filled.Add, contentDescription = "+1 dB", tint = TealAccent, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Add, contentDescription = "+1 dB", tint = TealAccent, modifier = Modifier.size(20.dp))
             }
             OutlinedTextField(
                 value = textValue,
@@ -420,9 +431,9 @@ private fun BandInputCell(
                     val newDb = (levelDb - 1).coerceIn(minDb, maxDb)
                     onLevelChange(newDb * 100)
                 },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.fillMaxWidth().height(36.dp)
             ) {
-                Icon(Icons.Filled.Remove, contentDescription = "-1 dB", tint = Teal300, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Remove, contentDescription = "-1 dB", tint = Teal300, modifier = Modifier.size(20.dp))
             }
             Text(text = "dB", style = MaterialTheme.typography.labelSmall, color = TextTertiary, textAlign = TextAlign.Center)
         }
@@ -469,7 +480,12 @@ private fun FrequencyResponseCurve(
                 }
                 fun levelAt(y: Float): Int {
                     val range = (maxLevel - minLevel).toFloat()
-                    val normalizedY = (y / canvasHeight).coerceIn(0f, 1f)
+                    val vInset = VCURVE_INSET.toPx()
+                    val top = vInset
+                    val bottom = (canvasHeight - vInset).coerceAtLeast(top + 1f)
+                    // The top/bottom margins clamp to max/min, so you can grab
+                    // an edge dot by touching its margin and then drag inward.
+                    val normalizedY = ((y - top) / (bottom - top)).coerceIn(0f, 1f)
                     return (maxLevel - normalizedY * range).toInt()
                         .coerceIn(minLevel, maxLevel)
                 }
@@ -511,7 +527,12 @@ private fun FrequencyResponseCurve(
         val width = size.width
         val height = size.height
         val range = (maxLevel - minLevel).toFloat()
-        val zeroY = height * (maxLevel / range)
+        // Match the gesture's vertical inset so dots are drawn where the hit
+        // logic places them (away from the top/bottom edges → grab room).
+        val vTop = VCURVE_INSET.toPx()
+        val vSpan = (height - 2 * vTop).coerceAtLeast(1f)
+        fun yFor(level: Int) = vTop + ((maxLevel - level) / range) * vSpan
+        val zeroY = vTop + (maxLevel / range) * vSpan
 
         // Zero line
         drawLine(
@@ -530,15 +551,13 @@ private fun FrequencyResponseCurve(
 
             bandLevels.forEachIndexed { index, level ->
                 val x = inset + index * stepX
-                val normalizedLevel = (maxLevel - level) / range
-                val y = normalizedLevel * height
+                val y = yFor(level)
 
                 if (index == 0) {
                     path.moveTo(x, y)
                 } else {
                     val prevX = inset + (index - 1) * stepX
-                    val prevLevel = bandLevels[index - 1]
-                    val prevY = (maxLevel - prevLevel) / range * height
+                    val prevY = yFor(bandLevels[index - 1])
                     val cpX = (prevX + x) / 2
                     path.cubicTo(cpX, prevY, cpX, y, x, y)
                 }
@@ -549,8 +568,7 @@ private fun FrequencyResponseCurve(
             // Dots at band positions — slightly larger to be more tappable
             bandLevels.forEachIndexed { index, level ->
                 val x = inset + index * stepX
-                val normalizedLevel = (maxLevel - level) / range
-                val y = normalizedLevel * height
+                val y = yFor(level)
                 drawCircle(color = teal300Color, radius = 7.dp.toPx(), center = Offset(x, y))
                 drawCircle(color = tealColor, radius = 4.dp.toPx(), center = Offset(x, y))
             }
