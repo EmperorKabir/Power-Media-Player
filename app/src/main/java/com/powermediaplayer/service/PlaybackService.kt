@@ -90,6 +90,14 @@ class PlaybackService : MediaSessionService() {
      */
     @javax.inject.Inject
     lateinit var hueAnalyserProcessor: com.powermediaplayer.hue.HueAnalyserAudioProcessor
+
+    /**
+     * Shared 10-band EQ levels (millibels). The in-chain
+     * [equalizerProcessor] reads this each buffer; the EQ screen and
+     * per-track overrides write it. Replaces the platform Equalizer.
+     */
+    @javax.inject.Inject
+    lateinit var equalizerEffectController: com.powermediaplayer.audio.EqualizerEffectController
     /**
      * In-chain reverb — replaces the platform EnvironmentalReverb, which
      * failed twice on hardware (OUTPUT_MIX denied; session-insert
@@ -111,6 +119,18 @@ class PlaybackService : MediaSessionService() {
     private val gainProcessor by lazy {
         com.powermediaplayer.audio.GainAudioProcessor(
             gainMbSupplier = { chainGainMbFlag }
+        )
+    }
+    /**
+     * In-chain 10-band biquad graphic EQ — replaces the platform Equalizer
+     * (which only had the device's ~5 hardware bands, so the app's top
+     * sliders did nothing and the low ones drove + clipped the whole
+     * spectrum). Reads the shared band levels each buffer; flat = exact
+     * pass-through. Sits AFTER reverb so reverb's input is unchanged.
+     */
+    private val equalizerProcessor by lazy {
+        com.powermediaplayer.audio.EqualizerAudioProcessor(
+            bandLevelsMbSupplier = { equalizerEffectController.bandLevels.value }
         )
     }
 
@@ -510,6 +530,10 @@ class PlaybackService : MediaSessionService() {
                             .DefaultAudioProcessorChain(
                                 stereoTransformProcessor,
                                 reverbProcessor,
+                                // 10-band EQ AFTER reverb — reverb's input is
+                                // unchanged so its behaviour is untouched; the
+                                // EQ shapes the final tone. Flat = pass-through.
+                                equalizerProcessor,
                                 audioDelayProcessor,
                                 gainProcessor,
                                 // §Hue PCM tap — passes audio through;
