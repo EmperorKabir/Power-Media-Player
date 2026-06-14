@@ -27,7 +27,7 @@ val playerInfo: InfoSheetData = InfoSheetData(
             bullets = listOf(
                 "Skip ±5/10/15/20/30 — Jump that many seconds back or forward.",
                 "Previous / Next — Jumps to previous/next chapter if the file has chapters; otherwise the previous/next track.",
-                "A-B Loop — Tap once to mark A. Tap again to mark B. Loops between the two. Tap a third time to clear.",
+                "A-B Loop — Tap once to mark A, again to mark B; playback then loops between them. The Track bar shows live markers — an amber A while only A is set, turning teal with a banded A-B region once the loop is active. Tap a third time to clear. A loop is remembered per file and clears itself when you move to a different track.",
                 "Frame step ± — One frame back or forward. Video only. Pauses the video first."
             )
         ),
@@ -209,8 +209,8 @@ val equalizerInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Adjust",
             bullets = listOf(
-                "Frequency curve — Visual of the current setting. Tap on the curve to nudge a band quickly.",
-                "Band sliders — 10 frequency bands, ±15 dB each.",
+                "Frequency curve — Drag a point up or down to set that band. The two end bands (lowest / highest) have a widened grab area so they're easy to hit.",
+                "Band cells — The grid below the curve: 10 frequency bands, each with a value you can type or nudge with +/−. Range ±15 dB.",
                 "Reset all — Returns every band to 0 dB and clears the active preset."
             )
         ),
