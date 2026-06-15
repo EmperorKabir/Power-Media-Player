@@ -144,8 +144,20 @@ fun PlayerScreen(
     // shows the picture (the VideoSurface) instead of falling into the audio
     // layout. The cast transport still drives the audio; the on-screen aspect
     // comes from the local player's real size (VideoSurface's size fallback).
-    val displayState = if (castingLocalVideo && !uiState.isVideoContent)
-        uiState.copy(isVideoContent = true) else uiState
+    // Remember the last real title: while casting, the session player briefly
+    // has no item during audio extraction, so its title reads "No media
+    // loaded" for a moment — show the last real title instead of flashing it.
+    val lastRealTitle = remember { mutableStateOf("") }
+    if (uiState.title.isNotBlank() && uiState.title != "No media loaded") {
+        lastRealTitle.value = uiState.title
+    }
+    val displayState = if (castingLocalVideo) {
+        uiState.copy(
+            isVideoContent = true,
+            title = if (uiState.title.isBlank() || uiState.title == "No media loaded")
+                lastRealTitle.value else uiState.title
+        )
+    } else uiState
     val showEmptyState = !uiState.hasMedia && !uiState.isLoading &&
         !uiState.cloudFetchInProgress && !uiState.isVideoContent &&
         !uiState.isSpotifyActive && !castingLocalVideo

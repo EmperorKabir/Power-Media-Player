@@ -1170,15 +1170,37 @@ class PlaybackService : MediaSessionService() {
                         it.isSink && it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
                     } == true
                     if (btSinkAdded) {
-                        serviceScope.launch {
-                            if (!settingsDataStore.resumeOnBt.first()) return@launch
-                            val p = exoPlayerRef?.get() ?: return@launch
-                            if (p.isPlaying || p.currentMediaItem == null) return@launch
+                        // A BT audio device connecting should ROUTE audio to it:
+                        // (1) Clear any phone-speaker reroute. The BT-disconnect
+                        //     button sets a preferred device; without clearing
+                        //     it, audio stays on the phone speaker even after BT
+                        //     reconnects ("won't connect back to Bluetooth").
+                        Companion.clearAudioReroute()
+                        val casting = mediaSession?.player is CastPlayer || castLocalVideoActive
+                        if (casting) {
+                            // (2) Failsafe (user-requested): a BT device takes
+                            //     priority over casting — end the cast so audio
+                            //     moves cleanly to BT instead of the cast device
+                            //     playing on while BT sits connected-but-silent.
                             runCatching {
-                                p.play()
-                                com.powermediaplayer.util.Diag.i(
-                                    "PMP_DIAG", "BT resume-on-connect fired (local player)"
-                                )
+                                CastContext.getSharedInstance(applicationContext)
+                                    .sessionManager.endCurrentSession(true)
+                            }
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG", "BT connected while casting → ending cast (BT takes over)"
+                            )
+                        } else {
+                            // (3) Resume-on-connect for plain BT (the toggle).
+                            serviceScope.launch {
+                                if (!settingsDataStore.resumeOnBt.first()) return@launch
+                                val p = exoPlayerRef?.get() ?: return@launch
+                                if (p.isPlaying || p.currentMediaItem == null) return@launch
+                                runCatching {
+                                    p.play()
+                                    com.powermediaplayer.util.Diag.i(
+                                        "PMP_DIAG", "BT resume-on-connect fired (local player)"
+                                    )
+                                }
                             }
                         }
                     }
