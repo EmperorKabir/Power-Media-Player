@@ -50,27 +50,31 @@ class DriveTagEnricher @Inject constructor(
     fun enrich(scope: CoroutineScope, item: CloudMediaItem, stableKey: String) {
         scope.launch(Dispatchers.IO) {
             playbackConnection.setCloudFetchInProgress(true)
-            val isSaf = item.id.startsWith("content://")
-            var found = false
-            var temp = try {
-                if (isSaf) driveProvider.downloadToCache(item)
-                else driveOAuthProvider.downloadToCache(item)
-            } catch (_: Throwable) { null }
-            if (temp != null) {
-                found = parseAndApply(item, temp, stableKey)
-                runCatching { temp.delete() }
-            }
-            if (!found) {
-                temp = try {
-                    if (isSaf) driveProvider.downloadFullToCache(item)
-                    else driveOAuthProvider.downloadFullToCache(item)
+            try {
+                val isSaf = item.id.startsWith("content://")
+                var found = false
+                var temp = try {
+                    if (isSaf) driveProvider.downloadToCache(item)
+                    else driveOAuthProvider.downloadToCache(item)
                 } catch (_: Throwable) { null }
                 if (temp != null) {
-                    parseAndApply(item, temp, stableKey)
+                    found = parseAndApply(item, temp, stableKey)
                     runCatching { temp.delete() }
                 }
+                if (!found) {
+                    temp = try {
+                        if (isSaf) driveProvider.downloadFullToCache(item)
+                        else driveOAuthProvider.downloadFullToCache(item)
+                    } catch (_: Throwable) { null }
+                    if (temp != null) {
+                        parseAndApply(item, temp, stableKey)
+                        runCatching { temp.delete() }
+                    }
+                }
+            } finally {
+                // finally so a cancel mid-download doesn't stick the spinner.
+                playbackConnection.setCloudFetchInProgress(false)
             }
-            playbackConnection.setCloudFetchInProgress(false)
         }
     }
 
@@ -109,7 +113,10 @@ class DriveTagEnricher @Inject constructor(
                         artworkUri = artUri,
                         artworkBytes = artBytes
                     )
-                    playbackConnection.setLocalMetadata(override)
+                    // Guarded: only paint onto the player if this item is still
+                    // current (a switch during the download must not put A's tags
+                    // on B). The caches below are keyed by stableKey = always safe.
+                    playbackConnection.setLocalMetadataIfCurrent(override, stableKey)
                     // DURABLE: write the enriched tags into senderMetadataByMediaId
                     // (used by the local resolution AND the rebuilt cast item) so
                     // the title/cover survive the transient override being wiped on
@@ -157,7 +164,7 @@ class DriveTagEnricher @Inject constructor(
                     val e = bundle.getLong("chapter_end_$i", -1)
                     if (s >= 0) ChapterInfo(t, s, e, i) else null
                 }
-                playbackConnection.setLocalChapters(chapters)
+                playbackConnection.setLocalChaptersIfCurrent(chapters, stableKey)
                 found = true
             }
         }

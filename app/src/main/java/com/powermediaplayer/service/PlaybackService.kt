@@ -3007,10 +3007,18 @@ class PlaybackService : MediaSessionService() {
                         .create<MutableList<MediaItem>>()
                     castAudioExtractJob?.cancel()
                     castAudioExtractJob = serviceScope.launch {
-                        val m4a = buildCastAudioRelayItem(srcUri, first.mediaMetadata)
-                            ?: resolvedItems.firstOrNull()
-                            ?: localItem
-                        fut.set(mutableListOf(m4a))
+                        try {
+                            val m4a = buildCastAudioRelayItem(srcUri, first.mediaMetadata)
+                                ?: resolvedItems.firstOrNull()
+                                ?: localItem
+                            fut.set(mutableListOf(m4a))
+                        } finally {
+                            // Audit: if this job is cancelled mid-extract the
+                            // future would never complete and Media3's add-items
+                            // op would wedge. Always resolve it (fall back to the
+                            // local item) so the queue update can finish.
+                            if (!fut.isDone) fut.set(mutableListOf(localItem))
+                        }
                     }
                     return fut
                 } else {

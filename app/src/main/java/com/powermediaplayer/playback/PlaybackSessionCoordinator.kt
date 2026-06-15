@@ -438,8 +438,17 @@ class PlaybackSessionCoordinator @Inject constructor(
     private suspend fun resolveLaunchAutoplay(): Boolean {
         val btConnected = runCatching {
             val am = context.getSystemService(android.media.AudioManager::class.java)
+            // Classic A2DP + LE-Audio sinks (newer BT headphones report BLE_*,
+            // not A2DP) so the resumeOnBt gate fires for those too. The BLE
+            // constants are int-valued (API 31+); harmless on older devices
+            // since those types never appear in getDevices there.
+            val btTypes = setOf(
+                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
+                android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER
+            )
             am?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)?.any {
-                it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+                it.type in btTypes
             } == true
         }.getOrDefault(false)
         val flag = if (btConnected) {

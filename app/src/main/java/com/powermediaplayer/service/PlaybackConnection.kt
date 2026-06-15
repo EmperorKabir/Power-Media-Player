@@ -506,6 +506,32 @@ class PlaybackConnection @Inject constructor(
     }
 
     /**
+     * Guarded variants: apply the override / chapters ONLY if [forMediaId] is
+     * still the player's CURRENT item. A background Drive enrich can take
+     * minutes; if the user switches tracks meanwhile, the slow enrich of item A
+     * must NOT paint A's title/cover/chapters onto item B (localMetadata /
+     * localChapters are global, not per-item). The check + set run on the main
+     * scope so `controller.currentMediaItem` is read safely.
+     */
+    fun setLocalMetadataIfCurrent(meta: LocalMetadataOverride?, forMediaId: String) {
+        scope.launch {
+            if (controller?.currentMediaItem?.mediaId == forMediaId) {
+                localMetadata = meta
+                scheduleUpdate()
+            }
+        }
+    }
+
+    fun setLocalChaptersIfCurrent(chapters: List<ChapterInfo>?, forMediaId: String) {
+        scope.launch {
+            if (controller?.currentMediaItem?.mediaId == forMediaId) {
+                localChapters = chapters?.takeIf { it.isNotEmpty() }
+                scheduleUpdate()
+            }
+        }
+    }
+
+    /**
      * Wrapper that ensures updatePlayerState always runs on the main thread.
      * Background coroutines (Drive download, parser) call setLocalChapters /
      * setLocalMetadata / setCloudFetchInProgress / setFolderChapters from

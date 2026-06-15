@@ -1131,7 +1131,11 @@ class CloudViewModel @Inject constructor(
             // are unaffected — worst case it simply doesn't optimise.
             val loadedPlayer = playbackConnection.getPlayer()
             if (loadedPlayer != null && loadedPlayer.mediaItemCount > 0 &&
-                loadedPlayer.currentMediaItem?.mediaId == uri.toString()
+                loadedPlayer.currentMediaItem?.mediaId == uri.toString() &&
+                // Don't "hold" an errored/idle player — play() won't re-prepare
+                // it; fall through to a real reload so a retry actually retries.
+                loadedPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE &&
+                loadedPlayer.playerError == null
             ) {
                 if (!loadedPlayer.playWhenReady) loadedPlayer.play()
                 heldThisOpen = true
@@ -1257,33 +1261,39 @@ class CloudViewModel @Inject constructor(
     private fun enrichDriveItem(item: CloudMediaItem, stableKey: String) {
         viewModelScope.launch(Dispatchers.IO) {
             playbackConnection.setCloudFetchInProgress(true)
-            // Three-pass strategy:
-            //   (1) head 32 MB — fast; works for moov-at-front
-            //   (2) full file (≤4 GB) — slow but reliable; MediaMetadataRetriever
-            //       needs a complete MP4 (ftyp + moov + mdat), so partial
-            //       tail-only downloads can't actually be parsed.
-            //   (3) skip — file too big or already extracted
-            val isSafItem = item.id.startsWith("content://")
-            var found = false
-            var tempFile = try {
-                if (isSafItem) driveProvider.downloadToCache(item)
-                else driveOAuthProvider.downloadToCache(item)
-            } catch (_: Throwable) { null }
-            if (tempFile != null) {
-                found = parseAndApply(item, tempFile, stableKey)
-                runCatching { tempFile.delete() }
-            }
-            if (!found) {
-                tempFile = try {
-                    if (isSafItem) driveProvider.downloadFullToCache(item)
-                    else driveOAuthProvider.downloadFullToCache(item)
+            try {
+                // Three-pass strategy:
+                //   (1) head 32 MB — fast; works for moov-at-front
+                //   (2) full file (≤4 GB) — slow but reliable; MediaMetadataRetriever
+                //       needs a complete MP4 (ftyp + moov + mdat), so partial
+                //       tail-only downloads can't actually be parsed.
+                //   (3) skip — file too big or already extracted
+                val isSafItem = item.id.startsWith("content://")
+                var found = false
+                var tempFile = try {
+                    if (isSafItem) driveProvider.downloadToCache(item)
+                    else driveOAuthProvider.downloadToCache(item)
                 } catch (_: Throwable) { null }
                 if (tempFile != null) {
-                    parseAndApply(item, tempFile, stableKey)
+                    found = parseAndApply(item, tempFile, stableKey)
                     runCatching { tempFile.delete() }
                 }
+                if (!found) {
+                    tempFile = try {
+                        if (isSafItem) driveProvider.downloadFullToCache(item)
+                        else driveOAuthProvider.downloadFullToCache(item)
+                    } catch (_: Throwable) { null }
+                    if (tempFile != null) {
+                        parseAndApply(item, tempFile, stableKey)
+                        runCatching { tempFile.delete() }
+                    }
+                }
+            } finally {
+                // Audit: not in finally before — a cancel mid-download (VM
+                // cleared / navigation) skipped this and stuck the global
+                // cloud-fetch spinner true forever.
+                playbackConnection.setCloudFetchInProgress(false)
             }
-            playbackConnection.setCloudFetchInProgress(false)
         }
     }
 
@@ -1340,7 +1350,11 @@ class CloudViewModel @Inject constructor(
                         artworkUri = artUri,
                         artworkBytes = artBytes
                     )
-                    playbackConnection.setLocalMetadata(override)
+                    // Guarded: only paint onto the player if this item is STILL
+                    // current (a fast switch during the long download must not
+                    // put A's tags on B). The caches below are keyed by stableKey
+                    // so they're always safe to write.
+                    playbackConnection.setLocalMetadataIfCurrent(override, stableKey)
                     // DURABLE: also write the enriched tags into the service-side
                     // senderMetadataByMediaId cache (keyed by mediaId == stableKey).
                     // updatePlayerState resolves the title/cover as
@@ -1407,7 +1421,7 @@ class CloudViewModel @Inject constructor(
                     val end = bundle.getLong("chapter_end_$i", -1)
                     if (start >= 0) ChapterInfo(title, start, end, i) else null
                 }
-                playbackConnection.setLocalChapters(chapters)
+                playbackConnection.setLocalChaptersIfCurrent(chapters, stableKey)
                 found = true
             }
         }

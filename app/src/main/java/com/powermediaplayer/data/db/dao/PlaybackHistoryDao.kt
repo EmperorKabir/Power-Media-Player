@@ -51,7 +51,10 @@ interface PlaybackHistoryDao {
      *  Used when embedded tags are extracted AFTER the row was first written
      *  with the filename — so auto-resume shows the proper title/author. */
     @Query(
-        "UPDATE playback_history SET title = :title, subtitle = :subtitle " +
+        // Keep the existing subtitle (e.g. the 'DRIVE' source label) when the
+        // extracted artist is blank, rather than wiping it to ''.
+        "UPDATE playback_history SET title = :title, " +
+            "subtitle = CASE WHEN :subtitle = '' THEN subtitle ELSE :subtitle END " +
             "WHERE id = (SELECT id FROM playback_history WHERE mediaUri = :uri " +
             "ORDER BY lastPlayedAt DESC LIMIT 1)"
     )

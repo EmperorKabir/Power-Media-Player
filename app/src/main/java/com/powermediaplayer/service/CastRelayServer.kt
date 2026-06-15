@@ -106,11 +106,16 @@ open class CastRelayServer(
         // channel, instead of read-and-discarding gigabytes through skip()
         // (which caused the 20-30s cast start + starved the receiver into
         // constant buffering on big files).
-        val pfd = resolver.openFileDescriptor(item.uri, "r")
-            ?: run {
-                Diag.w("PMP_DIAG", "CastRelay Local 404: openFileDescriptor null uri=${item.uri}")
-                return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "no fd")
-            }
+        // Some content providers only support stream access and either return
+        // null or THROW on openFileDescriptor — the seekable-fd path then 404s
+        // (or 500s on the throw) content that the old openInputStream path
+        // served. Fall back to a plain stream + skip for those.
+        val pfd = try {
+            resolver.openFileDescriptor(item.uri, "r")
+        } catch (t: Throwable) {
+            Diag.w("PMP_DIAG", "CastRelay Local: openFileDescriptor threw (${t.message}) → stream fallback")
+            null
+        } ?: return serveLocalStream(item, rangeHeader)
         val totalLength: Long = runCatching { pfd.statSize }.getOrDefault(-1L)
         val (start, end) = parseRange(rangeHeader, totalLength)
         val fis = java.io.FileInputStream(pfd.fileDescriptor)
@@ -152,6 +157,29 @@ open class CastRelayServer(
             "CastRelay Local response status=$status mime=${item.mimeType} " +
                 "contentLength=$contentLength range=${start}-${end} total=$totalLength seek=lseek"
         )
+        return resp
+    }
+
+    /**
+     * Stream fallback for content providers without a seekable fd: open the
+     * InputStream, skip to the range start, serve chunked. No Content-Range
+     * (total length unknown for a pure stream), but Accept-Ranges advertised
+     * and the bytes from [start] onward delivered — restores the pre-lseek
+     * behaviour for those providers instead of failing the cast.
+     */
+    private fun serveLocalStream(item: RelayItem.Local, rangeHeader: String?): Response {
+        val input = try {
+            context.contentResolver.openInputStream(item.uri)
+        } catch (t: Throwable) {
+            Diag.w("PMP_DIAG", "CastRelay Local 404: openInputStream failed (${t.message})")
+            null
+        } ?: return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "no stream")
+        val (start, _) = parseRange(rangeHeader, -1L)
+        if (start > 0) runCatching { input.skipFully(start) }
+        val status = if (rangeHeader != null) Response.Status.PARTIAL_CONTENT else Response.Status.OK
+        val resp = newChunkedResponse(status, item.mimeType, input)
+        resp.addHeader("Accept-Ranges", "bytes")
+        Diag.d("PMP_DIAG", "CastRelay Local response status=$status mime=${item.mimeType} seek=stream-skip start=$start")
         return resp
     }
 
