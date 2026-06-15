@@ -574,12 +574,22 @@ class SpotifyProvider @Inject constructor(
             "album", "playlist" -> spotifyUri
             else -> null
         }
+        // Album art: a track's cover lives on its album.images; albums /
+        // playlists carry images directly. Without this the item had no
+        // thumbnailUri, so the Last Played row stored null → no cover.
+        val images = when (type) {
+            "track" -> obj.getAsJsonObject("album")?.getAsJsonArray("images")
+            else -> obj.getAsJsonArray("images")
+        }
+        val artworkUrl = images?.takeIf { it.size() > 0 }
+            ?.get(0)?.asJsonObject?.get("url")?.takeIf { !it.isJsonNull }?.asString
         return CloudMediaItem(
             id = id,
             name = name,
             mimeType = if (type == "track") "audio/mpeg" else "application/spotify-$type",
             size = 0L,
             downloadUrl = preview.ifEmpty { spotifyUri },
+            thumbnailUri = artworkUrl?.let { android.net.Uri.parse(it) },
             sourceProvider = CloudProviderType.SPOTIFY,
             isFolder = type != "track",
             contextUri = contextUri

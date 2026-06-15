@@ -1257,6 +1257,20 @@ class PlaybackService : MediaSessionService() {
                             // (3) Resume-on-connect for plain BT (the toggle).
                             serviceScope.launch {
                                 if (!settingsDataStore.resumeOnBt.first()) return@launch
+                                // Spotify: the audio is on Spotify Connect; the
+                                // LOCAL player is a silent mirror with NO media
+                                // item, so p.currentMediaItem==null returned early
+                                // and nothing resumed (BT resume failed on Spotify
+                                // tracks). Resume Spotify Connect instead.
+                                if (spotifyProvider.spotifyState.value != null) {
+                                    runCatching {
+                                        spotifyProvider.resume()
+                                        com.powermediaplayer.util.Diag.i(
+                                            "PMP_DIAG", "BT resume-on-connect fired (Spotify Connect)"
+                                        )
+                                    }
+                                    return@launch
+                                }
                                 val p = exoPlayerRef?.get() ?: return@launch
                                 if (p.isPlaying || p.currentMediaItem == null) return@launch
                                 runCatching {
