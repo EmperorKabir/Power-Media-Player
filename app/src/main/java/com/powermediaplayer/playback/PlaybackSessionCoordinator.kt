@@ -412,6 +412,36 @@ class PlaybackSessionCoordinator @Inject constructor(
         }
     }
 
+    /**
+     * Launch-resume gate (user-specified logic, independent toggles):
+     *   • phone connected to a Bluetooth AUDIO sink → obey "Resume on
+     *     Bluetooth connect" (resumeOnBt).
+     *   • otherwise → obey "Auto-play on launch" (autoplayOnLaunch).
+     * Exactly one applies, chosen purely on Bluetooth-connection state. A Cast
+     * device is NOT a Bluetooth sink, so casting falls to the autoplayOnLaunch
+     * branch; if (rarely) both BT and cast are present, the BT branch wins
+     * because the decision keys off BT presence alone.
+     */
+    private suspend fun resolveLaunchAutoplay(): Boolean {
+        val btConnected = runCatching {
+            val am = context.getSystemService(android.media.AudioManager::class.java)
+            am?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)?.any {
+                it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+            } == true
+        }.getOrDefault(false)
+        val flag = if (btConnected) {
+            runCatching { settingsDataStore.resumeOnBt.first() }.getOrDefault(false)
+        } else {
+            runCatching { settingsDataStore.autoplayOnLaunch.first() }.getOrDefault(false)
+        }
+        com.powermediaplayer.diag.DiagLog.dec(
+            branch = "cold-start",
+            reason = "launch-autoplay gate: btConnected=$btConnected → " +
+                (if (btConnected) "resumeOnBt" else "autoplayOnLaunch") + "=$flag"
+        )
+        return flag
+    }
+
     private fun startColdStartRestore() {
         // Cold-start resume + notification-tap session adoption.
         //
@@ -591,11 +621,11 @@ class PlaybackSessionCoordinator @Inject constructor(
                                     .build()
                             )
                             .build()
-                        // Paused by default; "Auto-play on launch" starts
-                        // playback immediately from the saved spot instead.
-                        val autoplay = runCatching {
-                            settingsDataStore.autoplayOnLaunch.first()
-                        }.getOrDefault(false)
+                        // Paused by default; the launch-resume gate decides
+                        // whether to start playing — "Resume on Bluetooth
+                        // connect" when a BT sink is connected, else "Auto-play
+                        // on launch". The two toggles are independent.
+                        val autoplay = resolveLaunchAutoplay()
                         // Apply user-configured backoff so the user lands
                         // a bit BEFORE the saved position for context.
                         val backoffSec = runCatching {
@@ -637,9 +667,7 @@ class PlaybackSessionCoordinator @Inject constructor(
                             branch = "cold-start", reason = "spotify superseded by user play → skip"
                         )
                     } else {
-                    val autoplay = runCatching {
-                        settingsDataStore.autoplayOnLaunch.first()
-                    }.getOrDefault(false)
+                    val autoplay = resolveLaunchAutoplay()
                     // Provisional mirror UP-FRONT: without it the Connect
                     // playback started but the Player tab stayed blank
                     // (isSpotifyActive=false → empty state) because the

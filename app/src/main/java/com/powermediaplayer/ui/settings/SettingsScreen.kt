@@ -158,7 +158,12 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.setAudioBufferLowLatency(it) }
                 )
                 SettingsToggleItem("Resume on Bluetooth connect",
-                    "Auto-resume the last track when a BT audio device reconnects.",
+                    "Auto-resume the last track when a BT audio device reconnects. " +
+                        "Also decides auto-play when the app launches WHILE a " +
+                        "Bluetooth audio device is connected. When you're NOT on " +
+                        "Bluetooth, 'Auto-play on launch' applies instead — the two " +
+                        "are independent and only one acts at a time (casting counts " +
+                        "as not-on-Bluetooth).",
                     Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
                 SliderRow("Bookmark replay context", "${uiState.bookmarkReplayContextSec} s",
                     uiState.bookmarkReplayContextSec.toFloat(), 0f..30f,
@@ -187,6 +192,9 @@ fun SettingsScreen(
                         description = "Start playing the moment the app opens, " +
                             "from where you left off — whether the app was " +
                             "fully closed or still paused in the status bar. " +
+                            "Applies when NOT connected to a Bluetooth audio " +
+                            "device (casting included); when you ARE on Bluetooth, " +
+                            "'Resume on Bluetooth connect' decides instead. " +
                             "Off by default so opening the app never makes " +
                             "unexpected sound.",
                         icon = Icons.Filled.PlayArrow,
