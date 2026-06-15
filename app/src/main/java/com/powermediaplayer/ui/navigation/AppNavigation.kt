@@ -3,19 +3,10 @@ package com.powermediaplayer.ui.navigation
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
@@ -64,10 +55,11 @@ private val screens = listOf(
     Screen.Cloud, Screen.Equalizer, Screen.Settings
 )
 
-/** Height of the immersive-video app-tab BOTTOM bar (compact/folded widths),
- *  excluding the system nav inset (the bar adds that itself). The transport
- *  stack reserves this much bottom space while shown so they never collide. */
-internal val ImmersiveVideoTabBarHeight = 56.dp
+/** Height of the immersive-video app-tab BOTTOM bar (compact/folded widths) —
+ *  the Material3 NavigationBar content height, excluding the system nav inset
+ *  (the bar adds that itself). The transport stack reserves this much bottom
+ *  space while shown so they never collide. */
+internal val ImmersiveVideoTabBarHeight = 80.dp
 
 /** Width of the immersive-video app-tab SIDE rail (expanded/unfolded widths),
  *  matching the app's normal NavigationRail placement. The transport stack
@@ -293,6 +285,11 @@ private fun ImmersiveVideoTabOverlay(
     modifier: Modifier = Modifier,
     onNavigate: (String) -> Unit
 ) {
+    // Reuse the REAL Material3 nav components with the SAME colours as the
+    // app-wide NavigationSuiteScaffold so the immersive overlay is visually
+    // identical to the rail/bar shown on every other tab (top-aligned items,
+    // icon + label, teal selected) — not a bespoke icon strip. They handle
+    // their own system-bar insets, exactly like the normal scaffold.
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
@@ -300,50 +297,52 @@ private fun ImmersiveVideoTabOverlay(
         exit = fadeOut()
     ) {
         if (useRail) {
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(ImmersiveVideoRailWidth)
-                    .background(OledBlack.copy(alpha = 0.92f))
-                    .statusBarsPadding()
-                    .navigationBarsPadding(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+            NavigationRail(
+                modifier = Modifier.fillMaxHeight(),
+                containerColor = OledBlack
             ) {
                 screens.forEach { screen ->
-                    ImmersiveTabIcon(screen, currentDestination, onNavigate)
+                    val selected =
+                        currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                    NavigationRailItem(
+                        selected = selected,
+                        onClick = { onNavigate(screen.route) },
+                        icon = { Icon(screen.icon, contentDescription = screen.title) },
+                        label = {
+                            Text(screen.title, style = MaterialTheme.typography.labelSmall)
+                        },
+                        colors = NavigationRailItemDefaults.colors(
+                            selectedIconColor = TealAccent,
+                            selectedTextColor = TealAccent,
+                            unselectedIconColor = DisabledGrey,
+                            unselectedTextColor = DisabledGrey,
+                            indicatorColor = OledBlack
+                        )
+                    )
                 }
             }
         } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(OledBlack.copy(alpha = 0.92f))
-                    .navigationBarsPadding()
-                    .height(ImmersiveVideoTabBarHeight),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            NavigationBar(containerColor = OledBlack) {
                 screens.forEach { screen ->
-                    ImmersiveTabIcon(screen, currentDestination, onNavigate)
+                    val selected =
+                        currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = { onNavigate(screen.route) },
+                        icon = { Icon(screen.icon, contentDescription = screen.title) },
+                        label = {
+                            Text(screen.title, style = MaterialTheme.typography.labelSmall)
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = TealAccent,
+                            selectedTextColor = TealAccent,
+                            unselectedIconColor = DisabledGrey,
+                            unselectedTextColor = DisabledGrey,
+                            indicatorColor = OledBlack
+                        )
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ImmersiveTabIcon(
-    screen: Screen,
-    currentDestination: NavDestination?,
-    onNavigate: (String) -> Unit
-) {
-    val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-    IconButton(onClick = { onNavigate(screen.route) }) {
-        Icon(
-            imageVector = screen.icon,
-            contentDescription = screen.title,
-            tint = if (selected) TealAccent else DisabledGrey
-        )
     }
 }
