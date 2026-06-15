@@ -37,6 +37,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -623,17 +624,24 @@ class PlaybackService : MediaSessionService() {
             ) { a, b -> a + b }.collect { audioDelayFlag = it }
         }
         // Cast A/V offset — separate from the local AudioDelayProcessor sum
-        // above. On change (while the local-video-during-cast feature is
-        // active) re-align the on-phone picture to the cast audio position +
-        // offset. Event-driven (no polling loop → no jittery seeking).
+        // above. The flag updates IMMEDIATELY (so the cast listener uses the
+        // latest value)…
         serviceScope.launch {
-            settingsDataStore.castVideoAudioOffsetMs.collect { off ->
-                castVideoAudioOffsetMsFlag = off
-                if (castLocalVideoActive) {
-                    val basePos = castPlayer?.currentPosition ?: player?.currentPosition ?: 0L
-                    runCatching { player?.seekTo((basePos + off).coerceAtLeast(0L)) }
+            settingsDataStore.castVideoAudioOffsetMs.collect { castVideoAudioOffsetMsFlag = it }
+        }
+        // …but the on-phone picture is re-seeked only AFTER the slider settles
+        // (debounce). Seeking on every drag tick flooded the local player with
+        // seeks — jittery rendering + file-read thrashing that starved the
+        // cast relay.
+        serviceScope.launch {
+            settingsDataStore.castVideoAudioOffsetMs
+                .debounce(350)
+                .collect { off ->
+                    if (castLocalVideoActive) {
+                        val basePos = castPlayer?.currentPosition ?: player?.currentPosition ?: 0L
+                        runCatching { player?.seekTo((basePos + off).coerceAtLeast(0L)) }
+                    }
                 }
-            }
         }
         // Low-latency audio buffer flag — re-read by the
         // AudioTrackBufferSizeProvider on every AudioTrack init.
@@ -1466,8 +1474,23 @@ class PlaybackService : MediaSessionService() {
             // video never jitters (the old per-second seek loop caused the
             // "A-B loop" regression).
             cp.addListener(object : Player.Listener {
-                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
-                    if (castLocalVideoActive) runCatching { player?.playWhenReady = playWhenReady }
+                // Mirror the cast's ACTUAL playing state (not just playWhenReady,
+                // which is true while the cast is still buffering). When the
+                // cast truly starts (post-buffer), align the local picture to
+                // the real cast position + offset, then play it — this corrects
+                // the big head-start the local picture builds while the cast
+                // buffers the file. When the cast pauses/buffers, pause local.
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    if (!castLocalVideoActive) return
+                    val lp = player ?: return
+                    if (isPlaying) {
+                        runCatching {
+                            lp.seekTo((cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L))
+                            lp.playWhenReady = true
+                        }
+                    } else {
+                        runCatching { lp.playWhenReady = false }
+                    }
                 }
                 override fun onPositionDiscontinuity(
                     oldPosition: Player.PositionInfo,
@@ -2053,10 +2076,13 @@ class PlaybackService : MediaSessionService() {
         if (keepLocalVideo) {
             // Audio → audio-only cast device; KEEP the local player decoding
             // the picture on the phone, muted via the factor system (so the
-            // crossfade tick can't un-mute it). Both players start aligned
-            // (the cast gets currentPosition below); the cast Player.Listener
-            // mirrors play/pause + seeks — no polling loop.
+            // crossfade tick can't un-mute it). PAUSE it until the cast device
+            // actually starts (cast Player.Listener.onIsPlayingChanged) — this
+            // frees the phone's file-read + decode for the relay so the cast
+            // starts sooner, and stops the picture racing ahead of the
+            // buffering cast. It resumes ALIGNED to the real cast position.
             Companion.setCastLocalVideoMute(true)
+            runCatching { (current as ExoPlayer).playWhenReady = false }
             castLocalVideoActive = true
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
