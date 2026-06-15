@@ -273,6 +273,13 @@ class PlaybackService : MediaSessionService() {
 
         fun getExoPlayer(): ExoPlayer? = exoPlayerRef?.get()
 
+        // True while the local player is kept alive ONLY to show the picture
+        // during an audio-only cast. The Player UI reads this to suppress the
+        // "nothing's playing yet" empty state (the picture IS playing locally,
+        // even though the SESSION player is the audio-only CastPlayer).
+        val castLocalVideoActiveFlow =
+            kotlinx.coroutines.flow.MutableStateFlow(false)
+
         // ── Volume mixer ────────────────────────────────────────────
         // ExoPlayer.volume is multiplexed between two independent
         // sources: ReplayGain attenuation (negative track-gain values)
@@ -1978,6 +1985,7 @@ class PlaybackService : MediaSessionService() {
         // clear the active flag); re-enabled below if the new switch qualifies.
         castLocalVideoActive = false
         castInitialSyncDone = false
+        Companion.castLocalVideoActiveFlow.value = false
         Companion.setCastLocalVideoMute(false)
         // Cast local-video: ONLY when casting a VIDEO item to an AUDIO-ONLY
         // device do we keep the local picture alive. Every other case (audio
@@ -2102,6 +2110,7 @@ class PlaybackService : MediaSessionService() {
             Companion.setCastLocalVideoMute(true)
             runCatching { (current as ExoPlayer).playWhenReady = false }
             castLocalVideoActive = true
+            Companion.castLocalVideoActiveFlow.value = true
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
                 "Cast to AUDIO-ONLY device + video → keep local muted picture on phone (event-sync)"

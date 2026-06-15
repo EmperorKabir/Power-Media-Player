@@ -131,9 +131,16 @@ fun PlayerScreen(
     // LOCAL player is empty — without this gate the Player tab said
     // "Nothing's playing yet" while the mini-bar (which keys off the
     // overlaid title) correctly offered the Spotify track.
+    // Casting a video to an audio-only device keeps the PICTURE playing on
+    // this screen via the local player, even though the SESSION player is the
+    // audio-only CastPlayer (which can briefly read as "no media"). Suppress
+    // the empty state in that case so "nothing's playing yet" doesn't flash
+    // over the playing picture.
+    val castingLocalVideo by com.powermediaplayer.service.PlaybackService
+        .castLocalVideoActiveFlow.collectAsStateWithLifecycle()
     val showEmptyState = !uiState.hasMedia && !uiState.isLoading &&
         !uiState.cloudFetchInProgress && !uiState.isVideoContent &&
-        !uiState.isSpotifyActive
+        !uiState.isSpotifyActive && !castingLocalVideo
 
     // Audit 8.1 (F6) — Expanded width always two-pane; Medium two-pane
     // only in landscape (a portrait unfolded-fold stays single column).

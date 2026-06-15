@@ -100,43 +100,57 @@ open class CastRelayServer(
 
     private fun serveLocal(item: RelayItem.Local, rangeHeader: String?): Response {
         val resolver = context.contentResolver
-        val totalLength: Long = runCatching {
-            resolver.openAssetFileDescriptor(item.uri, "r")?.use { it.length }
-                ?: -1L
-        }.getOrDefault(-1L)
-        val (start, end) = parseRange(rangeHeader, totalLength)
-        val input = resolver.openInputStream(item.uri)
+        // Open a SEEKABLE file descriptor. A Range request to a large offset
+        // (e.g. the moov atom at the END of a multi-GB MP4 — the receiver asks
+        // for it first) is then served by an INSTANT lseek via the file
+        // channel, instead of read-and-discarding gigabytes through skip()
+        // (which caused the 20-30s cast start + starved the receiver into
+        // constant buffering on big files).
+        val pfd = resolver.openFileDescriptor(item.uri, "r")
             ?: run {
-                Diag.w("PMP_DIAG", "CastRelay Local 404: openInputStream null uri=${item.uri}")
-                return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "no stream")
+                Diag.w("PMP_DIAG", "CastRelay Local 404: openFileDescriptor null uri=${item.uri}")
+                return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "no fd")
             }
+        val totalLength: Long = runCatching { pfd.statSize }.getOrDefault(-1L)
+        val (start, end) = parseRange(rangeHeader, totalLength)
+        val fis = java.io.FileInputStream(pfd.fileDescriptor)
         val contentLength = if (end >= 0 && totalLength > 0) (end - start + 1) else -1L
         val status = if (rangeHeader != null && totalLength > 0)
             Response.Status.PARTIAL_CONTENT else Response.Status.OK
         // NanoHTTPD owns the stream only once it's wrapped in a Response;
-        // a throw before that (skipFully on a dying SAF provider) must
-        // close it here or the fd leaks per failed request.
+        // a throw before that must close the fd here or it leaks per request.
         val resp = try {
-            if (start > 0) input.skipFully(start)
+            if (start > 0) {
+                // True random-access seek (instant). Fall back to read-skip
+                // only if the fd somehow isn't seekable (non-file provider).
+                runCatching { fis.channel.position(start) }.getOrElse { fis.skipFully(start) }
+            }
+            // Close the underlying ParcelFileDescriptor when NanoHTTPD closes
+            // the served stream — otherwise the fd leaks per request.
+            val served = object : java.io.FilterInputStream(fis) {
+                override fun close() {
+                    runCatching { super.close() }
+                    runCatching { pfd.close() }
+                }
+            }
             if (contentLength > 0) {
-                newFixedLengthResponse(status, item.mimeType, input, contentLength)
+                newFixedLengthResponse(status, item.mimeType, served, contentLength)
             } else {
-                newChunkedResponse(status, item.mimeType, input)
+                newChunkedResponse(status, item.mimeType, served)
             }
         } catch (t: Throwable) {
-            runCatching { input.close() }
+            runCatching { fis.close() }
+            runCatching { pfd.close() }
             throw t
         }
         if (rangeHeader != null && totalLength > 0) {
             resp.addHeader("Content-Range", "bytes $start-${if (end >= 0) end else totalLength - 1}/$totalLength")
             resp.addHeader("Accept-Ranges", "bytes")
         }
-        // §Phase 11 Task 11.1: log every Local response so the cast bug
-        // bisect can correlate sender outgoing → receiver loadMedia.
         Diag.d(
             "PMP_DIAG",
             "CastRelay Local response status=$status mime=${item.mimeType} " +
-                "contentLength=$contentLength range=${start}-${end} total=$totalLength"
+                "contentLength=$contentLength range=${start}-${end} total=$totalLength seek=lseek"
         )
         return resp
     }
