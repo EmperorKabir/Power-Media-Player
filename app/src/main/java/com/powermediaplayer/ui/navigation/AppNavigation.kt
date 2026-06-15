@@ -196,7 +196,16 @@ fun AppNavigation(
         ) {
         NavHost(
             navController = navController,
-            startDestination = Screen.Player.route
+            startDestination = Screen.Player.route,
+            // T294 — the default NavHost cross-fade blends the outgoing tab and
+            // the incoming Player together for ~0.5s; on a video return the
+            // Library list fades out UNDER the Player controls while the video
+            // is still black, which reads as the "flicker/refresh". Instant
+            // swaps (no enter/exit/pop transition) remove that blend.
+            enterTransition = { androidx.compose.animation.EnterTransition.None },
+            exitTransition = { androidx.compose.animation.ExitTransition.None },
+            popEnterTransition = { androidx.compose.animation.EnterTransition.None },
+            popExitTransition = { androidx.compose.animation.ExitTransition.None }
         ) {
             composable(Screen.Player.route) {
                 PlayerScreen(
