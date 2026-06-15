@@ -209,6 +209,17 @@ fun AppNavigation(
                 .fillMaxSize()
                 .weight(1f)
         ) {
+        // ONE hoisted video surface for the whole app. Mounted OUTSIDE the
+        // NavHost (here, FIRST child) so a tab switch never disposes it — the
+        // TextureView/codec stays attached, killing the 1-frame black flash on
+        // returning to the Player tab. Player route → fills behind NavHost
+        // (zIndex 0, shown through PlayerScreen's transparent hole); other tabs
+        // → draggable in-app PiP (zIndex 2). Replaces FloatingVideoMiniPlayer.
+        com.powermediaplayer.ui.components.HoistedVideoStage(
+            isPlayerRoute = isPlayerRoute,
+            adaptive = com.powermediaplayer.ui.adaptive.rememberAdaptiveInfo(windowSizeClass),
+            onExpand = navigateToPlayer
+        )
         NavHost(
             navController = navController,
             startDestination = Screen.Player.route,
@@ -248,15 +259,9 @@ fun AppNavigation(
                 SettingsScreen(windowSizeClass = windowSizeClass)
             }
         }
-        // In-app picture-in-picture: keep the video visible while the
-        // user browses other tabs. Hidden on the Player tab (the full
-        // surface owns the video there); system PiP on leaving the app
-        // is unchanged (MainActivity's PiP branch).
-        if (!isPlayerRoute) {
-            com.powermediaplayer.ui.components.FloatingVideoMiniPlayer(
-                onExpand = navigateToPlayer
-            )
-        }
+        // (In-app picture-in-picture is now provided by HoistedVideoStage
+        // above — the same single video surface, repositioned by route, so a
+        // tab switch never recreates it.)
         }
         // MiniPlayerBar — every non-Player tab; spans the CONTENT width
         // so it sits beside the rail on wide layouts rather than under it.

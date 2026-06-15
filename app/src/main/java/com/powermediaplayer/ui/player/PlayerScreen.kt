@@ -574,14 +574,11 @@ private fun PlayerScreenCompact(
             )
         } else {
         if (uiState.isVideoContent) {
-            // Video content: render the actual video frames
-            // VideoSurface attaches directly to the ExoPlayer in PlaybackService
-            VideoSurface(
-                isVideoContent = true,
-                videoWidth = uiState.videoWidth,
-                videoHeight = uiState.videoHeight,
-                modifier = Modifier.fillMaxSize()
-            )
+            // Video content: the picture is drawn by the single hoisted video
+            // surface in AppNavigation (HoistedVideoStage), which sits BEHIND
+            // this destination. This is a transparent hole so that surface
+            // shows through — never recreating the TextureView on tab return.
+            Box(modifier = Modifier.fillMaxSize())
             // Tap the picture to TOGGLE the controls (show when hidden,
             // hide immediately when shown — overriding, but not removing,
             // the auto-hide timer). Sits above the video, below
@@ -700,9 +697,12 @@ private fun TabletopVideoLayout(
     val hingeGapDp =
         if (hinge != null) with(density) { (hinge.bottom - hinge.top).toDp() } else 0.dp
     Column(
+        // No opaque background here: the top-leaf is a transparent hole so the
+        // hoisted video surface (behind this destination) shows through. The
+        // hinge gap paints its own black and the OledBlack scaffold shows
+        // behind the bottom leaf's scrim, so the rest still reads black.
         modifier = Modifier
             .fillMaxSize()
-            .background(OledBlack)
     ) {
         // Top leaf — video, frame bottom edge resting on the hinge.
         Box(
@@ -710,12 +710,10 @@ private fun TabletopVideoLayout(
                 .fillMaxWidth()
                 .height(topLeafDp)
         ) {
-            VideoSurface(
-                isVideoContent = true,
-                videoWidth = uiState.videoWidth,
-                videoHeight = uiState.videoHeight,
-                modifier = Modifier.fillMaxSize()
-            )
+            // Transparent hole — the actual picture is drawn in the top leaf by
+            // the single hoisted video surface (HoistedVideoStage) behind this
+            // destination, pinned to the same topLeafDp on tabletop posture.
+            Box(modifier = Modifier.fillMaxSize())
         }
         // Physical hinge gap.
         if (hingeGapDp > 0.dp) {
