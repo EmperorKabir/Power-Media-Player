@@ -137,6 +137,9 @@ class PlaybackService : MediaSessionService() {
 
     @Volatile
     private var audioDelayFlag: Int = 0
+    // BT video offset in µs (positive = delay the picture). Read live per frame
+    // by OffsetVideoRenderer to compensate late Bluetooth-speaker audio.
+    @Volatile private var btVideoOffsetUsFlag: Long = 0L
     /**
      * Subtitle delay in ms. Read by [com.powermediaplayer.subtitles
      * .ShiftingSubtitleParserFactory] at parse-time and applied as a
@@ -636,6 +639,43 @@ class PlaybackService : MediaSessionService() {
                     )
                     .build()
             }
+
+            // Inject the offset-aware video renderer so the BT video offset can
+            // hold the picture back to match late Bluetooth audio. Default
+            // renderers are still added (fallback / extension decoders); ours is
+            // inserted FIRST so it handles standard video. At offset 0 it is
+            // byte-for-byte the default, so normal playback is unaffected.
+            override fun buildVideoRenderers(
+                context: android.content.Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: androidx.media3.exoplayer.mediacodec.MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                eventHandler: android.os.Handler,
+                eventListener: androidx.media3.exoplayer.video.VideoRendererEventListener,
+                allowedVideoJoiningTimeMs: Long,
+                out: ArrayList<androidx.media3.exoplayer.Renderer>
+            ) {
+                super.buildVideoRenderers(
+                    context, extensionRendererMode, mediaCodecSelector,
+                    enableDecoderFallback, eventHandler, eventListener,
+                    allowedVideoJoiningTimeMs, out
+                )
+                runCatching {
+                    out.add(
+                        0,
+                        OffsetVideoRenderer(
+                            androidx.media3.exoplayer.video.MediaCodecVideoRenderer.Builder(context)
+                                .setCodecAdapterFactory(codecAdapterFactory)
+                                .setMediaCodecSelector(mediaCodecSelector)
+                                .setAllowedJoiningTimeMs(allowedVideoJoiningTimeMs)
+                                .setEnableDecoderFallback(enableDecoderFallback)
+                                .setEventHandler(eventHandler)
+                                .setEventListener(eventListener)
+                                .setMaxDroppedFramesToNotify(50)
+                        ) { btVideoOffsetUsFlag }
+                    )
+                }
+            }
         }.setExtensionRendererMode(rendererMode)
 
         // Watch the stereo flip / mono mix prefs from DataStore and
@@ -656,14 +696,19 @@ class PlaybackService : MediaSessionService() {
         }
         // Audio delay slider — lives in the AudioDelayProcessor's
         // ring buffer; the supplier reads this @Volatile per buffer.
+        // Audio-delay slider ONLY feeds the audio processor now. The BT video
+        // offset moved to the VIDEO renderer (OffsetVideoRenderer): for late
+        // Bluetooth audio you must delay the VIDEO — delaying the audio (the
+        // old summed behaviour) pushed it later still (worse) and negatives
+        // were clamped to 0, so the slider "did nothing". Now SEPARATE: audio
+        // delay → audio, BT offset → video.
         serviceScope.launch {
-            // Sum of the manual audio-delay slider AND the BT video
-            // audio-offset slider. Both feed the same processor so users
-            // can stack them without surprises.
-            kotlinx.coroutines.flow.combine(
-                settingsDataStore.audioDelayMs,
-                settingsDataStore.btVideoAudioOffsetMs
-            ) { a, b -> a + b }.collect { audioDelayFlag = it }
+            settingsDataStore.audioDelayMs.collect { audioDelayFlag = it }
+        }
+        // BT video offset → delay the VIDEO frames (positive = hold the picture
+        // back to match late BT audio). Read live per frame by OffsetVideoRenderer.
+        serviceScope.launch {
+            settingsDataStore.btVideoAudioOffsetMs.collect { btVideoOffsetUsFlag = it * 1000L }
         }
         // Cast A/V offset — separate from the local AudioDelayProcessor sum
         // above. The flag updates IMMEDIATELY (so the cast listener uses the
