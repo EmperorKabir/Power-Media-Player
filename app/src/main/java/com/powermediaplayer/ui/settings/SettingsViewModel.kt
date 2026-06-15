@@ -78,6 +78,7 @@ data class SettingsUiState(
     val fontSizeScale: Float = 1.0f,
     val diagLogEnabled: Boolean = false,
     val btVideoAudioOffsetMs: Int = 0,
+    val castVideoAudioOffsetMs: Int = 0,
     val reverbWetMix: Float = 1.0f,
     val audioBufferLowLatency: Boolean = false,
     val webhookUrl: String = "",
@@ -201,7 +202,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.hueBridgeIp,
             settingsDataStore.hueAppKey,
             settingsDataStore.restoreLastOnLaunch,
-            settingsDataStore.autoplayOnLaunch
+            settingsDataStore.autoplayOnLaunch,
+            settingsDataStore.castVideoAudioOffsetMs
         )
     ) { v ->
         SettingsUiState(
@@ -279,7 +281,8 @@ class SettingsViewModel @Inject constructor(
             hueBridgeIp = v[71] as String,
             hueAppKey = v[72] as String,
             restoreLastOnLaunch = v[73] as Boolean,
-            autoplayOnLaunch = v[74] as Boolean
+            autoplayOnLaunch = v[74] as Boolean,
+            castVideoAudioOffsetMs = v[75] as Int
         )
     }
         // vc29.26 — drop duplicate emissions + conflate rapid bursts.
@@ -311,6 +314,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setBtVideoAudioOffsetMs(value: Int) {
         viewModelScope.launch { settingsDataStore.setBtVideoAudioOffsetMs(value) }
+    }
+
+    fun setCastVideoAudioOffsetMs(value: Int) {
+        viewModelScope.launch { settingsDataStore.setCastVideoAudioOffsetMs(value) }
     }
 
     fun setReverbWetMix(value: Float) {

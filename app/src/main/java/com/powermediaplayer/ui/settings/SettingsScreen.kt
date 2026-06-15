@@ -348,6 +348,16 @@ fun SettingsScreen(
                     valueMs = uiState.btVideoAudioOffsetMs,
                     onValueChange = { viewModel.setBtVideoAudioOffsetMs(it) }
                 )
+            },
+            SettingsItem(
+                "cast-av-offset", "Cast A/V sync offset",
+                listOf("cast", "chromecast", "offset", "sync", "delay", "lip",
+                    "latency", "video", "audio", "speaker", "google home")
+            ) {
+                CastVideoAudioOffsetRow(
+                    valueMs = uiState.castVideoAudioOffsetMs,
+                    onValueChange = { viewModel.setCastVideoAudioOffsetMs(it) }
+                )
             }
         )),
         // 5 — Audio
@@ -1682,6 +1692,45 @@ fun BtVideoAudioOffsetRow(
             text = "If watching video over Bluetooth speakers / headphones, " +
                 "lip-sync may drift because Bluetooth adds latency. Slide " +
                 "right to delay the video (most common). Range ±1 second.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary
+        )
+        ResetSliderRow(
+            label = "Offset",
+            value = valueMs.toFloat(),
+            default = 0f,
+            valueRange = -1000f..1000f,
+            steps = 199, // 10 ms increments
+            valueLabel = "${valueMs} ms",
+            onValueChange = { onValueChange(it.toInt()) }
+        )
+    }
+}
+
+/**
+ * Cast audio-video offset slider — the counterpart to
+ * [BtVideoAudioOffsetRow] for the local-video-while-casting feature. When
+ * casting audio to an audio-only device the picture keeps playing on the
+ * phone; this nudges the on-phone video vs the cast audio so lip-sync is
+ * right per device/room. INDEPENDENT of the Bluetooth offset. ±1000 ms,
+ * 10 ms steps, default 0. Same stored value as the Cast button popup slider.
+ */
+@Composable
+fun CastVideoAudioOffsetRow(
+    valueMs: Int,
+    onValueChange: (Int) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Text(
+            text = "Cast video audio offset",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Text(
+            text = "When casting audio to a speaker, the video keeps playing " +
+                "on your phone. If the picture leads or lags the cast audio, " +
+                "slide to nudge it into sync. Independent of the Bluetooth " +
+                "offset. Range ±1 second.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
         )

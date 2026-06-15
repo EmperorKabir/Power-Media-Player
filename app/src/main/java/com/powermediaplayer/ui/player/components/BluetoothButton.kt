@@ -19,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.powermediaplayer.ui.settings.SettingsViewModel
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.util.BluetoothDeviceInfo
 import com.powermediaplayer.util.BluetoothHelper
@@ -37,8 +40,12 @@ import com.powermediaplayer.util.BluetoothHelper
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BluetoothButton(modifier: Modifier = Modifier) {
+fun BluetoothButton(
+    modifier: Modifier = Modifier,
+    settingsVm: SettingsViewModel = hiltViewModel()
+) {
     val context = LocalContext.current
+    val settings by settingsVm.uiState.collectAsStateWithLifecycle()
     var sheetOpen by remember { mutableStateOf(false) }
     var enabledState by remember { mutableStateOf(BluetoothHelper.isEnabled(context)) }
     var permissionGranted by remember { mutableStateOf(BluetoothHelper.hasConnectPermission(context)) }
@@ -116,6 +123,8 @@ fun BluetoothButton(modifier: Modifier = Modifier) {
             BluetoothSheetContent(
                 isEnabled = enabledState,
                 hasPermission = permissionGranted,
+                offsetMs = settings.btVideoAudioOffsetMs,
+                onOffsetChange = { settingsVm.setBtVideoAudioOffsetMs(it) },
                 onRequestPermission = {
                     permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
                 },
@@ -134,6 +143,8 @@ fun BluetoothButton(modifier: Modifier = Modifier) {
 private fun BluetoothSheetContent(
     isEnabled: Boolean,
     hasPermission: Boolean,
+    offsetMs: Int,
+    onOffsetChange: (Int) -> Unit,
     onRequestPermission: () -> Unit,
     onEnable: () -> Unit,
     onOpenSettings: () -> Unit
@@ -166,6 +177,22 @@ private fun BluetoothSheetContent(
             style = MaterialTheme.typography.titleLarge,
             color = TealAccent
         )
+        Spacer(Modifier.height(12.dp))
+
+        // ── Video / audio sync offset ────────────────────────────
+        // Same stored value as Settings → "Bluetooth video audio offset",
+        // so adjusting it here moves the Settings slider and vice-versa.
+        // Shown regardless of BT permission — it's a playback tuning.
+        AvSyncOffsetControl(
+            title = "Video / audio sync offset",
+            description = "Bluetooth adds audio latency, so lip-sync can " +
+                "drift when watching video over a BT speaker / headphones. " +
+                "Slide right to delay the video to match. Range ±1 second.",
+            offsetMs = offsetMs,
+            onOffsetChange = onOffsetChange
+        )
+        Spacer(Modifier.height(12.dp))
+        HorizontalDivider(color = DisabledContent)
         Spacer(Modifier.height(12.dp))
 
         if (!hasPermission) {

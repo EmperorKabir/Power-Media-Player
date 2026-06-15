@@ -33,6 +33,11 @@ class SettingsDataStore @Inject constructor(
         val FONT_SIZE_SCALE = floatPreferencesKey("font_size_scale")
         val DIAG_LOG_ENABLED = booleanPreferencesKey("diag_log_enabled")
         val BT_VIDEO_AUDIO_OFFSET_MS = intPreferencesKey("bt_video_audio_offset_ms")
+        // Cast audio offset — INDEPENDENT of the BT offset. Applies ONLY to
+        // the local-video-while-casting sync loop (shifts the on-phone video's
+        // target position vs the cast audio) so the user can dial lip-sync per
+        // device/room. ±1000 ms, default 0.
+        val CAST_VIDEO_AUDIO_OFFSET_MS = intPreferencesKey("cast_video_audio_offset_ms")
         val REVERB_WET_MIX = floatPreferencesKey("reverb_wet_mix")
         // §C13 — per-paired-device EQ preset map. Set of "addr|presetId".
         // Address-keyed because device names aren't stable; the BT MAC
@@ -949,6 +954,21 @@ class SettingsDataStore @Inject constructor(
     suspend fun setBtVideoAudioOffsetMs(value: Int) {
         context.dataStore.edit { prefs ->
             prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] = value.coerceIn(-1000, 1000)
+        }
+    }
+
+    // Cast audio offset (INDEPENDENT of the BT offset). Shifts the on-phone
+    // video's target position vs the cast audio in PlaybackService's cast
+    // sync loop so the user can fine-tune lip-sync while watching locally and
+    // casting audio to an audio-only device. NOT routed through the local
+    // AudioDelayProcessor (that path is local/BT only). ±1000 ms, default 0.
+    val castVideoAudioOffsetMs: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[Keys.CAST_VIDEO_AUDIO_OFFSET_MS] ?: 0).coerceIn(-1000, 1000)
+    }
+
+    suspend fun setCastVideoAudioOffsetMs(value: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CAST_VIDEO_AUDIO_OFFSET_MS] = value.coerceIn(-1000, 1000)
         }
     }
 

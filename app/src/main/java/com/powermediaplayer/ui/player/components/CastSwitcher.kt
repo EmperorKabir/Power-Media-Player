@@ -49,6 +49,11 @@ import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
 import com.powermediaplayer.ui.theme.TextSecondary
 import com.powermediaplayer.ui.theme.TextTertiary
+import androidx.compose.material3.HorizontalDivider
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.powermediaplayer.ui.settings.SettingsViewModel
+import com.powermediaplayer.ui.theme.DisabledContent
 
 /**
  * Combined Cast button — always visible, replaces the previous pair
@@ -68,9 +73,11 @@ import com.powermediaplayer.ui.theme.TextTertiary
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CastSwitcherButton(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    settingsVm: SettingsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val settings by settingsVm.uiState.collectAsStateWithLifecycle()
     val router = remember { MediaRouter.getInstance(context) }
     val selector = remember {
         MediaRouteSelector.Builder()
@@ -186,6 +193,22 @@ fun CastSwitcherButton(
                         }
                     )
                 }
+                // ── Video / audio sync offset ────────────────────────
+                // Same stored value as Settings → "Cast video audio offset",
+                // so adjusting it here moves the Settings slider and vice-versa.
+                // Applies when watching video on the phone while casting the
+                // audio to an audio-only device.
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = DisabledContent)
+                Spacer(Modifier.height(12.dp))
+                AvSyncOffsetControl(
+                    title = "Video / audio sync offset",
+                    description = "When you cast audio to a speaker, the video " +
+                        "keeps playing on your phone. Nudge this if the picture " +
+                        "leads or lags the cast audio. Range ±1 second.",
+                    offsetMs = settings.castVideoAudioOffsetMs,
+                    onOffsetChange = { settingsVm.setCastVideoAudioOffsetMs(it) }
+                )
                 Spacer(Modifier.height(16.dp))
             }
         }

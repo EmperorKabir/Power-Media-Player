@@ -200,6 +200,11 @@ class PlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
+    // Cast local-video feature: when casting audio to an AUDIO-ONLY device,
+    // the local player keeps decoding the picture (muted) and this job keeps
+    // it synced to the cast audio position (+ the user's cast offset).
+    private var castLocalVideoSyncJob: kotlinx.coroutines.Job? = null
+    @Volatile private var castVideoAudioOffsetMsFlag: Int = 0
     // CastContext is process-static: a listener left registered pins this
     // service generation (and its released CastPlayer) until process death.
     private var castSessionListener:
@@ -598,6 +603,13 @@ class PlaybackService : MediaSessionService() {
                 settingsDataStore.audioDelayMs,
                 settingsDataStore.btVideoAudioOffsetMs
             ) { a, b -> a + b }.collect { audioDelayFlag = it }
+        }
+        // Cast A/V offset — read live by the cast-local-video sync loop. Kept
+        // SEPARATE from the local AudioDelayProcessor sum above (that path is
+        // local/BT only); this offset only shifts the on-phone video vs the
+        // cast audio.
+        serviceScope.launch {
+            settingsDataStore.castVideoAudioOffsetMs.collect { castVideoAudioOffsetMsFlag = it }
         }
         // Low-latency audio buffer flag — re-read by the
         // AudioTrackBufferSizeProvider on every AudioTrack init.
@@ -1861,6 +1873,15 @@ class PlaybackService : MediaSessionService() {
         val ms = mediaSession ?: return
         val current = ms.player
         if (current === target) return
+        // Any player switch cancels an in-flight cast-local-video sync and
+        // unmutes the local player (it may have been muted to keep the picture
+        // on the phone while audio cast to a speaker).
+        stopCastLocalVideoSync()
+        // Cast local-video: ONLY when casting a VIDEO item to an AUDIO-ONLY
+        // device do we keep the local picture alive. Every other case (audio
+        // cast, video-capable TV, non-video) takes the unchanged path below.
+        val keepLocalVideo = target is CastPlayer && current is ExoPlayer &&
+            current.isPlayingVideo() && isAudioOnlyCastDevice()
 
         val items = (0 until current.mediaItemCount).map { current.getMediaItemAt(it) }
         val currentIndex = current.currentMediaItemIndex
@@ -1968,7 +1989,17 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
-        current.stop()
+        if (keepLocalVideo) {
+            // Audio → audio-only cast device; KEEP the local player decoding
+            // the picture on the phone, MUTED, rather than stopping it.
+            runCatching { (current as ExoPlayer).volume = 0f }
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "Cast to AUDIO-ONLY device + video item → keep local muted video on phone"
+            )
+        } else {
+            current.stop()
+        }
         ms.player = target
         if (transformed.isNotEmpty()) {
             // CRASH FIX (NPE in DefaultMediaSourceFactory.createMediaSource):
@@ -1992,9 +2023,73 @@ class PlaybackService : MediaSessionService() {
         // Re-publish the active player reference for the video surface.
         if (target is ExoPlayer) {
             exoPlayerRef = java.lang.ref.WeakReference(target)
+        } else if (keepLocalVideo && current is ExoPlayer) {
+            // Cast audio + local muted video: keep the on-phone surface bound
+            // to the local player and drive its position from the cast audio.
+            exoPlayerRef = java.lang.ref.WeakReference(current)
+            startCastLocalVideoSync(current, target as CastPlayer)
         } else {
             exoPlayerRef = null
         }
+    }
+
+    /** True when the active cast session targets an AUDIO-ONLY device (no
+     *  video-out capability) — e.g. a Google Home / Nest speaker. Defaults to
+     *  false (the unchanged stop-local behaviour) when it can't be read. */
+    private fun isAudioOnlyCastDevice(): Boolean = runCatching {
+        val device = CastContext.getSharedInstance(this)
+            .sessionManager.currentCastSession?.castDevice ?: return false
+        !device.hasCapability(com.google.android.gms.cast.CastDevice.CAPABILITY_VIDEO_OUT)
+    }.getOrDefault(false)
+
+    /** True when the player currently has a video track (or a known video size). */
+    private fun Player.isPlayingVideo(): Boolean =
+        currentTracks.groups.any { it.type == androidx.media3.common.C.TRACK_TYPE_VIDEO } ||
+            videoSize.width > 0
+
+    /** Keep the muted local picture tracking the cast audio position (+ the
+     *  user's cast offset) on a 1 s cadence; correct only past a drift
+     *  threshold so the picture doesn't jitter. Best-effort — the cast offset
+     *  slider is the manual lip-sync fine-tune. */
+    private fun startCastLocalVideoSync(local: ExoPlayer, cast: CastPlayer) {
+        castLocalVideoSyncJob?.cancel()
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "Cast local-video sync STARTED (picture local + muted, audio on cast device)"
+        )
+        castLocalVideoSyncJob = serviceScope.launch {
+            while (true) {
+                runCatching {
+                    local.volume = 0f
+                    val offset = castVideoAudioOffsetMsFlag.toLong()
+                    val castIdx = cast.currentMediaItemIndex
+                    // Follow track changes initiated on the cast side.
+                    if (castIdx in 0 until local.mediaItemCount &&
+                        castIdx != local.currentMediaItemIndex
+                    ) {
+                        local.seekTo(castIdx, (cast.currentPosition + offset).coerceAtLeast(0L))
+                    }
+                    if (local.playWhenReady != cast.playWhenReady) {
+                        local.playWhenReady = cast.playWhenReady
+                    }
+                    val targetPos = cast.currentPosition + offset
+                    if (kotlin.math.abs(targetPos - local.currentPosition) > 400L) {
+                        local.seekTo(targetPos.coerceAtLeast(0L))
+                    }
+                }
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
+
+    private fun stopCastLocalVideoSync() {
+        if (castLocalVideoSyncJob != null) {
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cast local-video sync STOPPED")
+        }
+        castLocalVideoSyncJob?.cancel()
+        castLocalVideoSyncJob = null
+        // Unmute the local player (it may have been muted for the feature).
+        runCatching { player?.volume = 1f }
     }
 
     /**
