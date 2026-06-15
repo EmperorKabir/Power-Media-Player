@@ -89,8 +89,28 @@ fun VideoSurface(
     ) {
         if (!isVideoContent) return@Box
 
-        val aspectMod = if (videoWidth > 0 && videoHeight > 0) {
-            Modifier.aspectRatio(videoWidth.toFloat() / videoHeight.toFloat())
+        // Fall back to the RENDERING player's real video size when the caller
+        // passes 0 (audio-only cast: the session player is the CastPlayer,
+        // which reports 0×0, but the LOCAL player bound here has the real
+        // size) so the picture keeps its aspect ratio instead of stretching.
+        val fallbackSize = remember { androidx.compose.runtime.mutableStateOf(0 to 0) }
+        if (videoWidth <= 0 || videoHeight <= 0) {
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                val p = PlaybackService.getExoPlayer()
+                p?.videoSize?.let { fallbackSize.value = it.width to it.height }
+                val l = object : androidx.media3.common.Player.Listener {
+                    override fun onVideoSizeChanged(vs: androidx.media3.common.VideoSize) {
+                        fallbackSize.value = vs.width to vs.height
+                    }
+                }
+                p?.addListener(l)
+                onDispose { p?.removeListener(l) }
+            }
+        }
+        val effW = if (videoWidth > 0) videoWidth else fallbackSize.value.first
+        val effH = if (videoHeight > 0) videoHeight else fallbackSize.value.second
+        val aspectMod = if (effW > 0 && effH > 0) {
+            Modifier.aspectRatio(effW.toFloat() / effH.toFloat())
         } else {
             Modifier.fillMaxSize()
         }

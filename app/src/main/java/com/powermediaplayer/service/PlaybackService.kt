@@ -200,6 +200,12 @@ class PlaybackService : MediaSessionService() {
 
     private var player: ExoPlayer? = null
     private var castPlayer: CastPlayer? = null
+    // Cast local-video: true while the local player is kept alive ONLY to show
+    // the picture on the phone during an audio-only cast. Sync is EVENT-DRIVEN
+    // (mirror play/pause + seeks via a cast Player.Listener + an offset
+    // collector) — NO polling loop, so no jittery repeated seeking.
+    @Volatile private var castLocalVideoActive: Boolean = false
+    @Volatile private var castVideoAudioOffsetMsFlag: Int = 0
     // CastContext is process-static: a listener left registered pins this
     // service generation (and its released CastPlayer) until process death.
     private var castSessionListener:
@@ -270,6 +276,12 @@ class PlaybackService : MediaSessionService() {
         // avoids one source overwriting the other.
         @Volatile private var replayGainFactor: Float = 1.0f
         @Volatile private var crossfadeFactor: Float = 1.0f
+        // Cast local-video mute: 0 while the local player is kept alive ONLY
+        // to show the picture on the phone (audio is on the cast device). A
+        // THIRD factor — not a direct player.volume write — so the crossfade
+        // tick (which re-asserts replayGain×crossfade every 100ms) can't
+        // un-mute it. 1.0 in every normal case.
+        @Volatile private var castLocalVideoMuteFactor: Float = 1.0f
 
         /** §B5 — last auto-revert reason (null when not active). */
         /** Push-based: the UI used to POLL a static holder for this at
@@ -405,9 +417,20 @@ class PlaybackService : MediaSessionService() {
          *  setVolume calls. */
         internal fun crossfadeFactorRead(): Float = crossfadeFactor
 
+        /** Mute (0) / unmute (1) the local player WITHOUT a direct volume
+         *  write — used while the local player only shows the picture during
+         *  an audio-only cast. The crossfade tick re-asserts volume via
+         *  applyMixedVolume, which multiplies this factor in, so the mute
+         *  sticks. */
+        internal fun setCastLocalVideoMute(mute: Boolean) {
+            castLocalVideoMuteFactor = if (mute) 0.0f else 1.0f
+            applyMixedVolume()
+        }
+
         private fun applyMixedVolume() {
             val p = getExoPlayer() ?: return
-            val v = (replayGainFactor * crossfadeFactor).coerceIn(0.0f, 1.0f)
+            val v = (replayGainFactor * crossfadeFactor * castLocalVideoMuteFactor)
+                .coerceIn(0.0f, 1.0f)
             // ExoPlayer.volume is main-thread-only; post if needed.
             if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
                 runCatching { p.volume = v }
@@ -598,6 +621,19 @@ class PlaybackService : MediaSessionService() {
                 settingsDataStore.audioDelayMs,
                 settingsDataStore.btVideoAudioOffsetMs
             ) { a, b -> a + b }.collect { audioDelayFlag = it }
+        }
+        // Cast A/V offset — separate from the local AudioDelayProcessor sum
+        // above. On change (while the local-video-during-cast feature is
+        // active) re-align the on-phone picture to the cast audio position +
+        // offset. Event-driven (no polling loop → no jittery seeking).
+        serviceScope.launch {
+            settingsDataStore.castVideoAudioOffsetMs.collect { off ->
+                castVideoAudioOffsetMsFlag = off
+                if (castLocalVideoActive) {
+                    val basePos = castPlayer?.currentPosition ?: player?.currentPosition ?: 0L
+                    runCatching { player?.seekTo((basePos + off).coerceAtLeast(0L)) }
+                }
+            }
         }
         // Low-latency audio buffer flag — re-read by the
         // AudioTrackBufferSizeProvider on every AudioTrack init.
@@ -1423,6 +1459,43 @@ class PlaybackService : MediaSessionService() {
                     player?.let { switchPlayer(it) }
                 }
             })
+            // Cast local-video sync (EVENT-DRIVEN): while the picture is shown
+            // on the phone during an audio-only cast, mirror the cast's
+            // play/pause, user seeks, and track changes onto the local player.
+            // No polling loop — fires only on real cast events, so the local
+            // video never jitters (the old per-second seek loop caused the
+            // "A-B loop" regression).
+            cp.addListener(object : Player.Listener {
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (castLocalVideoActive) runCatching { player?.playWhenReady = playWhenReady }
+                }
+                override fun onPositionDiscontinuity(
+                    oldPosition: Player.PositionInfo,
+                    newPosition: Player.PositionInfo,
+                    reason: Int
+                ) {
+                    if (castLocalVideoActive && reason == Player.DISCONTINUITY_REASON_SEEK) {
+                        val lp = player ?: return
+                        runCatching {
+                            lp.seekTo(
+                                cp.currentMediaItemIndex
+                                    .coerceIn(0, (lp.mediaItemCount - 1).coerceAtLeast(0)),
+                                (cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L)
+                            )
+                        }
+                    }
+                }
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    if (!castLocalVideoActive) return
+                    val lp = player ?: return
+                    val idx = cp.currentMediaItemIndex
+                    if (idx in 0 until lp.mediaItemCount) {
+                        runCatching {
+                            lp.seekTo(idx, (cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L))
+                        }
+                    }
+                }
+            })
             castPlayer = cp
 
             // Bug fix (user-reported "I cast to A, then to B; A keeps
@@ -1861,6 +1934,15 @@ class PlaybackService : MediaSessionService() {
         val ms = mediaSession ?: return
         val current = ms.player
         if (current === target) return
+        // Tear down any prior cast-local-video state on ANY switch (unmute +
+        // clear the active flag); re-enabled below if the new switch qualifies.
+        castLocalVideoActive = false
+        Companion.setCastLocalVideoMute(false)
+        // Cast local-video: ONLY when casting a VIDEO item to an AUDIO-ONLY
+        // device do we keep the local picture alive. Every other case (audio
+        // cast, video-capable TV, non-video) takes the unchanged stop path.
+        val keepLocalVideo = target is CastPlayer && current is ExoPlayer &&
+            current.isPlayingVideo() && isAudioOnlyCastDevice()
 
         val items = (0 until current.mediaItemCount).map { current.getMediaItemAt(it) }
         val currentIndex = current.currentMediaItemIndex
@@ -1968,7 +2050,21 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
-        current.stop()
+        if (keepLocalVideo) {
+            // Audio → audio-only cast device; KEEP the local player decoding
+            // the picture on the phone, muted via the factor system (so the
+            // crossfade tick can't un-mute it). Both players start aligned
+            // (the cast gets currentPosition below); the cast Player.Listener
+            // mirrors play/pause + seeks — no polling loop.
+            Companion.setCastLocalVideoMute(true)
+            castLocalVideoActive = true
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "Cast to AUDIO-ONLY device + video → keep local muted picture on phone (event-sync)"
+            )
+        } else {
+            current.stop()
+        }
         ms.player = target
         if (transformed.isNotEmpty()) {
             // CRASH FIX (NPE in DefaultMediaSourceFactory.createMediaSource):
@@ -1992,10 +2088,28 @@ class PlaybackService : MediaSessionService() {
         // Re-publish the active player reference for the video surface.
         if (target is ExoPlayer) {
             exoPlayerRef = java.lang.ref.WeakReference(target)
+        } else if (keepLocalVideo && current is ExoPlayer) {
+            // Keep the on-phone surface bound to the local (muted) player so it
+            // keeps drawing the picture while audio plays on the cast device.
+            exoPlayerRef = java.lang.ref.WeakReference(current)
         } else {
             exoPlayerRef = null
         }
     }
+
+    /** True when the active cast session targets an AUDIO-ONLY device (no
+     *  video-out capability) — e.g. a Google Home / Nest speaker. Defaults to
+     *  false (the unchanged stop-local behaviour) when it can't be read. */
+    private fun isAudioOnlyCastDevice(): Boolean = runCatching {
+        val device = CastContext.getSharedInstance(this)
+            .sessionManager.currentCastSession?.castDevice ?: return false
+        !device.hasCapability(com.google.android.gms.cast.CastDevice.CAPABILITY_VIDEO_OUT)
+    }.getOrDefault(false)
+
+    /** True when the player currently has a video track (or a known video size). */
+    private fun Player.isPlayingVideo(): Boolean =
+        currentTracks.groups.any { it.type == androidx.media3.common.C.TRACK_TYPE_VIDEO } ||
+            videoSize.width > 0
 
     /**
      * Cast relay (lazy-singleton). Started on first switch-to-CastPlayer,
