@@ -795,17 +795,34 @@ private fun OverlayContent(
     // overlay that floats above it. Audio keeps the root padding, so it adds
     // nothing here (would double-inset otherwise).
     val isVideoOverlay = uiState.isVideoContent
+    val immersiveCompactWidth =
+        androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     val topBarInset = if (isVideoOverlay) Modifier.statusBarsPadding() else Modifier
     val immersiveTabsShown =
         com.powermediaplayer.MainActivityHolder.videoControlsVisible.value
+    // Reserve space for the immersive tab overlay so the transport stack never
+    // sits under it: a BOTTOM bar on compact/folded widths → reserve bottom
+    // height; a SIDE rail on expanded/unfolded widths → reserve start width.
+    // Plus the system nav inset (root drops its padding while video is full-
+    // bleed). Audio keeps the root systemBarsPadding, so adds nothing here.
     val bottomBarInset = if (isVideoOverlay) {
-        Modifier
-            .navigationBarsPadding()
-            .padding(
-                bottom = if (immersiveTabsShown)
-                    com.powermediaplayer.ui.navigation.ImmersiveVideoTabBarHeight
-                else 0.dp
-            )
+        if (immersiveCompactWidth) {
+            Modifier
+                .navigationBarsPadding()
+                .padding(
+                    bottom = if (immersiveTabsShown)
+                        com.powermediaplayer.ui.navigation.ImmersiveVideoTabBarHeight
+                    else 0.dp
+                )
+        } else {
+            Modifier
+                .navigationBarsPadding()
+                .padding(
+                    start = if (immersiveTabsShown)
+                        com.powermediaplayer.ui.navigation.ImmersiveVideoRailWidth
+                    else 0.dp
+                )
+        }
     } else {
         Modifier
     }
