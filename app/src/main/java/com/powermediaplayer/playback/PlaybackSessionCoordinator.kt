@@ -632,20 +632,47 @@ class PlaybackSessionCoordinator @Inject constructor(
                 // spot. Connect needs a reachable device, so this fails
                 // gracefully (the picker stays available) when none is found.
                 currentMediaUri == null && recent.source == "SPOTIFY" -> {
+                    if (!com.powermediaplayer.playback.ResumeGate.isCurrent(gateToken)) {
+                        com.powermediaplayer.diag.DiagLog.dec(
+                            branch = "cold-start", reason = "spotify superseded by user play → skip"
+                        )
+                    } else {
+                    val autoplay = runCatching {
+                        settingsDataStore.autoplayOnLaunch.first()
+                    }.getOrDefault(false)
+                    // Provisional mirror UP-FRONT: without it the Connect
+                    // playback started but the Player tab stayed blank
+                    // (isSpotifyActive=false → empty state) because the
+                    // mirror state/polling were never armed. Mirrors the
+                    // LastPlayed-tap resume path exactly.
+                    spotifyProvider.armProvisionalMirror(
+                        com.powermediaplayer.cloud.SpotifyPlaybackState(
+                            title = recent.title,
+                            artist = recent.subtitle,
+                            album = "",
+                            artworkUrl = recent.artworkUri,
+                            positionMs = recent.lastPositionMs.coerceAtLeast(0L),
+                            durationMs = recent.durationMs,
+                            isPlaying = autoplay,
+                            trackUri = recent.mediaUri,
+                            deviceName = null
+                        )
+                    )
                     playbackConnection.setCloudFetchInProgress(true)
                     runCatching {
-                        if (!com.powermediaplayer.playback.ResumeGate.isCurrent(gateToken)) {
-                            return@runCatching
-                        }
                         val played = spotifyProvider
                             .playTrackOnConnectDevice(recent.mediaUri)
                         if (played.isSuccess) {
+                            // Start the live mirror so the Player tab swaps
+                            // to Spotify metadata + transport (independent of
+                            // the saved position).
+                            spotifyProvider.startPlaybackPolling(
+                                expectPlayback = true, expectedTrack = recent.mediaUri
+                            )
                             if (recent.lastPositionMs > 0L) {
-                                spotifyProvider.seekTo(recent.lastPositionMs)
+                                kotlinx.coroutines.delay(500)
+                                runCatching { spotifyProvider.seekTo(recent.lastPositionMs) }
                             }
-                            val autoplay = runCatching {
-                                settingsDataStore.autoplayOnLaunch.first()
-                            }.getOrDefault(false)
                             if (!autoplay) runCatching { spotifyProvider.pause() }
                             lastPlayedRepo.adoptSession(recent.id)
                             com.powermediaplayer.util.Diag.i(
@@ -654,14 +681,19 @@ class PlaybackSessionCoordinator @Inject constructor(
                                     "${recent.lastPositionMs}ms (session ${recent.id})"
                             )
                         } else {
+                            // Play failed (no reachable Connect device) — drop
+                            // the provisional mirror so the Player tab doesn't
+                            // strand a dead track routing controls to Spotify.
+                            spotifyProvider.clearProvisionalMirror()
                             com.powermediaplayer.util.Diag.i(
                                 "PMP_DIAG",
                                 "Cold-start Spotify resume failed (no Connect " +
-                                    "device?) — left to picker"
+                                    "device?) — cleared mirror"
                             )
                         }
-                    }
+                    }.onFailure { spotifyProvider.clearProvisionalMirror() }
                     playbackConnection.setCloudFetchInProgress(false)
+                    }
                 }
             }
             } finally {
