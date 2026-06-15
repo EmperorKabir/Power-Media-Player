@@ -294,22 +294,17 @@ class MainActivity : FragmentActivity() {
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        // vc31 edge-to-edge: keep the OledBlack Surface
-                        // full-bleed behind the (transparent, Android-15
-                        // default) system bars, but inset the app chrome
-                        // so InfoIcon/controls don't collide with the
-                        // notch or the back-gesture zone. Addresses the
-                        // Play Console edge-to-edge warning.
+                        // vc31 edge-to-edge: the OledBlack Surface is full-
+                        // bleed behind the (transparent, Android-15 default)
+                        // system bars. T294 — the root no longer toggles
+                        // systemBarsPadding on/off for video (that flip
+                        // relayouted the whole window — the "all tabs refresh"
+                        // flicker on entering the player). The window is now
+                        // full-bleed CONSTANTLY; every route self-insets its
+                        // own chrome (PlayerScreen insets non-video content at
+                        // its root; AppNavigation wraps each non-Player route).
                         androidx.compose.foundation.layout.Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                // Audit 6.4 — immersive video drops the bar
-                                // padding so the frame is truly full-bleed;
-                                // everything else keeps the inset chrome.
-                                .then(
-                                    if (MainActivityHolder.fullBleedVideo.value) Modifier
-                                    else Modifier.systemBarsPadding()
-                                )
+                            modifier = Modifier.fillMaxSize()
                         ) {
                             AppNavigation(
                                 windowSizeClass = windowSizeClass,

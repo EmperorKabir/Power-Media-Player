@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.only
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -44,6 +45,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,6 +86,7 @@ val LocalAdaptiveInfo =
  * Medium (large phone / unfolded foldable in portrait): wider single column
  * Expanded (tablet / landscape foldable): two-panel — artwork left, controls right
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun PlayerScreen(
     windowSizeClass: WindowSizeClass,
@@ -140,7 +144,26 @@ fun PlayerScreen(
         windowSizeClass.widthSizeClass == WindowWidthSizeClass.Expanded ||
             (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium && isLandscape)
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // T294 — the window is full-bleed (MainActivity no longer pads). NON-VIDEO
+    // player content (audio, two-pane, empty state) self-insets here: top
+    // status bar + the bottom-bar / side-rail clearance for the always-present
+    // nav overlay. VIDEO stays full-bleed and self-insets inside OverlayContent
+    // instead. This condition flips only on a video↔audio track change (never
+    // on tab entry), so it never contributes to the entry relayout/flicker.
+    val chromeCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val nonVideoChromeInset = Modifier
+        .windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility)
+        .padding(
+            bottom = if (chromeCompactWidth)
+                com.powermediaplayer.ui.navigation.ImmersiveVideoTabBarHeight else 0.dp,
+            start = if (chromeCompactWidth)
+                0.dp else com.powermediaplayer.ui.navigation.ImmersiveVideoRailWidth
+        )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(if (uiState.isVideoContent) Modifier else nonVideoChromeInset)
+    ) {
         androidx.compose.runtime.CompositionLocalProvider(LocalAdaptiveInfo provides adaptive) {
         // Video ALWAYS uses the Compact layout regardless of screen size,
         // so the picture fills the whole screen on phones, tablets, and
@@ -624,10 +647,30 @@ private fun PlayerScreenCompact(
         }
 
         if (uiState.isVideoContent) {
-            AnimatedVisibility(
-                visible = controlsVisible,
-                enter = fadeIn(animationSpec = tween(durationMillis = 500)),
-                exit = fadeOut(animationSpec = tween(durationMillis = 1000))
+            // Controls are an ALPHA overlay (draw-phase only), NOT
+            // AnimatedVisibility. The subtree stays composed + measured at a
+            // constant size the whole time the video shows; toggling controls
+            // changes only the GPU alpha, so nothing relayouts (the flicker
+            // was the AnimatedVisibility compose/dispose + inset re-read). The
+            // 500ms-in / 1000ms-out feel is preserved by the animation spec.
+            val controlsAlpha by animateFloatAsState(
+                targetValue = if (controlsVisible) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (controlsVisible) 500 else 1000
+                ),
+                label = "videoControlsAlpha"
+            )
+            val controlsHidden = controlsAlpha < 0.01f
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = controlsAlpha }
+                    // Alpha 0 ≠ gone for accessibility — hide the still-composed
+                    // controls from TalkBack when fully faded out.
+                    .then(
+                        if (controlsHidden) Modifier.clearAndSetSemantics { }
+                        else Modifier
+                    )
             ) {
                 OverlayContent(
                     uiState = uiState,
@@ -639,6 +682,20 @@ private fun PlayerScreenCompact(
                     onShowChapterPicker = onShowChapterPicker,
                     onShowInfo = onShowInfo
                 )
+                // Alpha 0 keeps the subtree HIT-TESTABLE: an invisible
+                // slider/button could still catch a tap/drag. When hidden, a
+                // top-most transparent catcher swallows the gesture and brings
+                // the controls back instead — the show-on-tap behaviour that
+                // AnimatedVisibility gave for free by leaving the tree.
+                if (controlsHidden) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures(onTap = { controlsVisible = true })
+                            }
+                    )
+                }
             }
             // CastButton previously lived top-right of the video frame and
             // top-right of the audio cover; both have moved into the
@@ -761,7 +818,7 @@ private fun TabletopVideoLayout(
  * artworkBytes lifted out, Compose's smart-recomposition will skip
  * this composable when only the position-poll tick changes.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun OverlayContent(
     uiState: PlayerUiState,
@@ -797,40 +854,38 @@ private fun OverlayContent(
     val isVideoOverlay = uiState.isVideoContent
     val immersiveCompactWidth =
         androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
-    val topBarInset = if (isVideoOverlay) Modifier.statusBarsPadding() else Modifier
-    val immersiveTabsShown =
-        com.powermediaplayer.MainActivityHolder.videoControlsVisible.value
-    // Reserve space for the immersive tab overlay so the transport stack never
-    // sits under it: a BOTTOM bar on compact/folded widths → reserve bottom
-    // height; a SIDE rail on expanded/unfolded widths → reserve start width.
-    // Plus the system nav inset (root drops its padding while video is full-
-    // bleed). Audio keeps the root systemBarsPadding, so adds nothing here.
+    // CONSTANT insets (…IgnoringVisibility): unlike statusBarsPadding /
+    // navigationBarsPadding, these do NOT collapse to zero when the system
+    // bars hide, so toggling controls (which hides/shows the bars) never
+    // re-pads the stack → no relayout. The live variants shrinking on hide
+    // were a per-toggle reflow source (the flicker).
+    val topBarInset = if (isVideoOverlay)
+        Modifier.windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
+    else Modifier
+    // Reserve the immersive app-tab overlay UNCONDITIONALLY (drop the old
+    // 0↔height flip on controls visibility — that flip was a per-toggle
+    // relayout). Keep the WIDTH branch: BOTTOM bar on compact/folded →
+    // reserve bottom; SIDE rail on expanded/unfolded → reserve start. The
+    // overlay's real footprint = its 80dp content + the system nav inset,
+    // matched by navigationBarsIgnoringVisibility (constant) + the 80dp const.
     val bottomBarInset = if (isVideoOverlay) {
         if (immersiveCompactWidth) {
             Modifier
-                .navigationBarsPadding()
-                .padding(
-                    bottom = if (immersiveTabsShown)
-                        com.powermediaplayer.ui.navigation.ImmersiveVideoTabBarHeight
-                    else 0.dp
-                )
+                .windowInsetsPadding(WindowInsets.navigationBarsIgnoringVisibility)
+                .padding(bottom = com.powermediaplayer.ui.navigation.ImmersiveVideoTabBarHeight)
         } else {
             Modifier
-                .navigationBarsPadding()
-                .padding(
-                    start = if (immersiveTabsShown)
-                        com.powermediaplayer.ui.navigation.ImmersiveVideoRailWidth
-                    else 0.dp
-                )
+                .windowInsetsPadding(WindowInsets.navigationBarsIgnoringVisibility)
+                .padding(start = com.powermediaplayer.ui.navigation.ImmersiveVideoRailWidth)
         }
     } else {
         Modifier
     }
-    // Info icon top-right. Inside this OverlayContent (which is wrapped
-    // in AnimatedVisibility for video) the icon hides with controls per
-    // Q1 LOCKED. For audio mode (no AnimatedVisibility wrapper) the
-    // icon stays visible. Q2 LOCKED Option A: scrim hides with controls,
-    // independent layer not required — current arch already correct.
+    // Info icon top-right. For video this OverlayContent sits inside the
+    // controls alpha layer, so the icon fades + becomes non-interactive with
+    // the controls (the hidden-state tap catcher swallows phantom taps) per
+    // Q1 LOCKED. For audio mode (rendered directly at alpha 1) the icon stays
+    // visible. Q2 LOCKED Option A: scrim fades with controls (same layer).
     Box(modifier = Modifier.fillMaxSize().then(cutoutPad).then(topBarInset)) {
         InfoIcon(
             onClick = onShowInfo,

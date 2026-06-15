@@ -90,3 +90,31 @@ Pick (i) unless the literal requirement is "no relayout in logs".
 - Implement Scope A first, verify on device (logs + recording) before Scope B.
 - Do NOT touch surface/PiP/binding/cast/routes.
 - No code until the user approves this plan + picks decision §4.
+
+## 8. APPROVED 2026-06-15 — Scope B (incl A), decision (i). Deep audit done (agents ab5bc6ce layout + aa0b3992 interaction). Binding implementation spec:
+
+### Step A — controls become alpha overlays (PlayerScreen.kt)
+- A1. Replace the `AnimatedVisibility(visible=controlsVisible)` around `OverlayContent` (video branch, ~:627) with `OverlayContent(modifier = Modifier.graphicsLayer { alpha = a })` where `val a by animateFloatAsState(if (controlsVisible) 1f else 0f)`. Keep `controlsVisible` as source of truth; DERIVE alpha.
+- A2. Pointer + semantics gate: when `a < 0.01f`, OverlayContent root also gets a pointer-consume modifier + `clearAndSetSemantics{}` so the (now-composed) sliders/rotate/InfoIcon/popup-buttons/chips can't be tapped or seen by TalkBack. The separate tap-to-toggle layer (~:578-584, sibling BELOW OverlayContent) stays live — do NOT gate it.
+- A3. Insets: in OverlayContent swap `statusBarsPadding()`/`navigationBarsPadding()` (visibility-dependent, ~:800/811/819) for the constant `WindowInsets.systemBarsIgnoringVisibility` variants so a bar-hide doesn't re-pad.
+- A4. Tab-clearance (~:808-825): keep the WIDTH branch (start-rail vs bottom-bar) but reserve UNCONDITIONALLY — drop the `if(videoControlsVisible) height else 0` flip. Use `ImmersiveVideoTabBarHeight + NavigationBarDefaults.windowInsets` / `ImmersiveVideoRailWidth + NavigationRailDefaults.windowInsets`.
+- A5. Keep system-bar hide (decision i). Accept PositionSection 4 Hz recompose while hidden (measure post-change; do not re-introduce compose/dispose).
+
+### Step B — nav becomes an always-present alpha overlay app-wide
+- B1. AppNavigation.kt: remove the `navLayoutType = None` branch (~:137). Keep the scaffold as a plain content host with layoutType always `None` (no built-in nav), and render the Bar/Rail via the existing `ImmersiveVideoTabOverlay` pattern GENERALISED to all routes (always composed). Its alpha = `if (fullBleedVideo && !videoControlsVisible) 0f else 1f` (visible on normal tabs + video-with-controls; hidden only on video-controls-hidden). Pointer-gate the overlay when alpha 0.
+- B2. Tab clearance per screen — content is full-bleed; each screen self-insets so items aren't hidden behind the overlay. Compact → bottom `ImmersiveVideoTabBarHeight + NavigationBarDefaults.windowInsets`; Expanded → start `ImmersiveVideoRailWidth + NavigationRailDefaults.windowInsets`. Plumb width-class + a clearance PaddingValues down (or expose via the holder). Screens: Library (LazyVerticalGrid contentPadding), LastPlayed (grid contentPadding + Column start), Cloud (every lazy body contentPadding + Column start), Equalizer (convert :301 Spacer to inset-aware), Settings (convert :838/:2481 Spacer + two-pane start). Player audio branch (~:826) gains the same reservation (today only the video branch reserves).
+- B3. KEEP the top status-bar inset app-wide. Change `MainActivity.kt:309-312`: instead of `systemBarsPadding() | nothing`, always apply only `statusBarsPadding()` (top) app-wide; bottom/start handled per-screen (B2). Confirms ranked-risk #1 mitigation.
+- B4. MiniPlayerBar: lift out of the content `Column` into the overlay tier; sit directly ABOVE the bottom-bar overlay (Compact) / RIGHT of the rail (Expanded). Each screen reserves its 56.dp when visible.
+- B5. FloatingVideoMiniPlayer: clamp bounds now include the overlay region — keep its BottomEnd resting offset clear of the bar.
+
+### Invariants to preserve (from interaction audit)
+- PlayerScreen stays a NavHost destination that disposes on tab-leave (flag reset at :526-537 stays load-bearing).
+- Clearance reservation stays WIDTH-conditional; only the visibility flip is removed.
+- Tabletop: controls rendered directly (alpha no-op); overlay nav alpha 0 in tabletop (unchanged). Verify IgnoringVisibility insets don't shift the bottom-leaf.
+- Routes/back-stack/widget/PiP/cast/surface untouched.
+
+### Verify (device + logcat + ffmpeg recording)
+- Per-toggle: no content `Relayout`/re-measure on controls tap.
+- Entry: switching INTO Player does not reflow the tabs.
+- Phantom-tap test: rotate/InfoIcon/sliders/popup buttons do NOTHING when controls hidden.
+- Every tab: last list items not hidden behind overlay (compact bottom + expanded start); tab highlight correct; drill-in back; widget open; fold bar↔rail; PiP; cast-video; Hue on local.

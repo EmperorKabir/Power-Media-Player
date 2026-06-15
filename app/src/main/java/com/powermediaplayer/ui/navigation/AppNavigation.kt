@@ -4,9 +4,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
@@ -71,6 +77,7 @@ internal val ImmersiveVideoRailWidth = 80.dp
  * so that the "navigate to player" action can trigger playback and switch tabs
  * atomically.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AppNavigation(
     windowSizeClass: WindowSizeClass,
@@ -129,18 +136,17 @@ fun AppNavigation(
 
     val isPlayerRoute = currentDestination?.hierarchy?.any { it.route == Screen.Player.route } == true
 
-    // Audit 6.1 / 8.1 — bar↔rail by window width. Phones keep the bottom
-    // bar; tablets/unfolded foldables get a NavigationRail (Play
-    // large-screen tier requirement). Immersive video hides navigation
-    // entirely.
-    val navLayoutType = when {
-        com.powermediaplayer.MainActivityHolder.fullBleedVideo.value ->
-            androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
-        windowSizeClass.widthSizeClass == androidx.compose.material3.windowsizeclass.WindowWidthSizeClass.Compact ->
-            androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationBar
-        else ->
-            androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.NavigationRail
-    }
+    // T294 — the app nav is now an always-present alpha OVERLAY (built below),
+    // NOT a NavigationSuiteScaffold layout sibling. The scaffold's own nav is
+    // forced OFF (layoutType None) for EVERY route, so the content slot never
+    // resizes when entering the full-screen video player (that resize — nav
+    // bar/rail vanishing + content re-padding — was the "all tabs refresh"
+    // flicker). Width still decides bar (compact/folded) vs side rail
+    // (expanded/unfolded) for the overlay and the per-route content inset.
+    val compactWidth = windowSizeClass.widthSizeClass ==
+        androidx.compose.material3.windowsizeclass.WindowWidthSizeClass.Compact
+    val navLayoutType =
+        androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType.None
     val suiteColors =
         androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults.colors(
             navigationBarContainerColor = OledBlack,
@@ -188,20 +194,25 @@ fun AppNavigation(
         }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-        androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .weight(1f)
-        ) {
+        // Content is FULL-BLEED for ALL routes — the scaffold shows no nav
+        // (layoutType None), so the content slot never resizes when entering
+        // the full-screen video player. The nav bar/rail is an always-present
+        // OVERLAY (built at the bottom of this Box). Non-Player routes are
+        // WRAPPED to reserve the same area the old scaffold slot gave (top
+        // status bar + bottom-bar / side-rail clearance), so no individual
+        // screen needed internal changes. The Player route is NOT wrapped — it
+        // is full-bleed and self-insets inside PlayerScreen.
+        val contentInset = Modifier
+            .windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility)
+            .padding(
+                bottom = if (compactWidth) ImmersiveVideoTabBarHeight else 0.dp,
+                start = if (compactWidth) 0.dp else ImmersiveVideoRailWidth
+            )
         NavHost(
             navController = navController,
             startDestination = Screen.Player.route,
-            // T294 — the default NavHost cross-fade blends the outgoing tab and
-            // the incoming Player together for ~0.5s; on a video return the
-            // Library list fades out UNDER the Player controls while the video
-            // is still black, which reads as the "flicker/refresh". Instant
-            // swaps (no enter/exit/pop transition) remove that blend.
+            // T294 — instant swaps (no enter/exit transition); the default
+            // cross-fade blended the outgoing tab under the incoming Player.
             enterTransition = { androidx.compose.animation.EnterTransition.None },
             exitTransition = { androidx.compose.animation.ExitTransition.None },
             popEnterTransition = { androidx.compose.animation.EnterTransition.None },
@@ -215,53 +226,58 @@ fun AppNavigation(
                 )
             }
             composable(Screen.Library.route) {
-                LibraryScreen(
-                    viewModel = libraryViewModel,
-                    onNavigateToPlayer = navigateToPlayer
-                )
+                NonPlayerRoute(contentInset, navigateToPlayer) {
+                    LibraryScreen(
+                        viewModel = libraryViewModel,
+                        onNavigateToPlayer = navigateToPlayer
+                    )
+                }
             }
             composable(Screen.Cloud.route) {
-                CloudBrowserScreen(onNavigateToPlayer = navigateToPlayer)
+                NonPlayerRoute(contentInset, navigateToPlayer) {
+                    CloudBrowserScreen(onNavigateToPlayer = navigateToPlayer)
+                }
             }
             composable(Screen.LastPlayed.route) {
-                com.powermediaplayer.ui.lastplayed.LastPlayedScreen(
-                    onNavigateToPlayer = navigateToPlayer
+                NonPlayerRoute(contentInset, navigateToPlayer) {
+                    com.powermediaplayer.ui.lastplayed.LastPlayedScreen(
+                        onNavigateToPlayer = navigateToPlayer
+                    )
+                }
+            }
+            composable(Screen.Equalizer.route) {
+                NonPlayerRoute(contentInset, navigateToPlayer) { EqualizerScreen() }
+            }
+            composable(Screen.Settings.route) {
+                NonPlayerRoute(contentInset, navigateToPlayer) {
+                    SettingsScreen(windowSizeClass = windowSizeClass)
+                }
+            }
+        }
+        // In-app picture-in-picture floating video — SHARED across the
+        // non-Player tabs (NOT per-route, or its video surface would re-bind on
+        // every tab switch). Inset so its resting corner clears the nav overlay.
+        // System PiP on leaving the app is unchanged (MainActivity's PiP branch).
+        if (!isPlayerRoute) {
+            // Reserve the MiniPlayerBar height (56dp) at the bottom too, so the
+            // floating video's default BottomEnd rest position stays ABOVE the
+            // mini-bar — its placement relative to the bar before this refactor.
+            Box(modifier = Modifier.fillMaxSize().then(contentInset).padding(bottom = 56.dp)) {
+                com.powermediaplayer.ui.components.FloatingVideoMiniPlayer(
+                    onExpand = navigateToPlayer
                 )
             }
-            composable(Screen.Equalizer.route) { EqualizerScreen() }
-            composable(Screen.Settings.route) {
-                SettingsScreen(windowSizeClass = windowSizeClass)
-            }
         }
-        // In-app picture-in-picture: keep the video visible while the
-        // user browses other tabs. Hidden on the Player tab (the full
-        // surface owns the video there); system PiP on leaving the app
-        // is unchanged (MainActivity's PiP branch).
-        if (!isPlayerRoute) {
-            com.powermediaplayer.ui.components.FloatingVideoMiniPlayer(
-                onExpand = navigateToPlayer
-            )
-        }
-        }
-        // MiniPlayerBar — every non-Player tab; spans the CONTENT width
-        // so it sits beside the rail on wide layouts rather than under it.
-        if (!isPlayerRoute) {
-            com.powermediaplayer.ui.components.MiniPlayerBar(
-                onClick = navigateToPlayer
-            )
-        }
-        }
-        // Immersive-video app-tab overlay — floats over the full-bleed
-        // picture when controls are up, so switching tabs never resizes the
-        // video. Bottom bar on compact/folded; SIDE rail on expanded/unfolded
-        // (matching the app's normal rail placement). NSS bar is None while
-        // immersive.
-        val immersiveTabsOnSide =
-            windowSizeClass.widthSizeClass !=
-                androidx.compose.material3.windowsizeclass.WindowWidthSizeClass.Compact
+        // Always-present app-tab nav OVERLAY (replaces the scaffold's nav).
+        // Visible on every normal tab AND the video player while controls are
+        // up; fades out ONLY when the video controls hide. Because it's an
+        // aligned overlay (never a layout sibling), showing/hiding it never
+        // resizes content — no relayout, no flicker. Bottom bar on
+        // compact/folded; SIDE rail on expanded/unfolded.
+        val immersiveTabsOnSide = !compactWidth
         ImmersiveVideoTabOverlay(
-            visible = com.powermediaplayer.MainActivityHolder.fullBleedVideo.value &&
-                com.powermediaplayer.MainActivityHolder.videoControlsVisible.value,
+            visible = !(com.powermediaplayer.MainActivityHolder.fullBleedVideo.value &&
+                !com.powermediaplayer.MainActivityHolder.videoControlsVisible.value),
             useRail = immersiveTabsOnSide,
             currentDestination = currentDestination,
             modifier = Modifier.align(
@@ -275,6 +291,29 @@ fun AppNavigation(
             }
         }
         }
+    }
+}
+
+/**
+ * Wraps a NON-Player route so its content + mini-player bar occupy the same
+ * area the old NavigationSuiteScaffold content slot gave: the full-bleed window
+ * MINUS the top status bar and the bottom-bar / side-rail clearance for the
+ * always-present nav overlay. The Player route is NOT wrapped (it is full-bleed
+ * and self-insets inside PlayerScreen). Keeping the content area identical is
+ * why no individual screen (Library/Cloud/LastPlayed/EQ/Settings) needed any
+ * internal change. MiniPlayerBar is a layout sibling here (content sits above
+ * it, exactly as before); it has no video surface, so composing it per-route is
+ * cheap (no surface re-bind, unlike the shared FloatingVideoMiniPlayer).
+ */
+@Composable
+private fun NonPlayerRoute(
+    contentInset: Modifier,
+    onMiniClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().then(contentInset)) {
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) { content() }
+        com.powermediaplayer.ui.components.MiniPlayerBar(onClick = onMiniClick)
     }
 }
 
