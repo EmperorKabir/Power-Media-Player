@@ -288,6 +288,15 @@ class PlaybackService : MediaSessionService() {
         val castLocalVideoActiveFlow =
             kotlinx.coroutines.flow.MutableStateFlow(false)
 
+        /** True while the player's audio is force-pinned to the phone speaker
+         *  via [rerouteAudioToPhoneSpeaker] (a per-app override of the system
+         *  route). The Bluetooth sheet reads this to flip its action between
+         *  "Play on phone speaker" and "Play on <BT device>", so the user can
+         *  always pull audio back to Bluetooth even when the device was already
+         *  connected (no fresh device-add event would clear it otherwise). */
+        val audioRerouteActiveFlow =
+            kotlinx.coroutines.flow.MutableStateFlow(false)
+
         /** Reroute the player's audio OFF a Bluetooth speaker back to the
          *  phone's built-in speaker, WITHOUT disabling Bluetooth (a true ACL
          *  disconnect needs privileged system APIs). Uses the stable Media3
@@ -303,6 +312,7 @@ class PlaybackService : MediaSessionService() {
                 ?: return false
             return runCatching {
                 p.setPreferredAudioDevice(speaker)
+                audioRerouteActiveFlow.value = true
                 com.powermediaplayer.util.Diag.i("PMP_DIAG", "Audio rerouted to phone speaker (BT kept on)")
                 true
             }.getOrDefault(false)
@@ -311,6 +321,7 @@ class PlaybackService : MediaSessionService() {
         /** Clear the preferred-device override → default (Bluetooth) routing. */
         fun clearAudioReroute() {
             runCatching { getExoPlayer()?.setPreferredAudioDevice(null) }
+            audioRerouteActiveFlow.value = false
         }
 
         // ── Volume mixer ────────────────────────────────────────────

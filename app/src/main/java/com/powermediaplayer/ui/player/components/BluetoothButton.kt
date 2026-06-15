@@ -55,6 +55,12 @@ fun BluetoothButton(
         context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
     }
     var a2dpActive by remember { mutableStateOf(audioManager.isBluetoothA2dpOn) }
+    // True while THIS app's audio is force-pinned to the phone speaker
+    // (reroute override). Lets the sheet flip between "play on phone" and
+    // "play on Bluetooth", so a stuck reroute is always recoverable even when
+    // the BT device was already connected.
+    val rerouteActive by com.powermediaplayer.service.PlaybackService
+        .audioRerouteActiveFlow.collectAsStateWithLifecycle()
     // Audit 3.11 — event-driven instead of a 2s binder poll: routing
     // adds/removes fire AudioDeviceCallback the moment a BT sink
     // connects or drops.
@@ -97,17 +103,23 @@ fun BluetoothButton(
     ) {
         Icon(
             imageVector = when {
-                a2dpActive -> Icons.Filled.BluetoothConnected
+                a2dpActive && !rerouteActive -> Icons.Filled.BluetoothConnected
+                a2dpActive && rerouteActive -> Icons.Filled.BluetoothConnected
                 enabledState -> Icons.Filled.Bluetooth
                 else -> Icons.Filled.BluetoothDisabled
             },
             contentDescription = when {
-                a2dpActive -> "Bluetooth audio active"
+                a2dpActive && !rerouteActive -> "Bluetooth audio active"
+                a2dpActive && rerouteActive -> "Bluetooth connected, audio on phone speaker"
                 enabledState -> "Bluetooth on, not routing audio"
                 else -> "Bluetooth off"
             },
             tint = when {
-                a2dpActive -> TealAccent
+                // Connected AND routing BT audio → full accent.
+                a2dpActive && !rerouteActive -> TealAccent
+                // Connected but audio pinned to the phone speaker → dimmed,
+                // so the button reflects "playing out the phone" at a glance.
+                a2dpActive && rerouteActive -> TealAccent.copy(alpha = 0.5f)
                 enabledState -> TealAccent.copy(alpha = 0.7f)
                 else -> TextSecondary
             }
@@ -126,17 +138,30 @@ fun BluetoothButton(
                 isEnabled = enabledState,
                 hasPermission = permissionGranted,
                 a2dpActive = a2dpActive,
-                onDisconnect = {
+                rerouteActive = rerouteActive,
+                onPlayOnPhone = {
                     // "Disconnect" without turning Bluetooth off = reroute this
                     // app's audio to the phone speaker (a true ACL disconnect
-                    // needs privileged APIs). BT stays on; reconnects on next
-                    // route change / when BT is re-selected.
+                    // needs privileged APIs). BT stays on; recover via
+                    // onPlayOnBluetooth below.
                     val ok = com.powermediaplayer.service.PlaybackService
                         .rerouteAudioToPhoneSpeaker(context)
                     android.widget.Toast.makeText(
                         context,
                         if (ok) "Audio moved to phone speaker — Bluetooth still on"
                         else "Couldn't switch audio output",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    sheetOpen = false
+                },
+                onPlayOnBluetooth = {
+                    // Undo the reroute → default routing flows back to the
+                    // connected Bluetooth device. Fixes "connected to <device>
+                    // but playing out the phone".
+                    com.powermediaplayer.service.PlaybackService.clearAudioReroute()
+                    android.widget.Toast.makeText(
+                        context,
+                        "Audio moved back to Bluetooth",
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
                     sheetOpen = false
@@ -162,7 +187,9 @@ private fun BluetoothSheetContent(
     isEnabled: Boolean,
     hasPermission: Boolean,
     a2dpActive: Boolean,
-    onDisconnect: () -> Unit,
+    rerouteActive: Boolean,
+    onPlayOnPhone: () -> Unit,
+    onPlayOnBluetooth: () -> Unit,
     offsetMs: Int,
     onOffsetChange: (Int) -> Unit,
     onRequestPermission: () -> Unit,
@@ -199,23 +226,47 @@ private fun BluetoothSheetContent(
         )
         Spacer(Modifier.height(12.dp))
 
-        // ── Disconnect (play on phone speaker) ───────────────────
-        // Shown only while BT audio is actually routing. Moves THIS app's
-        // audio back to the phone speaker; Bluetooth stays on (a true ACL
-        // disconnect needs privileged APIs). This replaces the old
-        // tap-the-button-to-disconnect, which hid this sheet.
-        if (a2dpActive) {
-            FilledTonalButton(
-                onClick = onDisconnect,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(
-                    Icons.Filled.BluetoothDisabled,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
+        // ── Audio-output toggle (reversible) ─────────────────────
+        // Shown whenever a BT device is connected (a2dpActive) OR the app has
+        // pinned audio to the phone speaker (rerouteActive). A true ACL
+        // disconnect needs privileged APIs, so "disconnect" = pin this app's
+        // audio to the phone speaker; the toggle flips back to the BT device.
+        // This is the fix for "connected to <device> but playing out the phone":
+        // the override is now always recoverable from here.
+        if (a2dpActive || rerouteActive) {
+            if (rerouteActive) {
+                Text(
+                    text = "Audio is on the phone speaker. Bluetooth is still " +
+                        "connected — tap below to play through it again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary
                 )
-                Spacer(Modifier.width(6.dp))
-                Text("Play on phone speaker (stop Bluetooth audio)")
+                Spacer(Modifier.height(8.dp))
+                FilledTonalButton(
+                    onClick = onPlayOnBluetooth,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Filled.BluetoothAudio,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Play on Bluetooth")
+                }
+            } else {
+                FilledTonalButton(
+                    onClick = onPlayOnPhone,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Filled.BluetoothDisabled,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Play on phone speaker (stop Bluetooth audio)")
+                }
             }
             Spacer(Modifier.height(12.dp))
         }
