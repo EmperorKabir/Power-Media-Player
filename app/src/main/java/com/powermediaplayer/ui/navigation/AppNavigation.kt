@@ -211,7 +211,16 @@ fun AppNavigation(
         ) {
         NavHost(
             navController = navController,
-            startDestination = Screen.Player.route
+            startDestination = Screen.Player.route,
+            // Tab switches are INSTANT. The compose-navigation default is a
+            // 700 ms cross-fade, which made returning to a playing video look
+            // like a full-screen "refresh" — the picture faded in over the
+            // outgoing screen. A tabbed app should swap immediately (like a
+            // bottom-nav bar), so disable enter/exit/pop transitions.
+            enterTransition = { androidx.compose.animation.EnterTransition.None },
+            exitTransition = { androidx.compose.animation.ExitTransition.None },
+            popEnterTransition = { androidx.compose.animation.EnterTransition.None },
+            popExitTransition = { androidx.compose.animation.ExitTransition.None }
         ) {
             composable(Screen.Player.route) {
                 PlayerScreen(
