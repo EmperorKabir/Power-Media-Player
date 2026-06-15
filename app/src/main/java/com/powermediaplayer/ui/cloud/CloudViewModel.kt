@@ -1024,8 +1024,11 @@ class CloudViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
+                heldThisOpen = false
                 if (openItemInternal(item)) {
-                    recordCloudPlay(item)
+                    // A "hold" (item already loaded) is a resume, not a fresh
+                    // play — don't record a new Recents row or re-adopt session.
+                    if (!heldThisOpen) recordCloudPlay(item)
                     onPlaybackStarted()
                 }
             } catch (t: Throwable) {
@@ -1051,6 +1054,12 @@ class CloudViewModel @Inject constructor(
     // re-download.
     private val enrichedByMediaId =
         java.util.concurrent.ConcurrentHashMap<String, LocalMetadataOverride>()
+
+    // Set true by openItemInternal when it took the "hold" fast-path (the
+    // tapped item was already loaded). openItem reads it to skip recordCloudPlay
+    // so a mere resume doesn't spawn a duplicate Recents row or re-adopt the
+    // session — only a genuine (re)load records a play.
+    private var heldThisOpen = false
 
     private suspend fun openItemInternal(item: CloudMediaItem): Boolean {
         // Drive (or other non-Spotify) playback starts → stop the
@@ -1110,6 +1119,27 @@ class CloudViewModel @Inject constructor(
                     errorMessage = "No playable URL for this item"
                 )
                 return false
+            }
+            // ── "Hold" fast-path ─────────────────────────────────────
+            // If this EXACT item is already loaded in the player, don't rebuild
+            // it: rebuilding re-prepares the stream, re-runs Drive enrichment,
+            // and briefly resets the metadata. Just resume + show. mediaId is
+            // the stream URI (stable per item — the Drive files URL, no
+            // per-request token). When the current item is DIFFERENT (a cast
+            // round-trip rebuilds the queue, switching provider/track, cold
+            // start) this falls through to the normal full load, so those paths
+            // are unaffected — worst case it simply doesn't optimise.
+            val loadedPlayer = playbackConnection.getPlayer()
+            if (loadedPlayer != null && loadedPlayer.mediaItemCount > 0 &&
+                loadedPlayer.currentMediaItem?.mediaId == uri.toString()
+            ) {
+                if (!loadedPlayer.playWhenReady) loadedPlayer.play()
+                heldThisOpen = true
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "openItem: '${item.name}' already loaded → HOLD (no rebuild, no reload)"
+                )
+                return true
             }
             // mediaId MUST be the URI string and requestMetadata MUST carry
             // the URI — MediaController IPC strips localConfiguration.uri
