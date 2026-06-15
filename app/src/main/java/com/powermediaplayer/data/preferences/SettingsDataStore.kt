@@ -614,7 +614,10 @@ class SettingsDataStore @Inject constructor(
     }
 
     val stopOnTaskRemoved: Flow<Boolean> = context.dataStore.data.map {
-        it[Keys.STOP_ON_TASK_REMOVED] ?: false
+        // Default ON — swiping the app away fully closes it (stops playback +
+        // clears the notification), except when PiP is active. Power users can
+        // turn this off to keep music playing across a swipe.
+        it[Keys.STOP_ON_TASK_REMOVED] ?: true
     }
     suspend fun setStopOnTaskRemoved(v: Boolean) {
         context.dataStore.edit { it[Keys.STOP_ON_TASK_REMOVED] = v }

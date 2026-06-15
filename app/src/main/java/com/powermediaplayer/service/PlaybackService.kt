@@ -2126,35 +2126,42 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Default behaviour: stop the service ONLY when nothing is
-        // queued / not playing, so audio survives the user swiping
-        // the app from Recents (which is what most music players do).
-        // When the user has opted in to "Stop on swipe-away" via
-        // Settings, we stop unconditionally.
-        val stopUnconditionally = runCatching {
+        // PiP keeps the video playing in its own window — a swipe-away while
+        // Picture-in-Picture is active must NOT tear the service down.
+        if (com.powermediaplayer.MainActivityHolder.isInPip) {
+            com.powermediaplayer.diag.DiagLog.lifecycle(
+                "PlaybackService.onTaskRemoved — PiP active, service kept alive"
+            )
+            super.onTaskRemoved(rootIntent)
+            return
+        }
+        // Swipe-away = full close by default (user choice): stop playback AND
+        // clear the queue so the media/status notification disappears, then
+        // stop the service + process. A power user can opt OUT via Settings →
+        // "Stop on swipe-away" to keep music playing in the background.
+        val stopOnSwipe = runCatching {
             kotlinx.coroutines.runBlocking {
-                // Bounded: an unbounded read here blocks the main thread
-                // during task removal (ANR vector). Timeout → false = the
-                // safer default (don't stop playback on a failed read).
+                // Bounded read — an unbounded one blocks the main thread
+                // during task removal (ANR vector).
                 kotlinx.coroutines.withTimeoutOrNull(200) {
                     settingsDataStore.stopOnTaskRemoved.first()
-                } ?: false
+                } ?: true
             }
-        }.getOrDefault(false)
+        }.getOrDefault(true)
         val player = mediaSession?.player
         com.powermediaplayer.diag.DiagLog.lifecycle(
-            "PlaybackService.onTaskRemoved stopUncond=$stopUnconditionally " +
+            "PlaybackService.onTaskRemoved stopOnSwipe=$stopOnSwipe " +
                 "playWhenReady=${player?.playWhenReady} itemCount=${player?.mediaItemCount}"
         )
-        if (stopUnconditionally) {
-            player?.stop()
+        if (stopOnSwipe) {
+            player?.let { runCatching { it.stop(); it.clearMediaItems() } }
             stopSelf()
             return
         }
-        if (player != null) {
-            if (!player.playWhenReady || player.mediaItemCount == 0) {
-                stopSelf()
-            }
+        // Opted out → keep music playing across the swipe; only tear down
+        // when nothing is actually playing.
+        if (player != null && (!player.playWhenReady || player.mediaItemCount == 0)) {
+            stopSelf()
         }
     }
 

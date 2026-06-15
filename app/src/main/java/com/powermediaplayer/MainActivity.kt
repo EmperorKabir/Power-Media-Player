@@ -53,6 +53,14 @@ object MainActivityHolder {
     val fullBleedVideo = androidx.compose.runtime.mutableStateOf(false)
 
     /**
+     * True while the activity is in Picture-in-Picture. Shared here so the
+     * PlaybackService can read it during onTaskRemoved — a swipe-away while
+     * PiP is showing must NOT tear the service down.
+     */
+    @Volatile
+    var isInPip: Boolean = false
+
+    /**
      * 8.3 — rotate-to-fullscreen toggle. An activity-level orientation
      * request overrides the user's auto-rotate quick-setting on phones
      * with NO permission (verified against current platform docs);
@@ -129,6 +137,7 @@ class MainActivity : FragmentActivity() {
         // Audit 6.3 — recreation while in PiP (uiMode/density/locale all
         // recreate) must not render the full chrome inside the PiP frame.
         isInPip.value = isInPictureInPictureMode
+        MainActivityHolder.isInPip = isInPictureInPictureMode
         // §C20 — first-launch deep-link extra (the widget tap path).
         // Strip it from the sticky intent too: recreation re-reads the
         // SAME intent and would re-arm the navigation (audit 6.2).
@@ -367,6 +376,7 @@ class MainActivity : FragmentActivity() {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         com.powermediaplayer.util.Diag.i("PMP_PIP", "onPictureInPictureModeChanged isInPip=$isInPictureInPictureMode")
         isInPip.value = isInPictureInPictureMode
+        MainActivityHolder.isInPip = isInPictureInPictureMode
         // Surface ownership across the transition is handled by
         // VideoSurfaceBinding's healing stack: two surfaces can bind
         // within ~30 ms of each other on exit, and the loser's disposal

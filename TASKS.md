@@ -143,6 +143,16 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
   overlay. Evidence: assembleDebug green, installed (Success), commit 72de6d1.
   `[VISUAL]` re-check on device with the rest of T228.
 
+## J — vc33 post-publish device bugs (2026-06-15)
+
+| ID | Task | Phase | Status |
+|----|------|-------|--------|
+| T284 | Video controls: tap toggles controls (away supersedes timer; can return); all timer logic kept | M | DONE(PlayerScreen: removed show-only parentTapModifier; added full-bleed tap layer below OverlayContent → `controlsVisible = !controlsVisible`; auto-hide LaunchedEffect intact) `[DEVICE]` re-test |
+| T285 | Resume bug investigation — tester saw Drive audiobook resume at 0:00; test local/video/Drive/Spotify | I | DONE(root causes: (1) backoff clamp — `pos - backoffMs` went negative→coerced to 0 for short positions; (2) 5s tick coarseness lost brief/final plays; (3) most-recent row was SPOTIFY which cold-start skips by design → "nothing playing". DB evidence: all positions ARE persisted) |
+| T286 | FIX resume: backoff clamp guard + onStop background position save | M | ACTIVE(backoff: `if pos>backoffMs then pos-backoffMs else pos.coerceAtLeast(0)`; ProcessLifecycle onStop saves player position when not Spotify-mirrored, skips reverse-cache) `[BUILD+DEVICE]` |
+| T287 | Swipe-away = stop everything except PiP (user decision) | M | ACTIVE(MainActivityHolder.isInPip flag synced both PiP callbacks; onTaskRemoved: PiP→keep alive, else stop+clearMediaItems+stopSelf; STOP_ON_TASK_REMOVED default→true) `[BUILD+DEVICE]` |
+| T288 | Spotify auto-resume on launch (user decision) | M | ACTIVE(cold-start SPOTIFY branch: playTrackOnConnectDevice + seekTo saved pos; respects autoplayOnLaunch; adoptSession; graceful no-device) `[BUILD+DEVICE]` |
+
 - vc30 shipped to Play Closed testing — sent for review. ✔
 - vc31 UX batch (#210-#220 + reorg/search/empty-player/undo/typography):
   ALL gate-PASS — evidence tables in

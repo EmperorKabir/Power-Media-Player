@@ -606,10 +606,42 @@ class PlaybackSessionCoordinator @Inject constructor(
                     }
                     playbackConnection.setCloudFetchInProgress(false)
                 }
-                // Spotify recent / player has a different media — leave
-                // session null. Spotify needs an active Connect device,
-                // chosen by the user; the 5s tick will synthesise a
-                // session if playback continues from another entry path.
+                // Auto-resume Spotify (user opt-in): play the saved track on
+                // the last/available Connect device and seek to the saved
+                // spot. Connect needs a reachable device, so this fails
+                // gracefully (the picker stays available) when none is found.
+                currentMediaUri == null && recent.source == "SPOTIFY" -> {
+                    playbackConnection.setCloudFetchInProgress(true)
+                    runCatching {
+                        if (!com.powermediaplayer.playback.ResumeGate.isCurrent(gateToken)) {
+                            return@runCatching
+                        }
+                        val played = spotifyProvider
+                            .playTrackOnConnectDevice(recent.mediaUri)
+                        if (played.isSuccess) {
+                            if (recent.lastPositionMs > 0L) {
+                                spotifyProvider.seekTo(recent.lastPositionMs)
+                            }
+                            val autoplay = runCatching {
+                                settingsDataStore.autoplayOnLaunch.first()
+                            }.getOrDefault(false)
+                            if (!autoplay) runCatching { spotifyProvider.pause() }
+                            lastPlayedRepo.adoptSession(recent.id)
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Cold-start Spotify resumed '${recent.title}' @ " +
+                                    "${recent.lastPositionMs}ms (session ${recent.id})"
+                            )
+                        } else {
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Cold-start Spotify resume failed (no Connect " +
+                                    "device?) — left to picker"
+                            )
+                        }
+                    }
+                    playbackConnection.setCloudFetchInProgress(false)
+                }
             }
             } finally {
                 com.powermediaplayer.playback.ResumeGate.end(gateToken)
