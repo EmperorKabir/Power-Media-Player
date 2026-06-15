@@ -51,6 +51,18 @@ class PlaybackSessionCoordinator @Inject constructor(
         startReplayGainApply()
         startPositionPersistTick()
         startBackgroundPositionSave()
+    }
+
+    /**
+     * Cold-start restore is intentionally OUTSIDE [start]'s once-per-process
+     * guard: a swipe-away stops the service but Android keeps the process
+     * cached, so reopening is a WARM start — [start] no-ops and the restore
+     * would never re-run. Call this from every MainActivity.onCreate (fresh
+     * create only, not config-change recreate). The internal coldStartGuard
+     * (reset by PlaybackConnection on service disconnect) makes repeat calls
+     * within one live session idempotent, so this is safe to call each time.
+     */
+    fun attemptColdStartRestore() {
         startColdStartRestore()
     }
 
@@ -445,10 +457,19 @@ class PlaybackSessionCoordinator @Inject constructor(
                 )
                 return@launch
             }
-            if (lastPlayedRepo.currentSessionId.value != null) {
+            // Skip only when a session is adopted AND media is actually
+            // loaded — i.e. a Library/Cloud/LastPlayed tap already started
+            // playback we must not override. After a swipe-stop the process
+            // survives (warm reopen) with a STALE adopted id but an EMPTY
+            // player; there the restore SHOULD run, so an empty player falls
+            // through instead of being skipped as "already adopted".
+            val connectedPlayer = playbackConnection.getPlayer()
+            if (lastPlayedRepo.currentSessionId.value != null &&
+                (connectedPlayer?.mediaItemCount ?: 0) > 0
+            ) {
                 com.powermediaplayer.diag.DiagLog.dec(
                     branch = "cold-start",
-                    reason = "session-already-adopted by Library/Cloud/LastPlayed tap → skip"
+                    reason = "session-already-adopted + media loaded → skip"
                 )
                 return@launch
             }

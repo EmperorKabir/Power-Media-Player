@@ -912,6 +912,26 @@ class PlaybackConnection @Inject constructor(
      */
     private fun updatePlayerState() {
         val c = controller ?: return
+        // Genuinely-empty queue (post-clear / swipe-stop / fresh service):
+        // emit a clean empty state. Without this the stale-id fallback below
+        // (lastKnownMediaId → senderMetadataByMediaId → itemMetadata) keeps
+        // synthesising the PREVIOUS track's title while mediaItemCount=0, so
+        // the mini-bar (keys on title) showed a paused ghost track while the
+        // Player tab (keys on hasMedia = count>0) correctly showed empty.
+        // Strictly count==0 so the cast/switchPlayer window — where
+        // currentMediaItem is briefly null but the count stays >0 — still
+        // gets the lastKnownMediaId fallback it relies on.
+        if (c.mediaItemCount == 0) {
+            lastKnownMediaId = null
+            localMetadata = null
+            lastEmbeddedArt = null
+            embeddedArtOwnerId = null
+            _playerState.value = PlayerState(
+                cloudFetchInProgress = _playerState.value.cloudFetchInProgress,
+                playerError = _playerState.value.playerError
+            )
+            return
+        }
         // Two metadata sources matter here:
         //   - `metadata` = merged player metadata (file-extracted + MediaItem)
         //     — what onMediaMetadataChanged delivers, used for title/artist/etc.

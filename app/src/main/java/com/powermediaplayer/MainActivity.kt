@@ -160,6 +160,14 @@ class MainActivity : FragmentActivity() {
         // Playback-session side effects run exactly once per process
         // (audit 3.1/8.4) — idempotent ignition, not lifecycle-bound.
         sessionCoordinator.start()
+        // Cold-start restore runs OUTSIDE start()'s once-per-process guard:
+        // a swipe-away kills the service but Android keeps the process cached,
+        // so reopening is a WARM start where start() no-ops — the restore must
+        // still fire. Fresh create only (savedInstanceState==null); a config
+        // recreate keeps the live session, so re-restoring there is wrong.
+        if (savedInstanceState == null) {
+            sessionCoordinator.attemptColdStartRestore()
+        }
 
         // DIAGNOSTIC (F8 fold posture) — log the RAW FoldingFeature from
         // androidx.window (the same source material3-adaptive reads) on
