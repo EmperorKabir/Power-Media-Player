@@ -36,6 +36,7 @@ class LastPlayedViewModel @Inject constructor(
     private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
+    private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     @param:dagger.hilt.android.qualifiers.ApplicationContext
     private val context: android.content.Context
 ) : ViewModel() {
@@ -489,47 +490,69 @@ class LastPlayedViewModel @Inject constructor(
                 // items — parses once, caches (including the empty
                 // result), and injects via the existing setLocalChapters
                 // path IF the user is still on this item.
-                if (isRemote &&
-                    mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0
-                ) {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        // vc32: dedup — concurrent resumes of the same uri
-                        // must not fire duplicate multi-minute parses. The
-                        // mark lives INSIDE the coroutine: marking in the
-                        // guard expression strands the uri as "filling"
-                        // forever if the VM clears before this launches.
-                        if (!com.powermediaplayer.util.ChapterCache.shared.markFilling(item.mediaUri)) {
-                            return@launch
-                        }
-                        val tFill = com.powermediaplayer.diag.DiagLog.now()
-                        val late = try {
-                            runCatching {
-                                com.powermediaplayer.util.M4bChapterParser
-                                    .extractChaptersAsBundle(context, uri)
-                            }.getOrDefault(android.os.Bundle())
-                        } finally {
-                            com.powermediaplayer.util.ChapterCache.shared
-                                .unmarkFilling(item.mediaUri)
-                        }
-                        val count = late.getInt("chapter_count", 0)
-                        com.powermediaplayer.diag.DiagLog.perf(
-                            "resume.asyncChapterFill",
-                            com.powermediaplayer.diag.DiagLog.now() - tFill,
-                            "token=$token count=$count"
+                if (mediaItem.mediaMetadata.extras?.getInt("chapter_count", 0) == 0) {
+                    if (item.source == com.powermediaplayer.data.repository
+                            .LastPlayedRepository.Source.DRIVE
+                    ) {
+                        // Drive: the moov (tags + chapters) is often at the END
+                        // of the file and CANNOT be read over the https URL —
+                        // the old async remote parse took ~75 s and returned 0
+                        // chapters. Download + parse the LOCAL file instead
+                        // (loads the proper title/author too) and PERSIST, so
+                        // this and every later resume show it. Same enricher the
+                        // Cloud tab uses → tapping from either place is consistent.
+                        val driveId = if (item.mediaUri.startsWith("content://")) item.mediaUri
+                            else item.mediaUri.substringAfter("/files/", "").substringBefore("?")
+                                .ifEmpty { item.mediaUri.hashCode().toString() }
+                        driveTagEnricher.enrich(
+                            viewModelScope,
+                            com.powermediaplayer.cloud.CloudMediaItem(
+                                id = driveId,
+                                name = item.title,
+                                mimeType = "audio/mp4",
+                                size = 0L,
+                                downloadUrl = item.mediaUri,
+                                sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
+                            ),
+                            item.mediaUri
                         )
-                        if (count > 0 &&
-                            com.powermediaplayer.playback.ResumeGate.isCurrent(token)
-                        ) {
-                            val chapters = (0 until count).mapNotNull { i ->
-                                val title = late.getString("chapter_title_$i")
-                                    ?: "Chapter ${i + 1}"
-                                val start = late.getLong("chapter_start_$i", -1)
-                                val end = late.getLong("chapter_end_$i", -1)
-                                if (start >= 0) {
-                                    com.powermediaplayer.service.ChapterInfo(title, start, end, i)
-                                } else null
+                    } else if (isRemote) {
+                        // Non-Drive remote (rare): keep the best-effort inline
+                        // remote parse (range-capable URLs can stream-parse).
+                        viewModelScope.launch(Dispatchers.IO) {
+                            if (!com.powermediaplayer.util.ChapterCache.shared.markFilling(item.mediaUri)) {
+                                return@launch
                             }
-                            playbackConnection.setLocalChapters(chapters)
+                            val tFill = com.powermediaplayer.diag.DiagLog.now()
+                            val late = try {
+                                runCatching {
+                                    com.powermediaplayer.util.M4bChapterParser
+                                        .extractChaptersAsBundle(context, uri)
+                                }.getOrDefault(android.os.Bundle())
+                            } finally {
+                                com.powermediaplayer.util.ChapterCache.shared
+                                    .unmarkFilling(item.mediaUri)
+                            }
+                            val count = late.getInt("chapter_count", 0)
+                            com.powermediaplayer.diag.DiagLog.perf(
+                                "resume.asyncChapterFill",
+                                com.powermediaplayer.diag.DiagLog.now() - tFill,
+                                "token=$token count=$count"
+                            )
+                            if (count > 0 &&
+                                com.powermediaplayer.playback.ResumeGate.isCurrent(token)
+                            ) {
+                                val chapters = (0 until count).mapNotNull { i ->
+                                    val title = late.getString("chapter_title_$i")
+                                        ?: "Chapter ${i + 1}"
+                                    val start = late.getLong("chapter_start_$i", -1)
+                                    val end = late.getLong("chapter_end_$i", -1)
+                                    if (start >= 0) {
+                                        com.powermediaplayer.service.ChapterInfo(title, start, end, i)
+                                    } else null
+                                }
+                                playbackConnection.setLocalChapters(chapters)
+                            }
                         }
                     }
                 }
