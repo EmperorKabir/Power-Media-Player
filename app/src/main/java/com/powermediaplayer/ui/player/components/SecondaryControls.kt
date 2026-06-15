@@ -35,6 +35,25 @@ fun VolumeAndBrightnessControls(
     val context = LocalContext.current
     var brightness by remember { mutableFloatStateOf(BrightnessHelper.getBrightnessFloat(context)) }
 
+    // WRITE_SETTINGS permission state — hoisted ABOVE the slider so it can
+    // gate the slider's `enabled`. Re-checks on every ON_RESUME so the slider
+    // un-greys the moment permission is granted in Settings (and re-disables
+    // if revoked). Changing system brightness requires WRITE_SETTINGS; without
+    // it the slider must be disabled (not just a silent no-op write).
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var canWrite by remember {
+        mutableStateOf(BrightnessHelper.canWriteSettings(context))
+    }
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                canWrite = BrightnessHelper.canWriteSettings(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -84,7 +103,7 @@ fun VolumeAndBrightnessControls(
             Icon(
                 imageVector = Icons.Filled.BrightnessLow,
                 contentDescription = "Brightness low",
-                tint = TextSecondary,
+                tint = if (brightnessEnabled && canWrite) TextSecondary else DisabledGrey,
                 modifier = Modifier.size(20.dp)
             )
             Slider(
@@ -100,7 +119,9 @@ fun VolumeAndBrightnessControls(
                         BrightnessHelper.setBrightnessFloat(context, brightness)
                     }
                 },
-                enabled = brightnessEnabled,
+                // Disabled (greyed + not draggable) until WRITE_SETTINGS is
+                // granted — moving system brightness without it is impossible.
+                enabled = brightnessEnabled && canWrite,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 8.dp)
@@ -117,30 +138,14 @@ fun VolumeAndBrightnessControls(
             Icon(
                 imageVector = Icons.Filled.BrightnessHigh,
                 contentDescription = "Brightness high",
-                tint = TextSecondary,
+                tint = if (brightnessEnabled && canWrite) TextSecondary else DisabledGrey,
                 modifier = Modifier.size(20.dp)
             )
         }
 
-        // WRITE_SETTINGS permission hint — re-checks on every
-        // ON_RESUME so the banner disappears as soon as the user grants
-        // permission in Settings (and reappears if the user revokes it
-        // later). Without the lifecycle observer the canWriteSettings
-        // check ran at composition time only and the banner stuck
-        // around even after the grant.
-        val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-        var canWrite by remember {
-            mutableStateOf(BrightnessHelper.canWriteSettings(context))
-        }
-        androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
-            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                    canWrite = BrightnessHelper.canWriteSettings(context)
-                }
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-        }
+        // WRITE_SETTINGS permission hint — `canWrite` (hoisted above the
+        // slider) re-checks on every ON_RESUME, so this banner disappears as
+        // soon as the user grants permission and the slider un-greys together.
         if (!canWrite) {
             Text(
                 text = "Tap to grant brightness permission",
