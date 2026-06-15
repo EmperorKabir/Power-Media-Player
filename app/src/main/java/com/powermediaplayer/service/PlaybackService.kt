@@ -288,6 +288,14 @@ class PlaybackService : MediaSessionService() {
         val castLocalVideoActiveFlow =
             kotlinx.coroutines.flow.MutableStateFlow(false)
 
+        /** True whenever the SESSION player is a CastPlayer — i.e. the app is
+         *  casting (any kind: audio cast, audio-only-while-local-video, TV).
+         *  The Bluetooth button reads this so it doesn't show "routing to BT"
+         *  while audio is actually on the cast device (BT may still be
+         *  system-connected, but it isn't the app's active output). */
+        val castActiveFlow =
+            kotlinx.coroutines.flow.MutableStateFlow(false)
+
         /** True while the player's audio is force-pinned to the phone speaker
          *  via [rerouteAudioToPhoneSpeaker] (a per-app override of the system
          *  route). The Bluetooth sheet reads this to flip its action between
@@ -2115,6 +2123,10 @@ class PlaybackService : MediaSessionService() {
         castLocalVideoActive = false
         castInitialSyncDone = false
         Companion.castLocalVideoActiveFlow.value = false
+        // General cast indicator: true the moment the session player becomes a
+        // CastPlayer, false on the way back to local. Drives the BT button's
+        // "on but not the active app output" state during a cast.
+        Companion.castActiveFlow.value = target is CastPlayer
         Companion.setCastLocalVideoMute(false)
         castAudioExtractJob?.cancel()
         castAudioExtractJob = null

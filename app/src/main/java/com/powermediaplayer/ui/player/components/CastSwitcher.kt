@@ -200,7 +200,15 @@ fun CastSwitcherButton(
                     Spacer(Modifier.height(8.dp))
                     StopRow(
                         onClick = {
-                            router.selectRoute(router.defaultRoute)
+                            // Return audio to the connected Bluetooth speaker if
+                            // there is one — selectRoute(defaultRoute) ALWAYS
+                            // forces the phone built-in, which left audio on the
+                            // phone after stopping a cast while BT stayed
+                            // connected (logcat 21:48:55: "Selecting route: Phone"
+                            // → builtin speaker (2)). isBluetooth() is the stable
+                            // mediarouter 1.7 discriminator.
+                            val btRoute = router.routes.firstOrNull { it.isBluetooth }
+                            router.selectRoute(btRoute ?: router.defaultRoute)
                             sheetOpen = false
                         }
                     )

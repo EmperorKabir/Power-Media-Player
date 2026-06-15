@@ -61,6 +61,10 @@ fun BluetoothButton(
     // the BT device was already connected.
     val rerouteActive by com.powermediaplayer.service.PlaybackService
         .audioRerouteActiveFlow.collectAsStateWithLifecycle()
+    // True while the app is casting: BT may stay system-connected but it is
+    // NOT the app's active output, so the button must not show "routing to BT".
+    val castActive by com.powermediaplayer.service.PlaybackService
+        .castActiveFlow.collectAsStateWithLifecycle()
     // Audit 3.11 — event-driven instead of a 2s binder poll: routing
     // adds/removes fire AudioDeviceCallback the moment a BT sink
     // connects or drops.
@@ -90,6 +94,11 @@ fun BluetoothButton(
         enabledState = BluetoothHelper.isEnabled(context)
     }
 
+    // BT is the app's ACTIVE output only when A2DP is routing AND we're not
+    // casting (a cast moves the app's audio to the cast device even though BT
+    // can stay system-connected).
+    val btRouting = a2dpActive && !castActive
+
     IconButton(
         onClick = {
             // Tap ALWAYS opens the sheet (the disconnect/use-phone-speaker
@@ -103,23 +112,25 @@ fun BluetoothButton(
     ) {
         Icon(
             imageVector = when {
-                a2dpActive && !rerouteActive -> Icons.Filled.BluetoothConnected
-                a2dpActive && rerouteActive -> Icons.Filled.BluetoothConnected
+                btRouting -> Icons.Filled.BluetoothConnected
                 enabledState -> Icons.Filled.Bluetooth
                 else -> Icons.Filled.BluetoothDisabled
             },
             contentDescription = when {
-                a2dpActive && !rerouteActive -> "Bluetooth audio active"
-                a2dpActive && rerouteActive -> "Bluetooth connected, audio on phone speaker"
+                btRouting && !rerouteActive -> "Bluetooth audio active"
+                btRouting && rerouteActive -> "Bluetooth connected, audio on phone speaker"
+                castActive && a2dpActive -> "Bluetooth connected, audio on cast device"
                 enabledState -> "Bluetooth on, not routing audio"
                 else -> "Bluetooth off"
             },
             tint = when {
                 // Connected AND routing BT audio → full accent.
-                a2dpActive && !rerouteActive -> TealAccent
+                btRouting && !rerouteActive -> TealAccent
                 // Connected but audio pinned to the phone speaker → dimmed,
                 // so the button reflects "playing out the phone" at a glance.
-                a2dpActive && rerouteActive -> TealAccent.copy(alpha = 0.5f)
+                btRouting && rerouteActive -> TealAccent.copy(alpha = 0.5f)
+                // BT on but not the app output (casting, or no media route) →
+                // dimmed "on, not routing".
                 enabledState -> TealAccent.copy(alpha = 0.7f)
                 else -> TextSecondary
             }
@@ -137,7 +148,8 @@ fun BluetoothButton(
             BluetoothSheetContent(
                 isEnabled = enabledState,
                 hasPermission = permissionGranted,
-                a2dpActive = a2dpActive,
+                a2dpActive = btRouting,
+                castActive = castActive && a2dpActive,
                 rerouteActive = rerouteActive,
                 onPlayOnPhone = {
                     // "Disconnect" without turning Bluetooth off = reroute this
@@ -187,6 +199,7 @@ private fun BluetoothSheetContent(
     isEnabled: Boolean,
     hasPermission: Boolean,
     a2dpActive: Boolean,
+    castActive: Boolean,
     rerouteActive: Boolean,
     onPlayOnPhone: () -> Unit,
     onPlayOnBluetooth: () -> Unit,
@@ -233,7 +246,19 @@ private fun BluetoothSheetContent(
         // audio to the phone speaker; the toggle flips back to the BT device.
         // This is the fix for "connected to <device> but playing out the phone":
         // the override is now always recoverable from here.
-        if (a2dpActive || rerouteActive) {
+        if (castActive) {
+            // While casting, the app's audio is on the cast device — the BT
+            // reroute toggle (which acts on the local player) is moot. Make the
+            // state explicit instead of silently showing nothing.
+            Text(
+                text = "Casting — audio is playing on the cast device. " +
+                    "Bluetooth stays system-connected; stop casting to use it " +
+                    "for playback in this app.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary
+            )
+            Spacer(Modifier.height(12.dp))
+        } else if (a2dpActive || rerouteActive) {
             if (rerouteActive) {
                 Text(
                     text = "Audio is on the phone speaker. Bluetooth is still " +
