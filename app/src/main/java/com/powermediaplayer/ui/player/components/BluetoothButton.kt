@@ -6,10 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,7 +38,7 @@ import com.powermediaplayer.util.BluetoothHelper
  * No app-side connection initiation is attempted because the public
  * BluetoothA2dp.connect API has been hidden since SDK 28.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BluetoothButton(
     modifier: Modifier = Modifier,
@@ -88,39 +84,16 @@ fun BluetoothButton(
         enabledState = BluetoothHelper.isEnabled(context)
     }
 
-    Box(
+    IconButton(
+        onClick = {
+            // Tap ALWAYS opens the sheet (the disconnect/use-phone-speaker
+            // action lives INSIDE it now — tap-to-disconnect hid the menu).
+            if (!permissionGranted) {
+                permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            sheetOpen = true
+        },
         modifier = modifier
-            .clip(CircleShape)
-            .combinedClickable(
-                onClick = {
-                    if (a2dpActive) {
-                        // Routing to a BT device → tap moves audio back to the
-                        // phone speaker (Bluetooth stays on; a true ACL
-                        // disconnect needs privileged APIs). Long-press opens
-                        // the sheet (pairing / settings / A/V offset).
-                        val ok = com.powermediaplayer.service.PlaybackService
-                            .rerouteAudioToPhoneSpeaker(context)
-                        android.widget.Toast.makeText(
-                            context,
-                            if (ok) "Audio moved to phone speaker — Bluetooth still on"
-                            else "Couldn't switch audio output",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        if (!permissionGranted) {
-                            permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
-                        }
-                        sheetOpen = true
-                    }
-                },
-                onLongClick = {
-                    if (!permissionGranted) {
-                        permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
-                    }
-                    sheetOpen = true
-                }
-            ),
-        contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = when {
@@ -129,7 +102,7 @@ fun BluetoothButton(
                 else -> Icons.Filled.BluetoothDisabled
             },
             contentDescription = when {
-                a2dpActive -> "Bluetooth audio active — tap to use phone speaker, long-press for options"
+                a2dpActive -> "Bluetooth audio active"
                 enabledState -> "Bluetooth on, not routing audio"
                 else -> "Bluetooth off"
             },
@@ -152,6 +125,22 @@ fun BluetoothButton(
             BluetoothSheetContent(
                 isEnabled = enabledState,
                 hasPermission = permissionGranted,
+                a2dpActive = a2dpActive,
+                onDisconnect = {
+                    // "Disconnect" without turning Bluetooth off = reroute this
+                    // app's audio to the phone speaker (a true ACL disconnect
+                    // needs privileged APIs). BT stays on; reconnects on next
+                    // route change / when BT is re-selected.
+                    val ok = com.powermediaplayer.service.PlaybackService
+                        .rerouteAudioToPhoneSpeaker(context)
+                    android.widget.Toast.makeText(
+                        context,
+                        if (ok) "Audio moved to phone speaker — Bluetooth still on"
+                        else "Couldn't switch audio output",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    sheetOpen = false
+                },
                 offsetMs = settings.btVideoAudioOffsetMs,
                 onOffsetChange = { settingsVm.setBtVideoAudioOffsetMs(it) },
                 onRequestPermission = {
@@ -172,6 +161,8 @@ fun BluetoothButton(
 private fun BluetoothSheetContent(
     isEnabled: Boolean,
     hasPermission: Boolean,
+    a2dpActive: Boolean,
+    onDisconnect: () -> Unit,
     offsetMs: Int,
     onOffsetChange: (Int) -> Unit,
     onRequestPermission: () -> Unit,
@@ -207,6 +198,27 @@ private fun BluetoothSheetContent(
             color = TealAccent
         )
         Spacer(Modifier.height(12.dp))
+
+        // ── Disconnect (play on phone speaker) ───────────────────
+        // Shown only while BT audio is actually routing. Moves THIS app's
+        // audio back to the phone speaker; Bluetooth stays on (a true ACL
+        // disconnect needs privileged APIs). This replaces the old
+        // tap-the-button-to-disconnect, which hid this sheet.
+        if (a2dpActive) {
+            FilledTonalButton(
+                onClick = onDisconnect,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    Icons.Filled.BluetoothDisabled,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text("Play on phone speaker (stop Bluetooth audio)")
+            }
+            Spacer(Modifier.height(12.dp))
+        }
 
         // ── Video / audio sync offset ────────────────────────────
         // Same stored value as Settings → "Bluetooth video audio offset",
