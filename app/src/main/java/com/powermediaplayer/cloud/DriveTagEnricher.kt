@@ -5,6 +5,7 @@ import com.powermediaplayer.data.repository.LastPlayedRepository
 import com.powermediaplayer.service.ChapterInfo
 import com.powermediaplayer.service.LocalMetadataOverride
 import com.powermediaplayer.service.PlaybackConnection
+import com.powermediaplayer.util.ArtworkCache
 import com.powermediaplayer.util.ChapterCache
 import com.powermediaplayer.util.M4bChapterParser
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -92,6 +93,9 @@ class DriveTagEnricher @Inject constructor(
                     ?: mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
                 val album = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM)
                 val artBytes = mmr.embeddedPicture
+                val artUri = (artBytes?.let {
+                    ArtworkCache.write(context, stableKey, it)
+                }) ?: item.thumbnailUri
                 if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
                     !album.isNullOrBlank() || artBytes != null
                 ) {
@@ -102,13 +106,16 @@ class DriveTagEnricher @Inject constructor(
                         title = title,
                         artist = artist,
                         album = album,
-                        artworkUri = item.thumbnailUri,
+                        artworkUri = artUri,
                         artworkBytes = artBytes
                     )
                     playbackConnection.setLocalMetadata(override)
                     cache[item.id] = override
-                    if (!title.isNullOrBlank()) {
-                        runCatching { lastPlayedRepo.updateDisplayByUri(stableKey, title, artist ?: "") }
+                    runCatching {
+                        if (!title.isNullOrBlank())
+                            lastPlayedRepo.updateDisplayByUri(stableKey, title, artist ?: "")
+                        if (artBytes != null && artUri != null)
+                            lastPlayedRepo.updateArtworkByUri(stableKey, artUri.toString())
                     }
                     if (artBytes != null) found = true
                 }

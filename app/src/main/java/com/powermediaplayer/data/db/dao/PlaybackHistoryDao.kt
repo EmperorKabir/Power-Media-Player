@@ -57,6 +57,16 @@ interface PlaybackHistoryDao {
     )
     suspend fun updateDisplayByUri(uri: String, title: String, subtitle: String)
 
+    /** Persist the cover-art URI (a durable cache-file path for embedded art)
+     *  onto the most-recent row for a uri, so Last Played thumbnails + resume
+     *  show the real cover, not the (often null) Drive thumbnail. */
+    @Query(
+        "UPDATE playback_history SET artworkUri = :artworkUri " +
+            "WHERE id = (SELECT id FROM playback_history WHERE mediaUri = :uri " +
+            "ORDER BY lastPlayedAt DESC LIMIT 1)"
+    )
+    suspend fun updateArtworkByUri(uri: String, artworkUri: String)
+
     @Query("DELETE FROM playback_history WHERE id = :id")
     suspend fun delete(id: Long)
 

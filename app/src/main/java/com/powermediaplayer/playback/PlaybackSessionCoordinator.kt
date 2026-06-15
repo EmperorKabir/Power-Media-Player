@@ -617,6 +617,15 @@ class PlaybackSessionCoordinator @Inject constructor(
                                 androidx.media3.common.MediaMetadata.Builder()
                                     .setTitle(recent.title)
                                     .setArtist(recent.subtitle)
+                                    // Restore the persisted cover (durable cache
+                                    // file written when the item was enriched)
+                                    // so resume shows the real artwork, not blank.
+                                    .apply {
+                                        val art = com.powermediaplayer.util.ArtworkCache
+                                            .uriFor(context, recent.mediaUri)
+                                            ?: recent.artworkUri?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+                                        if (art != null) setArtworkUri(art)
+                                    }
                                     .setExtras(chapterExtras)
                                     .build()
                             )

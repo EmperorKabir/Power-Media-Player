@@ -1318,6 +1318,12 @@ class CloudViewModel @Inject constructor(
                     android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM
                 )
                 val artBytes = mmr.embeddedPicture
+                // Persist embedded art to a durable cache file so the cover
+                // survives the transient override (fixes the intermittent
+                // cover) AND can be referenced by Last Played + resume.
+                val artUri = (artBytes?.let {
+                    com.powermediaplayer.util.ArtworkCache.write(context, stableKey, it)
+                }) ?: item.thumbnailUri
                 if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
                     !album.isNullOrBlank() || artBytes != null) {
                     val override = LocalMetadataOverride(
@@ -1331,28 +1337,23 @@ class CloudViewModel @Inject constructor(
                         title = title,
                         artist = artist,
                         album = album,
-                        // Preserve the Drive thumbnail as a fallback when
-                        // the file has no embedded picture — otherwise
-                        // updating with artworkBytes=null would wipe the
-                        // placeholder we set instantly on play.
-                        artworkUri = item.thumbnailUri,
+                        artworkUri = artUri,
                         artworkBytes = artBytes
                     )
                     playbackConnection.setLocalMetadata(override)
                     // Cache for instant, no-re-download restore on the next
                     // open of this item this session (cast-return, re-tap).
                     enrichedByMediaId[item.id] = override
-                    // PERSIST the proper title/author onto the Last Played row
-                    // for this uri, so a later AUTO-RESUME (cold-start, which
-                    // never enriches by design) shows the real tags instead of
-                    // the filename — this is the bit that was regressed.
-                    if (!title.isNullOrBlank()) {
-                        viewModelScope.launch {
-                            runCatching {
-                                lastPlayedRepo.updateDisplayByUri(
-                                    stableKey, title, artist ?: ""
-                                )
-                            }
+                    // PERSIST proper title/author + the cover uri onto the Last
+                    // Played row so a later AUTO-RESUME (cold-start never
+                    // enriches) + the Last Played thumbnail show the real tags
+                    // and cover instead of the filename / blank.
+                    viewModelScope.launch {
+                        runCatching {
+                            if (!title.isNullOrBlank())
+                                lastPlayedRepo.updateDisplayByUri(stableKey, title, artist ?: "")
+                            if (artBytes != null && artUri != null)
+                                lastPlayedRepo.updateArtworkByUri(stableKey, artUri.toString())
                         }
                     }
                     if (artBytes != null) found = true

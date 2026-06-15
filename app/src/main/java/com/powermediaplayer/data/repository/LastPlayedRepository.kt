@@ -226,6 +226,11 @@ class LastPlayedRepository @Inject constructor(
         historyDao.updateDisplayByUri(uri, title, subtitle)
     }
 
+    /** Persist a durable cover-art URI onto the most-recent row for a uri. */
+    suspend fun updateArtworkByUri(uri: String, artworkUri: String) {
+        historyDao.updateArtworkByUri(uri, artworkUri)
+    }
+
     /** Delete a single Recents row (and its bookmarks via FK CASCADE). */
     suspend fun delete(id: Long) {
         historyDao.delete(id)
