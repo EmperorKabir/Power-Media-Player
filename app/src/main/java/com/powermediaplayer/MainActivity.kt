@@ -5,6 +5,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
@@ -293,18 +294,22 @@ class MainActivity : FragmentActivity() {
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
-                        // vc31 edge-to-edge: the OledBlack Surface stays
+                        // vc31 edge-to-edge: keep the OledBlack Surface
                         // full-bleed behind the (transparent, Android-15
-                        // default) system bars. The system-bar inset for the
-                        // app chrome is applied PER-TAB inside AppNavigation
-                        // (not here): toggling it on this root Box re-padded
-                        // the WHOLE tree every time the full-bleed video
-                        // player gained/lost focus, relaying out the entire
-                        // window on each return to the Player tab (visible
-                        // flicker). Keeping the root stable confines the
-                        // re-measure to the content that's swapping anyway.
+                        // default) system bars, but inset the app chrome
+                        // so InfoIcon/controls don't collide with the
+                        // notch or the back-gesture zone. Addresses the
+                        // Play Console edge-to-edge warning.
                         androidx.compose.foundation.layout.Box(
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // Audit 6.4 — immersive video drops the bar
+                                // padding so the frame is truly full-bleed;
+                                // everything else keeps the inset chrome.
+                                .then(
+                                    if (MainActivityHolder.fullBleedVideo.value) Modifier
+                                    else Modifier.systemBarsPadding()
+                                )
                         ) {
                             AppNavigation(
                                 windowSizeClass = windowSizeClass,

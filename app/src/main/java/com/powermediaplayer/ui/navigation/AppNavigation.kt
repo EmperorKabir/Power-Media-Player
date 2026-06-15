@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
@@ -189,49 +188,15 @@ fun AppNavigation(
         }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-        // System-bar inset applied HERE (per-tab content) rather than on the
-        // activity root: full-bleed video drops it, every other tab keeps it.
-        // Putting it on the content — which swaps on navigation anyway —
-        // means returning to the video player no longer relayouts the whole
-        // window (the previous root-level toggle caused the flicker). The
-        // wrapping Box above stays full-bleed so the immersive tab overlay
-        // still aligns to the true screen edges.
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (com.powermediaplayer.MainActivityHolder.fullBleedVideo.value) Modifier
-                    else Modifier.systemBarsPadding()
-                )
-        ) {
+        androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .weight(1f)
         ) {
-        // ONE hoisted video surface for the whole app. Mounted OUTSIDE the
-        // NavHost (here, FIRST child) so a tab switch never disposes it — the
-        // TextureView/codec stays attached, killing the 1-frame black flash on
-        // returning to the Player tab. Player route → fills behind NavHost
-        // (zIndex 0, shown through PlayerScreen's transparent hole); other tabs
-        // → draggable in-app PiP (zIndex 2). Replaces FloatingVideoMiniPlayer.
-        com.powermediaplayer.ui.components.HoistedVideoStage(
-            isPlayerRoute = isPlayerRoute,
-            adaptive = com.powermediaplayer.ui.adaptive.rememberAdaptiveInfo(windowSizeClass),
-            onExpand = navigateToPlayer
-        )
         NavHost(
             navController = navController,
-            startDestination = Screen.Player.route,
-            // Tab switches are INSTANT. The compose-navigation default is a
-            // 700 ms cross-fade, which made returning to a playing video look
-            // like a full-screen "refresh" — the picture faded in over the
-            // outgoing screen. A tabbed app should swap immediately (like a
-            // bottom-nav bar), so disable enter/exit/pop transitions.
-            enterTransition = { androidx.compose.animation.EnterTransition.None },
-            exitTransition = { androidx.compose.animation.ExitTransition.None },
-            popEnterTransition = { androidx.compose.animation.EnterTransition.None },
-            popExitTransition = { androidx.compose.animation.ExitTransition.None }
+            startDestination = Screen.Player.route
         ) {
             composable(Screen.Player.route) {
                 PlayerScreen(
@@ -259,9 +224,15 @@ fun AppNavigation(
                 SettingsScreen(windowSizeClass = windowSizeClass)
             }
         }
-        // (In-app picture-in-picture is now provided by HoistedVideoStage
-        // above — the same single video surface, repositioned by route, so a
-        // tab switch never recreates it.)
+        // In-app picture-in-picture: keep the video visible while the
+        // user browses other tabs. Hidden on the Player tab (the full
+        // surface owns the video there); system PiP on leaving the app
+        // is unchanged (MainActivity's PiP branch).
+        if (!isPlayerRoute) {
+            com.powermediaplayer.ui.components.FloatingVideoMiniPlayer(
+                onExpand = navigateToPlayer
+            )
+        }
         }
         // MiniPlayerBar — every non-Player tab; spans the CONTENT width
         // so it sits beside the rail on wide layouts rather than under it.

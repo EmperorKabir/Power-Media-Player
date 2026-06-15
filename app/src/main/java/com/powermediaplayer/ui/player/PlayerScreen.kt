@@ -464,17 +464,6 @@ private fun PlayerScreenCompact(
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
-    // DIAG (T294) — one log per PlayerScreen composition entry: confirms the
-    // tab-return rebuild (H1) and captures the controls-reset (H2) + uiState
-    // (H3 empty-state check) at that exact moment.
-    LaunchedEffect(Unit) {
-        com.powermediaplayer.util.Diag.i(
-            "PMP_DIAG",
-            "PlayerScreen COMPOSE enter isVideo=${uiState.isVideoContent} " +
-                "hasMedia=${uiState.hasMedia} title='${uiState.title.take(24)}' " +
-                "controlsVisible=$controlsVisible"
-        )
-    }
     // Audit 8.2 (F8) — tabletop foldable: video occupies the top leaf,
     // controls the bottom leaf. Immersive auto-hide is suspended here
     // (bars + controls stay shown) since the picture isn't full-bleed.
@@ -574,11 +563,14 @@ private fun PlayerScreenCompact(
             )
         } else {
         if (uiState.isVideoContent) {
-            // Video content: the picture is drawn by the single hoisted video
-            // surface in AppNavigation (HoistedVideoStage), which sits BEHIND
-            // this destination. This is a transparent hole so that surface
-            // shows through — never recreating the TextureView on tab return.
-            Box(modifier = Modifier.fillMaxSize())
+            // Video content: render the actual video frames
+            // VideoSurface attaches directly to the ExoPlayer in PlaybackService
+            VideoSurface(
+                isVideoContent = true,
+                videoWidth = uiState.videoWidth,
+                videoHeight = uiState.videoHeight,
+                modifier = Modifier.fillMaxSize()
+            )
             // Tap the picture to TOGGLE the controls (show when hidden,
             // hide immediately when shown — overriding, but not removing,
             // the auto-hide timer). Sits above the video, below
@@ -697,12 +689,9 @@ private fun TabletopVideoLayout(
     val hingeGapDp =
         if (hinge != null) with(density) { (hinge.bottom - hinge.top).toDp() } else 0.dp
     Column(
-        // No opaque background here: the top-leaf is a transparent hole so the
-        // hoisted video surface (behind this destination) shows through. The
-        // hinge gap paints its own black and the OledBlack scaffold shows
-        // behind the bottom leaf's scrim, so the rest still reads black.
         modifier = Modifier
             .fillMaxSize()
+            .background(OledBlack)
     ) {
         // Top leaf — video, frame bottom edge resting on the hinge.
         Box(
@@ -710,10 +699,12 @@ private fun TabletopVideoLayout(
                 .fillMaxWidth()
                 .height(topLeafDp)
         ) {
-            // Transparent hole — the actual picture is drawn in the top leaf by
-            // the single hoisted video surface (HoistedVideoStage) behind this
-            // destination, pinned to the same topLeafDp on tabletop posture.
-            Box(modifier = Modifier.fillMaxSize())
+            VideoSurface(
+                isVideoContent = true,
+                videoWidth = uiState.videoWidth,
+                videoHeight = uiState.videoHeight,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         // Physical hinge gap.
         if (hingeGapDp > 0.dp) {
