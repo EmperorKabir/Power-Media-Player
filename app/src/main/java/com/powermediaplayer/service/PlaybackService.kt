@@ -212,6 +212,11 @@ class PlaybackService : MediaSessionService() {
     // its buffering blips — mirroring isPlaying made the picture stutter.
     @Volatile private var castInitialSyncDone: Boolean = false
     @Volatile private var castVideoAudioOffsetMsFlag: Int = 0
+    // Audio-only cast of a video: the extracted temp .m4a we cast (small →
+    // fast receiver buffer) and the extraction job, so we can cancel + delete
+    // on cast-end.
+    private var castAudioTempFile: java.io.File? = null
+    private var castAudioExtractJob: kotlinx.coroutines.Job? = null
     // CastContext is process-static: a listener left registered pins this
     // service generation (and its released CastPlayer) until process death.
     private var castSessionListener:
@@ -1987,6 +1992,10 @@ class PlaybackService : MediaSessionService() {
         castInitialSyncDone = false
         Companion.castLocalVideoActiveFlow.value = false
         Companion.setCastLocalVideoMute(false)
+        castAudioExtractJob?.cancel()
+        castAudioExtractJob = null
+        castAudioTempFile?.let { runCatching { it.delete() } }
+        castAudioTempFile = null
         // Cast local-video: ONLY when casting a VIDEO item to an AUDIO-ONLY
         // device do we keep the local picture alive. Every other case (audio
         // cast, video-capable TV, non-video) takes the unchanged stop path.
@@ -2119,7 +2128,14 @@ class PlaybackService : MediaSessionService() {
             current.stop()
         }
         ms.player = target
-        if (transformed.isNotEmpty()) {
+        if (keepLocalVideo) {
+            // Don't cast the heavy video — extract its audio track and cast
+            // ONLY that, so the speaker starts in ~1-2s instead of buffering
+            // 20-30s of 4K video. The picture plays locally (muted) meanwhile.
+            startCastAudioOnly(
+                target as CastPlayer, current as ExoPlayer, currentPosition, playWhenReady
+            )
+        } else if (transformed.isNotEmpty()) {
             // CRASH FIX (NPE in DefaultMediaSourceFactory.createMediaSource):
             // ExoPlayer requires every MediaItem to have a non-null
             // localConfiguration. CastPlayer's reconstructed items can
@@ -2163,6 +2179,77 @@ class PlaybackService : MediaSessionService() {
     private fun Player.isPlayingVideo(): Boolean =
         currentTracks.groups.any { it.type == androidx.media3.common.C.TRACK_TYPE_VIDEO } ||
             videoSize.width > 0
+
+    /** Extract the current video's audio track to a small temp .m4a (off the
+     *  main thread) and cast ONLY that — a tiny stream the speaker buffers in
+     *  ~1-2s instead of buffering tens of seconds of 4K video. Falls back to
+     *  casting the video itself if extraction (or the relay) fails. */
+    private fun startCastAudioOnly(
+        cast: CastPlayer,
+        local: ExoPlayer,
+        positionMs: Long,
+        play: Boolean
+    ) {
+        val sourceItem = local.currentMediaItem
+        val sourceUri = sourceItem?.localConfiguration?.uri
+            ?: sourceItem?.requestMetadata?.mediaUri
+        if (sourceItem == null || sourceUri == null) {
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "Cast audio-only: no source uri")
+            return
+        }
+        val metadata = sourceItem.mediaMetadata
+        castAudioExtractJob?.cancel()
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG", "Cast audio-only: extracting audio from $sourceUri"
+        )
+        castAudioExtractJob = serviceScope.launch {
+            val temp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                CastAudioExtractor.extractAudio(applicationContext, sourceUri)
+            }
+            // The user may have stopped casting while we extracted (the
+            // teardown at the top of switchPlayer clears this flag).
+            if (!castLocalVideoActive) {
+                runCatching { temp?.delete() }
+                return@launch
+            }
+            castAudioTempFile?.let { old -> runCatching { old.delete() } }
+            castAudioTempFile = temp
+            val server = castRelayServer ?: startCastRelayIfNeeded()
+            if (temp == null) {
+                // Extraction failed (exotic codec etc.) — fall back to casting
+                // the video so the user still gets audio, just with the wait.
+                com.powermediaplayer.util.Diag.w(
+                    "PMP_DIAG", "Cast audio-only fallback → casting video (extract failed)"
+                )
+                if (server != null) {
+                    val videoItem = rebuildForCast(sourceItem, server)
+                    if (videoItem.localConfiguration != null) {
+                        cast.setMediaItems(listOf(videoItem), 0, positionMs)
+                        cast.playWhenReady = play
+                        cast.prepare()
+                    }
+                }
+                return@launch
+            }
+            if (server == null) return@launch
+            val token = server.register(
+                CastRelayServer.RelayItem.Local(android.net.Uri.fromFile(temp), "audio/mp4")
+            )
+            val url = "http://$castRelayLanIp:${server.listeningPort}/$token"
+            val item = MediaItem.Builder()
+                .setUri(url)
+                .setMediaId(sourceUri.toString())
+                .setMediaMetadata(metadata)
+                .build()
+            cast.setMediaItems(listOf(item), 0, positionMs)
+            cast.playWhenReady = play
+            cast.prepare()
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "Cast audio-only: casting extracted m4a (${temp.length()} bytes) @${positionMs}ms"
+            )
+        }
+    }
 
     /**
      * Cast relay (lazy-singleton). Started on first switch-to-CastPlayer,
