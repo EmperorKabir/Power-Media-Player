@@ -729,6 +729,13 @@ class PlaybackConnection @Inject constructor(
                 com.powermediaplayer.util.Diag.i("PMP_DIAG", "evt loadingChanged=$isLoading")
                 scheduleUpdate()
             }
+            // DIAG (T294) — fires when the codec draws the first frame to a
+            // newly-attached surface. On a tab return this marks the END of the
+            // black-blink window (the moment the picture is live again); the
+            // gap between the new-surface bind and this is the blink duration.
+            override fun onRenderedFirstFrame() {
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "evt RENDERED_FIRST_FRAME")
+            }
             // Track changes populate isVideoContent — must be listened to separately
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                 controller?.let { cachedAudioFormatLabel = describeAudioFormat(it) }

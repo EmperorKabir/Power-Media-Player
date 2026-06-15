@@ -261,6 +261,21 @@ class PlaybackService : MediaSessionService() {
 
         fun getExoPlayer(): ExoPlayer? = exoPlayerRef?.get()
 
+        /**
+         * T294 — monotonically increments each time the renderer draws a video
+         * frame (fed by a VideoFrameMetadataListener on the player). The video
+         * surface uses this as the reliable "a real frame is now on the surface"
+         * signal to drop its freeze-frame after a tab-return surface re-attach —
+         * Player.Listener.onRenderedFirstFrame does NOT fire on a live surface
+         * swap (confirmed on device), so it can't be used. Paused/ended → no new
+         * tick → the freeze-frame stays (the last frame shows, not black).
+         */
+        private val _videoFrameTick = kotlinx.coroutines.flow.MutableStateFlow(0L)
+        val videoFrameTick: kotlinx.coroutines.flow.StateFlow<Long>
+            get() = _videoFrameTick
+        // Set from the player's VideoFrameMetadataListener (onCreate).
+        internal fun bumpVideoFrameTick() { _videoFrameTick.value++ }
+
         // ── Volume mixer ────────────────────────────────────────────
         // ExoPlayer.volume is multiplexed between two independent
         // sources: ReplayGain attenuation (negative track-gain values)
@@ -932,6 +947,10 @@ class PlaybackService : MediaSessionService() {
 
         // Publish the real ExoPlayer so VideoSurface can attach to it for rendering
         exoPlayerRef = java.lang.ref.WeakReference(player!!)
+
+        // T294 — per-frame tick so the video surface can drop its freeze-frame
+        // the instant a real frame lands on a re-attached surface (tab return).
+        player!!.setVideoFrameMetadataListener { _, _, _, _ -> bumpVideoFrameTick() }
 
         // Crossfade controller. Polls position and applies a linear
         // volume ramp via [setCrossfadeFactor] in the final

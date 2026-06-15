@@ -10,8 +10,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
@@ -110,6 +115,11 @@ fun VideoSurface(
             factory = { ctx ->
                 TextureView(ctx).apply {
                     isOpaque = true
+                    // DIAG (T294) — confirm whether returning to the Player tab
+                    // recreates the full-screen TextureView (root-cause check).
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG", "VS factory CREATE tv=${this.hashCode()}"
+                    )
                     VideoSurfaceBinding.bind(this)
                     // Audit 6.12 — publish on-screen bounds so PiP enter
                     // can animate from the video frame (sourceRectHint)
@@ -143,10 +153,58 @@ fun VideoSurface(
                 // the cause of the off-frame / frozen-frame artefacts.
             },
             onRelease = { view ->
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG", "VS RELEASE tv=${view.hashCode()}"
+                )
                 VideoSurfaceBinding.release(view)
             },
             modifier = aspectMod.then(transformMod)
         )
+
+        // T294 — freeze-frame over the re-attached surface. Returning to the
+        // Player tab rebuilds this composable → a NEW (blank) TextureView →
+        // the picture is black until the codec draws a frame to it (persists
+        // while paused/ended; brief while playing). Show the last captured
+        // frame ON TOP until a real frame lands on the new surface, detected
+        // by videoFrameTick incrementing AFTER mount (onRenderedFirstFrame does
+        // NOT fire on a live surface swap). Paused/ended → tick frozen → the
+        // last frame keeps showing (correct) instead of black.
+        val freezeBmp = remember { VideoFreezeFrame.consume() }
+        if (freezeBmp != null) {
+            var showFreeze by remember { mutableStateOf(true) }
+            LaunchedEffect(Unit) {
+                // Suspend until a genuinely NEW frame is drawn to the
+                // re-attached surface, then drop the freeze. Observed via the
+                // flow (not Compose state) so playback doesn't recompose this
+                // every frame. Paused/ended never ticks → first() never
+                // resumes → the last frame keeps showing instead of black.
+                val start = PlaybackService.videoFrameTick.value
+                PlaybackService.videoFrameTick.first { it != start }
+                showFreeze = false
+            }
+            if (showFreeze) {
+                androidx.compose.foundation.Image(
+                    bitmap = freezeBmp.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = aspectMod.then(transformMod)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * T294 — one-shot holder for the last video frame captured at a surface
+ * handoff. [VideoSurfaceBinding.bind] fills it from the OUTGOING surface; the
+ * next [VideoSurface] to mount consumes it as a freeze-frame to bridge the
+ * blank-surface gap on a tab return. Cleared on consume so it never goes stale.
+ */
+object VideoFreezeFrame {
+    @Volatile private var bmp: android.graphics.Bitmap? = null
+    fun put(b: android.graphics.Bitmap?) { bmp = b }
+    fun consume(): android.graphics.Bitmap? {
+        val b = bmp; bmp = null; return b
     }
 }
 
@@ -174,9 +232,19 @@ object VideoSurfaceBinding {
 
     @Synchronized
     fun bind(view: android.view.TextureView) {
+        // T294 — capture the OUTGOING surface's last frame before the codec
+        // re-attaches to the new view, so the new (briefly blank) surface can
+        // show that frame instead of black during a tab-return handoff.
+        val outgoing = stack.peekLast()?.get()
+        if (outgoing != null && outgoing !== view && outgoing.isAvailable) {
+            runCatching { outgoing.bitmap }.getOrNull()?.let { VideoFreezeFrame.put(it) }
+        }
         stack.removeAll { it.get() == null || it.get() === view }
         stack.addLast(java.lang.ref.WeakReference(view))
         current = stack.peekLast()
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG", "VS bind tv=${view.hashCode()} stack=${stack.size} → setVideoTextureView"
+        )
         runCatching {
             com.powermediaplayer.service.PlaybackService
                 .getExoPlayer()?.setVideoTextureView(view)

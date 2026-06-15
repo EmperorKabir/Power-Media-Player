@@ -464,6 +464,17 @@ private fun PlayerScreenCompact(
     var controlsVisible by remember(uiState.isVideoContent) {
         mutableStateOf(true)
     }
+    // DIAG (T294) — one log per PlayerScreen composition entry: confirms the
+    // tab-return rebuild (H1) and captures the controls-reset (H2) + uiState
+    // (H3 empty-state check) at that exact moment.
+    LaunchedEffect(Unit) {
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "PlayerScreen COMPOSE enter isVideo=${uiState.isVideoContent} " +
+                "hasMedia=${uiState.hasMedia} title='${uiState.title.take(24)}' " +
+                "controlsVisible=$controlsVisible"
+        )
+    }
     // Audit 8.2 (F8) — tabletop foldable: video occupies the top leaf,
     // controls the bottom leaf. Immersive auto-hide is suspended here
     // (bars + controls stay shown) since the picture isn't full-bleed.

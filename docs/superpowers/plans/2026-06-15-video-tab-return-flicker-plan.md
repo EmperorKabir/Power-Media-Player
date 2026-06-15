@@ -142,6 +142,38 @@ out, view-reuse fragile), masking the unavoidable blank with the last frame is t
 - Strip the Phase-1 diagnostic logs (or gate behind the existing DiagLog) before the
   final release build.
 
+## 6b. Phase 1 RESULTS (captured on device 2026-06-15, logcat + frame burst)
+Evidence files: `deeplogs/logcat-t294*.txt`, `deeplogs/montage.png`.
+- **H1 CONFIRMED.** Clean `Player→Library→Player`: leaving = mini TextureView CREATE
+  + bind, full RELEASE; returning = mini RELEASE → **new full TextureView CREATE**
+  (hash changes each return: 113507244 → 116545419 → 202579223) + `setVideoTextureView`.
+- **Frame burst across the return: the video rect is BLACK for the whole ~500ms+
+  window** (frames 1–11). The clip was at its end (1:14/-0:00) → ended/paused → the
+  codec has no frame to draw to the new surface → stays black. (Playing would fill in
+  1–2 frames.) → the "refresh" = a black video on the re-attached surface.
+- **`onRenderedFirstFrame` does NOT fire on the swap** (it fired on cold start, 220 ms
+  after bind, but never on a return). → the planned hide-trigger is INVALID.
+- **H2 CONFIRMED but minor.** `PlayerScreen COMPOSE … controlsVisible=true` on every
+  return (controls reset to shown). `AnimatedVisibility` starts already-visible so
+  there is NO 500 ms fade — controls just snap on (~1 frame). Secondary to the black.
+- **H3 FALSE.** `hasMedia=true`, title populated at first composition → ViewModel
+  restored, no empty-state flash. No fix needed.
+
+### Corrected fix (replaces §5 Fix A trigger)
+- **Fix A — freeze-frame over the re-attached surface, kept until a real frame
+  renders.** Capture the outgoing surface's last frame in `VideoSurfaceBinding.bind`
+  (`getBitmap`), show it ON TOP of the new TextureView. Hide it on the first
+  **rendered-frame tick** AFTER mount — sourced from a `VideoFrameMetadataListener`
+  on the ExoPlayer (fires per rendered frame; reliable on a live swap, unlike
+  `onRenderedFirstFrame`). Paused/ended → no tick → freeze stays = the last frame
+  shows (correct: a paused video should show its frame, not black). `isOpaque` stays
+  true (no per-frame alpha-blend perf change).
+- **Fix B — preserve `controlsVisible` across navigation** (`rememberSaveable`), so
+  returning keeps the prior chrome state instead of snapping controls on. Low-risk,
+  removes the secondary artefact.
+- Both keep the dual-surface; both localized (`VideoSurface.kt`, `PlaybackService`/
+  `PlaybackConnection` for the frame tick, `PlayerScreen` controlsVisible).
+
 ## 7. Anti-skip
 - Do NOT implement any fix until Phase 1 evidence is captured and the decision gate
   picks the fix(es). (This is the discipline the two prior failed fixes skipped.)
