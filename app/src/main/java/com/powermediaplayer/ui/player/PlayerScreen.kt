@@ -2,6 +2,8 @@ package com.powermediaplayer.ui.player
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
@@ -500,7 +502,7 @@ private fun PlayerScreenCompact(
     // them. Swipe shows transient bars per platform convention.
     val immersiveActivity = androidx.compose.ui.platform.LocalContext.current
         as? android.app.Activity
-    LaunchedEffect(uiState.isVideoContent, controlsVisible) {
+    LaunchedEffect(uiState.isVideoContent, controlsVisible, tabletopVideo) {
         val window = immersiveActivity?.window ?: return@LaunchedEffect
         val ctrl = androidx.core.view.WindowCompat
             .getInsetsController(window, window.decorView)
@@ -511,8 +513,15 @@ private fun PlayerScreenCompact(
         } else {
             ctrl.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
         }
+        // Video is full-bleed the WHOLE time it's showing — toggling controls
+        // never resizes the picture; the system bars + controls + tab bar all
+        // overlay on top and inset themselves. The tab overlay shows only when
+        // controls are up (and not in the tabletop split, which lays controls
+        // out in its own bottom leaf).
         com.powermediaplayer.MainActivityHolder.fullBleedVideo.value =
-            uiState.isVideoContent && !controlsVisible
+            uiState.isVideoContent
+        com.powermediaplayer.MainActivityHolder.videoControlsVisible.value =
+            uiState.isVideoContent && controlsVisible && !tabletopVideo
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -521,6 +530,7 @@ private fun PlayerScreenCompact(
                     .show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             }
             com.powermediaplayer.MainActivityHolder.fullBleedVideo.value = false
+            com.powermediaplayer.MainActivityHolder.videoControlsVisible.value = false
             // 8.3b — leaving the player never strands an orientation lock.
             com.powermediaplayer.MainActivityHolder.releaseVideoOrientation()
         }
@@ -778,12 +788,33 @@ private fun OverlayContent(
         androidx.compose.foundation.layout.WindowInsets.displayCutout
             .only(androidx.compose.foundation.layout.WindowInsetsSides.Horizontal)
     )
+    // Full-bleed video drops the root systemBarsPadding so the picture is
+    // edge-to-edge at all times (no resize when controls toggle). The
+    // CONTROLS therefore self-inset: top icons clear the status bar, the
+    // bottom transport stack clears the nav bar AND the immersive app-tab
+    // overlay that floats above it. Audio keeps the root padding, so it adds
+    // nothing here (would double-inset otherwise).
+    val isVideoOverlay = uiState.isVideoContent
+    val topBarInset = if (isVideoOverlay) Modifier.statusBarsPadding() else Modifier
+    val immersiveTabsShown =
+        com.powermediaplayer.MainActivityHolder.videoControlsVisible.value
+    val bottomBarInset = if (isVideoOverlay) {
+        Modifier
+            .navigationBarsPadding()
+            .padding(
+                bottom = if (immersiveTabsShown)
+                    com.powermediaplayer.ui.navigation.ImmersiveVideoTabBarHeight
+                else 0.dp
+            )
+    } else {
+        Modifier
+    }
     // Info icon top-right. Inside this OverlayContent (which is wrapped
     // in AnimatedVisibility for video) the icon hides with controls per
     // Q1 LOCKED. For audio mode (no AnimatedVisibility wrapper) the
     // icon stays visible. Q2 LOCKED Option A: scrim hides with controls,
     // independent layer not required — current arch already correct.
-    Box(modifier = Modifier.fillMaxSize().then(cutoutPad)) {
+    Box(modifier = Modifier.fillMaxSize().then(cutoutPad).then(topBarInset)) {
         InfoIcon(
             onClick = onShowInfo,
             modifier = Modifier
@@ -831,6 +862,7 @@ private fun OverlayContent(
         modifier = Modifier
             .fillMaxSize()
             .then(cutoutPad)
+            .then(bottomBarInset)
             .then(scrollMod)
             .padding(top = 48.dp, start = horizontalPadding.dp, end = horizontalPadding.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

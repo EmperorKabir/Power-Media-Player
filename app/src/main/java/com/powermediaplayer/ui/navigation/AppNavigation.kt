@@ -1,8 +1,20 @@
 package com.powermediaplayer.ui.navigation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Equalizer
@@ -47,6 +59,11 @@ private val screens = listOf(
     Screen.Player, Screen.Library, Screen.LastPlayed,
     Screen.Cloud, Screen.Equalizer, Screen.Settings
 )
+
+/** Height of the immersive-video app-tab overlay, excluding the system nav
+ *  inset (the bar adds that itself). The video transport stack reserves this
+ *  much bottom space while the overlay is shown so the two never collide. */
+internal val ImmersiveVideoTabBarHeight = 56.dp
 
 /**
  * Main app navigation. Hosts a SHARED LibraryViewModel across the Library tab
@@ -169,6 +186,7 @@ fun AppNavigation(
             }
         }
     ) {
+        Box(modifier = Modifier.fillMaxSize()) {
         androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -222,6 +240,65 @@ fun AppNavigation(
                 onClick = navigateToPlayer
             )
         }
+        }
+        // Immersive-video app-tab overlay — floats over the bottom of the
+        // full-bleed picture when controls are up, so switching tabs never
+        // resizes the video. The normal NSS bar is None while immersive.
+        ImmersiveVideoTabOverlay(
+            visible = com.powermediaplayer.MainActivityHolder.fullBleedVideo.value &&
+                com.powermediaplayer.MainActivityHolder.videoControlsVisible.value,
+            currentDestination = currentDestination,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) { route ->
+            navController.navigate(route) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+        }
+    }
+}
+
+/**
+ * Slim app-tab bar overlaid on the bottom of a full-bleed video while the
+ * controls are visible. It floats ON TOP of the picture (never a layout
+ * sibling) so showing/hiding tabs can't resize the video. Icons only, to
+ * stay compact; the active tab is tinted. Adds the system-nav inset itself.
+ */
+@Composable
+private fun ImmersiveVideoTabOverlay(
+    visible: Boolean,
+    currentDestination: NavDestination?,
+    modifier: Modifier = Modifier,
+    onNavigate: (String) -> Unit
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(OledBlack.copy(alpha = 0.92f))
+                .navigationBarsPadding()
+                .height(ImmersiveVideoTabBarHeight),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            screens.forEach { screen ->
+                val selected =
+                    currentDestination?.hierarchy?.any { it.route == screen.route } == true
+                IconButton(onClick = { onNavigate(screen.route) }) {
+                    Icon(
+                        imageVector = screen.icon,
+                        contentDescription = screen.title,
+                        tint = if (selected) TealAccent else DisabledGrey
+                    )
+                }
+            }
         }
     }
 }

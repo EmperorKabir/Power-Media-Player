@@ -45,12 +45,20 @@ object MainActivityHolder {
     fun get(): android.app.Activity? = ref?.get()
 
     /**
-     * Audit 6.4/8.3 — true while immersive video has the system bars
-     * hidden; the activity root drops its systemBarsPadding so the
-     * video really is full-bleed. Written by the player's controls-
-     * visibility effect, read by setContent.
+     * True the WHOLE time video is on the Player screen (not only when the
+     * controls are hidden). The activity root drops its systemBarsPadding so
+     * the picture is full-bleed at all times — toggling the controls never
+     * resizes it. The controls/bars/tab overlays sit ON TOP and inset
+     * themselves. Written by the player's controls-visibility effect.
      */
     val fullBleedVideo = androidx.compose.runtime.mutableStateOf(false)
+
+    /**
+     * True while the video controls are SHOWN (full-bleed, non-tabletop).
+     * Drives the immersive app-tab overlay (AppNavigation) + the transport
+     * controls' bottom clearance so the tab bar and controls don't collide.
+     */
+    val videoControlsVisible = androidx.compose.runtime.mutableStateOf(false)
 
     /**
      * True while the activity is in Picture-in-Picture. Shared here so the
