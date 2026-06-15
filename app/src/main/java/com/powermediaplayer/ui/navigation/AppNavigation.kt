@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
@@ -188,7 +189,21 @@ fun AppNavigation(
         }
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-        androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxSize()) {
+        // System-bar inset applied HERE (per-tab content) rather than on the
+        // activity root: full-bleed video drops it, every other tab keeps it.
+        // Putting it on the content — which swaps on navigation anyway —
+        // means returning to the video player no longer relayouts the whole
+        // window (the previous root-level toggle caused the flicker). The
+        // wrapping Box above stays full-bleed so the immersive tab overlay
+        // still aligns to the true screen edges.
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (com.powermediaplayer.MainActivityHolder.fullBleedVideo.value) Modifier
+                    else Modifier.systemBarsPadding()
+                )
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
