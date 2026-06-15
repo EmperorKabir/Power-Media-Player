@@ -1,0 +1,148 @@
+# Plan — video "refresh/flicker" on returning to the Player tab
+
+Date: 2026-06-15. Status: PLAN ONLY (no code changes yet). Methodology:
+superpowers `systematic-debugging` (Iron Law: confirm root cause with evidence
+before any fix) + Context7 (authoritative API behaviour).
+
+User constraints (binding):
+- The **dual-surface** design (full `PlayerScreen` surface + `FloatingVideoMiniPlayer`
+  surface) MUST stay — the video effects (flip/rotate/colour via `graphicsLayer`
+  + TextureView ColorFilter) depend on per-screen `VideoSurface`.
+- **No big/drastic refactor** (single hoisted surface is OFF the table — risk of
+  subtle breakage to effects/PiP/tabletop).
+- Fix must be **targeted, low-risk, evidence-based**.
+
+## 1. Symptom + reproduction
+- Play a video → switch to another tab → return to the Player tab.
+- Whole screen "refreshes/flickers" on RETURN only (never on leaving).
+- Two prior fixes FAILED (proof the cause is neither): (a) root `systemBarsPadding`
+  relayout move (commit 8488398); (b) instant NavHost transitions (commit 1335524).
+
+## 2. Evidence gathered so far
+- **logcat (this session):** tab switches produce NO `MainActivity.onCreate`/lifecycle
+  → the Activity is NOT recreated; the flicker is a **composition** event, not an
+  Activity/process restart. `surface released while current — re-bound survivor`
+  was seen only on cold start + PiP exit (no clean tab-switch capture yet → GAP).
+- **Context7 / Jetpack Compose (authoritative):** `AndroidView` builds its `View` in
+  `factory`; when the composable leaves composition the View is disposed, and on
+  re-entry the factory runs again → a **new** View. Holding a View ref outside
+  `AndroidView` to reuse it is explicitly discouraged ("Prefer to construct a View
+  in the factory lambda"). → reusing the TextureView is fragile = violates the
+  low-risk constraint.
+- **Compose Navigation:** `NavHost` composes ONLY the current destination; leaving
+  Player disposes `PlayerScreen` (and its `VideoSurface`), returning rebuilds it.
+  `saveState/restoreState` (the app's tab pattern) preserves the ViewModel +
+  SavedState but NOT the composition → the TextureView is rebuilt.
+- **Context7 / Media3 (authoritative):** `setVideoTextureView(view)` attaches the
+  codec output to that view; a freshly-attached surface is blank until the codec
+  draws. `Player.Listener.onRenderedFirstFrame()` fires when the first frame is
+  rendered to the (new) surface → the precise signal that the picture is live again.
+- **Code:** `VideoSurface.kt` factory creates a `TextureView` + `VideoSurfaceBinding.bind`
+  → `setVideoTextureView`. `PlayerScreenCompact` line ~462:
+  `var controlsVisible by remember(uiState.isVideoContent){ mutableStateOf(true) }`
+  → on rebuild, controls RESET to visible, then auto-hide.
+
+## 3. Root-cause hypotheses (to CONFIRM in Phase 1 before any fix)
+- **H1 (primary): full-screen TextureView recreation.** Returning rebuilds
+  `PlayerScreen` → new full-screen `TextureView` → `setVideoTextureView(new)` →
+  blank surface for N frames until `onRenderedFirstFrame` → full-screen black blink.
+  (Leaving builds only the 192×108 mini surface → unnoticeable. Explains return-only.)
+- **H2 (secondary): chrome reset flash.** `controlsVisible` resets to `true` on
+  rebuild → controls + tab rail re-appear then auto-hide → a chrome flash that can
+  read as "refresh". Independent of H1; may co-occur.
+- **H3 (control): recomposition/empty-state flash.** If the ViewModel is NOT
+  actually restored, uiState briefly defaults (empty) then repopulates → flash.
+  (Expected FALSE because saveState preserves the VM, but must be ruled out.)
+
+## 4. Phase 1 — CONFIRM root cause (REQUIRED first executable step; instrumentation only)
+Add **debug-only** diagnostic logs (no behaviour change), build, install, capture a
+CLEAN `Player(video) → Library → Player` cycle on the Z Fold6, then read logs +
+a screen recording. This is the evidence the two failed fixes lacked.
+
+Instrumentation to add (all `Diag.i`, debug-stripped in release):
+1. `VideoSurface` factory: `"VS factory CREATE textureview hash=… isVideo=…"`.
+2. `VideoSurface` `onRelease`: `"VS RELEASE hash=…"`.
+3. `VideoSurfaceBinding.bind/release`: already logs survivor; add `"bind hash=… stackSize=…"`.
+4. `PlaybackConnection` player listener: add `onRenderedFirstFrame` →
+   `"RENDERED_FIRST_FRAME t=…"` (also confirms the Media3 callback fires on swap).
+5. `PlayerScreenCompact` entry (`LaunchedEffect(Unit)`): `"PlayerScreen COMPOSE controlsVisible=true"`.
+6. (H3) Log `uiState.title`/`hasMedia` at first composition on return.
+
+Capture + evidence to extract (timestamps correlated):
+- Around the RETURN tap: do we see `VS factory CREATE` (new full surface) +
+  `setVideoTextureView` + a gap to `RENDERED_FIRST_FRAME`? → measures the blink
+  duration (how many ms the surface is blank). CONFIRMS/with duration → H1.
+- `adb shell screenrecord` of the return; inspect (on a machine with a frame
+  extractor, or play back) whether the blank is the VIDEO RECT (H1) or the WHOLE
+  window incl. chrome (H2), and whether controls flash on→off (H2).
+- Check `uiState.title` non-empty at first composition (H3 false) vs empty (H3 true).
+
+Decision gate (which fix to build):
+- If `RENDERED_FIRST_FRAME` lags the new-surface attach by >1 frame AND the recording
+  shows a video-rect blank → **H1 confirmed → Fix A**.
+- If controls visibly flash on→off independent of the video → **H2 also true → Fix B**
+  (in addition to A).
+- If uiState is empty on first frame → **H3 → Fix C** (VM scoping). (Not expected.)
+
+## 5. Phase 2 — Targeted fix (build ONLY what Phase 1 confirms; keeps dual-surface)
+
+### Fix A — freeze-frame mask (for H1) — PRIMARY, localized to `VideoSurface.kt`
+Rationale: the 1-frame blank on a newly-attached codec surface is INHERENT (the
+codec must draw one frame); with surface recreation unavoidable (refactor ruled
+out, view-reuse fragile), masking the unavoidable blank with the last frame is the
+**standard** video-surface-handoff technique, not a hack.
+- Add `object VideoFreezeFrame { @Volatile var bmp: Bitmap? }`.
+- In `VideoSurfaceBinding.bind(newView)`: BEFORE switching, capture the OUTGOING
+  current view's frame: `runCatching { outgoing?.bitmap }` → `VideoFreezeFrame.bmp`.
+  (At return, the mini surface is still alive → `getBitmap()` yields the live frame.)
+- In `VideoSurface`: after the `AndroidView`, render `Image(VideoFreezeFrame.bmp)`
+  with the SAME `aspectMod.then(transformMod)` (so flip/rotate match), ON TOP of the
+  TextureView, while a `freezeVisible` state is true.
+- Hide trigger = **`onRenderedFirstFrame`** (precise), exposed from
+  `PlaybackConnection` as a one-shot `SharedFlow`/event the `VideoSurface` collects;
+  plus a **fallback timeout (~300 ms)** so a missed event can't strand the overlay.
+  Read the holder in a `LaunchedEffect` (post-composition) to avoid write-during-
+  composition; clear `VideoFreezeFrame.bmp` after use (recycle).
+- Net: on return the user sees the last frame (held ~1 frame) → live video; no black
+  blink. Applies to BOTH full + mini `VideoSurface` (mini freeze is harmless/benefit).
+- Risk: LOW — additive overlay in one file + one listener; no change to binding/codec
+  flow, effects, PiP, tabletop, or the dual-surface model.
+
+### Fix B — preserve `controlsVisible` across navigation (ONLY if H2 confirmed)
+- Hoist `controlsVisible` to survive recomposition (e.g., `rememberSaveable`, or a
+  retained holder keyed to the session) so returning restores the prior chrome state
+  instead of forcing visible→auto-hide. Eliminates the chrome flash.
+- Risk: LOW — single state hoist; must preserve the existing auto-hide timer logic.
+
+### Fix C — ViewModel scoping (ONLY if H3 confirmed; not expected)
+- Ensure `PlayerViewModel` is restored (activity-scoped or via correct
+  `LocalViewModelStoreOwner`) so uiState never flashes empty. Defer unless evidence.
+
+### Rejected alternatives (record, per protocol — no silent scope drop)
+- Single hoisted persistent surface: USER-REJECTED (effects depend on dual-surface).
+- Reuse TextureView across nav (hold ref): Context7-discouraged + fragile (View
+  parenting / SurfaceTexture lifecycle) → violates low-risk constraint.
+- Switch to `SurfaceView`: breaks `graphicsLayer`/ColorFilter effects path (the
+  VideoSurface doc comment already records why TextureView is required); handoff
+  artefacts historically worse.
+- Keep NavHost destination composed when off-screen: not supported by standard
+  `NavHost`; would itself be a "drastic change".
+
+## 6. Phase 3 — Verification (device)
+- Re-run the Phase-1 capture WITH the fix; confirm logs still show surface recreate
+  + `RENDERED_FIRST_FRAME`, but the screen recording shows NO black blink (freeze
+  frame bridges it). 
+- Acceptance predicates (machine/observation):
+  1. P1: `onRenderedFirstFrame` log present on every return (mechanism intact).
+  2. P2: screen recording of 3 returns shows zero full-screen black frames.
+  3. P3 (if Fix B): controls do not flash on→off on return (recording).
+  4. P4: effects (flip/rotate/colour), system PiP enter/exit, tabletop split all
+     still render correctly (regression check — dual-surface untouched).
+  5. P5: `assembleDebug` + unit suites green.
+- Strip the Phase-1 diagnostic logs (or gate behind the existing DiagLog) before the
+  final release build.
+
+## 7. Anti-skip
+- Do NOT implement any fix until Phase 1 evidence is captured and the decision gate
+  picks the fix(es). (This is the discipline the two prior failed fixes skipped.)
+- Build only the confirmed fix(es); each verified against P1–P5 before "done".
