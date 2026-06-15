@@ -343,6 +343,9 @@ class PlaybackSessionCoordinator @Inject constructor(
         // branch below OR a Library/Cloud/LastPlayed tap, synthesise one
         // here from the current MediaItem so subsequent bookmarks mirror.
         scope.launch(Dispatchers.Main) {
+            // Track the uri whose cover we've already written so we update the
+            // Last Played row's artwork once per track, not every 5s tick.
+            var lastArtTrack: String? = null
             while (isActive) {
                 delay(5_000)
                 // vc32: during a Spotify mirror the LOCAL player is
@@ -354,11 +357,21 @@ class PlaybackSessionCoordinator @Inject constructor(
                 val spot = spotifyProvider.spotifyState.value
                 if (spot != null) {
                     if (spot.isPlaying && spot.trackUri.isNotBlank()) {
+                        // The Spotify cover lives on the live mirror state, not
+                        // on the row (the row may have been created by the cold-
+                        // start mirror / a resume, with no artwork). Write it
+                        // onto the row so Last Played shows the album cover.
+                        val art = spot.artworkUrl?.takeIf { it.isNotBlank() }
+                        val writeArt = art != null && spot.trackUri != lastArtTrack
+                        if (writeArt) lastArtTrack = spot.trackUri
                         launch(Dispatchers.IO) {
                             runCatching {
                                 lastPlayedRepo.updatePositionByUri(
                                     spot.trackUri, spot.positionMs.coerceAtLeast(0L)
                                 )
+                                if (writeArt) {
+                                    lastPlayedRepo.updateArtworkByUri(spot.trackUri, art!!)
+                                }
                             }
                         }
                     }
