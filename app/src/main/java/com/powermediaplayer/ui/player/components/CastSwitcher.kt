@@ -132,7 +132,19 @@ fun CastSwitcherButton(
     DisposableEffect(Unit) {
         onDispose { router.removeCallback(cb) }
     }
-    val isCasting = !router.selectedRoute.isDefault
+    // "Casting" = a genuine REMOTE route is selected, NOT merely a non-default
+    // one. A connected Bluetooth speaker is ALSO a non-default system route
+    // (logcat: playbackType=0 = LOCAL), so the old `!isDefault` test lit the
+    // cast button "CastConnected" and showed a "Stop casting" row whenever BT
+    // was connected — even with no cast session. Tapping that phantom Stop ran
+    // selectRoute(defaultRoute), which yanked audio off the BT speaker onto the
+    // phone. Bluetooth AND the phone are both PLAYBACK_TYPE_LOCAL; only
+    // Chromecast / remote-playback routes are PLAYBACK_TYPE_REMOTE.
+    val isCasting = remember(selectedRouteId) {
+        val r = router.selectedRoute
+        !r.isDefault &&
+            r.playbackType == MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE
+    }
 
     IconButton(
         onClick = { sheetOpen = true },
