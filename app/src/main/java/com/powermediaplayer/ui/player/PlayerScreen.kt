@@ -526,30 +526,19 @@ private fun PlayerScreenCompact(
         }
     }
 
-    // No parent tap-detector — the previous Modifier.clickable on the
-    // parent Box caused recompositions per tap that surfaced as
-    // controls-row jumps and stutter. Auto-hide (4 s) is the sole
-    // dismissal path. To re-show after auto-hide the user can tap any
-    // control area (the row Column's child IconButtons trigger normal
-    // recomposition that flips controlsVisible via tap-on-anything).
-    // Tap-anywhere reveal is implemented below by a transparent
-    // pointerInput Box that ONLY responds when controls are HIDDEN —
-    // when visible there's no parent interceptor so child buttons fire
-    // unimpeded (the bug fixed earlier where skip-buttons didn't
-    // register).
-    val parentTapModifier = if (uiState.isVideoContent && !controlsVisible) {
-        Modifier.pointerInput(Unit) {
-            detectTapGestures(onTap = { controlsVisible = true })
-        }
-    } else {
-        Modifier
-    }
+    // Tap-to-TOGGLE is implemented by a transparent pointerInput layer
+    // sitting directly ABOVE the video surface but BELOW OverlayContent
+    // (added in the layout). A tap on the bare picture flips
+    // controlsVisible — showing when hidden, hiding immediately when shown
+    // (overriding the auto-hide timer, which itself stays intact). Because
+    // the layer is BELOW the controls, the control IconButtons sit on top
+    // and consume their own taps unimpeded (no parent interceptor — the
+    // earlier bug where skip-buttons didn't register).
 
     androidx.compose.runtime.CompositionLocalProvider(LocalOpenPopupCount provides openPopupCount) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .then(parentTapModifier)
     ) {
         if (tabletopVideo && adaptive != null) {
             TabletopVideoLayout(
@@ -571,6 +560,17 @@ private fun PlayerScreenCompact(
                 videoWidth = uiState.videoWidth,
                 videoHeight = uiState.videoHeight,
                 modifier = Modifier.fillMaxSize()
+            )
+            // Tap the picture to TOGGLE the controls (show when hidden,
+            // hide immediately when shown — overriding, but not removing,
+            // the auto-hide timer). Sits above the video, below
+            // OverlayContent, so control buttons still get their own taps.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { controlsVisible = !controlsVisible })
+                    }
             )
         } else {
             // Audio content: show album art with palette-extracted colours

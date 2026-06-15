@@ -50,7 +50,36 @@ class PlaybackSessionCoordinator @Inject constructor(
         startReplayGainAutoScan()
         startReplayGainApply()
         startPositionPersistTick()
+        startBackgroundPositionSave()
         startColdStartRestore()
+    }
+
+    private fun startBackgroundPositionSave() {
+        // The 5s persist tick alone loses the last <5s before the app is
+        // closed AND saves nothing for a play shorter than one tick — both
+        // make a short listen resume from 0. Persist the current position
+        // immediately when the app is backgrounded (which precedes most
+        // swipe-aways / system kills) so the resume spot is current.
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
+            object : androidx.lifecycle.DefaultLifecycleObserver {
+                override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+                    // Spotify mirror keeps a stale local item loaded — the 5s
+                    // tick persists the Spotify row by its own trackUri; don't
+                    // overwrite it with the stale player position here.
+                    if (spotifyProvider.spotifyState.value != null) return
+                    val player = playbackConnection.getPlayer() ?: return
+                    val item = player.currentMediaItem ?: return
+                    val mediaUri = item.mediaId.takeIf { it.isNotBlank() } ?: return
+                    val pos = player.currentPosition.coerceAtLeast(0L)
+                    if (pos <= 0L) return
+                    val path = item.localConfiguration?.uri?.path ?: ""
+                    if (path.contains("/reverse-cache/")) return
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { lastPlayedRepo.updatePositionByUri(mediaUri, pos) }
+                    }
+                }
+            }
+        )
     }
 
     private fun startEnrichment() {
@@ -551,7 +580,16 @@ class PlaybackSessionCoordinator @Inject constructor(
                         val backoffSec = runCatching {
                             settingsDataStore.coldStartResumeBackoffSec.first()
                         }.getOrNull() ?: 5
-                        val target = (recent.lastPositionMs - backoffSec * 1000L).coerceAtLeast(0L)
+                        val backoffMs = backoffSec * 1000L
+                        // The "land a bit earlier for context" backoff must not
+                        // swallow the whole resume: for a saved position shorter
+                        // than the backoff, resume AT the saved spot rather than
+                        // clamping to 0 (which restarted short listens from the
+                        // beginning — the reported local/video "starts at 0" bug).
+                        val target = if (recent.lastPositionMs > backoffMs)
+                            recent.lastPositionMs - backoffMs
+                        else
+                            recent.lastPositionMs.coerceAtLeast(0L)
                         playbackConnection.setMediaItems(
                             listOf(item), 0, playWhenReady = autoplay,
                             startPositionMs = target
