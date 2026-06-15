@@ -1321,7 +1321,14 @@ class CloudViewModel @Inject constructor(
                 if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
                     !album.isNullOrBlank() || artBytes != null) {
                     val override = LocalMetadataOverride(
-                        title = title ?: item.name,
+                        // DON'T fall back to the filename when the embedded
+                        // title tag is missing — some books (e.g. Deathly
+                        // Hallows) have artist/album but no MMR-readable title,
+                        // yet ExoPlayer parses the real title from the stream.
+                        // A filename override here OUTRANKS that real title
+                        // (overTitle wins) → the player showed the filename. Pass
+                        // it through null so the parsed title is used instead.
+                        title = title,
                         artist = artist,
                         album = album,
                         // Preserve the Drive thumbnail as a fallback when

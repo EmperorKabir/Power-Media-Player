@@ -96,7 +96,10 @@ class DriveTagEnricher @Inject constructor(
                     !album.isNullOrBlank() || artBytes != null
                 ) {
                     val override = LocalMetadataOverride(
-                        title = title ?: item.name,
+                        // Pass null (not the filename) when the embedded title
+                        // tag is missing — a filename override outranks the real
+                        // title ExoPlayer parses from the stream. See CloudViewModel.
+                        title = title,
                         artist = artist,
                         album = album,
                         artworkUri = item.thumbnailUri,

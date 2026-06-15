@@ -153,21 +153,41 @@ fun PlayerScreen(
     // Remember the last real title: while casting, the session player briefly
     // has no item during audio extraction, so its title reads "No media
     // loaded" for a moment — show the last real title instead of flashing it.
-    val lastRealTitle = remember { mutableStateOf("") }
-    if (uiState.title.isNotBlank() && uiState.title != "No media loaded") {
-        lastRealTitle.value = uiState.title
+    // A title that still ends in a media extension is the raw FILENAME, not a
+    // real title (cast items carry the filename; an un-enriched item shows it).
+    val mediaExtRegex = remember {
+        Regex("\\.(m4b|m4a|mp3|flac|mka|mkv|mp4|wav|ogg|oga|opus|aac|wma|aiff|aif|ape|mov|avi|webm|3gp|ts)$",
+            RegexOption.IGNORE_CASE)
     }
+    fun isFilenameTitle(t: String) = mediaExtRegex.containsMatchIn(t.trim())
+    // Remember the last PROPER (non-blank, non-filename) metadata. During a cast
+    // swap the session player briefly reads as "no media", and the cast item
+    // often carries only the filename as its title — in both cases re-show this
+    // last real metadata so it stays seamless ("display what was already there")
+    // instead of flashing "No media loaded" or the filename.
+    val lastReal = remember { androidx.compose.runtime.mutableStateOf<PlayerUiState?>(null) }
+    if (uiState.hasMedia && uiState.title.isNotBlank() &&
+        uiState.title != "No media loaded" && !isFilenameTitle(uiState.title)
+    ) {
+        lastReal.value = uiState
+    }
+    val titleNeedsHold = !uiState.hasMedia || uiState.title.isBlank() ||
+        uiState.title == "No media loaded" || isFilenameTitle(uiState.title)
+    val held = lastReal.value
     val displayState = when {
         castingLocalVideo -> uiState.copy(
             isVideoContent = true,
-            title = if (uiState.title.isBlank() || uiState.title == "No media loaded")
-                lastRealTitle.value else uiState.title
+            title = if (titleNeedsHold && held != null) held.title else uiState.title
         )
-        // Plain audio cast: keep the audio layout but hold the last real title
-        // so it doesn't blink to "No media loaded" mid-swap.
-        castActive -> uiState.copy(
-            title = if (uiState.title.isBlank() || uiState.title == "No media loaded")
-                lastRealTitle.value else uiState.title
+        // ANY cast where the title is missing or just the filename → hold the
+        // whole visible metadata block (title + artist + album + cover).
+        castActive && titleNeedsHold && held != null -> uiState.copy(
+            hasMedia = true,
+            title = held.title,
+            artist = held.artist,
+            album = held.album,
+            artworkUri = held.artworkUri,
+            hasCoverArt = held.hasCoverArt
         )
         else -> uiState
     }
@@ -223,7 +243,7 @@ fun PlayerScreen(
                 horizontalPadding = 0
             )
             twoPanePlayer -> PlayerScreenExpanded(
-                uiState = uiState,
+                uiState = displayState,
                 artworkBytes = artworkBytes,
                 artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
@@ -234,7 +254,7 @@ fun PlayerScreen(
                 onShowInfo = { showInfoSheet = true }
             )
             windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium -> PlayerScreenCompact(
-                uiState = uiState,
+                uiState = displayState,
                 artworkBytes = artworkBytes,
                 artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
@@ -246,7 +266,7 @@ fun PlayerScreen(
                 horizontalPadding = 32
             )
             else -> PlayerScreenCompact(
-                uiState = uiState,
+                uiState = displayState,
                 artworkBytes = artworkBytes,
                 artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
