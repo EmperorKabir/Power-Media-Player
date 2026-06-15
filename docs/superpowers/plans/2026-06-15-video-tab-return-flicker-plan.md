@@ -174,6 +174,62 @@ Evidence files: `deeplogs/logcat-t294*.txt`, `deeplogs/montage.png`.
 - Both keep the dual-surface; both localized (`VideoSurface.kt`, `PlaybackService`/
   `PlaybackConnection` for the frame tick, `PlayerScreen` controlsVisible).
 
+## 6c. PROPER FIX — audited design (2026-06-15, 4-agent parallel audit + Context7)
+
+Root cause RE-CONFIRMED: NavHost disposes the off-screen PlayerScreen destination →
+on every return the video `TextureView` is recreated → codec re-attaches to a blank
+surface → 1-frame flash (video-only; audio has no surface → no flash, confirmed by
+user). Masks (freeze-frame/transition/padding) cannot fix a recreated surface.
+
+Audit key facts (evidence in agent reports):
+- Video output target is set via `PlaybackService.getExoPlayer().setVideoTextureView`
+  through the STATIC `VideoSurfaceBinding` — independent of any PlayerViewModel
+  instance. Effects (flip/rotate/colour) read singleton-backed flows → identical
+  across VM instances. So hoisting the surface's composable does NOT change rendering
+  or effects.
+- 4 `VideoSurface` call sites: PlayerScreen full (PlayerScreen.kt:579), tabletop
+  top-leaf (:713), FloatingVideoMiniPlayer (:106), MainActivity PiP (:289).
+- `fullBleedVideo`/`videoControlsVisible` are written by PlayerScreenCompact effects
+  (PlayerScreen.kt:516-547) and read by AppNavigation (nav type None, immersive
+  overlay) — MUST stay in PlayerScreen (control/immersive logic, not surface logic).
+- PiP branch swaps out AppNavigation entirely (MainActivity.kt:285) → its own
+  VideoSurface; the binding stack + freeze-frame still needed for PiP enter/exit.
+
+CHOSEN DESIGN (single always-composed host, repositioned by route — NOT movableContent):
+1. One video host composed in AppNavigation's root Box whenever `isVideoContent &&
+   hasMedia`. It stays at the SAME tree position; only its Modifier (size/zIndex) +
+   wrapper chrome change by route → AndroidView never recreated on tab switch.
+   - isPlayerRoute && !tabletop → `fillMaxSize`, `zIndex 0` (behind the content).
+   - isPlayerRoute && tabletop  → top-leaf Box (height = hinge.top from adaptive),
+     `zIndex 0`.
+   - !isPlayerRoute → floating 192×108 BottomEnd, `zIndex 2` (on top), with the
+     drag/clamp/✕-dismiss/tap-expand chrome moved from FloatingVideoMiniPlayer.
+2. PlayerScreen video branch: replace `VideoSurface(...)` with a transparent
+   placeholder Box (keeps the tap-to-toggle layer + scrim + OverlayContent + flags
+   exactly as now). The picture shows through from the host behind.
+3. NavigationSuiteScaffold `containerColor` = transparent WHEN `fullBleedVideo`
+   (else OledBlack) so the behind-host shows on the Player video route; MainActivity's
+   OledBlack Surface remains the backdrop. Non-video routes stay opaque (host is
+   zIndex-2 mini on top, so no transparency needed there).
+4. KEEP unchanged: MainActivity PiP branch + its VideoSurface; `VideoSurfaceBinding`;
+   `VideoFreezeFrame` + `videoFrameTick` (now only relevant for PiP-exit/tabletop
+   handoff — dormant for tab switches); PlayerScreen's flag writes + immersive +
+   controlsVisible + tap layer + rotate button + DisposableEffect cleanup.
+5. Remove FloatingVideoMiniPlayer's own `VideoSurface` (absorbed by the host's mini
+   mode) — keep its chrome.
+6. `hiltViewModel()` in the host resolves Activity-scoped (outside NavHost) — benign
+   (singleton-backed). Optionally pass effect params; not required.
+
+Risk mitigations (from audit): keep binding/freeze-frame (PiP); keep flags in
+PlayerScreen; do NOT alter `navigateToPlayer` (drill-in back-stack, no popUpTo);
+enumerate tabletop as a 3rd slot; verify NO `VS factory CREATE` on tab return via
+deeplog after each step.
+
+VERIFY each step on device with the diag logs: a Player↔Library↔Player round-trip must
+log ZERO new `VS factory CREATE` (proves the TextureView is reused) and the user
+confirms no flicker. Audio, PiP enter/exit, tabletop fold, cast, drill-in back, widget
+deep-link, mini drag/dismiss/expand all re-tested.
+
 ## 7. Anti-skip
 - Do NOT implement any fix until Phase 1 evidence is captured and the decision gate
   picks the fix(es). (This is the discipline the two prior failed fixes skipped.)
