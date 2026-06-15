@@ -285,6 +285,31 @@ class PlaybackService : MediaSessionService() {
         val castLocalVideoActiveFlow =
             kotlinx.coroutines.flow.MutableStateFlow(false)
 
+        /** Reroute the player's audio OFF a Bluetooth speaker back to the
+         *  phone's built-in speaker, WITHOUT disabling Bluetooth (a true ACL
+         *  disconnect needs privileged system APIs). Uses the stable Media3
+         *  [ExoPlayer.setPreferredAudioDevice]. Returns true if applied. The OS
+         *  re-routes to BT again on the next route change; pass nothing /
+         *  call [clearAudioReroute] to restore default routing. */
+        fun rerouteAudioToPhoneSpeaker(context: android.content.Context): Boolean {
+            val p = getExoPlayer() ?: return false
+            val am = context.getSystemService(android.media.AudioManager::class.java)
+                ?: return false
+            val speaker = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+                .firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                ?: return false
+            return runCatching {
+                p.setPreferredAudioDevice(speaker)
+                com.powermediaplayer.util.Diag.i("PMP_DIAG", "Audio rerouted to phone speaker (BT kept on)")
+                true
+            }.getOrDefault(false)
+        }
+
+        /** Clear the preferred-device override → default (Bluetooth) routing. */
+        fun clearAudioReroute() {
+            runCatching { getExoPlayer()?.setPreferredAudioDevice(null) }
+        }
+
         // ── Volume mixer ────────────────────────────────────────────
         // ExoPlayer.volume is multiplexed between two independent
         // sources: ReplayGain attenuation (negative track-gain values)
@@ -1135,6 +1160,27 @@ class PlaybackService : MediaSessionService() {
                             "device+ type=${audioDeviceTypeName(d.type)} name='${d.productName}' " +
                                 "id=${d.id} sink=${d.isSink} src=${d.isSource}"
                         )
+                    }
+                    // BT resume-on-connect: the old code only LOGGED, so plain
+                    // Bluetooth speakers/headphones (which don't auto-send a
+                    // media-PLAY key) never resumed. Now: when a Bluetooth audio
+                    // SINK connects and the toggle is on, actually resume the
+                    // LOCAL player (targeted so a CastPlayer can't absorb it).
+                    val btSinkAdded = addedDevices?.any {
+                        it.isSink && it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+                    } == true
+                    if (btSinkAdded) {
+                        serviceScope.launch {
+                            if (!settingsDataStore.resumeOnBt.first()) return@launch
+                            val p = exoPlayerRef?.get() ?: return@launch
+                            if (p.isPlaying || p.currentMediaItem == null) return@launch
+                            runCatching {
+                                p.play()
+                                com.powermediaplayer.util.Diag.i(
+                                    "PMP_DIAG", "BT resume-on-connect fired (local player)"
+                                )
+                            }
+                        }
                     }
                 }
                 override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
@@ -2197,62 +2243,57 @@ class PlaybackService : MediaSessionService() {
             com.powermediaplayer.util.Diag.w("PMP_DIAG", "Cast audio-only: no source uri")
             return
         }
-        val metadata = sourceItem.mediaMetadata
         castAudioExtractJob?.cancel()
-        com.powermediaplayer.util.Diag.i(
-            "PMP_DIAG", "Cast audio-only: extracting audio from $sourceUri"
-        )
         castAudioExtractJob = serviceScope.launch {
-            val temp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                CastAudioExtractor.extractAudio(applicationContext, sourceUri)
-            }
-            // The user may have stopped casting while we extracted (the
-            // teardown at the top of switchPlayer clears this flag).
-            if (!castLocalVideoActive) {
-                runCatching { temp?.delete() }
-                return@launch
-            }
-            castAudioTempFile?.let { old -> runCatching { old.delete() } }
-            castAudioTempFile = temp
-            val server = castRelayServer ?: startCastRelayIfNeeded()
-            if (temp == null) {
-                // Extraction failed (exotic codec etc.) — fall back to casting
-                // the video so the user still gets audio, just with the wait.
-                com.powermediaplayer.util.Diag.w(
-                    "PMP_DIAG", "Cast audio-only fallback → casting video (extract failed)"
-                )
-                if (server != null) {
-                    val videoItem = rebuildForCast(sourceItem, server)
-                    if (videoItem.localConfiguration != null) {
-                        cast.setMediaItems(listOf(videoItem), 0, positionMs)
-                        cast.playWhenReady = play
-                        cast.prepare()
-                    }
-                }
-                return@launch
-            }
-            if (server == null) return@launch
-            val token = server.register(
-                CastRelayServer.RelayItem.Local(android.net.Uri.fromFile(temp), "audio/mp4")
-            )
-            val url = "http://$castRelayLanIp:${server.listeningPort}/$token"
-            val item = MediaItem.Builder()
-                .setUri(url)
-                // CastPlayer's DefaultMediaItemConverter REQUIRES a mimeType on
-                // the item (else IllegalArgumentException → crash). The temp is
-                // an MP4-container AAC, so audio/mp4.
-                .setMimeType("audio/mp4")
-                .setMediaId(sourceUri.toString())
-                .setMediaMetadata(metadata)
-                .build()
+            val item = buildCastAudioRelayItem(sourceUri, sourceItem.mediaMetadata)
+                ?: castRelayServer?.let { rebuildForCast(sourceItem, it) }   // fallback: cast the video
+            if (!castLocalVideoActive || item == null || item.localConfiguration == null) return@launch
             cast.setMediaItems(listOf(item), 0, positionMs)
             cast.playWhenReady = play
             cast.prepare()
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
-                "Cast audio-only: casting extracted m4a (${temp.length()} bytes) @${positionMs}ms"
+                "Cast audio-only: cast item set @${positionMs}ms mime=${item.localConfiguration?.mimeType}"
             )
         }
+    }
+
+    /** Extract [sourceUri]'s audio track to a temp m4a + register it with the
+     *  relay; returns a cast-ready audio/mp4 MediaItem, or null on failure.
+     *  Replaces + deletes any previous temp. Extraction runs off the main
+     *  thread. Shared by the initial cast switch AND track changes while
+     *  casting (onAddMediaItems). */
+    private suspend fun buildCastAudioRelayItem(
+        sourceUri: android.net.Uri,
+        metadata: androidx.media3.common.MediaMetadata
+    ): MediaItem? {
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG", "Cast audio-only: extracting audio from $sourceUri"
+        )
+        val temp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            CastAudioExtractor.extractAudio(applicationContext, sourceUri)
+        }
+        castAudioTempFile?.let { old -> runCatching { old.delete() } }
+        castAudioTempFile = temp
+        val server = castRelayServer ?: startCastRelayIfNeeded()
+        if (temp == null || server == null) {
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "Cast audio-only: extraction/relay unavailable")
+            return null
+        }
+        val token = server.register(
+            CastRelayServer.RelayItem.Local(android.net.Uri.fromFile(temp), "audio/mp4")
+        )
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG", "Cast audio-only: extracted ${temp.length()} bytes for $sourceUri"
+        )
+        return MediaItem.Builder()
+            .setUri("http://$castRelayLanIp:${server.listeningPort}/$token")
+            // CastPlayer's DefaultMediaItemConverter REQUIRES a mimeType (else
+            // it throws → crash). The temp is MP4-container AAC.
+            .setMimeType("audio/mp4")
+            .setMediaId(sourceUri.toString())
+            .setMediaMetadata(metadata)
+            .build()
     }
 
     /**
@@ -2818,6 +2859,49 @@ class PlaybackService : MediaSessionService() {
                 }
                 if (relay != null) rebuildForCast(withUri, relay) else withUri
             }.toMutableList()
+            // Cast-local-video: a NEW track chosen WHILE casting must keep the
+            // app's on-phone PICTURE in step with the cast audio. For a VIDEO,
+            // load it into the local player (so the picture updates) and cast
+            // AUDIO-ONLY (extracted). For an AUDIO track, disengage the
+            // local-video feature so the app shows the normal audio UI.
+            if (isCasting && castLocalVideoActive) {
+                val first = mediaItems.firstOrNull()
+                val srcUri = first?.localConfiguration?.uri
+                    ?: first?.requestMetadata?.mediaUri
+                    ?: first?.mediaId?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+                val isVideo = srcUri != null && (
+                    srcUri.toString().contains("/video/") ||
+                        first?.localConfiguration?.mimeType?.startsWith("video/") == true
+                )
+                if (first != null && srcUri != null && isVideo) {
+                    castInitialSyncDone = false
+                    // Show the new video locally (paused until the new cast
+                    // audio actually starts — onIsPlayingChanged realigns it).
+                    val localItem = first.buildUpon().setUri(srcUri).build()
+                    runCatching {
+                        player?.setMediaItem(localItem)
+                        player?.prepare()
+                        player?.playWhenReady = false
+                    }
+                    val fut = com.google.common.util.concurrent.SettableFuture
+                        .create<MutableList<MediaItem>>()
+                    castAudioExtractJob?.cancel()
+                    castAudioExtractJob = serviceScope.launch {
+                        val m4a = buildCastAudioRelayItem(srcUri, first.mediaMetadata)
+                            ?: resolvedItems.firstOrNull()
+                            ?: localItem
+                        fut.set(mutableListOf(m4a))
+                    }
+                    return fut
+                } else {
+                    // Audio track while casting → no local picture; normal cast.
+                    castLocalVideoActive = false
+                    castInitialSyncDone = false
+                    Companion.castLocalVideoActiveFlow.value = false
+                    Companion.setCastLocalVideoMute(false)
+                    castAudioExtractJob?.cancel()
+                }
+            }
             return Futures.immediateFuture(resolvedItems)
         }
     }

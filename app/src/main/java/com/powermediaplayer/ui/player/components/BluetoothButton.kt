@@ -6,6 +6,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,7 +42,7 @@ import com.powermediaplayer.util.BluetoothHelper
  * No app-side connection initiation is attempted because the public
  * BluetoothA2dp.connect API has been hidden since SDK 28.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BluetoothButton(
     modifier: Modifier = Modifier,
@@ -84,14 +88,39 @@ fun BluetoothButton(
         enabledState = BluetoothHelper.isEnabled(context)
     }
 
-    IconButton(
-        onClick = {
-            if (!permissionGranted) {
-                permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
-            }
-            sheetOpen = true
-        },
+    Box(
         modifier = modifier
+            .clip(CircleShape)
+            .combinedClickable(
+                onClick = {
+                    if (a2dpActive) {
+                        // Routing to a BT device → tap moves audio back to the
+                        // phone speaker (Bluetooth stays on; a true ACL
+                        // disconnect needs privileged APIs). Long-press opens
+                        // the sheet (pairing / settings / A/V offset).
+                        val ok = com.powermediaplayer.service.PlaybackService
+                            .rerouteAudioToPhoneSpeaker(context)
+                        android.widget.Toast.makeText(
+                            context,
+                            if (ok) "Audio moved to phone speaker — Bluetooth still on"
+                            else "Couldn't switch audio output",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        if (!permissionGranted) {
+                            permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
+                        }
+                        sheetOpen = true
+                    }
+                },
+                onLongClick = {
+                    if (!permissionGranted) {
+                        permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
+                    }
+                    sheetOpen = true
+                }
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = when {
@@ -100,7 +129,7 @@ fun BluetoothButton(
                 else -> Icons.Filled.BluetoothDisabled
             },
             contentDescription = when {
-                a2dpActive -> "Bluetooth audio active"
+                a2dpActive -> "Bluetooth audio active — tap to use phone speaker, long-press for options"
                 enabledState -> "Bluetooth on, not routing audio"
                 else -> "Bluetooth off"
             },
