@@ -138,6 +138,12 @@ fun PlayerScreen(
     // over the playing picture.
     val castingLocalVideo by com.powermediaplayer.service.PlaybackService
         .castLocalVideoActiveFlow.collectAsStateWithLifecycle()
+    // ANY cast (audio too): during the swap to the CastPlayer the session
+    // player briefly reads as "no media" before the receiver echoes metadata —
+    // without this an AUDIO cast (audiobook) flashes "nothing's playing yet"
+    // and a blank title. Hold both across the whole cast.
+    val castActive by com.powermediaplayer.service.PlaybackService
+        .castActiveFlow.collectAsStateWithLifecycle()
     // While casting a video to an audio-only device the SESSION player is the
     // audio-only m4a (isVideoContent=false), but the LOCAL player is playing the
     // SILENT VIDEO bound to the surface. Present it AS video content so the app
@@ -151,16 +157,23 @@ fun PlayerScreen(
     if (uiState.title.isNotBlank() && uiState.title != "No media loaded") {
         lastRealTitle.value = uiState.title
     }
-    val displayState = if (castingLocalVideo) {
-        uiState.copy(
+    val displayState = when {
+        castingLocalVideo -> uiState.copy(
             isVideoContent = true,
             title = if (uiState.title.isBlank() || uiState.title == "No media loaded")
                 lastRealTitle.value else uiState.title
         )
-    } else uiState
+        // Plain audio cast: keep the audio layout but hold the last real title
+        // so it doesn't blink to "No media loaded" mid-swap.
+        castActive -> uiState.copy(
+            title = if (uiState.title.isBlank() || uiState.title == "No media loaded")
+                lastRealTitle.value else uiState.title
+        )
+        else -> uiState
+    }
     val showEmptyState = !uiState.hasMedia && !uiState.isLoading &&
         !uiState.cloudFetchInProgress && !uiState.isVideoContent &&
-        !uiState.isSpotifyActive && !castingLocalVideo
+        !uiState.isSpotifyActive && !castingLocalVideo && !castActive
 
     // Audit 8.1 (F6) — Expanded width always two-pane; Medium two-pane
     // only in landscape (a portrait unfolded-fold stays single column).
