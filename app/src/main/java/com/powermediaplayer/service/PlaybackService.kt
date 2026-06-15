@@ -206,6 +206,11 @@ class PlaybackService : MediaSessionService() {
     // (mirror play/pause + seeks via a cast Player.Listener + an offset
     // collector) — NO polling loop, so no jittery repeated seeking.
     @Volatile private var castLocalVideoActive: Boolean = false
+    // True once the cast has TRULY started playing and we've aligned the local
+    // picture once. Before this, the picture stays paused (frozen frame) while
+    // the cast buffers. After, we follow the cast's INTENT (playWhenReady), not
+    // its buffering blips — mirroring isPlaying made the picture stutter.
+    @Volatile private var castInitialSyncDone: Boolean = false
     @Volatile private var castVideoAudioOffsetMsFlag: Int = 0
     // CastContext is process-static: a listener left registered pins this
     // service generation (and its released CastPlayer) until process death.
@@ -637,7 +642,7 @@ class PlaybackService : MediaSessionService() {
             settingsDataStore.castVideoAudioOffsetMs
                 .debounce(350)
                 .collect { off ->
-                    if (castLocalVideoActive) {
+                    if (castLocalVideoActive && castInitialSyncDone) {
                         val basePos = castPlayer?.currentPosition ?: player?.currentPosition ?: 0L
                         runCatching { player?.seekTo((basePos + off).coerceAtLeast(0L)) }
                     }
@@ -1474,22 +1479,30 @@ class PlaybackService : MediaSessionService() {
             // video never jitters (the old per-second seek loop caused the
             // "A-B loop" regression).
             cp.addListener(object : Player.Listener {
-                // Mirror the cast's ACTUAL playing state (not just playWhenReady,
-                // which is true while the cast is still buffering). When the
-                // cast truly starts (post-buffer), align the local picture to
-                // the real cast position + offset, then play it — this corrects
-                // the big head-start the local picture builds while the cast
-                // buffers the file. When the cast pauses/buffers, pause local.
+                // FIRST time the cast truly plays (post-buffer): align the
+                // picture to the real cast position ONCE + resume it. We do NOT
+                // react to later isPlaying flips — the cast toggles isPlaying on
+                // every buffer underrun, and mirroring that made the picture
+                // stutter + end up paused. cp.currentPosition is valid here
+                // (the cast is READY), avoiding the stale-position seeks.
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    if (!castLocalVideoActive) return
+                    if (!castLocalVideoActive || castInitialSyncDone || !isPlaying) return
                     val lp = player ?: return
-                    if (isPlaying) {
-                        runCatching {
-                            lp.seekTo((cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L))
-                            lp.playWhenReady = true
-                        }
-                    } else {
-                        runCatching { lp.playWhenReady = false }
+                    runCatching {
+                        lp.seekTo((cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L))
+                        lp.playWhenReady = true
+                    }
+                    castInitialSyncDone = true
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG", "Cast local-video: initial align done, picture resumed"
+                    )
+                }
+                // After the initial align, follow the cast's INTENT (deliberate
+                // play/pause). playWhenReady does NOT flip on buffering, so the
+                // picture stays smooth instead of stuttering with the speaker.
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (castLocalVideoActive && castInitialSyncDone) {
+                        runCatching { player?.playWhenReady = playWhenReady }
                     }
                 }
                 override fun onPositionDiscontinuity(
@@ -1497,7 +1510,11 @@ class PlaybackService : MediaSessionService() {
                     newPosition: Player.PositionInfo,
                     reason: Int
                 ) {
-                    if (castLocalVideoActive && reason == Player.DISCONTINUITY_REASON_SEEK) {
+                    // Mirror only DELIBERATE user seeks, and only after the
+                    // initial align (so early stale cast positions don't seek).
+                    if (castLocalVideoActive && castInitialSyncDone &&
+                        reason == Player.DISCONTINUITY_REASON_SEEK
+                    ) {
                         val lp = player ?: return
                         runCatching {
                             lp.seekTo(
@@ -1509,7 +1526,7 @@ class PlaybackService : MediaSessionService() {
                     }
                 }
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    if (!castLocalVideoActive) return
+                    if (!castLocalVideoActive || !castInitialSyncDone) return
                     val lp = player ?: return
                     val idx = cp.currentMediaItemIndex
                     if (idx in 0 until lp.mediaItemCount) {
@@ -1960,6 +1977,7 @@ class PlaybackService : MediaSessionService() {
         // Tear down any prior cast-local-video state on ANY switch (unmute +
         // clear the active flag); re-enabled below if the new switch qualifies.
         castLocalVideoActive = false
+        castInitialSyncDone = false
         Companion.setCastLocalVideoMute(false)
         // Cast local-video: ONLY when casting a VIDEO item to an AUDIO-ONLY
         // device do we keep the local picture alive. Every other case (audio
