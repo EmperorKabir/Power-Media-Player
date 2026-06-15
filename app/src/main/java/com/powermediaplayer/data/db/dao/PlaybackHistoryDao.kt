@@ -47,6 +47,16 @@ interface PlaybackHistoryDao {
     )
     suspend fun updatePositionByUri(uri: String, pos: Long)
 
+    /** Update the display title/subtitle of the most-recent row for a uri.
+     *  Used when embedded tags are extracted AFTER the row was first written
+     *  with the filename — so auto-resume shows the proper title/author. */
+    @Query(
+        "UPDATE playback_history SET title = :title, subtitle = :subtitle " +
+            "WHERE id = (SELECT id FROM playback_history WHERE mediaUri = :uri " +
+            "ORDER BY lastPlayedAt DESC LIMIT 1)"
+    )
+    suspend fun updateDisplayByUri(uri: String, title: String, subtitle: String)
+
     @Query("DELETE FROM playback_history WHERE id = :id")
     suspend fun delete(id: Long)
 

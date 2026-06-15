@@ -1146,7 +1146,7 @@ class CloudViewModel @Inject constructor(
                 } else if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
                     !item.isFolder
                 ) {
-                    enrichDriveItem(item)
+                    enrichDriveItem(item, uri.toString())
                 }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
@@ -1237,7 +1237,7 @@ class CloudViewModel @Inject constructor(
             // when we already have this item's tags cached this session.
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder &&
                 cachedEnriched == null) {
-                enrichDriveItem(item)
+                enrichDriveItem(item, uri.toString())
             }
         }
         // Reaching here means setMediaItems was called — playback has been
@@ -1254,7 +1254,7 @@ class CloudViewModel @Inject constructor(
      * filename) as well as on a fresh load. Skipped by callers when the item's
      * tags are already cached this session.
      */
-    private fun enrichDriveItem(item: CloudMediaItem) {
+    private fun enrichDriveItem(item: CloudMediaItem, stableKey: String) {
         viewModelScope.launch(Dispatchers.IO) {
             playbackConnection.setCloudFetchInProgress(true)
             // Three-pass strategy:
@@ -1270,7 +1270,7 @@ class CloudViewModel @Inject constructor(
                 else driveOAuthProvider.downloadToCache(item)
             } catch (_: Throwable) { null }
             if (tempFile != null) {
-                found = parseAndApply(item, tempFile)
+                found = parseAndApply(item, tempFile, stableKey)
                 runCatching { tempFile.delete() }
             }
             if (!found) {
@@ -1279,7 +1279,7 @@ class CloudViewModel @Inject constructor(
                     else driveOAuthProvider.downloadFullToCache(item)
                 } catch (_: Throwable) { null }
                 if (tempFile != null) {
-                    parseAndApply(item, tempFile)
+                    parseAndApply(item, tempFile, stableKey)
                     runCatching { tempFile.delete() }
                 }
             }
@@ -1292,7 +1292,11 @@ class CloudViewModel @Inject constructor(
      * Drive byte range. Pushes any extracted artwork / tags / chapters to
      * the player state. Returns true iff at least one was extracted.
      */
-    private fun parseAndApply(item: CloudMediaItem, tempFile: java.io.File): Boolean {
+    private fun parseAndApply(
+        item: CloudMediaItem,
+        tempFile: java.io.File,
+        stableKey: String
+    ): Boolean {
         var found = false
         val tempUri = android.net.Uri.fromFile(tempFile)
         com.powermediaplayer.util.Diag.i(
@@ -1331,6 +1335,19 @@ class CloudViewModel @Inject constructor(
                     // Cache for instant, no-re-download restore on the next
                     // open of this item this session (cast-return, re-tap).
                     enrichedByMediaId[item.id] = override
+                    // PERSIST the proper title/author onto the Last Played row
+                    // for this uri, so a later AUTO-RESUME (cold-start, which
+                    // never enriches by design) shows the real tags instead of
+                    // the filename — this is the bit that was regressed.
+                    if (!title.isNullOrBlank()) {
+                        viewModelScope.launch {
+                            runCatching {
+                                lastPlayedRepo.updateDisplayByUri(
+                                    stableKey, title, artist ?: ""
+                                )
+                            }
+                        }
+                    }
                     if (artBytes != null) found = true
                 }
                 com.powermediaplayer.util.Diag.i(
@@ -1344,6 +1361,15 @@ class CloudViewModel @Inject constructor(
             val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
             val count = bundle.getInt("chapter_count", 0)
             com.powermediaplayer.util.Diag.i("PowerMediaPlayer", "M4B parser: chapter_count=$count")
+            // Cache the LOCAL-parse result under the STABLE remote key so a
+            // later cold-start (which only does cachedOnly for remote, never an
+            // inline parse since 6708a96) finds these chapters instantly — the
+            // ephemeral file:// key it was cached under otherwise never matches.
+            runCatching {
+                com.powermediaplayer.util.ChapterCache.shared
+                    .attachDiskStore(context.cacheDir)
+                com.powermediaplayer.util.ChapterCache.shared.put(stableKey, "?", bundle)
+            }
             if (count > 0) {
                 val chapters = (0 until count).mapNotNull { i ->
                     val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"

@@ -220,6 +220,12 @@ class LastPlayedRepository @Inject constructor(
         historyDao.updatePositionByUri(uri, posMs)
     }
 
+    /** Persist enriched display title/author onto the most-recent row for a
+     *  uri, so a later auto-resume shows the proper tags (not the filename). */
+    suspend fun updateDisplayByUri(uri: String, title: String, subtitle: String) {
+        historyDao.updateDisplayByUri(uri, title, subtitle)
+    }
+
     /** Delete a single Recents row (and its bookmarks via FK CASCADE). */
     suspend fun delete(id: Long) {
         historyDao.delete(id)
