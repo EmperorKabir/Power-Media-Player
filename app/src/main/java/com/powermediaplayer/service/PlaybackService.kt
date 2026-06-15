@@ -2514,6 +2514,7 @@ class PlaybackService : MediaSessionService() {
         return mediaSession
     }
 
+    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
     override fun onTaskRemoved(rootIntent: Intent?) {
         // PiP keeps the video playing in its own window — a swipe-away while
         // Picture-in-Picture is active must NOT tear the service down.
@@ -2543,6 +2544,21 @@ class PlaybackService : MediaSessionService() {
                 "playWhenReady=${player?.playWhenReady} itemCount=${player?.mediaItemCount}"
         )
         if (stopOnSwipe) {
+            // Spotify Connect: the session `player` is only a SILENT local
+            // mirror. Stopping it leaves the actual track playing on the
+            // Connect device. Fire a best-effort pause to the Connect device
+            // on a scope that OUTLIVES serviceScope.cancel() (GlobalScope) —
+            // stopSelf() doesn't kill the process instantly, so the HTTP PUT
+            // usually lands in the teardown window. Without this, swiping the
+            // app away leaves Spotify playing on the speaker.
+            if (spotifyProvider.spotifyState.value != null) {
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { spotifyProvider.pause() }
+                }
+                com.powermediaplayer.diag.DiagLog.lifecycle(
+                    "onTaskRemoved — Spotify mirror active → best-effort Connect pause"
+                )
+            }
             player?.let { runCatching { it.stop(); it.clearMediaItems() } }
             stopSelf()
             return

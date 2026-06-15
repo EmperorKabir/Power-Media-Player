@@ -64,6 +64,16 @@ class DriveOAuthProvider @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val http = com.powermediaplayer.util.SharedHttp.base  // shared pool/cache (audit 5.3)
+    // File-CONTENT downloads (metadata enrichment, offline pins) can run far
+    // longer than the shared 30 s callTimeout — a full audiobook m4b is
+    // hundreds of MB. SharedHttp's comment says long media transfers must
+    // override callTimeout with 0; this client does that (shares the pool/
+    // cache via newBuilder, keeps the per-read 20 s stall guard). Without it
+    // the full-file fetch the M4B/MMR enricher needs always aborts at 30 s →
+    // embedded title/artist/album never load and the filename is shown.
+    private val downloadHttp = com.powermediaplayer.util.SharedHttp.base.newBuilder()
+        .callTimeout(0, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
     private val signInOptions: GoogleSignInOptions = GoogleSignInOptions
         .Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -338,7 +348,9 @@ class DriveOAuthProvider @Inject constructor(
                 .addHeader("Authorization", "Bearer $token")
                 .addHeader("Range", rangeHeader)
                 .build()
-            http.newCall(req).execute().use { resp ->
+            // downloadHttp = no overall callTimeout (large media transfers);
+            // the 20 s read timeout still aborts a genuinely stalled connection.
+            downloadHttp.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) {
                     com.powermediaplayer.util.Diag.e(tag, "Drive download failed: HTTP ${resp.code}")
                     return@withContext null
