@@ -1135,9 +1135,23 @@ class CloudViewModel @Inject constructor(
             ) {
                 if (!loadedPlayer.playWhenReady) loadedPlayer.play()
                 heldThisOpen = true
+                // HOLD the player, but STILL load tags + chapters. A cold-start
+                // auto-resume loads the item with only the filename (no
+                // enrichment), so without this a tap would hold AND never enrich
+                // → title/chapters never appear. Apply cached tags if we have
+                // them, else run the Drive download+extract (no queue rebuild).
+                val cached = enrichedByMediaId[item.id]
+                if (cached != null) {
+                    playbackConnection.setLocalMetadata(cached)
+                } else if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
+                    !item.isFolder
+                ) {
+                    enrichDriveItem(item)
+                }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
-                    "openItem: '${item.name}' already loaded → HOLD (no rebuild, no reload)"
+                    "openItem: '${item.name}' already loaded → HOLD (no rebuild; " +
+                        "tags ${if (cached != null) "from cache" else "enriching"})"
                 )
                 return true
             }
@@ -1223,42 +1237,54 @@ class CloudViewModel @Inject constructor(
             // when we already have this item's tags cached this session.
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder &&
                 cachedEnriched == null) {
-                viewModelScope.launch(Dispatchers.IO) {
-                    playbackConnection.setCloudFetchInProgress(true)
-                    // Three-pass strategy:
-                    //   (1) head 32 MB — fast; works for moov-at-front
-                    //   (2) full file (≤1 GB) — slow but reliable;
-                    //       MediaMetadataRetriever needs a complete MP4
-                    //       structure (ftyp + moov + mdat), so partial
-                    //       tail-only downloads can't actually be parsed.
-                    //   (3) skip — file too big or already extracted
-                    val isSafItem = item.id.startsWith("content://")
-                    var found = false
-                    var tempFile = try {
-                        if (isSafItem) driveProvider.downloadToCache(item)
-                        else driveOAuthProvider.downloadToCache(item)
-                    } catch (_: Throwable) { null }
-                    if (tempFile != null) {
-                        found = parseAndApply(item, tempFile)
-                        runCatching { tempFile.delete() }
-                    }
-                    if (!found) {
-                        tempFile = try {
-                            if (isSafItem) driveProvider.downloadFullToCache(item)
-                            else driveOAuthProvider.downloadFullToCache(item)
-                        } catch (_: Throwable) { null }
-                        if (tempFile != null) {
-                            parseAndApply(item, tempFile)
-                            runCatching { tempFile.delete() }
-                        }
-                    }
-                    playbackConnection.setCloudFetchInProgress(false)
-                }
+                enrichDriveItem(item)
             }
         }
         // Reaching here means setMediaItems was called — playback has been
         // handed to the service and (network permitting) will start.
         return true
+    }
+
+    /**
+     * Download a Drive item to cache and extract embedded tags + M4B chapters
+     * (the moov box for MP4/M4B etc. — MediaMetadataRetriever / the chapter
+     * parser cannot reach an authenticated HTTPS URL directly). Pushes the
+     * results to the player WITHOUT touching the queue, so it is safe to call
+     * on the "hold" path (item already loaded by cold-start with only the
+     * filename) as well as on a fresh load. Skipped by callers when the item's
+     * tags are already cached this session.
+     */
+    private fun enrichDriveItem(item: CloudMediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            playbackConnection.setCloudFetchInProgress(true)
+            // Three-pass strategy:
+            //   (1) head 32 MB — fast; works for moov-at-front
+            //   (2) full file (≤4 GB) — slow but reliable; MediaMetadataRetriever
+            //       needs a complete MP4 (ftyp + moov + mdat), so partial
+            //       tail-only downloads can't actually be parsed.
+            //   (3) skip — file too big or already extracted
+            val isSafItem = item.id.startsWith("content://")
+            var found = false
+            var tempFile = try {
+                if (isSafItem) driveProvider.downloadToCache(item)
+                else driveOAuthProvider.downloadToCache(item)
+            } catch (_: Throwable) { null }
+            if (tempFile != null) {
+                found = parseAndApply(item, tempFile)
+                runCatching { tempFile.delete() }
+            }
+            if (!found) {
+                tempFile = try {
+                    if (isSafItem) driveProvider.downloadFullToCache(item)
+                    else driveOAuthProvider.downloadFullToCache(item)
+                } catch (_: Throwable) { null }
+                if (tempFile != null) {
+                    parseAndApply(item, tempFile)
+                    runCatching { tempFile.delete() }
+                }
+            }
+            playbackConnection.setCloudFetchInProgress(false)
+        }
     }
 
     /**
