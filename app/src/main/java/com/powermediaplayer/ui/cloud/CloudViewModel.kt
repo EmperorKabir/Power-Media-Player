@@ -1042,6 +1042,16 @@ class CloudViewModel @Inject constructor(
      * recorded into [_uiState.errorMessage] and the caller should NOT
      * navigate away from the cloud screen.
      */
+    // Sticky cache of embedded tags/art already extracted this session, keyed
+    // by Drive file id. Without it, re-opening a Drive item (e.g. returning
+    // from a cast, which re-fires openItem) reset the filename placeholder AND
+    // re-downloaded the whole file (hundreds of MB) to re-extract — the
+    // metadata visibly "went away" then slowly came back. With it, a re-open
+    // restores the enriched title/artist/album/art instantly and skips the
+    // re-download.
+    private val enrichedByMediaId =
+        java.util.concurrent.ConcurrentHashMap<String, LocalMetadataOverride>()
+
     private suspend fun openItemInternal(item: CloudMediaItem): Boolean {
         // Drive (or other non-Spotify) playback starts → stop the
         // Spotify mirror so the Player tab swaps over cleanly instead
@@ -1162,12 +1172,14 @@ class CloudViewModel @Inject constructor(
             playbackConnection.setMediaItems(listOf(mediaItem), 0)
             // Use the same extension-first decision used for is_video_hint.
             playbackConnection.setVideoModeHint(isVideo)
-            // Instant placeholder metadata: filename as title + Drive's
-            // thumbnail (auto-generated for many files, no auth needed).
-            // Replaced by the post-download tags + embedded artwork when
-            // the background extraction finishes.
+            // Placeholder metadata. If this item was already enriched this
+            // session (e.g. returning from a cast re-fires openItem), reuse the
+            // cached embedded tags/art instantly instead of flashing the
+            // filename — and skip the re-download below. Otherwise: filename +
+            // Drive's auto-thumbnail, replaced when the extraction finishes.
+            val cachedEnriched = enrichedByMediaId[item.id]
             playbackConnection.setLocalMetadata(
-                LocalMetadataOverride(
+                cachedEnriched ?: LocalMetadataOverride(
                     title = item.name,
                     artworkUri = item.thumbnailUri
                 )
@@ -1177,8 +1189,10 @@ class CloudViewModel @Inject constructor(
             // (moov box for MP4/M4B, ID3 for MP3, etc.) and MediaExtractor /
             // MediaMetadataRetriever cannot reach an authenticated HTTPS URL
             // directly. Download to cache once, run BOTH parsers, push the
-            // results to the player. Streaming continues unaffected.
-            if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder) {
+            // results to the player. Streaming continues unaffected. Skipped
+            // when we already have this item's tags cached this session.
+            if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder &&
+                cachedEnriched == null) {
                 viewModelScope.launch(Dispatchers.IO) {
                     playbackConnection.setCloudFetchInProgress(true)
                     // Three-pass strategy:
@@ -1246,19 +1260,21 @@ class CloudViewModel @Inject constructor(
                 val artBytes = mmr.embeddedPicture
                 if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
                     !album.isNullOrBlank() || artBytes != null) {
-                    playbackConnection.setLocalMetadata(
-                        LocalMetadataOverride(
-                            title = title ?: item.name,
-                            artist = artist,
-                            album = album,
-                            // Preserve the Drive thumbnail as a fallback when
-                            // the file has no embedded picture — otherwise
-                            // updating with artworkBytes=null would wipe the
-                            // placeholder we set instantly on play.
-                            artworkUri = item.thumbnailUri,
-                            artworkBytes = artBytes
-                        )
+                    val override = LocalMetadataOverride(
+                        title = title ?: item.name,
+                        artist = artist,
+                        album = album,
+                        // Preserve the Drive thumbnail as a fallback when
+                        // the file has no embedded picture — otherwise
+                        // updating with artworkBytes=null would wipe the
+                        // placeholder we set instantly on play.
+                        artworkUri = item.thumbnailUri,
+                        artworkBytes = artBytes
                     )
+                    playbackConnection.setLocalMetadata(override)
+                    // Cache for instant, no-re-download restore on the next
+                    // open of this item this session (cast-return, re-tap).
+                    enrichedByMediaId[item.id] = override
                     if (artBytes != null) found = true
                 }
                 com.powermediaplayer.util.Diag.i(
