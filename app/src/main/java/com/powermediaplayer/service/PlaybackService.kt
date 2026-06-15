@@ -2238,6 +2238,10 @@ class PlaybackService : MediaSessionService() {
             val url = "http://$castRelayLanIp:${server.listeningPort}/$token"
             val item = MediaItem.Builder()
                 .setUri(url)
+                // CastPlayer's DefaultMediaItemConverter REQUIRES a mimeType on
+                // the item (else IllegalArgumentException → crash). The temp is
+                // an MP4-container AAC, so audio/mp4.
+                .setMimeType("audio/mp4")
                 .setMediaId(sourceUri.toString())
                 .setMediaMetadata(metadata)
                 .build()
