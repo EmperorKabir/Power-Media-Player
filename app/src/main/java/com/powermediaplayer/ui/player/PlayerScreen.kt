@@ -138,6 +138,14 @@ fun PlayerScreen(
     // over the playing picture.
     val castingLocalVideo by com.powermediaplayer.service.PlaybackService
         .castLocalVideoActiveFlow.collectAsStateWithLifecycle()
+    // While casting a video to an audio-only device the SESSION player is the
+    // audio-only m4a (isVideoContent=false), but the LOCAL player is playing the
+    // SILENT VIDEO bound to the surface. Present it AS video content so the app
+    // shows the picture (the VideoSurface) instead of falling into the audio
+    // layout. The cast transport still drives the audio; the on-screen aspect
+    // comes from the local player's real size (VideoSurface's size fallback).
+    val displayState = if (castingLocalVideo && !uiState.isVideoContent)
+        uiState.copy(isVideoContent = true) else uiState
     val showEmptyState = !uiState.hasMedia && !uiState.isLoading &&
         !uiState.cloudFetchInProgress && !uiState.isVideoContent &&
         !uiState.isSpotifyActive && !castingLocalVideo
@@ -169,7 +177,7 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .then(if (uiState.isVideoContent) Modifier else nonVideoChromeInset)
+            .then(if (displayState.isVideoContent) Modifier else nonVideoChromeInset)
     ) {
         androidx.compose.runtime.CompositionLocalProvider(LocalAdaptiveInfo provides adaptive) {
         // Video ALWAYS uses the Compact layout regardless of screen size,
@@ -177,8 +185,8 @@ fun PlayerScreen(
         // unfolded foldables. Audio uses the size-appropriate layout.
         when {
             showEmptyState -> EmptyPlayerState(onNavigateToLibrary)
-            uiState.isVideoContent -> PlayerScreenCompact(
-                uiState = uiState,
+            displayState.isVideoContent -> PlayerScreenCompact(
+                uiState = displayState,
                 artworkBytes = artworkBytes,
                 artworkContentScale = artworkContentScale,
                 viewModel = viewModel,
