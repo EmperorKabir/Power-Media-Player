@@ -110,6 +110,23 @@ class DriveTagEnricher @Inject constructor(
                         artworkBytes = artBytes
                     )
                     playbackConnection.setLocalMetadata(override)
+                    // DURABLE: write the enriched tags into senderMetadataByMediaId
+                    // (used by the local resolution AND the rebuilt cast item) so
+                    // the title/cover survive the transient override being wiped on
+                    // a reload/cast swap. See CloudViewModel for the full rationale.
+                    runCatching {
+                        val meta = androidx.media3.common.MediaMetadata.Builder().apply {
+                            if (!title.isNullOrBlank()) setTitle(title)
+                            if (!artist.isNullOrBlank()) setArtist(artist)
+                            if (!album.isNullOrBlank()) setAlbumTitle(album)
+                            artUri?.let { setArtworkUri(it) }
+                            artBytes?.let {
+                                setArtworkData(it, androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                            }
+                        }.build()
+                        com.powermediaplayer.service.PlaybackService
+                            .senderMetadataByMediaId[stableKey] = meta
+                    }
                     cache[item.id] = override
                     runCatching {
                         if (!title.isNullOrBlank())

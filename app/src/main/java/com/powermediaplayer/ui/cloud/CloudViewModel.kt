@@ -1341,6 +1341,28 @@ class CloudViewModel @Inject constructor(
                         artworkBytes = artBytes
                     )
                     playbackConnection.setLocalMetadata(override)
+                    // DURABLE: also write the enriched tags into the service-side
+                    // senderMetadataByMediaId cache (keyed by mediaId == stableKey).
+                    // updatePlayerState resolves the title/cover as
+                    //   overTitle ?: player.title ?: itemMetadata(senderMetadata)
+                    // and the CAST item is rebuilt from this cache too. The
+                    // transient override is wiped on any reload/cast swap and the
+                    // CastPlayer reports an EMPTY title, so without this the title
+                    // fell back to the filename (itemMetadata) on cast. Writing the
+                    // real tags here makes them survive — for local AND cast.
+                    runCatching {
+                        val meta = androidx.media3.common.MediaMetadata.Builder().apply {
+                            if (!title.isNullOrBlank()) setTitle(title)
+                            if (!artist.isNullOrBlank()) setArtist(artist)
+                            if (!album.isNullOrBlank()) setAlbumTitle(album)
+                            artUri?.let { setArtworkUri(it) }
+                            artBytes?.let {
+                                setArtworkData(it, androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                            }
+                        }.build()
+                        com.powermediaplayer.service.PlaybackService
+                            .senderMetadataByMediaId[stableKey] = meta
+                    }
                     // Cache for instant, no-re-download restore on the next
                     // open of this item this session (cast-return, re-tap).
                     enrichedByMediaId[item.id] = override
