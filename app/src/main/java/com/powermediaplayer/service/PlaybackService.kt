@@ -777,7 +777,14 @@ class PlaybackService : MediaSessionService() {
         // above. The flag updates IMMEDIATELY (so the cast listener uses the
         // latest value)…
         serviceScope.launch {
-            settingsDataStore.castVideoAudioOffsetMs.collect { castVideoAudioOffsetMsFlag = it }
+            settingsDataStore.castVideoAudioOffsetMs.collect {
+                castVideoAudioOffsetMsFlag = it
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "CASTOFF slider=${it}ms reached service (castLocalVideoActive=$castLocalVideoActive " +
+                        "initialSyncDone=$castInitialSyncDone)"
+                )
+            }
         }
         // …but the on-phone picture is re-seeked only AFTER the slider settles
         // (debounce). Seeking on every drag tick flooded the local player with
@@ -789,7 +796,19 @@ class PlaybackService : MediaSessionService() {
                 .collect { off ->
                     if (castLocalVideoActive && castInitialSyncDone) {
                         val basePos = castPlayer?.currentPosition ?: player?.currentPosition ?: 0L
-                        runCatching { player?.seekTo((basePos + off).coerceAtLeast(0L)) }
+                        val target = (basePos + off).coerceAtLeast(0L)
+                        runCatching { player?.seekTo(target) }
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "CASTOFF re-seek (slider settled): off=${off}ms castPos=${basePos}ms → localSeek=${target}ms"
+                        )
+                    } else {
+                        com.powermediaplayer.util.Diag.i(
+                            "PMP_DIAG",
+                            "CASTOFF slider settled off=${off}ms but INERT " +
+                                "(castLocalVideoActive=$castLocalVideoActive initialSyncDone=$castInitialSyncDone) " +
+                                "— offset only applies while casting a VIDEO to an audio-only device"
+                        )
                     }
                 }
         }
@@ -1699,13 +1718,16 @@ class PlaybackService : MediaSessionService() {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     if (!castLocalVideoActive || castInitialSyncDone || !isPlaying) return
                     val lp = player ?: return
+                    val alignTarget = (cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L)
                     runCatching {
-                        lp.seekTo((cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L))
+                        lp.seekTo(alignTarget)
                         lp.playWhenReady = true
                     }
                     castInitialSyncDone = true
                     com.powermediaplayer.util.Diag.i(
-                        "PMP_DIAG", "Cast local-video: initial align done, picture resumed"
+                        "PMP_DIAG",
+                        "CASTOFF initial align: castPos=${cp.currentPosition}ms offset=${castVideoAudioOffsetMsFlag}ms " +
+                            "→ localSeek=${alignTarget}ms; picture resumed"
                     )
                 }
                 // After the initial align, follow the cast's INTENT (deliberate
