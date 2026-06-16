@@ -2393,7 +2393,10 @@ class PlaybackService : MediaSessionService() {
             // Changed sets castInitialSyncDone) within 30 s it has hung — revert
             // to local so the user isn't stuck on a frozen muted picture with no
             // audio. A child of castAudioExtractJob, so a re-switch cancels it.
-            launch {
+            // Armed ONLY when we asked the cast to PLAY: a deliberately-paused
+            // cast (route-while-paused) legitimately never reaches "really
+            // playing", so arming it would wrongly tear down a healthy session.
+            if (play) launch {
                 kotlinx.coroutines.delay(30_000)
                 if (castLocalVideoActive && !castInitialSyncDone) {
                     com.powermediaplayer.util.Diag.w(

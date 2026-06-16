@@ -34,14 +34,18 @@ object ArtworkCache {
         // Skip the rewrite only when the SAME size already exists — a full hash
         // makes a same-size-different-content collision astronomically unlikely.
         if (!(f.exists() && f.length() == bytes.size.toLong())) {
-            // Atomic: write to a unique temp then rename, so a concurrent writer
-            // or a crash mid-write never leaves a half-written .img.
-            val tmp = File(f.parentFile, "${f.name}.${bytes.size}.tmp")
-            tmp.writeBytes(bytes)
-            if (!tmp.renameTo(f)) {
-                // renameTo can fail if the target exists on some FS — overwrite.
-                runCatching { f.delete() }
-                if (!tmp.renameTo(f)) { tmp.copyTo(f, overwrite = true); tmp.delete() }
+            // Atomic: write to a PER-WRITER-UNIQUE temp then rename, so two
+            // writers racing the same key (or a crash mid-write) never leave a
+            // half-written .img — and we never f.delete() first, so there is no
+            // window where the cover is transiently missing.
+            val tmp = File(f.parentFile, "${f.name}.${System.nanoTime()}.tmp")
+            try {
+                tmp.writeBytes(bytes)
+                // renameTo onto an existing target fails on some filesystems;
+                // copyTo(overwrite) replaces in place without a missing-file gap.
+                if (!tmp.renameTo(f)) tmp.copyTo(f, overwrite = true)
+            } finally {
+                runCatching { if (tmp.exists()) tmp.delete() }
             }
         }
         Uri.fromFile(f)

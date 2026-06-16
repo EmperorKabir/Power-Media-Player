@@ -53,8 +53,11 @@ class DriveTagEnricher @Inject constructor(
             // the Cloud tab AND Last Played near-simultaneously), don't start a
             // second hundreds-of-MB download — let the in-flight one finish.
             if (!ChapterCache.shared.markFilling(stableKey)) return@launch
-            playbackConnection.setCloudFetchInProgress(true)
+            // setCloudFetchInProgress INSIDE the try so the finally's
+            // unmarkFilling is unreachable only if markFilling itself threw —
+            // i.e. the fill flag can never get permanently stuck for the process.
             try {
+                playbackConnection.setCloudFetchInProgress(true)
                 val isSaf = item.id.startsWith("content://")
                 var found = false
                 var temp = try {
