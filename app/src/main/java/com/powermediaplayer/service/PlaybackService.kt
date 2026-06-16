@@ -694,18 +694,21 @@ class PlaybackService : MediaSessionService() {
                                 .setEnableDecoderFallback(enableDecoderFallback)
                                 .setEventHandler(eventHandler)
                                 .setEventListener(eventListener)
-                                .setMaxDroppedFramesToNotify(50)
-                        ) {
-                            // Delay the picture ONLY when Bluetooth is genuinely
-                            // the app's live output: not when the user rerouted
-                            // audio to the phone speaker (BT kept on) and not
-                            // while casting (audio is on the cast device). Either
-                            // would otherwise wrongly hold back the picture.
-                            if (btVideoRouteActive &&
-                                !audioRerouteActiveFlow.value &&
-                                !castActiveFlow.value
-                            ) btVideoOffsetUsFlag else 0L
-                        }
+                                .setMaxDroppedFramesToNotify(50),
+                            // Slider value — applied IMMEDIATELY so tuning is
+                            // responsive (a ramp here made the slider feel dead).
+                            offsetUsSupplier = { btVideoOffsetUsFlag },
+                            // Gate — eased on/off inside the renderer. Delay the
+                            // picture ONLY when Bluetooth is genuinely the app's
+                            // live output: not while rerouted to the phone speaker
+                            // (BT kept on) and not while casting (audio is on the
+                            // cast device).
+                            gateSupplier = {
+                                btVideoRouteActive &&
+                                    !audioRerouteActiveFlow.value &&
+                                    !castActiveFlow.value
+                            }
+                        )
                     )
                     // Diagnostic: prove OUR renderer is in the video list + its
                     // order (selector picks the lowest index on a capability tie).

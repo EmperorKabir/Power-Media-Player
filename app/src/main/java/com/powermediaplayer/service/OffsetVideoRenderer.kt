@@ -18,33 +18,31 @@ import java.nio.ByteBuffer
  * `processOutputBuffer` → `VideoFrameReleaseControl`). A larger presentation
  * time makes the frame "not due yet" → it's held → the picture lags.
  *
- * CRUCIAL: when the target offset is 0 (the non-BT default) the applied offset
- * stays 0, so the argument is passed to `super` UNCHANGED and the behaviour is
- * byte-for-byte the default — normal video playback (the common case) is
- * completely unaffected. Only a non-zero BT offset shifts anything.
+ * TWO INDEPENDENT INPUTS — this is the crux:
+ *  - [offsetUsSupplier] is the SLIDER value (µs, ≥0). It is applied IMMEDIATELY
+ *    so the user sees lip-sync change as they drag — a tuning control must be
+ *    responsive, never ramped.
+ *  - [gateSupplier] is whether Bluetooth is genuinely the live output. ONLY this
+ *    on/off transition is eased (a 0→1 scale over [GATE_RAMP_STEP] per frame),
+ *    so a BT connect/disconnect mid-video fades the offset in/out instead of
+ *    freezing the picture for `offset` ms (connect) or jumping it (disconnect).
  *
- * EASING: the supplier's value can change in one step — a BT-route gate flip
- * (connect/disconnect) or a slider scrub. Applying that step raw would freeze
- * the picture for `target` ms (stepping up) or fast-forward it (stepping down).
- * So the APPLIED offset eases toward the target by at most [RAMP_STEP_US] per
- * PROCESSED frame, spreading a typical ±250 ms change over ~1.7 s at 30 fps —
- * an imperceptible speed nudge instead of a jolt.
- *
- * @param offsetUsSupplier read live each frame, so the slider/gate take effect
- *        without rebuilding the player. Positive = delay the picture.
+ * applied = offset × gateScale. When the gate is off the scale settles to 0 →
+ * applied 0 → the argument is passed to `super` UNCHANGED → normal (non-BT)
+ * video playback is byte-for-byte the default, completely unaffected.
  */
 class OffsetVideoRenderer(
     builder: MediaCodecVideoRenderer.Builder,
-    private val offsetUsSupplier: () -> Long
+    private val offsetUsSupplier: () -> Long,
+    private val gateSupplier: () -> Boolean
 ) : MediaCodecVideoRenderer(builder) {
 
-    /** The offset actually added to frame PTS, eased toward the supplier target
-     *  (see EASING above). Starts at 0 so the first frames are default. */
-    private var appliedOffsetUs: Long = 0L
+    /** Eased 0→1 gate scale (BT off→on). Only the GATE is ramped; the slider
+     *  value is applied immediately. Starts at 0 so first frames are default. */
+    private var gateScale: Double = 0.0
 
-    // Diagnostics: prove (a) THIS renderer is the one selected for video and
-    // (b) the target/applied offset, on every target change + a heartbeat.
-    private var lastLoggedTarget: Long = Long.MIN_VALUE
+    // Diagnostics: prove THIS renderer draws the video + the values applied.
+    private var lastLoggedOffset: Long = Long.MIN_VALUE
     private var framesSinceLog: Int = 0
 
     override fun processOutputBuffer(
@@ -60,7 +58,10 @@ class OffsetVideoRenderer(
         isLastBuffer: Boolean,
         format: Format
     ): Boolean {
-        val target = offsetUsSupplier()
+        val offsetUs = offsetUsSupplier()
+        val gateOn = gateSupplier()
+        // Slider value applies immediately; only the gate scale eases.
+        val appliedUs = (offsetUs * gateScale).toLong()
         val processed = super.processOutputBuffer(
             positionUs,
             elapsedRealtimeUs,
@@ -69,31 +70,34 @@ class OffsetVideoRenderer(
             bufferIndex,
             bufferFlags,
             sampleCount,
-            bufferPresentationTimeUs + appliedOffsetUs, // 0 at steady non-BT → default
+            bufferPresentationTimeUs + appliedUs, // 0 when gate settled off → default
             isDecodeOnlyBuffer,
             isLastBuffer,
             format
         )
-        // Advance the ramp ONCE per processed buffer — a held frame re-invokes
-        // this returning false, and bumping then would over-ramp past the target.
+        // Ease the GATE scale once per processed buffer (a held frame re-invokes
+        // this returning false; bumping then would over-ramp the scale).
         if (processed) {
-            appliedOffsetUs += (target - appliedOffsetUs).coerceIn(-RAMP_STEP_US, RAMP_STEP_US)
+            val targetScale = if (gateOn) 1.0 else 0.0
+            gateScale += (targetScale - gateScale).coerceIn(-GATE_RAMP_STEP, GATE_RAMP_STEP)
             framesSinceLog++
         }
-        if (target != lastLoggedTarget || framesSinceLog >= 150) {
-            lastLoggedTarget = target
+        if (offsetUs != lastLoggedOffset || framesSinceLog >= 150) {
+            lastLoggedOffset = offsetUs
             framesSinceLog = 0
             Diag.i(
                 "PMP_DIAG",
-                "BTVID render target=${target}us applied=${appliedOffsetUs}us processed=$processed"
+                "BTVID render offset=${offsetUs}us gateOn=$gateOn scale=${"%.2f".format(gateScale)} " +
+                    "applied=${appliedUs}us processed=$processed"
             )
         }
         return processed
     }
 
     private companion object {
-        /** Max change to the applied offset per processed frame (µs). 5 ms/frame
-         *  ≈ 150 ms/s at 30 fps → a ±250 ms transition eases in ~1.7 s. */
-        const val RAMP_STEP_US = 5_000L
+        /** Gate-scale change per processed frame: 0→1 in 20 frames (~0.67 s at
+         *  30 fps, ~0.33 s at 60 fps). Smooths a BT connect/disconnect without
+         *  the slider value itself ever being throttled. */
+        const val GATE_RAMP_STEP = 0.05
     }
 }
