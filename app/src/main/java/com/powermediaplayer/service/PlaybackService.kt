@@ -140,6 +140,10 @@ class PlaybackService : MediaSessionService() {
     // BT video offset in µs (positive = delay the picture). Read live per frame
     // by OffsetVideoRenderer to compensate late Bluetooth-speaker audio.
     @Volatile private var btVideoOffsetUsFlag: Long = 0L
+    // True only when a BT audio sink is the active output. The BT video offset
+    // exists to compensate BT audio latency; on phone-speaker / wired it would
+    // wrongly delay the picture, so the renderer reads 0 unless this is set.
+    @Volatile private var btVideoRouteActive: Boolean = false
     /**
      * Subtitle delay in ms. Read by [com.powermediaplayer.subtitles
      * .ShiftingSubtitleParserFactory] at parse-time and applied as a
@@ -691,7 +695,7 @@ class PlaybackService : MediaSessionService() {
                                 .setEventHandler(eventHandler)
                                 .setEventListener(eventListener)
                                 .setMaxDroppedFramesToNotify(50)
-                        ) { btVideoOffsetUsFlag }
+                        ) { if (btVideoRouteActive) btVideoOffsetUsFlag else 0L }
                     )
                 }
             }
@@ -1233,6 +1237,7 @@ class PlaybackService : MediaSessionService() {
                     val btSinkAdded = addedDevices?.any {
                         it.isSink && it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
                     } == true
+                    if (btSinkAdded) btVideoRouteActive = true
                     if (btSinkAdded) {
                         // A BT audio device connecting should ROUTE audio to it:
                         // (1) Clear any phone-speaker reroute. The BT-disconnect
@@ -1263,12 +1268,13 @@ class PlaybackService : MediaSessionService() {
                                 // and nothing resumed (BT resume failed on Spotify
                                 // tracks). Resume Spotify Connect instead.
                                 if (spotifyProvider.spotifyState.value != null) {
-                                    runCatching {
-                                        spotifyProvider.resume()
-                                        com.powermediaplayer.util.Diag.i(
-                                            "PMP_DIAG", "BT resume-on-connect fired (Spotify Connect)"
-                                        )
-                                    }
+                                    val ok = runCatching { spotifyProvider.resume() }
+                                        .getOrNull()?.isSuccess == true
+                                    com.powermediaplayer.util.Diag.i(
+                                        "PMP_DIAG",
+                                        "BT resume-on-connect Spotify Connect: " +
+                                            if (ok) "resumed" else "failed"
+                                    )
                                     return@launch
                                 }
                                 val p = exoPlayerRef?.get() ?: return@launch
@@ -1290,9 +1296,16 @@ class PlaybackService : MediaSessionService() {
                                 "id=${d.id} sink=${d.isSink} src=${d.isSource}"
                         )
                     }
+                    // Re-evaluate whether BT is still the active route (drives the
+                    // BT video-offset gate).
+                    btVideoRouteActive = runCatching {
+                        getSystemService(android.media.AudioManager::class.java)?.isBluetoothA2dpOn == true
+                    }.getOrDefault(false)
                 }
             }
             am?.registerAudioDeviceCallback(audioDeviceCallback, null)
+            // Seed the BT-route flag from the current state at startup.
+            btVideoRouteActive = runCatching { am?.isBluetoothA2dpOn == true }.getOrDefault(false)
             // Snapshot the initial routing state so a single car-test
             // log shows the device set the user started with.
             am?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)?.forEach { d ->
@@ -1690,6 +1703,23 @@ class PlaybackService : MediaSessionService() {
                     if (idx in 0 until lp.mediaItemCount) {
                         runCatching {
                             lp.seekTo(idx, (cp.currentPosition + castVideoAudioOffsetMsFlag).coerceAtLeast(0L))
+                        }
+                    }
+                }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    // The audio-only cast (relay m4a) failed to load/play — don't
+                    // leave the local picture frozen + MUTED with no audio. End
+                    // the cast so switchPlayer reverts to the local ExoPlayer
+                    // (its teardown un-mutes + resumes), giving audio back on the
+                    // phone instead of silent-forever.
+                    if (castLocalVideoActive) {
+                        com.powermediaplayer.util.Diag.w(
+                            "PMP_DIAG",
+                            "Cast audio-only error (${error.errorCodeName}) → reverting to local"
+                        )
+                        runCatching {
+                            CastContext.getSharedInstance(applicationContext)
+                                .sessionManager.endCurrentSession(true)
                         }
                     }
                 }
@@ -2359,6 +2389,22 @@ class PlaybackService : MediaSessionService() {
                 "PMP_DIAG",
                 "Cast audio-only: cast item set @${positionMs}ms mime=${item.localConfiguration?.mimeType}"
             )
+            // Watchdog: if the cast never reaches "really playing" (onIsPlaying
+            // Changed sets castInitialSyncDone) within 30 s it has hung — revert
+            // to local so the user isn't stuck on a frozen muted picture with no
+            // audio. A child of castAudioExtractJob, so a re-switch cancels it.
+            launch {
+                kotlinx.coroutines.delay(30_000)
+                if (castLocalVideoActive && !castInitialSyncDone) {
+                    com.powermediaplayer.util.Diag.w(
+                        "PMP_DIAG", "Cast audio-only never started in 30s → reverting to local"
+                    )
+                    runCatching {
+                        CastContext.getSharedInstance(applicationContext)
+                            .sessionManager.endCurrentSession(true)
+                    }
+                }
+            }
         }
     }
 
@@ -2375,7 +2421,10 @@ class PlaybackService : MediaSessionService() {
             "PMP_DIAG", "Cast audio-only: extracting audio from $sourceUri"
         )
         val temp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            CastAudioExtractor.extractAudio(applicationContext, sourceUri)
+            val job = kotlin.coroutines.coroutineContext[kotlinx.coroutines.Job]
+            CastAudioExtractor.extractAudio(applicationContext, sourceUri) {
+                job?.isActive != false
+            }
         }
         castAudioTempFile?.let { old -> runCatching { old.delete() } }
         castAudioTempFile = temp

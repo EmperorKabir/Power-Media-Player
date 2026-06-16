@@ -7,24 +7,43 @@ import java.io.File
 /**
  * Durable on-disk cache for embedded cover art. The 600 KB-1 MB bytes pulled out
  * of an m4b live only in the transient session metadata override, so the cover
- * loaded intermittently (a race) and Last Played thumbnails were blank (the row
- * stored the often-null Drive thumbnail). Writing the bytes to a stable file
- * keyed by the media uri lets the player, cold-start restore, AND the Last
- * Played list all point at the same persistent image.
+ * loaded intermittently (a race) and Last Played thumbnails were blank. Writing
+ * the bytes to a stable file keyed by the media uri lets the player, cold-start
+ * restore, AND the Last Played list all point at the same persistent image.
  *
- * Stored under cacheDir/coverart/<hash>.img — cacheDir can be evicted under
- * storage pressure, but it survives normal process death, which is what the
- * resume + list paths need.
+ * Stored under cacheDir/coverart/<sha256>.img. Audit hardening: a full SHA-256
+ * key (not the 32-bit String.hashCode, which collides) and an atomic temp-then-
+ * rename write (no torn file if two enrichers race the same key).
  */
 object ArtworkCache {
     private fun dir(context: Context) = File(context.cacheDir, "coverart").apply { mkdirs() }
+
+    private fun keyHash(key: String): String =
+        runCatching {
+            java.security.MessageDigest.getInstance("SHA-256")
+                .digest(key.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        }.getOrDefault(key.hashCode().toString())
+
     private fun fileFor(context: Context, key: String) =
-        File(dir(context), "${key.hashCode()}.img")
+        File(dir(context), "${keyHash(key)}.img")
 
     /** Write [bytes] for [key]; returns the file:// uri, or null on failure. */
     fun write(context: Context, key: String, bytes: ByteArray): Uri? = runCatching {
         val f = fileFor(context, key)
-        if (!(f.exists() && f.length() == bytes.size.toLong())) f.writeBytes(bytes)
+        // Skip the rewrite only when the SAME size already exists — a full hash
+        // makes a same-size-different-content collision astronomically unlikely.
+        if (!(f.exists() && f.length() == bytes.size.toLong())) {
+            // Atomic: write to a unique temp then rename, so a concurrent writer
+            // or a crash mid-write never leaves a half-written .img.
+            val tmp = File(f.parentFile, "${f.name}.${bytes.size}.tmp")
+            tmp.writeBytes(bytes)
+            if (!tmp.renameTo(f)) {
+                // renameTo can fail if the target exists on some FS — overwrite.
+                runCatching { f.delete() }
+                if (!tmp.renameTo(f)) { tmp.copyTo(f, overwrite = true); tmp.delete() }
+            }
+        }
         Uri.fromFile(f)
     }.getOrNull()
 

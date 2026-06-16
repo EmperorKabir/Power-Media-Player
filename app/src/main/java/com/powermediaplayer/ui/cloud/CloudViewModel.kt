@@ -12,10 +12,8 @@ import com.powermediaplayer.cloud.GoogleDriveProvider
 import com.powermediaplayer.cloud.SpotifyProvider
 import com.powermediaplayer.data.preferences.DriveFavouriteFolder
 import com.powermediaplayer.data.preferences.SettingsDataStore
-import com.powermediaplayer.service.ChapterInfo
 import com.powermediaplayer.service.LocalMetadataOverride
 import com.powermediaplayer.service.PlaybackConnection
-import com.powermediaplayer.util.M4bChapterParser
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
@@ -88,6 +86,7 @@ class CloudViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val settingsDataStore: SettingsDataStore,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
+    private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao
 ) : ViewModel() {
@@ -1045,15 +1044,10 @@ class CloudViewModel @Inject constructor(
      * recorded into [_uiState.errorMessage] and the caller should NOT
      * navigate away from the cloud screen.
      */
-    // Sticky cache of embedded tags/art already extracted this session, keyed
-    // by Drive file id. Without it, re-opening a Drive item (e.g. returning
-    // from a cast, which re-fires openItem) reset the filename placeholder AND
-    // re-downloaded the whole file (hundreds of MB) to re-extract — the
-    // metadata visibly "went away" then slowly came back. With it, a re-open
-    // restores the enriched title/artist/album/art instantly and skips the
-    // re-download.
-    private val enrichedByMediaId =
-        java.util.concurrent.ConcurrentHashMap<String, LocalMetadataOverride>()
+    // The Drive download+extract+persist logic lives in the shared
+    // DriveTagEnricher (single source of truth, used by Cloud + Last Played) —
+    // its in-session cache is shared, so a Cloud tap and a Last Played tap of
+    // the same file reuse one download.
 
     // Set true by openItemInternal when it took the "hold" fast-path (the
     // tapped item was already loaded). openItem reads it to skip recordCloudPlay
@@ -1144,13 +1138,13 @@ class CloudViewModel @Inject constructor(
                 // enrichment), so without this a tap would hold AND never enrich
                 // → title/chapters never appear. Apply cached tags if we have
                 // them, else run the Drive download+extract (no queue rebuild).
-                val cached = enrichedByMediaId[item.id]
+                val cached = driveTagEnricher.cached(item.id)
                 if (cached != null) {
                     playbackConnection.setLocalMetadata(cached)
                 } else if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
                     !item.isFolder
                 ) {
-                    enrichDriveItem(item, uri.toString())
+                    driveTagEnricher.enrich(viewModelScope, item, uri.toString())
                 }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
@@ -1225,7 +1219,7 @@ class CloudViewModel @Inject constructor(
             // cached embedded tags/art instantly instead of flashing the
             // filename — and skip the re-download below. Otherwise: filename +
             // Drive's auto-thumbnail, replaced when the extraction finishes.
-            val cachedEnriched = enrichedByMediaId[item.id]
+            val cachedEnriched = driveTagEnricher.cached(item.id)
             playbackConnection.setLocalMetadata(
                 cachedEnriched ?: LocalMetadataOverride(
                     title = item.name,
@@ -1241,191 +1235,12 @@ class CloudViewModel @Inject constructor(
             // when we already have this item's tags cached this session.
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder &&
                 cachedEnriched == null) {
-                enrichDriveItem(item, uri.toString())
+                driveTagEnricher.enrich(viewModelScope, item, uri.toString())
             }
         }
         // Reaching here means setMediaItems was called — playback has been
         // handed to the service and (network permitting) will start.
         return true
-    }
-
-    /**
-     * Download a Drive item to cache and extract embedded tags + M4B chapters
-     * (the moov box for MP4/M4B etc. — MediaMetadataRetriever / the chapter
-     * parser cannot reach an authenticated HTTPS URL directly). Pushes the
-     * results to the player WITHOUT touching the queue, so it is safe to call
-     * on the "hold" path (item already loaded by cold-start with only the
-     * filename) as well as on a fresh load. Skipped by callers when the item's
-     * tags are already cached this session.
-     */
-    private fun enrichDriveItem(item: CloudMediaItem, stableKey: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            playbackConnection.setCloudFetchInProgress(true)
-            try {
-                // Three-pass strategy:
-                //   (1) head 32 MB — fast; works for moov-at-front
-                //   (2) full file (≤4 GB) — slow but reliable; MediaMetadataRetriever
-                //       needs a complete MP4 (ftyp + moov + mdat), so partial
-                //       tail-only downloads can't actually be parsed.
-                //   (3) skip — file too big or already extracted
-                val isSafItem = item.id.startsWith("content://")
-                var found = false
-                var tempFile = try {
-                    if (isSafItem) driveProvider.downloadToCache(item)
-                    else driveOAuthProvider.downloadToCache(item)
-                } catch (_: Throwable) { null }
-                if (tempFile != null) {
-                    found = parseAndApply(item, tempFile, stableKey)
-                    runCatching { tempFile.delete() }
-                }
-                if (!found) {
-                    tempFile = try {
-                        if (isSafItem) driveProvider.downloadFullToCache(item)
-                        else driveOAuthProvider.downloadFullToCache(item)
-                    } catch (_: Throwable) { null }
-                    if (tempFile != null) {
-                        parseAndApply(item, tempFile, stableKey)
-                        runCatching { tempFile.delete() }
-                    }
-                }
-            } finally {
-                // Audit: not in finally before — a cancel mid-download (VM
-                // cleared / navigation) skipped this and stuck the global
-                // cloud-fetch spinner true forever.
-                playbackConnection.setCloudFetchInProgress(false)
-            }
-        }
-    }
-
-    /**
-     * Run MediaMetadataRetriever + M4B chapter parser against a downloaded
-     * Drive byte range. Pushes any extracted artwork / tags / chapters to
-     * the player state. Returns true iff at least one was extracted.
-     */
-    private fun parseAndApply(
-        item: CloudMediaItem,
-        tempFile: java.io.File,
-        stableKey: String
-    ): Boolean {
-        var found = false
-        val tempUri = android.net.Uri.fromFile(tempFile)
-        com.powermediaplayer.util.Diag.i(
-            "PowerMediaPlayer",
-            "parseAndApply: file=${tempFile.absolutePath} bytes=${tempFile.length()}"
-        )
-        runCatching {
-            android.media.MediaMetadataRetriever().use { mmr ->
-                mmr.setDataSource(context, tempUri)
-                val title = mmr.extractMetadata(
-                    android.media.MediaMetadataRetriever.METADATA_KEY_TITLE
-                )
-                val artist = mmr.extractMetadata(
-                    android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST
-                ) ?: mmr.extractMetadata(
-                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST
-                )
-                val album = mmr.extractMetadata(
-                    android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM
-                )
-                val artBytes = mmr.embeddedPicture
-                // Persist embedded art to a durable cache file so the cover
-                // survives the transient override (fixes the intermittent
-                // cover) AND can be referenced by Last Played + resume.
-                val artUri = (artBytes?.let {
-                    com.powermediaplayer.util.ArtworkCache.write(context, stableKey, it)
-                }) ?: item.thumbnailUri
-                if (!title.isNullOrBlank() || !artist.isNullOrBlank() ||
-                    !album.isNullOrBlank() || artBytes != null) {
-                    val override = LocalMetadataOverride(
-                        // DON'T fall back to the filename when the embedded
-                        // title tag is missing — some books (e.g. Deathly
-                        // Hallows) have artist/album but no MMR-readable title,
-                        // yet ExoPlayer parses the real title from the stream.
-                        // A filename override here OUTRANKS that real title
-                        // (overTitle wins) → the player showed the filename. Pass
-                        // it through null so the parsed title is used instead.
-                        title = title,
-                        artist = artist,
-                        album = album,
-                        artworkUri = artUri,
-                        artworkBytes = artBytes
-                    )
-                    // Guarded: only paint onto the player if this item is STILL
-                    // current (a fast switch during the long download must not
-                    // put A's tags on B). The caches below are keyed by stableKey
-                    // so they're always safe to write.
-                    playbackConnection.setLocalMetadataIfCurrent(override, stableKey)
-                    // DURABLE: also write the enriched tags into the service-side
-                    // senderMetadataByMediaId cache (keyed by mediaId == stableKey).
-                    // updatePlayerState resolves the title/cover as
-                    //   overTitle ?: player.title ?: itemMetadata(senderMetadata)
-                    // and the CAST item is rebuilt from this cache too. The
-                    // transient override is wiped on any reload/cast swap and the
-                    // CastPlayer reports an EMPTY title, so without this the title
-                    // fell back to the filename (itemMetadata) on cast. Writing the
-                    // real tags here makes them survive — for local AND cast.
-                    runCatching {
-                        val meta = androidx.media3.common.MediaMetadata.Builder().apply {
-                            if (!title.isNullOrBlank()) setTitle(title)
-                            if (!artist.isNullOrBlank()) setArtist(artist)
-                            if (!album.isNullOrBlank()) setAlbumTitle(album)
-                            artUri?.let { setArtworkUri(it) }
-                            artBytes?.let {
-                                setArtworkData(it, androidx.media3.common.MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-                            }
-                        }.build()
-                        com.powermediaplayer.service.PlaybackService
-                            .senderMetadataByMediaId[stableKey] = meta
-                    }
-                    // Cache for instant, no-re-download restore on the next
-                    // open of this item this session (cast-return, re-tap).
-                    enrichedByMediaId[item.id] = override
-                    // PERSIST proper title/author + the cover uri onto the Last
-                    // Played row so a later AUTO-RESUME (cold-start never
-                    // enriches) + the Last Played thumbnail show the real tags
-                    // and cover instead of the filename / blank.
-                    viewModelScope.launch {
-                        runCatching {
-                            if (!title.isNullOrBlank())
-                                lastPlayedRepo.updateDisplayByUri(stableKey, title, artist ?: "")
-                            if (artBytes != null && artUri != null)
-                                lastPlayedRepo.updateArtworkByUri(stableKey, artUri.toString())
-                        }
-                    }
-                    if (artBytes != null) found = true
-                }
-                com.powermediaplayer.util.Diag.i(
-                    "PowerMediaPlayer",
-                    "MMR result: title=$title artist=$artist album=$album " +
-                        "artBytes=${artBytes?.size ?: 0}"
-                )
-            }
-        }
-        runCatching {
-            val bundle = M4bChapterParser.extractChaptersAsBundle(context, tempUri)
-            val count = bundle.getInt("chapter_count", 0)
-            com.powermediaplayer.util.Diag.i("PowerMediaPlayer", "M4B parser: chapter_count=$count")
-            // Cache the LOCAL-parse result under the STABLE remote key so a
-            // later cold-start (which only does cachedOnly for remote, never an
-            // inline parse since 6708a96) finds these chapters instantly — the
-            // ephemeral file:// key it was cached under otherwise never matches.
-            runCatching {
-                com.powermediaplayer.util.ChapterCache.shared
-                    .attachDiskStore(context.cacheDir)
-                com.powermediaplayer.util.ChapterCache.shared.put(stableKey, "?", bundle)
-            }
-            if (count > 0) {
-                val chapters = (0 until count).mapNotNull { i ->
-                    val title = bundle.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
-                    val start = bundle.getLong("chapter_start_$i", -1)
-                    val end = bundle.getLong("chapter_end_$i", -1)
-                    if (start >= 0) ChapterInfo(title, start, end, i) else null
-                }
-                playbackConnection.setLocalChaptersIfCurrent(chapters, stableKey)
-                found = true
-            }
-        }
-        return found
     }
 
     private var searchJob: kotlinx.coroutines.Job? = null

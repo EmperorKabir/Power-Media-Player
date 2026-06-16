@@ -49,6 +49,10 @@ class DriveTagEnricher @Inject constructor(
      */
     fun enrich(scope: CoroutineScope, item: CloudMediaItem, stableKey: String) {
         scope.launch(Dispatchers.IO) {
+            // Dedup: if the same file is already being enriched (e.g. tapped from
+            // the Cloud tab AND Last Played near-simultaneously), don't start a
+            // second hundreds-of-MB download — let the in-flight one finish.
+            if (!ChapterCache.shared.markFilling(stableKey)) return@launch
             playbackConnection.setCloudFetchInProgress(true)
             try {
                 val isSaf = item.id.startsWith("content://")
@@ -74,6 +78,7 @@ class DriveTagEnricher @Inject constructor(
             } finally {
                 // finally so a cancel mid-download doesn't stick the spinner.
                 playbackConnection.setCloudFetchInProgress(false)
+                ChapterCache.shared.unmarkFilling(stableKey)
             }
         }
     }

@@ -340,7 +340,9 @@ class DriveOAuthProvider @Inject constructor(
             com.powermediaplayer.util.Diag.e(tag, "Drive download: no access token (signed out?)")
             return@withContext null
         }
-        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id}_$suffix")
+        // Hash the id for the cache filename (the raw id can contain unsafe
+        // path chars, and a stable hash avoids collisions across the id space).
+        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_$suffix")
         val rangeHeader = "bytes=${rangeStart ?: ""}-${rangeEnd ?: ""}"
         try {
             val req = Request.Builder()

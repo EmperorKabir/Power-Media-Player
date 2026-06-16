@@ -28,7 +28,7 @@ import java.nio.ByteBuffer
 object CastAudioExtractor {
 
     /** Caller should delete the returned file when the cast ends. */
-    fun extractAudio(context: Context, source: Uri): File? {
+    fun extractAudio(context: Context, source: Uri, isActive: () -> Boolean = { true }): File? {
         val extractor = MediaExtractor()
         var muxer: MediaMuxer? = null
         var out: File? = null
@@ -66,6 +66,14 @@ object CastAudioExtractor {
             val info = MediaCodec.BufferInfo()
             var samples = 0L
             while (true) {
+                // Cooperative cancellation: when the cast was abandoned (rapid
+                // re-switch / track change) stop remuxing the whole track — drop
+                // the partial output and bail instead of burning CPU/IO on it.
+                if (!isActive()) {
+                    Diag.i("PMP_DIAG", "CastAudioExtractor cancelled after $samples samples")
+                    runCatching { out?.delete() }
+                    return null
+                }
                 val size = extractor.readSampleData(buffer, 0)
                 if (size < 0) break
                 info.offset = 0

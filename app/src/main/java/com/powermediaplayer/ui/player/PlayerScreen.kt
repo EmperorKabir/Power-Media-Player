@@ -156,7 +156,10 @@ fun PlayerScreen(
     // A title that still ends in a media extension is the raw FILENAME, not a
     // real title (cast items carry the filename; an un-enriched item shows it).
     val mediaExtRegex = remember {
-        Regex("\\.(m4b|m4a|mp3|flac|mka|mkv|mp4|wav|ogg|oga|opus|aac|wma|aiff|aif|ape|mov|avi|webm|3gp|ts)$",
+        // Require a non-space before the dot, and only the unambiguous media
+        // extensions — dropped short tokens (ts/ape/aif/oga/mka/3gp) that could
+        // end a real title.
+        Regex("\\S\\.(m4b|m4a|m4p|mp3|flac|mkv|mp4|wav|ogg|opus|aac|wma|aiff|mov|avi|webm)$",
             RegexOption.IGNORE_CASE)
     }
     fun isFilenameTitle(t: String) = mediaExtRegex.containsMatchIn(t.trim())
