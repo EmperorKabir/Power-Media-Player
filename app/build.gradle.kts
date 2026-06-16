@@ -28,8 +28,8 @@ android {
         applicationId = "com.powermediaplayer"
         minSdk = 30
         targetSdk = 35
-        versionCode = 33
-        versionName = "1.2.0"
+        versionCode = 34
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
