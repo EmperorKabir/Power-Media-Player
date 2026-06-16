@@ -5,6 +5,7 @@ package com.powermediaplayer.service
 import androidx.media3.common.Format
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
+import com.powermediaplayer.util.Diag
 import java.nio.ByteBuffer
 
 /**
@@ -41,6 +42,11 @@ class OffsetVideoRenderer(
      *  (see EASING above). Starts at 0 so the first frames are default. */
     private var appliedOffsetUs: Long = 0L
 
+    // Diagnostics: prove (a) THIS renderer is the one selected for video and
+    // (b) the target/applied offset, on every target change + a heartbeat.
+    private var lastLoggedTarget: Long = Long.MIN_VALUE
+    private var framesSinceLog: Int = 0
+
     override fun processOutputBuffer(
         positionUs: Long,
         elapsedRealtimeUs: Long,
@@ -72,6 +78,15 @@ class OffsetVideoRenderer(
         // this returning false, and bumping then would over-ramp past the target.
         if (processed) {
             appliedOffsetUs += (target - appliedOffsetUs).coerceIn(-RAMP_STEP_US, RAMP_STEP_US)
+            framesSinceLog++
+        }
+        if (target != lastLoggedTarget || framesSinceLog >= 150) {
+            lastLoggedTarget = target
+            framesSinceLog = 0
+            Diag.i(
+                "PMP_DIAG",
+                "BTVID render target=${target}us applied=${appliedOffsetUs}us processed=$processed"
+            )
         }
         return processed
     }

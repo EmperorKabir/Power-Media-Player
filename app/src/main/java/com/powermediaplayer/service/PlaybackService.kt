@@ -707,6 +707,12 @@ class PlaybackService : MediaSessionService() {
                             ) btVideoOffsetUsFlag else 0L
                         }
                     )
+                    // Diagnostic: prove OUR renderer is in the video list + its
+                    // order (selector picks the lowest index on a capability tie).
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "BTVID videoRenderers=${out.map { it.javaClass.simpleName }}"
+                    )
                 }
             }
         }.setExtensionRendererMode(rendererMode)
@@ -745,6 +751,23 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch {
             settingsDataStore.btVideoAudioOffsetMs.collect {
                 btVideoOffsetUsFlag = it.coerceAtLeast(0) * 1000L
+                // Diagnostic: prove the slider reaches the service AND compare the
+                // gate flag against GROUND TRUTH (a fresh enumeration of output
+                // devices), so a stuck gate is provable rather than guessed.
+                val btOut = runCatching {
+                    getSystemService(android.media.AudioManager::class.java)
+                        ?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+                        ?.any { d -> d.isSink && (
+                            d.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                            d.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                            d.type == android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER) } == true
+                }.getOrDefault(false)
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "BTVID slider=${it}ms flag=${btVideoOffsetUsFlag}us gate.routeActive=$btVideoRouteActive " +
+                        "groundTruth.btOutput=$btOut reroute=${Companion.audioRerouteActiveFlow.value} " +
+                        "cast=${Companion.castActiveFlow.value}"
+                )
             }
         }
         // Cast A/V offset — separate from the local AudioDelayProcessor sum
