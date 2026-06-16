@@ -1698,8 +1698,9 @@ fun BtVideoAudioOffsetRow(
         )
         Text(
             text = "If watching video over Bluetooth speakers / headphones, " +
-                "lip-sync may drift because Bluetooth adds latency. Slide " +
-                "right to delay the video (most common). Range ±1 second.",
+                "lip-sync may drift because Bluetooth adds AUDIO latency. The " +
+                "fix is to delay the video to match — slide right. Range 0–1 " +
+                "second (the picture can be held back but not advanced).",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
         )
@@ -1707,8 +1708,8 @@ fun BtVideoAudioOffsetRow(
             label = "Offset",
             value = valueMs.toFloat(),
             default = 0f,
-            valueRange = -1000f..1000f,
-            steps = 199, // 10 ms increments
+            valueRange = 0f..1000f,
+            steps = 99, // 10 ms increments
             valueLabel = "${valueMs} ms",
             onValueChange = { onValueChange(it.toInt()) }
         )

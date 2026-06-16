@@ -304,9 +304,10 @@ private fun BluetoothSheetContent(
             title = "Video / audio sync offset",
             description = "Bluetooth adds audio latency, so lip-sync can " +
                 "drift when watching video over a BT speaker / headphones. " +
-                "Slide right to delay the video to match. Range ±1 second.",
+                "Slide right to delay the video to match. Range 0–1 second.",
             offsetMs = offsetMs,
-            onOffsetChange = onOffsetChange
+            onOffsetChange = onOffsetChange,
+            range = 0f..1000f
         )
         Spacer(Modifier.height(12.dp))
         HorizontalDivider(color = DisabledContent)

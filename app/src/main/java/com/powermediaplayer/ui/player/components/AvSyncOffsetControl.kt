@@ -33,15 +33,21 @@ import com.powermediaplayer.ui.theme.TextTertiary
  * No outer horizontal padding — the hosting sheet supplies it, so the title /
  * description / track all align to the sheet's edge.
  *
- * @param offsetMs current value, ±1000 ms.
+ * @param offsetMs current value, in ms within [range].
+ * @param range slider bounds. Cast is bipolar (default ±1000); Bluetooth is
+ *        delay-only (0..1000) because the picture can be held but not advanced.
  */
 @Composable
 fun AvSyncOffsetControl(
     title: String,
     description: String,
     offsetMs: Int,
-    onOffsetChange: (Int) -> Unit
+    onOffsetChange: (Int) -> Unit,
+    range: ClosedFloatingPointRange<Float> = -1000f..1000f
 ) {
+    // 10 ms increments across the range → N positions, (N-1) interior steps.
+    val sliderSteps = (((range.endInclusive - range.start) / 10f).toInt() - 1)
+        .coerceAtLeast(0)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = title,
@@ -81,10 +87,10 @@ fun AvSyncOffsetControl(
             }
         }
         Slider(
-            value = offsetMs.toFloat().coerceIn(-1000f, 1000f),
+            value = offsetMs.toFloat().coerceIn(range.start, range.endInclusive),
             onValueChange = { onOffsetChange(it.toInt()) },
-            valueRange = -1000f..1000f,
-            steps = 199, // 10 ms increments
+            valueRange = range,
+            steps = sliderSteps, // 10 ms increments across the range
             modifier = Modifier.fillMaxWidth()
         )
     }

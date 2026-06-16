@@ -942,18 +942,18 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
-    // Manual video audio-offset for Bluetooth playback. Positive ms =
-    // delay the video to catch up to the audio (typical BT). Negative
-    // ms = the opposite. Range ±1000 ms, default 0. Applied to the
-    // existing audio-delay path that the in-app Subtitle/Audio delay
-    // setting already uses, so no new audio renderer plumbing needed.
+    // Manual video offset for Bluetooth playback. Bluetooth adds AUDIO
+    // latency, so the fix is to DELAY the video to match — applied by
+    // OffsetVideoRenderer holding frames back. Delay-only (0–1000 ms,
+    // default 0): the picture can be held but not advanced, so a negative
+    // value would have no useful effect for the BT-late case.
     val btVideoAudioOffsetMs: Flow<Int> = context.dataStore.data.map { prefs ->
-        (prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] ?: 0).coerceIn(-1000, 1000)
+        (prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] ?: 0).coerceIn(0, 1000)
     }
 
     suspend fun setBtVideoAudioOffsetMs(value: Int) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] = value.coerceIn(-1000, 1000)
+            prefs[Keys.BT_VIDEO_AUDIO_OFFSET_MS] = value.coerceIn(0, 1000)
         }
     }
 

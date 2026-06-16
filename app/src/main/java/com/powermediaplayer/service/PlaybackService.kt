@@ -695,7 +695,17 @@ class PlaybackService : MediaSessionService() {
                                 .setEventHandler(eventHandler)
                                 .setEventListener(eventListener)
                                 .setMaxDroppedFramesToNotify(50)
-                        ) { if (btVideoRouteActive) btVideoOffsetUsFlag else 0L }
+                        ) {
+                            // Delay the picture ONLY when Bluetooth is genuinely
+                            // the app's live output: not when the user rerouted
+                            // audio to the phone speaker (BT kept on) and not
+                            // while casting (audio is on the cast device). Either
+                            // would otherwise wrongly hold back the picture.
+                            if (btVideoRouteActive &&
+                                !audioRerouteActiveFlow.value &&
+                                !castActiveFlow.value
+                            ) btVideoOffsetUsFlag else 0L
+                        }
                     )
                 }
             }
@@ -730,8 +740,12 @@ class PlaybackService : MediaSessionService() {
         }
         // BT video offset → delay the VIDEO frames (positive = hold the picture
         // back to match late BT audio). Read live per frame by OffsetVideoRenderer.
+        // Clamp ≥0 defensively: you can only DELAY the picture (a stored negative
+        // from an older build would advance frames = no useful effect for BT).
         serviceScope.launch {
-            settingsDataStore.btVideoAudioOffsetMs.collect { btVideoOffsetUsFlag = it * 1000L }
+            settingsDataStore.btVideoAudioOffsetMs.collect {
+                btVideoOffsetUsFlag = it.coerceAtLeast(0) * 1000L
+            }
         }
         // Cast A/V offset — separate from the local AudioDelayProcessor sum
         // above. The flag updates IMMEDIATELY (so the cast listener uses the
