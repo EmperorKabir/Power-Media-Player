@@ -1468,7 +1468,27 @@ class SpotifyProvider @Inject constructor(
                     _isLoggedIn.value = true
                     cont.resume(token)
                 } else {
-                    if (ex != null) _isLoggedIn.value = false
+                    if (ex != null) {
+                        _isLoggedIn.value = false
+                        // Spotify (blog 2026-06-18): refresh tokens expire 6
+                        // months after the user's original authorization →
+                        // the token endpoint returns invalid_grant. Per their
+                        // guidance, DISCARD the dead token (do NOT retry it) so
+                        // the Cloud tab shows the Connect/sign-in prompt and the
+                        // next authorization starts a fresh 6-month token. A
+                        // transient/network refresh error keeps the token for a
+                        // later retry (only invalid_grant is terminal).
+                        if (ex.error == "invalid_grant") {
+                            pollScope.launch { runCatching { tokenStore.write(null) } }
+                            lastSerializedAuthState = null
+                            cachedAuthState = null
+                            cachedAuthStateJson = null
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Spotify refresh token expired (invalid_grant) — discarded; user must re-sign-in"
+                            )
+                        }
+                    }
                     cont.resume(null)
                 }
             }
