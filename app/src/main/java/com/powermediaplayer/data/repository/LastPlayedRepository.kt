@@ -275,6 +275,10 @@ class LastPlayedRepository @Inject constructor(
 
     suspend fun mostRecent(): PlaybackHistoryEntity? = historyDao.mostRecent()
 
+    /** Resume position for a media uri (podcast episode progress marker). */
+    fun observePositionFor(uri: String): kotlinx.coroutines.flow.Flow<Long?> =
+        historyDao.observePositionFor(uri)
+
     /**
      * Recents view: every history row, joined with whether the same
      * mediaUri is currently pinned (so the UI can show a filled star).

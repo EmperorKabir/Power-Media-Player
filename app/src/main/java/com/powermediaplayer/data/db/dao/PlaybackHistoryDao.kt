@@ -88,6 +88,14 @@ interface PlaybackHistoryDao {
     @Query("SELECT * FROM playback_history WHERE id = :id")
     suspend fun get(id: Long): PlaybackHistoryEntity?
 
+    /** Resume position of the most-recent row for a uri — drives the podcast
+     *  episode-row progress marker (in-progress vs played). Null = never played. */
+    @Query(
+        "SELECT lastPositionMs FROM playback_history WHERE mediaUri = :uri " +
+            "ORDER BY lastPlayedAt DESC LIMIT 1"
+    )
+    fun observePositionFor(uri: String): Flow<Long?>
+
     @Query("DELETE FROM playback_history")
     suspend fun deleteAll()
 

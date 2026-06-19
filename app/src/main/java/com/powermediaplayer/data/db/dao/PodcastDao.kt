@@ -39,4 +39,14 @@ interface PodcastDao {
 
     @Query("SELECT COUNT(*) FROM podcast_shows")
     suspend fun showCount(): Int
+
+    /** Per-show episode totals + "new" (never-opened) count, for the show row. */
+    data class FeedCounts(val feedUrl: String, val total: Int, val unopened: Int)
+
+    @Query(
+        "SELECT feedUrl, COUNT(*) AS total, " +
+            "SUM(CASE WHEN isPlayed = 0 THEN 1 ELSE 0 END) AS unopened " +
+            "FROM podcast_episodes GROUP BY feedUrl"
+    )
+    fun observeFeedCounts(): Flow<List<FeedCounts>>
 }

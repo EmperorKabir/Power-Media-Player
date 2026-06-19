@@ -9,8 +9,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -38,6 +48,7 @@ import com.powermediaplayer.data.db.entity.PodcastShowEntity
 import com.powermediaplayer.podcast.RssFeedParser
 import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.ui.theme.ErrorRed
+import com.powermediaplayer.ui.theme.SurfaceElevated
 import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
 import com.powermediaplayer.ui.theme.TextSecondary
@@ -47,6 +58,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -77,6 +89,16 @@ class PodcastsViewModel @Inject constructor(
 
     fun episodesFor(feedUrl: String): kotlinx.coroutines.flow.Flow<List<PodcastEpisodeEntity>> =
         podcastDao.observeEpisodes(feedUrl)
+
+    /** Per-show episode totals + "new" counts, keyed by feedUrl (B1 show rows). */
+    val feedCounts: StateFlow<Map<String, PodcastDao.FeedCounts>> =
+        podcastDao.observeFeedCounts()
+            .map { list -> list.associateBy { it.feedUrl } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** Saved resume position for an episode's audio (B2 progress marker). */
+    fun episodePosition(audioUrl: String): kotlinx.coroutines.flow.Flow<Long?> =
+        lastPlayedRepo.observePositionFor(audioUrl)
 
     fun playEpisode(episode: PodcastEpisodeEntity) {
         val uri = android.net.Uri.parse(episode.audioUrl)
@@ -120,6 +142,9 @@ class PodcastsViewModel @Inject constructor(
                     )
                 )
             }
+            // Mark "opened" (NOT completed — the episode-row marker derives
+            // in-progress vs played from the saved resume position).
+            podcastDao.setPlayed(episode.guid, true)
         }
     }
 
@@ -252,10 +277,15 @@ fun PodcastsSection(
             Text("Apple Podcasts results:", color = TextSecondary,
                 style = MaterialTheme.typography.labelSmall)
             hits.take(8).forEach { hit ->
-                Row(modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { vm.subscribeFromItunes(hit); url = "" }
-                    .padding(vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { vm.subscribeFromItunes(hit); url = "" }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PodcastArtwork(hit.artworkUrl, 40.dp)
+                    Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(hit.title, color = TextPrimary,
                             style = MaterialTheme.typography.bodySmall, maxLines = 1)
@@ -278,12 +308,19 @@ fun PodcastsSection(
                 color = TextTertiary
             )
         } else {
+            val counts by vm.feedCounts.collectAsState()
             var expandedFeed by remember { mutableStateOf<String?>(null) }
-            LazyColumn(
+            // Content-wrapping Column (NOT a fixed-height nested LazyColumn): the
+            // host's outer scroll list provides scrolling, so the section sizes to
+            // its content with no dead gap (fixes #6). The mini-player area is a
+            // layout sibling above which content already reflows (AppNavigation
+            // NonPlayerRoute), so no manual bottom inset is needed here.
+            Column(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.height(360.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
-                items(shows, key = { it.feedUrl }) { show ->
+                shows.forEach { show ->
+                    val c = counts[show.feedUrl]
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -294,14 +331,20 @@ fun PodcastsSection(
                             .padding(vertical = 8.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        PodcastArtwork(show.artworkUrl, 56.dp)
+                        Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
                                 show.title,
                                 style = MaterialTheme.typography.titleSmall,
-                                color = TextPrimary
+                                color = TextPrimary,
+                                maxLines = 2
                             )
+                            val total = c?.total ?: 0
+                            val newCount = c?.unopened ?: 0
                             Text(
-                                show.feedUrl,
+                                "$total episode${if (total == 1) "" else "s"}" +
+                                    if (newCount > 0) " · $newCount new" else "",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TextTertiary,
                                 maxLines = 1
@@ -392,7 +435,7 @@ private fun EpisodeList(
     vm: PodcastsViewModel
 ) {
     val episodes by vm.episodesFor(feedUrl).collectAsState(initial = emptyList())
-    Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 4.dp)) {
+    Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
         if (episodes.isEmpty()) {
             Text(
                 "Loading episodes…",
@@ -400,32 +443,99 @@ private fun EpisodeList(
                 color = TextTertiary
             )
         } else {
-            episodes.take(15).forEach { e ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { vm.playEpisode(e) }
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            e.title,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (e.isPlayed) TextTertiary else TextPrimary,
-                            maxLines = 2
-                        )
-                        Text(
-                            (if (e.durationS > 0) "${e.durationS / 60} min · " else "") +
-                                java.text.SimpleDateFormat(
-                                    "yyyy-MM-dd", java.util.Locale.getDefault()
-                                ).format(java.util.Date(e.publishedAt.coerceAtLeast(0L))),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextTertiary
-                        )
-                    }
-                }
+            episodes.take(15).forEach { e -> EpisodeRow(e, vm) }
+        }
+    }
+}
+
+/** One episode row. The listened marker is DERIVED from the saved resume
+ *  position (history row keyed by audioUrl), not the open-on-tap flag:
+ *  New (accent dot) / In-progress (bar + "min left") / Played (check). */
+@Composable
+private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
+    val posMs by vm.episodePosition(e.audioUrl).collectAsState(initial = null)
+    val durMs = e.durationS * 1000L
+    val progress = if (durMs > 0 && posMs != null)
+        (posMs!!.toFloat() / durMs).coerceIn(0f, 1f) else 0f
+    val played = progress >= 0.95f
+    val inProgress = (posMs ?: 0L) > 0L && !played
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { vm.playEpisode(e) }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+            when {
+                played -> Icon(
+                    Icons.Filled.Check, "Played",
+                    tint = TextTertiary, modifier = Modifier.size(18.dp)
+                )
+                inProgress -> {}
+                else -> Icon(
+                    Icons.Filled.FiberManualRecord, "New",
+                    tint = TealAccent, modifier = Modifier.size(9.dp)
+                )
             }
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                e.title,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (played) TextTertiary else TextPrimary,
+                maxLines = 2
+            )
+            val date = java.text.SimpleDateFormat(
+                "yyyy-MM-dd", java.util.Locale.getDefault()
+            ).format(java.util.Date(e.publishedAt.coerceAtLeast(0L)))
+            val dur = if (e.durationS > 0) "${e.durationS / 60} min" else ""
+            val left = if (inProgress && durMs > 0)
+                " · ${((durMs - (posMs ?: 0L)) / 60000L).coerceAtLeast(0L)} min left" else ""
+            Text(
+                listOf(dur, date).filter { it.isNotBlank() }.joinToString(" · ") + left,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary
+            )
+            if (inProgress) {
+                Spacer(Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = { progress },
+                    color = TealAccent,
+                    trackColor = TealAccent.copy(alpha = 0.2f),
+                    modifier = Modifier.fillMaxWidth().height(3.dp)
+                )
+            }
+        }
+    }
+}
+
+/** Rounded show/episode thumbnail via Coil (the app's network image loader is
+ *  already configured); falls back to a podcast glyph when there's no artwork. */
+@Composable
+private fun PodcastArtwork(url: String?, size: Dp, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(size)
+            .clip(RoundedCornerShape(8.dp))
+            .background(SurfaceElevated)
+    ) {
+        if (!url.isNullOrBlank()) {
+            coil3.compose.AsyncImage(
+                model = coil3.request.ImageRequest.Builder(LocalContext.current)
+                    .data(url).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            Icon(
+                Icons.Filled.Podcasts,
+                contentDescription = null,
+                tint = TextTertiary,
+                modifier = Modifier.align(Alignment.Center).size(size * 0.5f)
+            )
         }
     }
 }
