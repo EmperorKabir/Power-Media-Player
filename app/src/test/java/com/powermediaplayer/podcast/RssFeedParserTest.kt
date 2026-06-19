@@ -69,6 +69,44 @@ class RssFeedParserTest {
         assertNull(parser.parse("https://x", "not xml at all <<>>"))
     }
 
+    @Test fun fetchResult_sends_browser_user_agent_and_maps_ok() {
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(200).setBody(sample))
+        server.start()
+        try {
+            val r = RssFeedParser().fetchResult(server.url("/feed").toString())
+            assertTrue("expected Ok, got $r", r is RssFeedParser.FetchResult.Ok)
+            assertEquals(2, (r as RssFeedParser.FetchResult.Ok).episodes.size)
+            val ua = server.takeRequest().getHeader("User-Agent") ?: ""
+            assertTrue("UA should be browser-ish, was '$ua'", ua.contains("PowerMediaPlayer"))
+            assertTrue("UA must not be the bare okhttp default", !ua.startsWith("okhttp/"))
+        } finally { server.shutdown() }
+    }
+
+    @Test fun fetchResult_maps_http_error_code() {
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(okhttp3.mockwebserver.MockResponse().setResponseCode(403))
+        server.start()
+        try {
+            val r = RssFeedParser().fetchResult(server.url("/feed").toString())
+            assertTrue("expected HttpError, got $r", r is RssFeedParser.FetchResult.HttpError)
+            assertEquals(403, (r as RssFeedParser.FetchResult.HttpError).code)
+        } finally { server.shutdown() }
+    }
+
+    @Test fun fetchResult_maps_html_as_not_feed() {
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(
+            okhttp3.mockwebserver.MockResponse().setResponseCode(200)
+                .setBody("<html><body>not a feed</body></html>")
+        )
+        server.start()
+        try {
+            val r = RssFeedParser().fetchResult(server.url("/page").toString())
+            assertTrue("expected NotFeed, got $r", r is RssFeedParser.FetchResult.NotFeed)
+        } finally { server.shutdown() }
+    }
+
     @Test fun episodes_without_enclosure_are_skipped() {
         val xml = """
             <?xml version="1.0"?>

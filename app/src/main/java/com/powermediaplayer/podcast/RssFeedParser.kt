@@ -19,9 +19,22 @@ class RssFeedParser(
     private val httpClient: OkHttpClient = defaultClient
 ) {
     companion object {
+        private const val UA =
+            "Mozilla/5.0 (Linux; Android) PowerMediaPlayer (podcast feed reader)"
         private val defaultClient = com.powermediaplayer.util.SharedHttp.base.newBuilder()  // shared pool/cache (audit 5.3)
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            // Many podcast CDNs (Megaphone/Fastly/Akamai) 403 the default okhttp
+            // UA; a browser-ish UA + an RSS Accept header defeats that. Scoped to
+            // THIS client only — SharedHttp (Drive/Spotify) is untouched.
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header("User-Agent", UA)
+                        .header("Accept", "application/rss+xml, application/xml, text/xml, */*")
+                        .build()
+                )
+            }
             .build()
 
         // RFC 822 — common podcast pubDate format.
@@ -30,15 +43,36 @@ class RssFeedParser(
         )
     }
 
-    fun fetch(feedUrl: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? {
-        val req = Request.Builder().url(feedUrl).build()
-        val xml = runCatching {
-            httpClient.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) null else resp.body?.string()
-            }
-        }.getOrNull() ?: return null
-        return parse(feedUrl, xml)
+    /** Typed fetch outcome so the UI can show WHY a feed failed (403 vs not-RSS
+     *  vs network) instead of one generic "couldn't parse". */
+    sealed interface FetchResult {
+        data class Ok(
+            val show: PodcastShowEntity,
+            val episodes: List<PodcastEpisodeEntity>
+        ) : FetchResult
+        data class HttpError(val code: Int) : FetchResult
+        data class NotFeed(val reason: String) : FetchResult
+        data object Network : FetchResult
     }
+
+    fun fetchResult(feedUrl: String): FetchResult {
+        val req = Request.Builder().url(feedUrl).build()
+        return runCatching {
+            httpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return FetchResult.HttpError(resp.code)
+                val xml = resp.body?.string() ?: return FetchResult.NotFeed("empty body")
+                val parsed = parse(feedUrl, xml) ?: return FetchResult.NotFeed("not RSS")
+                // parse() returns a non-null show with 0 episodes for an HTML page
+                // or a non-podcast XML — that's not a usable feed.
+                if (parsed.second.isEmpty()) return FetchResult.NotFeed("no episodes")
+                FetchResult.Ok(parsed.first, parsed.second)
+            }
+        }.getOrElse { FetchResult.Network }
+    }
+
+    /** Back-compat shim — existing callers (PodcastSyncWorker) keep using this. */
+    fun fetch(feedUrl: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? =
+        (fetchResult(feedUrl) as? FetchResult.Ok)?.let { it.show to it.episodes }
 
     fun parse(feedUrl: String, xml: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? {
         return runCatching {

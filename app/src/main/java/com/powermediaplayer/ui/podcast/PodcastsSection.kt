@@ -123,22 +123,31 @@ class PodcastsViewModel @Inject constructor(
         }
     }
 
+    private suspend fun setStatus(msg: String) =
+        withContext(Dispatchers.Main) { _status.value = msg }
+
     fun addByUrl(rssUrl: String) {
         if (rssUrl.isBlank()) return
         _status.value = "Fetching feed…"
         viewModelScope.launch(Dispatchers.IO) {
-            val parsed = parser.fetch(rssUrl)
-            if (parsed == null) {
-                withContext(Dispatchers.Main) {
-                    _status.value = "Couldn't parse feed at $rssUrl"
+            // An Apple Podcasts page (…/idNNNN) isn't an RSS feed — resolve its
+            // real feedUrl via the iTunes lookup before trying to parse.
+            val appleId = Regex("""/id(\d+)""").find(rssUrl)?.groupValues?.get(1)
+            val target = if (rssUrl.contains("podcasts.apple.com") && appleId != null) {
+                itunes.lookupFeedUrl(appleId) ?: rssUrl
+            } else rssUrl
+            when (val r = parser.fetchResult(target)) {
+                is RssFeedParser.FetchResult.Ok -> {
+                    podcastDao.upsertShow(r.show)
+                    podcastDao.upsertEpisodes(r.episodes)
+                    setStatus("Subscribed: ${r.show.title} (${r.episodes.size} episodes)")
                 }
-                return@launch
-            }
-            val (show, episodes) = parsed
-            podcastDao.upsertShow(show)
-            podcastDao.upsertEpisodes(episodes)
-            withContext(Dispatchers.Main) {
-                _status.value = "Subscribed: ${show.title} (${episodes.size} episodes)"
+                is RssFeedParser.FetchResult.HttpError ->
+                    setStatus("Feed returned HTTP ${r.code}. Try searching the show name instead.")
+                is RssFeedParser.FetchResult.NotFeed ->
+                    setStatus("That URL isn't an RSS feed (${r.reason}). Paste the RSS feed, or search by name.")
+                RssFeedParser.FetchResult.Network ->
+                    setStatus("Network error fetching the feed. Check your connection.")
             }
         }
     }

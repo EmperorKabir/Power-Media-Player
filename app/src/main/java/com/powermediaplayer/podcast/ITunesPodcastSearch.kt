@@ -30,6 +30,23 @@ class ITunesPodcastSearch(
         val feedUrl: String
     )
 
+    /** Resolve an Apple Podcasts numeric id (from a podcasts.apple.com/.../idNNN
+     *  page URL) to its real RSS feedUrl via the open iTunes lookup endpoint. */
+    fun lookupFeedUrl(id: String): String? {
+        val url = "https://itunes.apple.com/lookup?id=$id&entity=podcast"
+        val req = Request.Builder().url(url).build()
+        return runCatching {
+            httpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@runCatching null
+                val body = resp.body?.string().orEmpty()
+                val arr = JSONObject(body).optJSONArray("results") ?: return@runCatching null
+                (0 until arr.length()).firstNotNullOfOrNull { i ->
+                    arr.optJSONObject(i)?.optString("feedUrl")?.ifBlank { null }
+                }
+            }
+        }.getOrNull()
+    }
+
     fun search(query: String, limit: Int = 20): List<Hit> {
         if (query.isBlank()) return emptyList()
         val q = URLEncoder.encode(query, "UTF-8")
