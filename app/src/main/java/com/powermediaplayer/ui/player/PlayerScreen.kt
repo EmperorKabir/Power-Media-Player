@@ -1661,7 +1661,35 @@ private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit) {
     val hasChapters = uiState.hasChapters
     val hasPlaylist = uiState.totalTracks > 1
 
-    if (!hasChapters && !hasPlaylist) return
+    if (!hasChapters && !hasPlaylist) {
+        // A7: while cloud/Drive chapters are still downloading + parsing, show a
+        // greyed "Loading chapters…" chip rather than hiding the affordance or
+        // implying there are none. Resolves to the real chip once they arrive.
+        if (uiState.cloudFetchInProgress) {
+            AssistChip(
+                onClick = {},
+                enabled = false,
+                label = {
+                    Text(
+                        text = "Loading chapters…",
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1
+                    )
+                },
+                leadingIcon = {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = TealAccent
+                    )
+                },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = SurfaceElevated
+                )
+            )
+        }
+        return
+    }
 
     val label = when {
         hasChapters -> {

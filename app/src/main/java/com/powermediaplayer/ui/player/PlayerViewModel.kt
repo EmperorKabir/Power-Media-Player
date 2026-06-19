@@ -709,7 +709,7 @@ class PlayerViewModel @Inject constructor(
         // Logged here so the request-time stamp lands in the diag log
         // — pair with the next PLAYER state line to measure end-to-end.
         com.powermediaplayer.diag.DiagLog.ui(
-            "slider speed → IPC=${"%.3f".format(speed)} (Sonic+A2DP buffers will add audible delay)"
+            "speed change → IPC=${"%.3f".format(speed)} (Sonic+A2DP buffers will add audible delay)"
         )
         playbackConnection.setPlaybackSpeed(speed)
         // §C7 slim — persist per-file speed override so the next time
