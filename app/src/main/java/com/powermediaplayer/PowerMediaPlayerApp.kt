@@ -107,6 +107,13 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider,
             )
             previous?.uncaughtException(thread, throwable)
         }
+        // A4 — guard the WorkManager `no_backup/androidx.work.workdb` crash
+        // (SQLITE_CANTOPEN: "no_backup doesn't exist", logcat 06-17). The dir is
+        // normally framework-created, but was missing on one device; touching
+        // noBackupFilesDir creates it, so WorkManager's WorkDatabase open (which
+        // runs on WorkManager's OWN thread, outside the enqueue runCatching
+        // below) can't fail with ENOENT.
+        runCatching { applicationContext.noBackupFilesDir }
         // §C10 / F6 fix — kick off periodic feed refresh on a worker
         // thread so the synchronous WorkManager.getInstance() call
         // doesn't sit on Application.onCreate's main-thread budget on
