@@ -1671,7 +1671,7 @@ private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit) {
                 enabled = false,
                 label = {
                     Text(
-                        text = "Loading chapters…",
+                        text = "Loading metadata…",
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1
                     )
