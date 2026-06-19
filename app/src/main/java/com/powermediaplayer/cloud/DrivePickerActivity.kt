@@ -152,9 +152,16 @@ class DrivePickerActivity : ComponentActivity() {
                       s.onload = function () {
                         gapi.load("picker", { callback: function () {
                           pmpRebuildPicker();
-                          // Re-render on configuration / fold changes so
-                          // the dialog always matches the WebView size.
+                          // Re-render on WIDTH (orientation / fold) changes ONLY.
+                          // A height-only resize is the soft keyboard opening; do
+                          // NOT rebuild then — disposing the picker blurs the
+                          // focused search box, so the IME is dismissed the instant
+                          // it tries to show (show/hide churn → keyboard never
+                          // appears). Width changes still rebuild to refit the fold.
+                          var pmpLastW = window.innerWidth;
                           window.addEventListener("resize", function () {
+                            if (window.innerWidth === pmpLastW) return;
+                            pmpLastW = window.innerWidth;
                             if (pmpPicker) { try { pmpPicker.dispose(); } catch(_) {} }
                             pmpRebuildPicker();
                           });
