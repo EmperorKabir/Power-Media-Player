@@ -62,7 +62,8 @@ import androidx.lifecycle.viewModelScope
 @HiltViewModel
 class PodcastsViewModel @Inject constructor(
     private val podcastDao: PodcastDao,
-    private val playbackConnection: PlaybackConnection
+    private val playbackConnection: PlaybackConnection,
+    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
 ) : ViewModel() {
     private val parser = RssFeedParser()
 
@@ -79,21 +80,46 @@ class PodcastsViewModel @Inject constructor(
 
     fun playEpisode(episode: PodcastEpisodeEntity) {
         val uri = android.net.Uri.parse(episode.audioUrl)
-        val item = androidx.media3.common.MediaItem.Builder()
-            .setMediaId(episode.audioUrl)
-            .setUri(uri)
-            .setRequestMetadata(
-                androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                    .setMediaUri(uri).build()
-            )
-            .setMediaMetadata(
-                androidx.media3.common.MediaMetadata.Builder()
-                    .setTitle(episode.title).build()
-            )
-            .build()
-        playbackConnection.setMediaItems(listOf(item), 0)
         viewModelScope.launch(Dispatchers.IO) {
-            podcastDao.setPlayed(episode.guid, true)
+            // Episode rows carry no artwork; resolve the show's image so the
+            // player AND the Recents row both get a cover (fixes #3).
+            val show = podcastDao.getShow(episode.feedUrl)
+            val artUri = show?.artworkUrl
+            val item = androidx.media3.common.MediaItem.Builder()
+                .setMediaId(episode.audioUrl)
+                .setUri(uri)
+                .setRequestMetadata(
+                    androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                        .setMediaUri(uri).build()
+                )
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(episode.title)
+                        .setArtist(show?.title ?: "")
+                        .apply { if (!artUri.isNullOrBlank()) setArtworkUri(android.net.Uri.parse(artUri)) }
+                        .build()
+                )
+                .build()
+            // MediaController must be touched on the main thread.
+            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(listOf(item), 0) }
+            // Record DIRECTLY into Recents (not the gated 5s-tick fallback) so a
+            // mid-session switch becomes the most-recent row and cold-start resumes
+            // IT (fixes #4/#5). source="LOCAL" + a remote URL is proven to resume.
+            runCatching {
+                lastPlayedRepo.recordPlay(
+                    com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                        mediaUri = episode.audioUrl,
+                        title = episode.title,
+                        subtitle = show?.title ?: "Podcast",
+                        artworkUri = artUri,
+                        source = "LOCAL",
+                        mediaKindOrdinal = 0,
+                        lastPositionMs = 0L,
+                        durationMs = episode.durationS * 1000L,
+                        lastPlayedAt = System.currentTimeMillis()
+                    )
+                )
+            }
         }
     }
 
