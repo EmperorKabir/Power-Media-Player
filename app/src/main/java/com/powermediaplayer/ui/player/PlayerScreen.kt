@@ -1695,7 +1695,7 @@ private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit) {
         hasChapters -> {
             val idx = uiState.currentChapterIndex
             val chapter = uiState.chapters.getOrNull(idx)
-            if (chapter != null) "Ch. ${idx + 1}: ${chapter.title}" else "Chapters"
+            if (chapter != null) chapter.title else "Chapters"
         }
         else -> "${uiState.currentTrackIndex + 1} / ${uiState.totalTracks} tracks"
     }
