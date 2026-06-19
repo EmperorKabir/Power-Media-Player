@@ -455,10 +455,15 @@ private fun EpisodeList(
 private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
     val posMs by vm.episodePosition(e.audioUrl).collectAsState(initial = null)
     val durMs = e.durationS * 1000L
-    val progress = if (durMs > 0 && posMs != null)
-        (posMs!!.toFloat() / durMs).coerceIn(0f, 1f) else 0f
-    val played = progress >= 0.95f
-    val inProgress = (posMs ?: 0L) > 0L && !played
+    val pos = posMs ?: 0L
+    // A feed's declared itunes:duration is sometimes wrong (seen: 4 min for a
+    // 55 min episode). If the saved position is past it, the declared duration
+    // is bogus → treat as finished and don't show a misleading total/bar.
+    val durSane = durMs > 0L && pos <= durMs + durMs / 20
+    val played = (durSane && pos >= durMs * 95 / 100) || (durMs in 1 until pos)
+    val inProgress = pos > 0L && !played
+    val progress = if (durSane && inProgress)
+        (pos.toFloat() / durMs).coerceIn(0f, 1f) else 0f
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -490,15 +495,21 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
             val date = java.text.SimpleDateFormat(
                 "yyyy-MM-dd", java.util.Locale.getDefault()
             ).format(java.util.Date(e.publishedAt.coerceAtLeast(0L)))
-            val dur = if (e.durationS > 0) "${e.durationS / 60} min" else ""
-            val left = if (inProgress && durMs > 0)
-                " · ${((durMs - (posMs ?: 0L)) / 60000L).coerceAtLeast(0L)} min left" else ""
+            // Clear: total duration when unplayed, "X min left" while in
+            // progress, "Played" when finished (incl. the bogus-duration case).
+            val timeInfo = when {
+                played -> "Played"
+                inProgress && durSane ->
+                    "${((durMs - pos) / 60000L).coerceAtLeast(0L)} min left"
+                durMs > 0L -> "${durMs / 60000L} min"
+                else -> ""
+            }
             Text(
-                listOf(dur, date).filter { it.isNotBlank() }.joinToString(" · ") + left,
+                listOf(timeInfo, date).filter { it.isNotBlank() }.joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = TextTertiary
             )
-            if (inProgress) {
+            if (inProgress && durSane) {
                 Spacer(Modifier.height(4.dp))
                 LinearProgressIndicator(
                     progress = { progress },

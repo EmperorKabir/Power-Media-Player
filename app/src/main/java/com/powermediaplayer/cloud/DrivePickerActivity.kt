@@ -159,11 +159,21 @@ class DrivePickerActivity : ComponentActivity() {
                           // it tries to show (show/hide churn → keyboard never
                           // appears). Width changes still rebuild to refit the fold.
                           var pmpLastW = window.innerWidth;
+                          var pmpResizeTimer = null;
                           window.addEventListener("resize", function () {
-                            if (window.innerWidth === pmpLastW) return;
-                            pmpLastW = window.innerWidth;
-                            if (pmpPicker) { try { pmpPicker.dispose(); } catch(_) {} }
-                            pmpRebuildPicker();
+                            if (pmpResizeTimer) clearTimeout(pmpResizeTimer);
+                            // Debounce + require a real WIDTH change (>40px). The
+                            // soft keyboard fires several jittery resizes while it
+                            // animates; rebuilding on those disposes the focused
+                            // search box and the keyboard flickers (3 show/hide
+                            // cycles seen in logs). Only a fold/orientation change
+                            // (big, settled width delta) should rebuild.
+                            pmpResizeTimer = setTimeout(function () {
+                              if (Math.abs(window.innerWidth - pmpLastW) < 40) return;
+                              pmpLastW = window.innerWidth;
+                              if (pmpPicker) { try { pmpPicker.dispose(); } catch(_) {} }
+                              pmpRebuildPicker();
+                            }, 400);
                           });
                         }});
                       };

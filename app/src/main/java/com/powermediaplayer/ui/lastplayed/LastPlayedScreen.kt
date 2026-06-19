@@ -733,8 +733,14 @@ private fun HistoryHeaderRow(
             // paints transparent so the MusicNote shows through.
             Icon(Icons.Filled.MusicNote, contentDescription = null,
                 tint = TealAccent, modifier = Modifier.size(20.dp))
-            val artModel: Any? = when (item.source) {
-                Source.LOCAL ->
+            val artModel: Any? = when {
+                // Podcasts store source=LOCAL but with a REMOTE audio uri + a
+                // remote show-cover url; the local-file art fetcher can't read
+                // those, so load the cover url directly (like cloud rows). Drive/
+                // Spotify (else) and real local-file rows are byte-identical.
+                item.source == Source.LOCAL && item.mediaUri.startsWith("http") ->
+                    item.artworkUri
+                item.source == Source.LOCAL ->
                     item.mediaUri.takeIf { it.isNotBlank() }?.let {
                         com.powermediaplayer.util.LocalTrackArt(it, item.artworkUri)
                     }
