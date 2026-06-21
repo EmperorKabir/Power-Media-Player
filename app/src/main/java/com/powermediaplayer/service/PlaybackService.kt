@@ -1190,6 +1190,15 @@ class PlaybackService : MediaSessionService() {
                     "isPlaying=$isPlaying pos=${p?.currentPosition}ms " +
                         "playWhenReady=${p?.playWhenReady} mediaId=${com.powermediaplayer.diag.DiagLog.hash(p?.currentMediaItem?.mediaId)}"
                 )
+                // Call-pause fix: own audio focus WHILE playing — request on start
+                // (so a call's transient loss reaches our listener and we pause),
+                // abandon on a non-focus stop. Skip the re-request when we just
+                // auto-resumed after a call (resumingFromFocusGain).
+                if (isPlaying) {
+                    if (!resumingFromFocusGain) requestAudioFocusForPlayback()
+                } else if (!pausedDueToFocus) {
+                    abandonAudioFocusForPlayback()
+                }
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 val rname = when (reason) {
@@ -1886,6 +1895,10 @@ class PlaybackService : MediaSessionService() {
     private var audioFocusListener: android.media.AudioManager.OnAudioFocusChangeListener? = null
     @Volatile private var pausedDueToFocus: Boolean = false
     @Volatile private var duckedDueToFocus: Boolean = false
+    // Call-pause fix: own focus WHILE playing. haveAudioFocus tracks our grant;
+    // resumingFromFocusGain stops the GAIN-driven p.play() from re-requesting.
+    @Volatile private var haveAudioFocus: Boolean = false
+    @Volatile private var resumingFromFocusGain: Boolean = false
     // vc29.26 — audio-focus policy cached (was 2 async + 2 launch per
     // event reading DataStore each time). Policy changes are rare; cache
     // them via a single combine collector in onCreate.
@@ -1911,53 +1924,79 @@ class PlaybackService : MediaSessionService() {
                 .setAcceptsDelayedFocusGain(true)
                 .build()
         }
-        // Request focus immediately so subsequent transient/duck/loss
-        // events flow into our listener. Failure here is non-fatal —
-        // some emulator images return AUDIOFOCUS_REQUEST_FAILED on the
-        // first attempt before AudioFlinger is fully initialised.
-        runCatching {
+        // §C14 / call-pause fix: do NOT request focus here. We request when
+        // playback STARTS (requestAudioFocusForPlayback, from onIsPlayingChanged)
+        // and abandon when it stops — so the app is the LIVE focus owner during
+        // playback and a phone call's transient loss reaches our listener (it
+        // didn't when focus was requested once at service creation).
+    }
+
+    /** Request focus the instant playback starts so we're the live owner.
+     *  Tolerant of a transient FAILED (targetSdk 35 can momentarily refuse a
+     *  request that races foreground-service promotion) — we never hard-pause a
+     *  running stream on FAILED; the next play / foreground refreshes it. */
+    private fun requestAudioFocusForPlayback() {
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager ?: return
+        val res = runCatching {
             val req = audioFocusRequest
             if (android.os.Build.VERSION.SDK_INT >= 26 && req != null) {
                 am.requestAudioFocus(req)
             } else {
                 @Suppress("DEPRECATION")
                 am.requestAudioFocus(
-                    listener,
+                    audioFocusListener,
                     android.media.AudioManager.STREAM_MUSIC,
                     android.media.AudioManager.AUDIOFOCUS_GAIN
                 )
             }
-        }.onFailure {
-            com.powermediaplayer.util.Diag.w("PMP_DIAG", "AudioFocus request failed", it)
-        }
+        }.getOrDefault(android.media.AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+        haveAudioFocus = res == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus request on play → $res held=$haveAudioFocus")
     }
+
+    /** Release focus on a non-focus stop (user pause/stop, permanent loss). */
+    private fun abandonAudioFocusForPlayback() {
+        if (!haveAudioFocus) return
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager ?: return
+        runCatching {
+            val req = audioFocusRequest
+            if (android.os.Build.VERSION.SDK_INT >= 26 && req != null) am.abandonAudioFocusRequest(req)
+            else { @Suppress("DEPRECATION") audioFocusListener?.let { am.abandonAudioFocus(it) } }
+        }
+        haveAudioFocus = false
+    }
+
+    /** Video ALWAYS pauses on a focus loss (ducking/continuing a video during a
+     *  call is nonsensical); audio honours the user's per-scenario setting. */
+    private fun isCurrentItemVideo(): Boolean = runCatching {
+        player?.currentMediaItem?.localConfiguration?.mimeType?.startsWith("video/") == true ||
+            (player?.videoSize?.let { it.width > 0 && it.height > 0 } == true)
+    }.getOrDefault(false)
 
     private fun handleAudioFocusChange(change: Int) {
         val p = player ?: return
-        if (Companion.oauthInFlight) {
-            com.powermediaplayer.util.Diag.i(
-                "PMP_DIAG",
-                "AudioFocus change=$change SUPPRESSED (OAuth in flight)"
-            )
-            return
-        }
-        // vc29.26 — synchronous read from cached @Volatile vars. No
-        // coroutine allocation per event; safe to run on the focus
-        // callback's own thread.
+        val video = isCurrentItemVideo()
         val choice = when (change) {
-            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> focusPolicyOnCall
-            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> focusPolicyOnNotif
-            android.media.AudioManager.AUDIOFOCUS_LOSS -> focusPolicyOnOther
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> if (video) "pause" else focusPolicyOnCall
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> if (video) "pause" else focusPolicyOnNotif
+            android.media.AudioManager.AUDIOFOCUS_LOSS -> if (video) "pause" else focusPolicyOnOther
             else -> "gain"
         }
         when (change) {
             android.media.AudioManager.AUDIOFOCUS_GAIN -> {
-                if (duckedDueToFocus) {
-                    runCatching { p.volume = 1.0f }
-                    duckedDueToFocus = false
+                // Bound the OAuth guard: only suppress the auto-RESUME during an
+                // OAuth bounce (so returning from the Spotify Custom Tab doesn't
+                // restart local audio). A loss-PAUSE is never suppressed.
+                if (Companion.oauthInFlight) {
+                    pausedDueToFocus = false; duckedDueToFocus = false
+                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN auto-resume suppressed (OAuth in flight)")
+                    return
                 }
+                if (duckedDueToFocus) { runCatching { p.volume = 1.0f }; duckedDueToFocus = false }
                 if (pausedDueToFocus) {
+                    resumingFromFocusGain = true
                     runCatching { p.play() }
+                    resumingFromFocusGain = false
                     pausedDueToFocus = false
                 }
                 com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN applied")
@@ -1968,20 +2007,19 @@ class PlaybackService : MediaSessionService() {
                 when (choice) {
                     "pause" -> {
                         if (p.isPlaying) {
-                            pausedDueToFocus = true
+                            // Arm auto-resume only for a TRANSIENT loss (call/notif);
+                            // a permanent loss (another media app) stays paused, and
+                            // the onIsPlayingChanged hook abandons our request.
+                            pausedDueToFocus = change != android.media.AudioManager.AUDIOFOCUS_LOSS
                             runCatching { p.pause() }
                         }
                     }
-                    "duck" -> {
-                        duckedDueToFocus = true
-                        runCatching { p.volume = 0.3f }
-                    }
+                    "duck" -> { duckedDueToFocus = true; runCatching { p.volume = 0.3f } }
                     else -> {}
                 }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
-                    "AudioFocus loss=$change choice=$choice " +
-                        "paused=$pausedDueToFocus ducked=$duckedDueToFocus"
+                    "AudioFocus loss=$change choice=$choice video=$video paused=$pausedDueToFocus ducked=$duckedDueToFocus"
                 )
             }
         }
