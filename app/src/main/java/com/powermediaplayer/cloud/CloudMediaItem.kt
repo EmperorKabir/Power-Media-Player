@@ -19,6 +19,9 @@ data class CloudMediaItem(
     val sourceProvider: CloudProviderType,
     val isFolder: Boolean = false,
     val parentId: String? = null,
+    // Secondary line for result rows: track/album → artist(s); show →
+    // publisher; episode → show name; playlist → owner. Blank when N/A.
+    val subtitle: String = "",
     // Spotify-only: the spotify:album:XX or spotify:playlist:XX URI
     // the track was discovered in. Passed as context_uri to
     // /me/player/play so /next and /previous work within the album

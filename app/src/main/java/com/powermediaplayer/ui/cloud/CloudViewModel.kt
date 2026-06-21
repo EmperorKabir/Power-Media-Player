@@ -114,12 +114,15 @@ class CloudViewModel @Inject constructor(
                 else driveOAuthProvider.downloadFullToCache(item)
             }.getOrNull()
             if (file != null && file.exists()) {
-                settingsDataStore.upsertOfflineDrive(item.id, file.absolutePath)
+                // §C28/Part 4.3 — relocate into the user's single global Drive
+                // folder when one is set (else keep the app-cache path).
+                val (storedPath, storedSize) = relocateDriveOffline(item, file)
+                settingsDataStore.upsertOfflineDrive(item.id, storedPath)
                 offlineCopyDao.upsert(
                     com.powermediaplayer.data.db.entity.OfflineCopyEntity(
                         driveFileId = item.id,
-                        localPath = file.absolutePath,
-                        byteSize = file.length()
+                        localPath = storedPath,
+                        byteSize = storedSize
                     )
                 )
                 evictOfflineLruIfOverLimit()
@@ -128,7 +131,7 @@ class CloudViewModel @Inject constructor(
                 }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
-                    "C28 saved offline id=${item.id} path=${file.absolutePath} size=${file.length()}"
+                    "C28 saved offline id=${item.id} path=$storedPath size=$storedSize"
                 )
             } else {
                 _uiState.update {
@@ -141,12 +144,89 @@ class CloudViewModel @Inject constructor(
     fun removeDriveOffline(driveId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val path = offlineDrivePairs.value[driveId]
-            if (path != null) {
-                runCatching { java.io.File(path).delete() }
-            }
+            if (path != null) deleteOfflinePath(path)
             settingsDataStore.removeOfflineDrive(driveId)
             offlineCopyDao.delete(driveId)
             com.powermediaplayer.util.Diag.i("PMP_DIAG", "C28 removed offline id=$driveId")
+        }
+    }
+
+    /** Delete a stored offline copy, branching on uri scheme (SAF vs file). */
+    private fun deleteOfflinePath(path: String) {
+        if (path.startsWith("content://")) {
+            com.powermediaplayer.util.SafStorage.delete(context, android.net.Uri.parse(path))
+        } else {
+            runCatching { java.io.File(path).delete() }
+        }
+    }
+
+    /**
+     * §C28/Part 4.3 — if the user picked ONE global Drive offline folder, copy
+     * the freshly-cached file into it (SAF) and return the content:// doc uri +
+     * size; otherwise keep the app-cache path. Single global location, single
+     * account — no per-account fan-out.
+     */
+    private suspend fun relocateDriveOffline(
+        item: CloudMediaItem,
+        cacheFile: java.io.File
+    ): Pair<String, Long> {
+        val fallback = cacheFile.absolutePath to cacheFile.length()
+        val tree = settingsDataStore.driveOfflineTreeUri.first().ifBlank { null }
+            ?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+            ?: return fallback
+        if (!com.powermediaplayer.util.SafStorage.hasWriteAccess(context, tree)) return fallback
+        val dir = com.powermediaplayer.util.SafStorage.resolveDir(
+            context, tree, "PowerMediaPlayer", "drive"
+        ) ?: return fallback
+        val name = item.name.ifBlank { cacheFile.name }
+        val child = com.powermediaplayer.util.SafStorage.createChild(
+            dir, name, mimeForName(name)
+        ) ?: return fallback
+        val bytes = runCatching {
+            cacheFile.inputStream().use {
+                com.powermediaplayer.util.SafStorage.writeStream(context, child.uri, it)
+            }
+        }.getOrDefault(0L)
+        if (bytes <= 0L) {
+            runCatching { child.delete() }
+            return fallback
+        }
+        runCatching { cacheFile.delete() }   // moved into the user's folder
+        return child.uri.toString() to bytes
+    }
+
+    private fun mimeForName(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "mp3" -> "audio/mpeg"
+        "m4a", "aac" -> "audio/mp4"
+        "flac" -> "audio/flac"
+        "ogg", "oga" -> "audio/ogg"
+        "opus" -> "audio/opus"
+        "wav" -> "audio/wav"
+        "mp4", "m4v" -> "video/mp4"
+        "mkv" -> "video/x-matroska"
+        "webm" -> "video/webm"
+        else -> "application/octet-stream"
+    }
+
+    /** §C28/Part 3.2 — set of currently-pinned offline driveFileIds (reactive). */
+    val starredOfflineIds: kotlinx.coroutines.flow.StateFlow<Set<String>> =
+        offlineCopyDao.observeAll()
+            .map { rows -> rows.filter { it.isStarred }.map { it.driveFileId }.toSet() }
+            .stateIn(
+                viewModelScope,
+                kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                emptySet()
+            )
+
+    /** §C28/Part 3.2 — pin/unpin an offline copy so the LRU evictor spares it. */
+    fun toggleStarredOffline(driveId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val row = offlineCopyDao.get(driveId) ?: return@launch
+            val now = !row.isStarred
+            offlineCopyDao.setStarred(driveId, now)
+            _uiState.update {
+                it.copy(errorMessage = if (now) "Pinned — protected from auto-cleanup" else "Unpinned")
+            }
         }
     }
 
@@ -228,7 +308,7 @@ class CloudViewModel @Inject constructor(
         for (row in lru) {
             if (total <= limit) break
             if (row.isStarred) continue
-            runCatching { java.io.File(row.localPath).delete() }
+            deleteOfflinePath(row.localPath)
             offlineCopyDao.delete(row.driveFileId)
             settingsDataStore.removeOfflineDrive(row.driveFileId)
             total -= row.byteSize
@@ -1083,8 +1163,16 @@ class CloudViewModel @Inject constructor(
         // token automatically for googleapis.com URLs.
         run {
             val streamResult: kotlin.Result<android.net.Uri> = if (offlinePath != null) {
-                val f = java.io.File(offlinePath)
-                if (f.exists()) kotlin.Result.success(android.net.Uri.fromFile(f))
+                // §C28 — offline copy may be a plain cache file OR a content://
+                // doc in the user's chosen Drive folder. Verify it still exists,
+                // then play it directly; else fall back to the network fetch.
+                val isSaf = offlinePath.startsWith("content://")
+                val localUri = if (isSaf) android.net.Uri.parse(offlinePath)
+                    else android.net.Uri.fromFile(java.io.File(offlinePath))
+                val present = if (isSaf)
+                    com.powermediaplayer.util.SafStorage.exists(context, localUri)
+                    else java.io.File(offlinePath).exists()
+                if (present) kotlin.Result.success(localUri)
                 else when (item.sourceProvider) {
                     CloudProviderType.GOOGLE_DRIVE ->
                         if (item.id.startsWith("content://")) driveProvider.getMediaStreamUri(item)

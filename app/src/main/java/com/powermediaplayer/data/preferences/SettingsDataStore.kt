@@ -50,6 +50,12 @@ class SettingsDataStore @Inject constructor(
         val OFFLINE_STORAGE_LIMIT_BYTES = androidx.datastore.preferences.core.longPreferencesKey(
             "offline_storage_limit_bytes"
         )
+        // §C10 — global default folder (SAF tree uri) for podcast downloads;
+        // null/blank → app-private storage. Per-show overrides live in the DB.
+        val PODCAST_DOWNLOAD_TREE_URI = stringPreferencesKey("podcast_download_tree_uri")
+        // §C28 — the ONE folder (SAF tree uri) where Drive offline copies are
+        // written; null/blank → app-private storage. Single global location.
+        val DRIVE_OFFLINE_TREE_URI = stringPreferencesKey("drive_offline_tree_uri")
         // §C9 — OpenSubtitles credentials.
         val OPENSUBS_TOKEN = stringPreferencesKey("opensubs_token")
         val OPENSUBS_EMAIL = stringPreferencesKey("opensubs_email")
@@ -1021,6 +1027,28 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setOfflineStorageLimitBytes(bytes: Long) {
         context.dataStore.edit { prefs -> prefs[Keys.OFFLINE_STORAGE_LIMIT_BYTES] = bytes }
+    }
+
+    /** §C10 — global podcast download folder (SAF tree uri); blank = app-private. */
+    val podcastDownloadTreeUri: Flow<String> = context.dataStore.data.map {
+        it[Keys.PODCAST_DOWNLOAD_TREE_URI] ?: ""
+    }
+    suspend fun setPodcastDownloadTreeUri(uri: String?) {
+        context.dataStore.edit { prefs ->
+            if (uri.isNullOrBlank()) prefs.remove(Keys.PODCAST_DOWNLOAD_TREE_URI)
+            else prefs[Keys.PODCAST_DOWNLOAD_TREE_URI] = uri
+        }
+    }
+
+    /** §C28 — the single global Drive offline folder (SAF tree uri); blank = app-private. */
+    val driveOfflineTreeUri: Flow<String> = context.dataStore.data.map {
+        it[Keys.DRIVE_OFFLINE_TREE_URI] ?: ""
+    }
+    suspend fun setDriveOfflineTreeUri(uri: String?) {
+        context.dataStore.edit { prefs ->
+            if (uri.isNullOrBlank()) prefs.remove(Keys.DRIVE_OFFLINE_TREE_URI)
+            else prefs[Keys.DRIVE_OFFLINE_TREE_URI] = uri
+        }
     }
 
     /** §C18 — "track" or "album" gain mode. Default: track. */

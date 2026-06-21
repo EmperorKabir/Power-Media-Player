@@ -27,6 +27,10 @@ interface OfflineCopyDao {
     @Query("UPDATE offline_copy SET lastPlayedAt = :ts WHERE driveFileId = :id")
     suspend fun touch(id: String, ts: Long = System.currentTimeMillis())
 
+    /** §C28 — pin/unpin a copy so the LRU evictor never reclaims it. */
+    @Query("UPDATE offline_copy SET isStarred = :starred WHERE driveFileId = :id")
+    suspend fun setStarred(id: String, starred: Boolean)
+
     @Query("DELETE FROM offline_copy WHERE driveFileId = :id")
     suspend fun delete(id: String)
 }

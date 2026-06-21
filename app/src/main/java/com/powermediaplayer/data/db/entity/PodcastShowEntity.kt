@@ -15,7 +15,10 @@ data class PodcastShowEntity(
     // §C10 per-show settings (LOCKED).
     val autoDownload: Boolean = false,
     val retentionLastN: Int = 0,            // 0 = keep all
-    val notifyOnNewEpisode: Boolean = false
+    val notifyOnNewEpisode: Boolean = false,
+    // User-chosen download folder for THIS show (a persisted SAF tree uri);
+    // null → the global default folder (per-show storage override).
+    val downloadTreeUri: String? = null
 )
 
 @Entity(tableName = "podcast_episodes")
@@ -27,5 +30,10 @@ data class PodcastEpisodeEntity(
     val audioUrl: String,
     val durationS: Long = 0L,
     val publishedAt: Long = 0L,
-    val isPlayed: Boolean = false
+    val isPlayed: Boolean = false,
+    // Offline download tracking: localPath = file:// or content:// uri of the
+    // downloaded audio (null = not downloaded); size in bytes + when fetched.
+    val localPath: String? = null,
+    val localBytes: Long = 0L,
+    val downloadedAt: Long = 0L
 )

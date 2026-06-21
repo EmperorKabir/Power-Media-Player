@@ -583,15 +583,37 @@ class SpotifyProvider @Inject constructor(
         }
         val artworkUrl = images?.takeIf { it.size() > 0 }
             ?.get(0)?.asJsonObject?.get("url")?.takeIf { !it.isJsonNull }?.asString
+        // Secondary line so result rows read "Title · Artist" rather than a
+        // bare title (the reported quality defect). Source varies by type.
+        val subtitle = when (type) {
+            "track", "album" -> obj.getAsJsonArray("artists")
+                ?.mapNotNull { el ->
+                    el.asJsonObject?.get("name")?.takeIf { !it.isJsonNull }?.asString
+                }
+                ?.joinToString(", ").orEmpty()
+            "show" -> obj.get("publisher")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            "episode" -> obj.getAsJsonObject("show")
+                ?.get("name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            "playlist" -> obj.getAsJsonObject("owner")
+                ?.get("display_name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+            "artist" -> "Artist"
+            else -> ""
+        }
         return CloudMediaItem(
             id = id,
             name = name,
-            mimeType = if (type == "track") "audio/mpeg" else "application/spotify-$type",
+            mimeType = if (type == "track" || type == "episode") "audio/mpeg"
+                else "application/spotify-$type",
             size = 0L,
-            downloadUrl = preview.ifEmpty { spotifyUri },
+            // Episodes play the FULL show via Connect (uris:[spotify:episode:…]),
+            // not the 30 s preview — keep the spotify URI as the play target so
+            // openItem routes it correctly and never coerces it to a track URI.
+            downloadUrl = if (type == "episode") spotifyUri else preview.ifEmpty { spotifyUri },
             thumbnailUri = artworkUrl?.let { android.net.Uri.parse(it) },
             sourceProvider = CloudProviderType.SPOTIFY,
-            isFolder = type != "track",
+            // Episodes are leaves (play the single episode), not browsable folders.
+            isFolder = type != "track" && type != "episode",
+            subtitle = subtitle,
             contextUri = contextUri
         )
     }
@@ -1064,7 +1086,7 @@ class SpotifyProvider @Inject constructor(
             )
             val url = "https://api.spotify.com/v1/search?" +
                 "q=" + java.net.URLEncoder.encode(query, "UTF-8") +
-                "&type=track,album,playlist,show,episode&limit=10"
+                "&type=track,album,artist,playlist,show,episode&limit=10"
             val req = Request.Builder()
                 .url(url)
                 .addHeader("Authorization", "Bearer $token")
@@ -1080,6 +1102,7 @@ class SpotifyProvider @Inject constructor(
                     val body = resp.body?.string().orEmpty()
                     val root = JsonParser.parseString(body).asJsonObject
                     listOf("tracks" to "track", "albums" to "album",
+                           "artists" to "artist",
                            "playlists" to "playlist", "shows" to "show",
                            "episodes" to "episode").forEach { (key, type) ->
                         val arr = root.getAsJsonObject(key)

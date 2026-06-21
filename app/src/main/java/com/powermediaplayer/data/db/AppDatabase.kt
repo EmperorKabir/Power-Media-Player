@@ -88,7 +88,9 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     // v16: Pinned albums — adds `pinned_albums` + `pinned_album_tracks`
     //      tables. Shares the 10-pin cap with HistoryFavouriteEntity at
     //      the repository layer.
-    version = 16,
+    // v17: §C10 downloads — adds episode localPath/localBytes/downloadedAt +
+    //      per-show downloadTreeUri (user-chosen storage). Additive.
+    version = 17,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -192,6 +194,18 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE podcast_shows ADD COLUMN autoDownload INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE podcast_shows ADD COLUMN retentionLastN INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE podcast_shows ADD COLUMN notifyOnNewEpisode INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        // v16 → v17 (§C10 downloads): episode offline-copy tracking +
+        // per-show download folder override. Additive ALTERs; existing
+        // rows default to not-downloaded / global-folder.
+        val MIGRATION_16_17: Migration = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE podcast_episodes ADD COLUMN localPath TEXT")
+                db.execSQL("ALTER TABLE podcast_episodes ADD COLUMN localBytes INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE podcast_episodes ADD COLUMN downloadedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE podcast_shows ADD COLUMN downloadTreeUri TEXT")
             }
         }
 

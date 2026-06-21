@@ -25,12 +25,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -58,6 +66,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -73,11 +82,21 @@ import androidx.lifecycle.viewModelScope
  */
 @HiltViewModel
 class PodcastsViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     private val podcastDao: PodcastDao,
     private val playbackConnection: PlaybackConnection,
-    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
+    private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
+    private val settings: com.powermediaplayer.data.preferences.SettingsDataStore
 ) : ViewModel() {
     private val parser = RssFeedParser()
+    private val downloader = com.powermediaplayer.podcast.PodcastDownloader(appContext)
+
+    /** §C10 — guids with an in-flight manual download (drives the row spinner). */
+    private val _downloading = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+    val downloading: StateFlow<Set<String>> = _downloading
+    private fun markDownloading(guid: String, on: Boolean) {
+        _downloading.value = if (on) _downloading.value + guid else _downloading.value - guid
+    }
 
     val shows: StateFlow<List<PodcastShowEntity>> =
         podcastDao.observeShows().stateIn(
@@ -101,18 +120,26 @@ class PodcastsViewModel @Inject constructor(
         lastPlayedRepo.observePositionFor(audioUrl)
 
     fun playEpisode(episode: PodcastEpisodeEntity) {
-        val uri = android.net.Uri.parse(episode.audioUrl)
         viewModelScope.launch(Dispatchers.IO) {
             // Episode rows carry no artwork; resolve the show's image so the
             // player AND the Recents row both get a cover (fixes #3).
             val show = podcastDao.getShow(episode.feedUrl)
             val artUri = show?.artworkUrl
+            // §C10 — play the downloaded file when present + readable; the
+            // playback source (localConfiguration.uri set via setUri) overrides
+            // the stream in the service's resolver. Keep audioUrl as mediaId +
+            // requestMetadata.mediaUri so the resume position + Recents row stay
+            // keyed to the episode, not the on-disk path (so download/delete
+            // never loses progress and the Recents dedup is stable).
+            val keyUri = android.net.Uri.parse(episode.audioUrl)
+            val playUri = resolvePlayableLocal(episode)
+                ?.let { android.net.Uri.parse(it) } ?: keyUri
             val item = androidx.media3.common.MediaItem.Builder()
                 .setMediaId(episode.audioUrl)
-                .setUri(uri)
+                .setUri(playUri)
                 .setRequestMetadata(
                     androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(uri).build()
+                        .setMediaUri(keyUri).build()
                 )
                 .setMediaMetadata(
                     androidx.media3.common.MediaMetadata.Builder()
@@ -148,6 +175,115 @@ class PodcastsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * §C10 — returns the downloaded copy's uri string if the episode has one
+     * AND it is still readable; otherwise null. A stale localPath (file removed
+     * out from under us, or a revoked SAF grant) self-heals: the row is cleared
+     * so the "downloaded" badge disappears and playback falls back to the stream.
+     */
+    private suspend fun resolvePlayableLocal(episode: PodcastEpisodeEntity): String? {
+        val path = episode.localPath?.takeIf { it.isNotBlank() } ?: return null
+        val readable = runCatching {
+            val u = android.net.Uri.parse(path)
+            when (u.scheme) {
+                "content" ->
+                    appContext.contentResolver.openFileDescriptor(u, "r")?.use { true } ?: false
+                "file", null ->
+                    java.io.File(u.path ?: path).let { it.exists() && it.canRead() }
+                else -> java.io.File(path).exists()
+            }
+        }.getOrDefault(false)
+        if (!readable) {
+            runCatching { podcastDao.clearLocalPath(episode.guid) }
+            return null
+        }
+        return path
+    }
+
+    // ── §C10 downloads — manual per-episode + per-show management ──────────
+
+    fun downloadEpisode(e: PodcastEpisodeEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (_downloading.value.contains(e.guid)) return@launch
+            markDownloading(e.guid, true)
+            try {
+                val show = podcastDao.getShow(e.feedUrl) ?: return@launch
+                val global = settings.podcastDownloadTreeUri.first().ifBlank { null }
+                val saved = downloader.download(show, e, global)
+                if (saved != null) {
+                    podcastDao.setLocalPath(e.guid, saved.uri, saved.bytes, System.currentTimeMillis())
+                    setStatus("Downloaded: ${e.title}")
+                } else {
+                    setStatus("Download failed: ${e.title}")
+                }
+            } finally {
+                markDownloading(e.guid, false)
+            }
+        }
+    }
+
+    fun deleteEpisodeDownload(e: PodcastEpisodeEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            e.localPath?.takeIf { it.isNotBlank() }?.let {
+                com.powermediaplayer.util.SafStorage.delete(appContext, android.net.Uri.parse(it))
+            }
+            podcastDao.clearLocalPath(e.guid)
+            setStatus("Deleted download: ${e.title}")
+        }
+    }
+
+    fun downloadLatestForShow(feedUrl: String, n: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val show = podcastDao.getShow(feedUrl) ?: return@launch
+            val global = settings.podcastDownloadTreeUri.first().ifBlank { null }
+            val budget = if (n > 0) n else 5
+            val episodes = podcastDao.observeEpisodes(feedUrl).first()
+                .sortedByDescending { it.publishedAt }.take(budget)
+            var ok = 0
+            episodes.forEach { e ->
+                markDownloading(e.guid, true)
+                try {
+                    val saved = downloader.downloadIfMissing(show, e, global)
+                    if (saved != null) {
+                        podcastDao.setLocalPath(
+                            e.guid, saved.uri, saved.bytes, System.currentTimeMillis()
+                        )
+                        ok++
+                    }
+                } finally {
+                    markDownloading(e.guid, false)
+                }
+            }
+            setStatus("Downloaded $ok new episode(s) for ${show.title}")
+        }
+    }
+
+    fun deleteAllForShow(feedUrl: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val downloaded = podcastDao.downloadedForFeed(feedUrl)
+            downloaded.forEach { e ->
+                e.localPath?.let {
+                    com.powermediaplayer.util.SafStorage.delete(appContext, android.net.Uri.parse(it))
+                }
+                podcastDao.clearLocalPath(e.guid)
+            }
+            setStatus("Deleted ${downloaded.size} download(s)")
+        }
+    }
+
+    /** §C10/Part 4.2 — set (or clear) this show's download folder. */
+    fun setShowFolder(feedUrl: String, treeUri: android.net.Uri?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val show = podcastDao.getShow(feedUrl) ?: return@launch
+            val uriStr = treeUri?.let {
+                com.powermediaplayer.util.SafStorage.persistTree(appContext, it)
+                it.toString()
+            }
+            podcastDao.upsertShow(show.copy(downloadTreeUri = uriStr))
+            setStatus(if (uriStr == null) "Folder reset to default" else "Download folder updated")
+        }
+    }
+
     private suspend fun setStatus(msg: String) =
         withContext(Dispatchers.Main) { _status.value = msg }
 
@@ -164,7 +300,7 @@ class PodcastsViewModel @Inject constructor(
             when (val r = parser.fetchResult(target)) {
                 is RssFeedParser.FetchResult.Ok -> {
                     podcastDao.upsertShow(r.show)
-                    podcastDao.upsertEpisodes(r.episodes)
+                    podcastDao.syncEpisodes(r.episodes)
                     setStatus("Subscribed: ${r.show.title} (${r.episodes.size} episodes)")
                 }
                 is RssFeedParser.FetchResult.HttpError ->
@@ -426,6 +562,63 @@ private fun ShowSettingsRow(
                 modifier = Modifier.width(96.dp)
             )
         }
+        // §C10/Part 4.2 — per-show download folder picker (SAF write grant).
+        val folderPicker = rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocumentTree()
+        ) { uri -> if (uri != null) vm.setShowFolder(show.feedUrl, uri) }
+        val folderLabel = remember(show.downloadTreeUri) {
+            show.downloadTreeUri
+                ?.let { com.powermediaplayer.util.SafStorage.treeLabel(android.net.Uri.parse(it)) }
+                ?: "Default (app storage)"
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.Folder, contentDescription = null,
+                tint = TextSecondary, modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "Folder: $folderLabel",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = { folderPicker.launch(null) }) {
+                Text("Change", color = TealAccent, style = MaterialTheme.typography.labelSmall)
+            }
+            if (show.downloadTreeUri != null) {
+                TextButton(onClick = { vm.setShowFolder(show.feedUrl, null) }) {
+                    Text("Reset", color = TextTertiary, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        // §C10 — bulk download / delete for the whole show.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { vm.downloadLatestForShow(show.feedUrl, retention) }) {
+                Icon(
+                    Icons.Filled.Download, contentDescription = null,
+                    tint = TealAccent, modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Download latest ${if (retention > 0) retention else 5}",
+                    color = TealAccent, style = MaterialTheme.typography.labelSmall
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = { vm.deleteAllForShow(show.feedUrl) }) {
+                Icon(
+                    Icons.Filled.DeleteOutline, contentDescription = null,
+                    tint = ErrorRed, modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Delete downloads", color = ErrorRed,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
     }
 }
 
@@ -518,6 +711,52 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
                     modifier = Modifier.fillMaxWidth().height(3.dp)
                 )
             }
+        }
+        // §C10 — per-episode download / downloaded-badge+delete affordance.
+        val downloadingSet by vm.downloading.collectAsState()
+        val isDownloading = downloadingSet.contains(e.guid)
+        val isDownloaded = !e.localPath.isNullOrBlank()
+        var confirmDelete by remember(e.guid) { mutableStateOf(false) }
+        Spacer(Modifier.width(4.dp))
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            when {
+                isDownloading -> CircularProgressIndicator(
+                    color = TealAccent,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp)
+                )
+                isDownloaded -> IconButton(onClick = { confirmDelete = true }) {
+                    Icon(
+                        Icons.Filled.DownloadDone,
+                        contentDescription = "Downloaded — tap to delete",
+                        tint = TealAccent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                else -> IconButton(onClick = { vm.downloadEpisode(e) }) {
+                    Icon(
+                        Icons.Filled.Download,
+                        contentDescription = "Download episode",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
+        if (confirmDelete) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                title = { Text("Delete download?") },
+                text = { Text("Remove the downloaded file for \"${e.title}\". Your listening progress is kept.") },
+                confirmButton = {
+                    TextButton(onClick = { vm.deleteEpisodeDownload(e); confirmDelete = false }) {
+                        Text("Delete", color = ErrorRed)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+                }
+            )
         }
     }
 }

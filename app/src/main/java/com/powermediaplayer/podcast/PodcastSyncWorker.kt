@@ -31,7 +31,8 @@ import kotlinx.coroutines.withContext
 class PodcastSyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
-    private val podcastDao: PodcastDao
+    private val podcastDao: PodcastDao,
+    private val settings: com.powermediaplayer.data.preferences.SettingsDataStore
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -41,12 +42,15 @@ class PodcastSyncWorker @AssistedInject constructor(
         // and server load sane while a 20-show library stops being serial.
         val parser = RssFeedParser()
         val downloader = com.powermediaplayer.podcast.PodcastDownloader(applicationContext)
+        val globalTree = settings.podcastDownloadTreeUri.first().ifBlank { null }
         val shows = podcastDao.observeShows().first()
         val sem = Semaphore(3)
         val results = coroutineScope {
             shows.map { show ->
                 async {
-                    sem.withPermit { runCatching { syncShow(parser, downloader, show) }.getOrDefault(0 to 0) }
+                    sem.withPermit {
+                        runCatching { syncShow(parser, downloader, show, globalTree) }.getOrDefault(0 to 0)
+                    }
                 }
             }.map { it.await() }
         }
@@ -64,7 +68,8 @@ class PodcastSyncWorker @AssistedInject constructor(
     private suspend fun syncShow(
         parser: RssFeedParser,
         downloader: PodcastDownloader,
-        show: com.powermediaplayer.data.db.entity.PodcastShowEntity
+        show: com.powermediaplayer.data.db.entity.PodcastShowEntity,
+        globalTree: String?
     ): Pair<Int, Int> {
         val parsed = runCatching { parser.fetch(show.feedUrl) }.getOrNull()
             ?: return 0 to 0
@@ -78,16 +83,25 @@ class PodcastSyncWorker @AssistedInject constructor(
                 notifyOnNewEpisode = show.notifyOnNewEpisode
             )
         )
-        podcastDao.upsertEpisodes(episodes)
+        podcastDao.syncEpisodes(episodes)
         var downloaded = 0
         // §C10 auto-download — when the user opted in, fetch the
         // newest N episodes' audio files into the spec'd folder.
         if (show.autoDownload) {
             val budget = if (show.retentionLastN > 0) show.retentionLastN else 5
+            // Re-read so localPath set by an earlier sync is visible (skip-if-present).
+            val stored = podcastDao.observeEpisodes(show.feedUrl).first()
+            val byGuid = stored.associateBy { it.guid }
             val newest = episodes.sortedByDescending { it.publishedAt }.take(budget)
-            newest.forEach { ep ->
-                val ok = downloader.downloadIfMissing(show, ep)
-                if (ok) downloaded++
+            newest.forEach { parsedEp ->
+                val ep = byGuid[parsedEp.guid] ?: parsedEp
+                val saved = downloader.downloadIfMissing(show, ep, globalTree)
+                if (saved != null) {
+                    podcastDao.setLocalPath(
+                        ep.guid, saved.uri, saved.bytes, System.currentTimeMillis()
+                    )
+                    downloaded++
+                }
             }
         }
         return episodes.size to downloaded
