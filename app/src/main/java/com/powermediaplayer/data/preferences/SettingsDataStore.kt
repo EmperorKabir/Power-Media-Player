@@ -289,6 +289,14 @@ class SettingsDataStore @Inject constructor(
         val AUDIO_FOCUS_ON_CALL = stringPreferencesKey("audio_focus_on_call")
         val AUDIO_FOCUS_ON_NOTIFICATION = stringPreferencesKey("audio_focus_on_notification")
         val AUDIO_FOCUS_ON_OTHER_MEDIA = stringPreferencesKey("audio_focus_on_other_media")
+        // Resume playback when a transient interruption (call / nav prompt /
+        // another app's temporary grab) ends. Default on.
+        val AUDIO_RESUME_AFTER_INTERRUPTION = booleanPreferencesKey("audio_resume_after_interruption")
+        // Whether a phone interruption also pauses CAST (remote) playback. Default
+        // off — the call is on the phone, not the cast device, so the TV/speaker
+        // keeps playing. (Bluetooth is LOCAL audio and always follows the
+        // per-scenario pause/duck/continue policy above.)
+        val AUDIO_INTERRUPTIONS_PAUSE_CAST = booleanPreferencesKey("audio_interruptions_pause_cast")
 
         // §C17 — online metadata enrichment via Discogs + MusicBrainz.
         // Stub: just the toggle for now; the actual API integrations
@@ -731,6 +739,20 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setAudioFocusOnOtherMedia(token: String) {
         context.dataStore.edit { it[Keys.AUDIO_FOCUS_ON_OTHER_MEDIA] = token }
+    }
+    /** Resume after a transient interruption (call/nav/other app) ends. Default on. */
+    val audioResumeAfterInterruption: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUDIO_RESUME_AFTER_INTERRUPTION] ?: true
+    }
+    suspend fun setAudioResumeAfterInterruption(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUDIO_RESUME_AFTER_INTERRUPTION] = enabled }
+    }
+    /** Interruptions also pause CAST (remote) playback. Default off. */
+    val interruptionsPauseCast: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUDIO_INTERRUPTIONS_PAUSE_CAST] ?: false
+    }
+    suspend fun setInterruptionsPauseCast(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUDIO_INTERRUPTIONS_PAUSE_CAST] = enabled }
     }
 
     // ── §C17 Online metadata enrichment ───────────────────────────────

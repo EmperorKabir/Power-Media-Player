@@ -351,6 +351,12 @@ class PlaybackService : MediaSessionService() {
         // tick (which re-asserts replayGain×crossfade every 100ms) can't
         // un-mute it. 1.0 in every normal case.
         @Volatile private var castLocalVideoMuteFactor: Float = 1.0f
+        // Audio-focus transient duck (LOSS_TRANSIENT_CAN_DUCK): 0.3 while a
+        // notification/nav-prompt ducks us. A FOURTH factor — not a direct
+        // player.volume write — so the crossfade tick + replayGain can't
+        // un-duck it mid-notification, and restoring it never clobbers an
+        // active replayGain attenuation or cast mute. 1.0 normally.
+        @Volatile private var focusDuckFactor: Float = 1.0f
 
         /** §B5 — last auto-revert reason (null when not active). */
         /** Push-based: the UI used to POLL a static holder for this at
@@ -496,9 +502,17 @@ class PlaybackService : MediaSessionService() {
             applyMixedVolume()
         }
 
+        /** Audio-focus transient duck (0.3) / restore (1.0) via the volume
+         *  mix, so it composes with replayGain/crossfade/cast-mute rather than
+         *  overwriting player.volume. */
+        internal fun setFocusDuck(ducked: Boolean) {
+            focusDuckFactor = if (ducked) 0.3f else 1.0f
+            applyMixedVolume()
+        }
+
         private fun applyMixedVolume() {
             val p = getExoPlayer() ?: return
-            val v = (replayGainFactor * crossfadeFactor * castLocalVideoMuteFactor)
+            val v = (replayGainFactor * crossfadeFactor * castLocalVideoMuteFactor * focusDuckFactor)
                 .coerceIn(0.0f, 1.0f)
             // ExoPlayer.volume is main-thread-only; post if needed.
             if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
@@ -1136,6 +1150,8 @@ class PlaybackService : MediaSessionService() {
                     focusPolicyOnCall = settingsDataStore.audioFocusOnCall.first()
                     focusPolicyOnNotif = settingsDataStore.audioFocusOnNotification.first()
                     focusPolicyOnOther = settingsDataStore.audioFocusOnOtherMedia.first()
+                    resumeAfterFocusLoss = settingsDataStore.audioResumeAfterInterruption.first()
+                    pauseCastOnInterruption = settingsDataStore.interruptionsPauseCast.first()
                 }
             }
         }
@@ -1448,6 +1464,17 @@ class PlaybackService : MediaSessionService() {
                     focusPolicyOnCall = c
                     focusPolicyOnNotif = n
                     focusPolicyOnOther = o
+                }
+        }
+        serviceScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.audioResumeAfterInterruption,
+                settingsDataStore.interruptionsPauseCast
+            ) { r, c -> r to c }
+                .distinctUntilChanged()
+                .collect { (r, c) ->
+                    resumeAfterFocusLoss = r
+                    pauseCastOnInterruption = c
                 }
         }
 
@@ -1905,6 +1932,10 @@ class PlaybackService : MediaSessionService() {
     @Volatile private var focusPolicyOnCall: String = "pause"
     @Volatile private var focusPolicyOnNotif: String = "duck"
     @Volatile private var focusPolicyOnOther: String = "pause"
+    // Resume when a transient interruption (call/nav/other app) ends. Default on.
+    @Volatile private var resumeAfterFocusLoss: Boolean = true
+    // Whether interruptions also pause CAST (remote) playback. Default off.
+    @Volatile private var pauseCastOnInterruption: Boolean = false
 
     private fun installAudioFocusPolicy() {
         val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
@@ -1975,6 +2006,17 @@ class PlaybackService : MediaSessionService() {
 
     private fun handleAudioFocusChange(change: Int) {
         val p = player ?: return
+        // Cast = REMOTE output: a phone interruption (call/notification) is local
+        // to the phone, so by default it does NOT touch the cast device — the
+        // TV/speaker keeps playing. The user can opt in via pauseCastOnInterruption.
+        // Bluetooth is LOCAL audio (it IS the focus stream) and is never skipped —
+        // it follows the per-scenario pause/duck/continue policy below.
+        if (Companion.castActiveFlow.value && !pauseCastOnInterruption) {
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG", "AudioFocus change=$change ignored — casting (remote output)"
+            )
+            return
+        }
         val video = isCurrentItemVideo()
         val choice = when (change) {
             android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> if (video) "pause" else focusPolicyOnCall
@@ -1992,20 +2034,32 @@ class PlaybackService : MediaSessionService() {
                     com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN auto-resume suppressed (OAuth in flight)")
                     return
                 }
-                if (duckedDueToFocus) { runCatching { p.volume = 1.0f }; duckedDueToFocus = false }
+                if (duckedDueToFocus) { Companion.setFocusDuck(false); duckedDueToFocus = false }
                 if (pausedDueToFocus) {
-                    resumingFromFocusGain = true
-                    runCatching { p.play() }
-                    resumingFromFocusGain = false
+                    if (resumeAfterFocusLoss) {
+                        resumingFromFocusGain = true
+                        runCatching { p.play() }
+                        resumingFromFocusGain = false
+                    } else {
+                        // User disabled auto-resume — stay paused and release focus
+                        // (we're no longer producing audio, so don't hold it).
+                        abandonAudioFocusForPlayback()
+                    }
                     pausedDueToFocus = false
                 }
-                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN applied")
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG", "AudioFocus GAIN applied (resume=$resumeAfterFocusLoss)"
+                )
             }
             android.media.AudioManager.AUDIOFOCUS_LOSS,
             android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
             android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 when (choice) {
                     "pause" -> {
+                        // A pending duck must not survive a pause, or a later
+                        // resume (esp. after a permanent loss, which gets no GAIN)
+                        // would play back at 30%.
+                        if (duckedDueToFocus) { Companion.setFocusDuck(false); duckedDueToFocus = false }
                         if (p.isPlaying) {
                             // Arm auto-resume only for a TRANSIENT loss (call/notif);
                             // a permanent loss (another media app) stays paused, and
@@ -2014,7 +2068,7 @@ class PlaybackService : MediaSessionService() {
                             runCatching { p.pause() }
                         }
                     }
-                    "duck" -> { duckedDueToFocus = true; runCatching { p.volume = 0.3f } }
+                    "duck" -> { duckedDueToFocus = true; Companion.setFocusDuck(true) }
                     else -> {}
                 }
                 com.powermediaplayer.util.Diag.i(

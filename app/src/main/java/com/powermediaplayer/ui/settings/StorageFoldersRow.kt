@@ -85,13 +85,13 @@ fun StorageFoldersRow(
         FolderRow(
             label = "Podcast download folder",
             value = folderLabel(podcast),
-            onChange = { podcastPicker.launch(null) },
+            onChange = { podcastPicker.launch(com.powermediaplayer.util.SafStorage.phoneStorageInitialUri()) },
             onReset = if (podcast.isNotBlank()) ({ vm.setPodcastFolder(null) }) else null
         )
         FolderRow(
             label = "Google Drive files folder",
             value = folderLabel(drive),
-            onChange = { drivePicker.launch(null) },
+            onChange = { drivePicker.launch(com.powermediaplayer.util.SafStorage.phoneStorageInitialUri()) },
             onReset = if (drive.isNotBlank()) ({ vm.setDriveFolder(null) }) else null
         )
         Text(

@@ -129,6 +129,31 @@ fun SettingsScreen(
                 AudioFocusRow("Phone call", uiState.audioFocusOnCall) { viewModel.setAudioFocusOnCall(it) }
                 AudioFocusRow("Other notification", uiState.audioFocusOnNotification) { viewModel.setAudioFocusOnNotification(it) }
                 AudioFocusRow("Other media app", uiState.audioFocusOnOtherMedia) { viewModel.setAudioFocusOnOtherMedia(it) }
+                // Auto-resume + cast-interruption toggles (own mini-VM so the big
+                // settings combine is untouched).
+                val intVm: com.powermediaplayer.ui.settings.InterruptionSettingsViewModel =
+                    androidx.hilt.navigation.compose.hiltViewModel()
+                val resumeAfterInterruption by intVm.resumeAfter.collectAsStateWithLifecycle()
+                val pauseCastOnInterruption by intVm.pauseCast.collectAsStateWithLifecycle()
+                SettingsToggleItem(
+                    title = "Resume after interruptions",
+                    description = "When a phone call, navigation prompt, or another app's " +
+                        "temporary audio ends, automatically resume playback. Off = stay " +
+                        "paused until you press play.",
+                    icon = Icons.Filled.PlayArrow,
+                    checked = resumeAfterInterruption,
+                    onCheckedChange = { intVm.setResumeAfter(it) }
+                )
+                SettingsToggleItem(
+                    title = "Interruptions pause casting",
+                    description = "When casting to a TV or speaker, also pause it on a phone " +
+                        "call or notification. Off (default) = the cast keeps playing, because " +
+                        "the call is on your phone, not the cast device. Bluetooth is local " +
+                        "audio and always follows the per-scenario setting above.",
+                    icon = Icons.Filled.Cast,
+                    checked = pauseCastOnInterruption,
+                    onCheckedChange = { intVm.setPauseCast(it) }
+                )
                 SettingsToggleItem(
                     title = "Auto-play on headphone connect",
                     description = "When you plug in headphones (or connect a Bluetooth audio device), " +

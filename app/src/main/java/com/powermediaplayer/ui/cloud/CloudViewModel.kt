@@ -188,6 +188,11 @@ class CloudViewModel @Inject constructor(
             }
         }.getOrDefault(0L)
         if (bytes <= 0L) {
+            // Empty write (revoked grant / provider error mid-copy) — clean up the
+            // stub child so it can't orphan in the user's folder, and keep the cache.
+            com.powermediaplayer.util.Diag.w(
+                "PMP_DIAG", "C28 relocate wrote 0 bytes for ${item.name}; kept app-cache copy"
+            )
             runCatching { child.delete() }
             return fallback
         }
@@ -1357,8 +1362,17 @@ class CloudViewModel @Inject constructor(
                         }
                         saf.await() + oauth.await()
                     }
-                provider == CloudProviderType.SPOTIFY ->
-                    spotifyProvider.search(query).getOrDefault(emptyList())
+                provider == CloudProviderType.SPOTIFY -> {
+                    // Surface a search failure (expired token / 401 / network) so it
+                    // doesn't read as "no results" — mirrors the folder-open path.
+                    val r = spotifyProvider.search(query)
+                    r.exceptionOrNull()?.let { ex ->
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = ex.message ?: "Spotify search failed"
+                        )
+                    }
+                    r.getOrDefault(emptyList())
+                }
                 else -> emptyList()
             }
             _uiState.value = _uiState.value.copy(searchResults = results)

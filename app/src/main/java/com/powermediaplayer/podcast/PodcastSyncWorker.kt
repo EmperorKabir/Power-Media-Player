@@ -80,7 +80,11 @@ class PodcastSyncWorker @AssistedInject constructor(
                 subscribedAt = show.subscribedAt,
                 autoDownload = show.autoDownload,
                 retentionLastN = show.retentionLastN,
-                notifyOnNewEpisode = show.notifyOnNewEpisode
+                notifyOnNewEpisode = show.notifyOnNewEpisode,
+                // Preserve the user's per-show download folder — a REPLACE upsert
+                // with the freshly-parsed (null) value would silently reset it
+                // to the global default on every periodic sync.
+                downloadTreeUri = show.downloadTreeUri
             )
         )
         podcastDao.syncEpisodes(episodes)

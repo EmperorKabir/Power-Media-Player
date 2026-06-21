@@ -299,7 +299,18 @@ class PodcastsViewModel @Inject constructor(
             } else rssUrl
             when (val r = parser.fetchResult(target)) {
                 is RssFeedParser.FetchResult.Ok -> {
-                    podcastDao.upsertShow(r.show)
+                    // Re-adding an already-subscribed feed must NOT reset the user's
+                    // per-show settings (auto-download / retention / notify / folder)
+                    // — a REPLACE upsert with the freshly-parsed defaults would.
+                    val existing = podcastDao.getShow(r.show.feedUrl)
+                    val merged = if (existing == null) r.show else r.show.copy(
+                        subscribedAt = existing.subscribedAt,
+                        autoDownload = existing.autoDownload,
+                        retentionLastN = existing.retentionLastN,
+                        notifyOnNewEpisode = existing.notifyOnNewEpisode,
+                        downloadTreeUri = existing.downloadTreeUri
+                    )
+                    podcastDao.upsertShow(merged)
                     podcastDao.syncEpisodes(r.episodes)
                     setStatus("Subscribed: ${r.show.title} (${r.episodes.size} episodes)")
                 }
@@ -584,7 +595,9 @@ private fun ShowSettingsRow(
                 maxLines = 1,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = { folderPicker.launch(null) }) {
+            TextButton(onClick = {
+                folderPicker.launch(com.powermediaplayer.util.SafStorage.phoneStorageInitialUri())
+            }) {
                 Text("Change", color = TealAccent, style = MaterialTheme.typography.labelSmall)
             }
             if (show.downloadTreeUri != null) {

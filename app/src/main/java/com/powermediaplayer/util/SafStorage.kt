@@ -100,6 +100,18 @@ object SafStorage {
     }.getOrNull()
 
     /**
+     * Initial-location hint for an OPEN_DOCUMENT_TREE picker → the phone's
+     * top-level (primary) internal storage, so the picker opens THERE instead
+     * of inheriting the last-used location (e.g. a previously-picked Drive
+     * folder). A hint only — some OEM pickers may still land elsewhere.
+     */
+    fun phoneStorageInitialUri(): Uri? = runCatching {
+        android.provider.DocumentsContract.buildDocumentUri(
+            "com.android.externalstorage.documents", "primary:"
+        )
+    }.getOrNull()
+
+    /**
      * Cheap label from a tree uri's document id WITHOUT a provider query (safe
      * to call in composition): "…/tree/primary%3APodcasts" → "Podcasts".
      */
