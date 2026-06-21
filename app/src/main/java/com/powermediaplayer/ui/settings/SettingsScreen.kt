@@ -39,6 +39,7 @@ import com.powermediaplayer.ui.theme.*
 @Composable
 fun SettingsScreen(
     windowSizeClass: androidx.compose.material3.windowsizeclass.WindowSizeClass? = null,
+    onOpenDownloads: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -308,9 +309,12 @@ fun SettingsScreen(
             },
             SettingsItem(
                 "cloud", "Cloud",
-                listOf("offline", "storage", "prefetch", "pre-fetch", "buffer", "drive", "stream")
+                listOf("offline", "storage", "prefetch", "pre-fetch", "buffer", "drive",
+                    "stream", "download", "folder", "podcast", "location")
             ) {
                 com.powermediaplayer.ui.settings.OfflineStorageLimitRow()
+                // Part 4.3 — global storage-location pickers + Downloads manager.
+                StorageFoldersRow(onOpenDownloads = onOpenDownloads)
                 SettingsToggleItem("Pre-fetch next cloud track",
                     "Buffer the next item in a cloud queue for seamless transition.",
                     Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }

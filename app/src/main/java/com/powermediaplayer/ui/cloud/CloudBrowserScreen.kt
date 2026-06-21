@@ -50,7 +50,8 @@ private val SpotifyGreen = androidx.compose.ui.graphics.Color(0xFF1DB954)
 @Composable
 fun CloudBrowserScreen(
     viewModel: CloudViewModel = hiltViewModel(),
-    onNavigateToPlayer: () -> Unit = {}
+    onNavigateToPlayer: () -> Unit = {},
+    onOpenDownloads: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     // Audit 4.5 - per-row .any{} scans were O(rows x favourites) per
@@ -126,6 +127,8 @@ fun CloudBrowserScreen(
     contextItem?.let { item ->
         val isSpotify = item.sourceProvider == CloudProviderType.SPOTIFY
         val isDriveTrack = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
+        val starredOffline by viewModel.starredOfflineIds.collectAsStateWithLifecycle()
+        val isPinned = starredOffline.contains(item.id)
         // §C25 — Drive favourites can carry per-file overrides keyed
         // by the SAF content:// URI. Drive OAuth (REST) has session-
         // dependent stream URLs that don't key stably, so override-*
@@ -134,7 +137,7 @@ fun CloudBrowserScreen(
             uiState.driveFavouriteTracks.any { it.id == item.id }
         com.powermediaplayer.ui.player.components.TrackContextSheet(
             title = item.name,
-            subtitle = if (isSpotify) "Spotify" else "Drive",
+            subtitle = item.subtitle.ifBlank { if (isSpotify) "Spotify" else "Drive" },
             actions = com.powermediaplayer.ui.player.components.TrackContextActions(
                 // Drive and Spotify tracks both support favouriting via
                 // their respective viewmodel methods; folders skipped.
@@ -165,6 +168,13 @@ fun CloudBrowserScreen(
                 } else null,
                 onRemoveOffline = if (isDriveTrack && viewModel.hasOfflineCopy(item.id)) {
                     { viewModel.removeDriveOffline(item.id); contextItem = null }
+                } else null,
+                // §C28/Part 3.2 — pin/unpin so the LRU evictor spares this copy.
+                onPinOffline = if (isDriveTrack && viewModel.hasOfflineCopy(item.id) && !isPinned) {
+                    { viewModel.toggleStarredOffline(item.id); contextItem = null }
+                } else null,
+                onUnpinOffline = if (isDriveTrack && viewModel.hasOfflineCopy(item.id) && isPinned) {
+                    { viewModel.toggleStarredOffline(item.id); contextItem = null }
                 } else null,
                 onOverrideSpeed = if (isFavDriveSaf) {
                     { overrideTarget = item; contextItem = null }
@@ -341,10 +351,11 @@ fun CloudBrowserScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = OledBlack)
         )
 
-        // Search bar — Drive only. Spotify search is hidden per UX
-        // decision (the previous text-search implementation didn't
-        // surface useful results to end-users).
-        if (uiState.activeProvider != null && uiState.activeProvider != CloudProviderType.SPOTIFY) {
+        // Search bar — Drive AND Spotify. Spotify catalogue search is
+        // re-enabled (Part 5): result rows now show "Title · Artist",
+        // standalone episodes play the full show on Connect, and artist
+        // results drill to top-tracks.
+        if (uiState.activeProvider != null) {
             OutlinedTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
@@ -409,6 +420,29 @@ fun CloudBrowserScreen(
                     )
                     com.powermediaplayer.ui.podcast.PodcastsSection()
                 }
+                // Part 3.3 — unified Downloads manager (podcasts + Drive offline).
+                item(key = "downloads_entry") {
+                    androidx.compose.material3.HorizontalDivider(
+                        color = DisabledGrey, modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenDownloads() }
+                            .padding(horizontal = 24.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Download, contentDescription = null, tint = TealAccent)
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Manage downloads", color = TextPrimary,
+                                style = MaterialTheme.typography.titleSmall)
+                            Text("Podcasts + offline Drive files · storage usage",
+                                color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextSecondary)
+                    }
+                }
             }
         } else {
             // File browser
@@ -450,9 +484,12 @@ fun CloudBrowserScreen(
                     }
                 }
             } else if (uiState.activeProvider == CloudProviderType.SPOTIFY &&
-                       uiState.spotifySection == null) {
+                       uiState.spotifySection == null &&
+                       uiState.searchQuery.isBlank()) {
                 // Spotify section picker — landing screen when entering
                 // Spotify. Each card opens a single Web API endpoint.
+                // A non-blank query falls through to the search-results
+                // branch below (Part 5.2 ordering fix).
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 360.dp),   // audit 8.1 (F4)
                     modifier = Modifier.fillMaxSize(),
@@ -1397,14 +1434,25 @@ private fun CloudItemRow(
             Icon(icon, contentDescription = label, tint = TealAccent, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
-        Text(
-            text = item.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // Part 5.1 — secondary line: track/album artist, show publisher, etc.
+            if (item.subtitle.isNotBlank()) {
+                Text(
+                    text = item.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
         if (isOffline) {
             Surface(
                 color = TealAccent.copy(alpha = 0.18f),

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -54,6 +55,8 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     data object Cloud : Screen("cloud", "Cloud", Icons.Filled.Cloud)
     data object Equalizer : Screen("equalizer", "EQ", Icons.Filled.Equalizer)
     data object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
+    // Secondary screen — reachable from the Cloud tab + Settings, not a tab.
+    data object Downloads : Screen("downloads", "Downloads", Icons.Filled.Download)
 }
 
 private val screens = listOf(
@@ -235,7 +238,17 @@ fun AppNavigation(
             }
             composable(Screen.Cloud.route) {
                 NonPlayerRoute(contentInset, navigateToPlayer) {
-                    CloudBrowserScreen(onNavigateToPlayer = navigateToPlayer)
+                    CloudBrowserScreen(
+                        onNavigateToPlayer = navigateToPlayer,
+                        onOpenDownloads = { navController.navigate(Screen.Downloads.route) { launchSingleTop = true } }
+                    )
+                }
+            }
+            composable(Screen.Downloads.route) {
+                NonPlayerRoute(contentInset, navigateToPlayer) {
+                    com.powermediaplayer.ui.downloads.DownloadsScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
             }
             composable(Screen.LastPlayed.route) {
@@ -250,7 +263,10 @@ fun AppNavigation(
             }
             composable(Screen.Settings.route) {
                 NonPlayerRoute(contentInset, navigateToPlayer) {
-                    SettingsScreen(windowSizeClass = windowSizeClass)
+                    SettingsScreen(
+                        windowSizeClass = windowSizeClass,
+                        onOpenDownloads = { navController.navigate(Screen.Downloads.route) { launchSingleTop = true } }
+                    )
                 }
             }
         }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
@@ -66,6 +67,9 @@ data class TrackContextActions(
     val onOpenInOtherApp: (() -> Unit)? = null,
     val onSaveOffline: (() -> Unit)? = null,
     val onRemoveOffline: (() -> Unit)? = null,
+    /** §C28 — pin an offline copy so the LRU evictor never reclaims it. */
+    val onPinOffline: (() -> Unit)? = null,
+    val onUnpinOffline: (() -> Unit)? = null,
     val onDelete: (() -> Unit)? = null,
     /** Pin every track of this album to the Last Played → Pinned list.
      *  Shared 10-cap enforced at the repository layer. */
@@ -174,6 +178,12 @@ fun TrackContextSheet(
             }
             actions.onRemoveOffline?.let {
                 Item(Icons.Filled.Headset, "Remove offline copy", onClick = it, tint = ErrorRed)
+            }
+            actions.onPinOffline?.let {
+                Item(Icons.Filled.PushPin, "Protect from auto-cleanup", onClick = it)
+            }
+            actions.onUnpinOffline?.let {
+                Item(Icons.Filled.PushPin, "Unpin (allow auto-cleanup)", onClick = it, tint = TealAccent)
             }
             actions.onDelete?.let {
                 Item(Icons.Filled.Delete, "Delete", onClick = it, tint = ErrorRed)
