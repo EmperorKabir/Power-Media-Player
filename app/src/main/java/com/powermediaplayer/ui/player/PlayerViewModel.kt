@@ -108,16 +108,20 @@ class PlayerViewModel @Inject constructor(
             spotifyProvider.spotifyState
                 .map { it?.contextUri }
                 .distinctUntilChanged()
-                .collect { ctx ->
+                // collectLatest: a fast album switch cancels the in-flight
+                // listContainer fetch instead of queueing behind it (no stutter,
+                // no stale list painted). distinctUntilChanged already dedups
+                // consecutive same-context emits.
+                .collectLatest { ctx ->
                     val browsable = ctx != null &&
                         (ctx.startsWith("spotify:album:") || ctx.startsWith("spotify:playlist:"))
                     if (!browsable) {
                         _spotifyContextTracks.value = emptyList()
                         lastContextFetched = null
-                    } else if (ctx != lastContextFetched) {
+                    } else {
+                        val tracks = spotifyProvider.listContainer(ctx!!).getOrDefault(emptyList())
                         lastContextFetched = ctx
-                        _spotifyContextTracks.value =
-                            spotifyProvider.listContainer(ctx!!).getOrDefault(emptyList())
+                        _spotifyContextTracks.value = tracks
                     }
                 }
         }

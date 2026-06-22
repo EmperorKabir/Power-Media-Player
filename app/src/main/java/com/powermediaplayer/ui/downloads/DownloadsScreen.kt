@@ -293,7 +293,6 @@ fun DownloadsScreen(
                     DownloadRowView(
                         row,
                         selected = row.key in sel,
-                        selectionActive = sel.isNotEmpty(),
                         onToggleSelect = { vm.toggleSelected(row.key) },
                         onDelete = { vm.delete(row) }
                     )
@@ -307,7 +306,6 @@ fun DownloadsScreen(
                     DownloadRowView(
                         row,
                         selected = row.key in sel,
-                        selectionActive = sel.isNotEmpty(),
                         onToggleSelect = { vm.toggleSelected(row.key) },
                         onDelete = { vm.delete(row) }
                     )
@@ -333,7 +331,6 @@ private fun SectionHeader(icon: androidx.compose.ui.graphics.vector.ImageVector,
 private fun DownloadRowView(
     row: DownloadsViewModel.DownloadRow,
     selected: Boolean = false,
-    selectionActive: Boolean = false,
     onToggleSelect: () -> Unit = {},
     onDelete: () -> Unit
 ) {

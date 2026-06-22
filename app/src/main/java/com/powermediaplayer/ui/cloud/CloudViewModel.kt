@@ -1490,7 +1490,7 @@ class CloudViewModel @Inject constructor(
             val items = _uiState.value.items
             val idx = items.indexOfFirst { it.id == current.id }
             if (idx < 0) return@launch
-            val next = items.drop(idx + 1).firstOrNull {
+            val next = items.asSequence().drop(idx + 1).firstOrNull {
                 !it.isFolder && it.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
                     it.mimeType.startsWith("audio/") &&
                     driveTagEnricher.cached(it.id) == null
