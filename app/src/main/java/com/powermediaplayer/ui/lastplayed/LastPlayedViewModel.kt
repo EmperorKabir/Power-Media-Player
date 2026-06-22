@@ -322,8 +322,20 @@ class LastPlayedViewModel @Inject constructor(
                 )
                 try {
                 val tPlay = com.powermediaplayer.diag.DiagLog.now()
+                // A Spotify album/playlist/show URI is a CONTEXT, not a track —
+                // it must play via context_uri (PUT /play {context_uri:…}), NOT
+                // the uris:[…] field, which only accepts track/episode URIs (an
+                // album URI there → Spotify 400 "Unsupported uri kind: album").
+                // Meteora was saved to Recents as spotify:album:… by the album
+                // play, so replaying it hit exactly that 400.
+                val isContextUri = item.mediaUri.startsWith("spotify:album:") ||
+                    item.mediaUri.startsWith("spotify:playlist:") ||
+                    item.mediaUri.startsWith("spotify:show:")
                 val play = runCatching {
-                    spotifyProvider.playTrackOnConnectDevice(item.mediaUri, contextUri = null)
+                    if (isContextUri)
+                        spotifyProvider.playTrackOnConnectDevice(spotifyUri = null, contextUri = item.mediaUri)
+                    else
+                        spotifyProvider.playTrackOnConnectDevice(item.mediaUri, contextUri = null)
                 }.getOrNull()
                 com.powermediaplayer.diag.DiagLog.perf(
                     "resume.spotifyPlayCall", com.powermediaplayer.diag.DiagLog.now() - tPlay,
@@ -331,6 +343,9 @@ class LastPlayedViewModel @Inject constructor(
                 )
                 val ok = play?.isSuccess == true
                 if (ok) {
+                    // Album/playlist/show replay → loop the context to the start
+                    // at the end, matching the album-play behaviour.
+                    if (isContextUri) runCatching { spotifyProvider.setRepeat("context") }
                     // Always start polling so the Player tab swaps to
                     // the Spotify mirror — independent of whether the
                     // user is jumping to a saved position. expectPlayback

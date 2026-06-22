@@ -694,12 +694,27 @@ class SpotifyProvider @Inject constructor(
             val token = currentAccessToken() ?: return@withContext Result.failure(
                 IllegalStateException("Spotify session expired — sign in again")
             )
+            // An album/playlist/show URI passed as the "track" is really a
+            // CONTEXT — route it through context_uri. The uris:[…] field only
+            // accepts track/episode URIs (an album there → 400 "Unsupported uri
+            // kind: album"). Normalising here covers cold-start resume, Recents
+            // replay and favourited-album plays without each caller special-casing it.
+            var trackUri = spotifyUri
+            var ctx = contextUri
+            if (ctx == null && trackUri != null &&
+                (trackUri.startsWith("spotify:album:") ||
+                    trackUri.startsWith("spotify:playlist:") ||
+                    trackUri.startsWith("spotify:show:"))
+            ) {
+                ctx = trackUri
+                trackUri = null
+            }
             // If caller didn't supply a context but the URI is a track,
             // resolve the track's album so /next + /previous work. With a null
-            // spotifyUri (play-whole-album), the context IS the album → no lookup.
-            val resolvedContext = contextUri
-                ?: spotifyUri?.let { resolveTrackAlbumUri(token, it) }
-            val firstAttempt = playRequest(token, spotifyUri, resolvedContext, deviceId = null)
+            // trackUri (play-whole-context), the context IS the album → no lookup.
+            val resolvedContext = ctx
+                ?: trackUri?.let { resolveTrackAlbumUri(token, it) }
+            val firstAttempt = playRequest(token, trackUri, resolvedContext, deviceId = null)
             if (firstAttempt.isSuccess) return@withContext firstAttempt
 
             // 404 NO_ACTIVE_DEVICE — pick first device and retry.
@@ -749,7 +764,7 @@ class SpotifyProvider @Inject constructor(
             // Tiny gap so Spotify finishes activating the device before
             // we send the play command.
             kotlinx.coroutines.delay(400)
-            playRequest(token, spotifyUri, resolvedContext, deviceId = first.first)
+            playRequest(token, trackUri, resolvedContext, deviceId = first.first)
         }
 
     /** Set Connect repeat mode: "context" (loop the album/playlist), "track",
