@@ -23,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -357,6 +358,8 @@ fun CloudBrowserScreen(
         // standalone episodes play the full show on Connect, and artist
         // results drill to top-tracks.
         if (uiState.activeProvider != null) {
+            var searchFocused by remember { mutableStateOf(false) }
+            val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
             OutlinedTextField(
                 value = uiState.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
@@ -373,7 +376,16 @@ fun CloudBrowserScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .onFocusChanged { searchFocused = it.isFocused }
             )
+            // Recent searches: shown when the field is focused + empty.
+            if (searchFocused && uiState.searchQuery.isBlank()) {
+                com.powermediaplayer.ui.components.RecentSearchesDropdown(
+                    recents = recentSearches,
+                    onPick = { viewModel.setSearchQuery(it) },
+                    onClear = { viewModel.clearRecentSearches() }
+                )
+            }
         }
 
         // Provider quick-switch tabs — tap to jump straight to Drive or

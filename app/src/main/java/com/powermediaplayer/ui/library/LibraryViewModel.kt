@@ -278,6 +278,21 @@ class LibraryViewModel @Inject constructor(
         recomputeDisplayed()
     }
 
+    /** Recent Library search queries, most-recent-first (persisted). */
+    val recentSearches: kotlinx.coroutines.flow.StateFlow<List<String>> =
+        settingsDataStore.recentSearchesLibrary.stateIn(
+            viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList()
+        )
+    fun clearRecentSearches() {
+        viewModelScope.launch { settingsDataStore.clearRecentSearchesLibrary() }
+    }
+    /** Remember a query once the user acts on a result (not per-keystroke). */
+    private fun recordSearchIfActive() {
+        _uiState.value.searchQuery.takeIf { it.isNotBlank() }?.let { q ->
+            viewModelScope.launch { settingsDataStore.addRecentSearchLibrary(q) }
+        }
+    }
+
     // Audit 4.1 — recompute used to run synchronously on the CALLER
     // thread (Main, per keystroke). One debounced worker on Default now
     // does the filter+sort; emissions within the window coalesce.
@@ -559,6 +574,7 @@ class LibraryViewModel @Inject constructor(
      * folders work as expected.
      */
     fun playSingle(file: MediaFileInfo) {
+        recordSearchIfActive()
         stopSpotifyMirrorIfActive()
         // vc32: new play intent — supersedes any in-flight slow resume.
         com.powermediaplayer.playback.ResumeGate.end(com.powermediaplayer.playback.ResumeGate.begin())

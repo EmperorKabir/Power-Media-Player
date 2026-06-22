@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -351,8 +352,18 @@ class PodcastsViewModel @Inject constructor(
 
     fun searchItunes(query: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            settings.addRecentSearchPodcast(query)
             _itunesResults.value = itunes.search(query)
         }
+    }
+
+    /** Recent podcast search queries, most-recent-first (persisted). */
+    val recentSearches: kotlinx.coroutines.flow.StateFlow<List<String>> =
+        settings.recentSearchesPodcast.stateIn(
+            viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList()
+        )
+    fun clearRecentSearches() {
+        viewModelScope.launch { settings.clearRecentSearchesPodcast() }
     }
 
     fun subscribeFromItunes(hit: com.powermediaplayer.podcast.ITunesPodcastSearch.Hit) {
@@ -385,6 +396,8 @@ fun PodcastsSection(
     val shows by vm.shows.collectAsState()
     val status by vm.status.collectAsState()
     var url by remember { mutableStateOf("") }
+    var searchFocused by remember { mutableStateOf(false) }
+    val recentSearches by vm.recentSearches.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
@@ -413,7 +426,7 @@ fun PodcastsSection(
                 onValueChange = { url = it },
                 label = { Text("RSS feed URL or search term") },
                 singleLine = true,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused }
             )
             Spacer(Modifier.width(8.dp))
             TextButton(onClick = {
@@ -427,6 +440,13 @@ fun PodcastsSection(
                 Icon(Icons.Filled.Add, contentDescription = "Add")
                 Text("Add / search", color = TealAccent)
             }
+        }
+        if (searchFocused && url.isBlank()) {
+            com.powermediaplayer.ui.components.RecentSearchesDropdown(
+                recents = recentSearches,
+                onPick = { url = it; vm.searchItunes(it) },
+                onClear = { vm.clearRecentSearches() }
+            )
         }
         // §C10 LOCKED — iTunes podcast search results inline. Tap a
         // row to subscribe.

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.util.TimeFormatter
@@ -439,6 +440,8 @@ fun LibraryScreen(
         }
 
         // ── Search Bar ───────────────────────────────────────────
+        var searchFocused by remember { mutableStateOf(false) }
+        val recentSearches by viewModel.recentSearches.collectAsStateWithLifecycle()
         OutlinedTextField(
             value = uiState.searchQuery,
             onValueChange = { viewModel.setSearchQuery(it) },
@@ -465,7 +468,15 @@ fun LibraryScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
+                .onFocusChanged { searchFocused = it.isFocused }
         )
+        if (searchFocused && uiState.searchQuery.isBlank()) {
+            com.powermediaplayer.ui.components.RecentSearchesDropdown(
+                recents = recentSearches,
+                onPick = { viewModel.setSearchQuery(it) },
+                onClear = { viewModel.clearRecentSearches() }
+            )
+        }
 
         // ── Tabs: Audio | Video ──────────────────────────────────
         TabRow(

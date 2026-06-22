@@ -116,6 +116,15 @@ class CloudViewModel @Inject constructor(
     private val _savingOffline = MutableStateFlow<Set<String>>(emptySet())
     val savingOffline: StateFlow<Set<String>> = _savingOffline
 
+    /** Recent Cloud/Spotify search queries, most-recent-first (persisted). */
+    val recentSearches: StateFlow<List<String>> =
+        settingsDataStore.recentSearchesCloud.stateIn(
+            viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList()
+        )
+    fun clearRecentSearches() {
+        viewModelScope.launch { settingsDataStore.clearRecentSearchesCloud() }
+    }
+
     fun saveDriveOffline(item: CloudMediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
             _savingOffline.update { it + item.id }
@@ -1151,6 +1160,11 @@ class CloudViewModel @Inject constructor(
             "PMP_DIAG",
             "Cloud.openItem name=${item.name} provider=${item.sourceProvider} folder=${item.isFolder} mime=${item.mimeType}"
         )
+        // Acting on a search result → that query was useful; remember it. (Only
+        // here, not on every keystroke, so the history holds whole queries.)
+        _uiState.value.searchQuery.takeIf { it.isNotBlank() }?.let { q ->
+            viewModelScope.launch { settingsDataStore.addRecentSearchCloud(q) }
+        }
         if (!item.isFolder) {
             // vc32: new play intent — supersedes any in-flight slow resume.
             com.powermediaplayer.playback.ResumeGate.end(

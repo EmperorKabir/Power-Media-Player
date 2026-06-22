@@ -126,6 +126,13 @@ class SettingsDataStore @Inject constructor(
         val RESUME_ON_BT = booleanPreferencesKey("resume_on_bt")
         val PREFETCH_NEXT_CLOUD = booleanPreferencesKey("prefetch_next_cloud")
 
+        // Recent search history per search box — single ordered string
+        // (U+001F-delimited, most-recent-first) so insertion order survives
+        // (a StringSet would lose ordering).
+        val RECENT_SEARCHES_CLOUD = stringPreferencesKey("recent_searches_cloud")
+        val RECENT_SEARCHES_LIBRARY = stringPreferencesKey("recent_searches_library")
+        val RECENT_SEARCHES_PODCAST = stringPreferencesKey("recent_searches_podcast")
+
         val LIBRARY_SORT_MODE = stringPreferencesKey("library_sort_mode")
 
         // Auto-hide control timers — seconds. 0 means "Never auto-hide".
@@ -1346,6 +1353,37 @@ class SettingsDataStore @Inject constructor(
     val crossfadeMs: Flow<Int> = context.dataStore.data.map { it[Keys.CROSSFADE_MS] ?: 0 }
     val resumeOnBt: Flow<Boolean> = context.dataStore.data.map { it[Keys.RESUME_ON_BT] ?: false }
     val prefetchNextCloud: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREFETCH_NEXT_CLOUD] ?: true }
+
+    // ── Recent searches (per box, ordered most-recent-first, max 12) ──────────
+    private val rsSep = ""
+    private fun decodeRecent(raw: String?): List<String> =
+        raw?.split(rsSep)?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+
+    val recentSearchesCloud: Flow<List<String>> =
+        context.dataStore.data.map { decodeRecent(it[Keys.RECENT_SEARCHES_CLOUD]) }
+    val recentSearchesLibrary: Flow<List<String>> =
+        context.dataStore.data.map { decodeRecent(it[Keys.RECENT_SEARCHES_LIBRARY]) }
+    val recentSearchesPodcast: Flow<List<String>> =
+        context.dataStore.data.map { decodeRecent(it[Keys.RECENT_SEARCHES_PODCAST]) }
+
+    private suspend fun addRecent(key: Preferences.Key<String>, query: String) {
+        val q = query.trim()
+        if (q.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val cur = decodeRecent(prefs[key]).toMutableList()
+            cur.removeAll { it.equals(q, ignoreCase = true) } // de-dupe → moves to top
+            cur.add(0, q)
+            while (cur.size > 12) cur.removeAt(cur.size - 1)
+            prefs[key] = cur.joinToString(rsSep)
+        }
+    }
+
+    suspend fun addRecentSearchCloud(q: String) = addRecent(Keys.RECENT_SEARCHES_CLOUD, q)
+    suspend fun addRecentSearchLibrary(q: String) = addRecent(Keys.RECENT_SEARCHES_LIBRARY, q)
+    suspend fun addRecentSearchPodcast(q: String) = addRecent(Keys.RECENT_SEARCHES_PODCAST, q)
+    suspend fun clearRecentSearchesCloud() { context.dataStore.edit { it.remove(Keys.RECENT_SEARCHES_CLOUD) } }
+    suspend fun clearRecentSearchesLibrary() { context.dataStore.edit { it.remove(Keys.RECENT_SEARCHES_LIBRARY) } }
+    suspend fun clearRecentSearchesPodcast() { context.dataStore.edit { it.remove(Keys.RECENT_SEARCHES_PODCAST) } }
 
     suspend fun setVideoFlipH(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_FLIP_HORIZONTAL] = v } }
     suspend fun setVideoFlipV(v: Boolean) { context.dataStore.edit { it[Keys.VIDEO_FLIP_VERTICAL] = v } }
