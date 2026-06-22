@@ -1046,6 +1046,46 @@ class CloudViewModel @Inject constructor(
      *   playing — used by the UI to navigate to the Player tab. Failures
      *   (Spotify previews removed, Drive 401, etc.) do not navigate.
      */
+    /**
+     * Play a Spotify ALBUM (or playlist) from the first track on the Connect
+     * device, then set repeat=context so it loops back to the start at the end.
+     * Next/previous traverse the album. Used by the play button on album rows;
+     * tapping the row itself still BROWSES the album's tracks.
+     */
+    fun playSpotifyAlbum(item: CloudMediaItem, onPlaybackStarted: () -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching { playbackConnection.pause() }
+            val contextUri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
+                else "spotify:${item.mimeType.substringAfter("application/spotify-")}:${item.id}"
+            spotifyProvider.armProvisionalMirror(
+                com.powermediaplayer.cloud.SpotifyPlaybackState(
+                    title = item.name,
+                    artist = item.subtitle,
+                    album = item.name,
+                    artworkUrl = item.thumbnailUri?.toString(),
+                    positionMs = 0L,
+                    durationMs = 0L,
+                    isPlaying = true,
+                    trackUri = contextUri,
+                    deviceName = null
+                )
+            )
+            val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri = null, contextUri = contextUri)
+            if (r.isSuccess) {
+                runCatching { spotifyProvider.setRepeat("context") }
+                spotifyProvider.startPlaybackPolling(expectPlayback = true, expectedTrack = contextUri)
+                recordCloudPlay(item)
+                _uiState.value = _uiState.value.copy(errorMessage = "Playing album: ${item.name}")
+                onPlaybackStarted()
+            } else {
+                spotifyProvider.clearProvisionalMirror()
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = r.exceptionOrNull()?.message ?: "Spotify playback failed"
+                )
+            }
+        }
+    }
+
     fun openItem(item: CloudMediaItem, onPlaybackStarted: () -> Unit = {}) {
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
@@ -1136,6 +1176,11 @@ class CloudViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(
                         errorMessage = ex.message ?: "Spotify playback failed"
                     )
+                }
+                // Track played WITHIN an album/playlist context → loop the
+                // context so it returns to the start at the end (user request).
+                if (r.isSuccess && !item.contextUri.isNullOrBlank()) {
+                    runCatching { spotifyProvider.setRepeat("context") }
                 }
             }
             return

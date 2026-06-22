@@ -652,6 +652,9 @@ fun CloudBrowserScreen(
                 ) {
                     gridItems(uiState.searchResults, key = { "search_${it.id}_${it.sourceProvider}" }) { item ->
                         val isDriveTrack = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
+                        val isSpotifyAlbum = item.sourceProvider == CloudProviderType.SPOTIFY &&
+                            item.isFolder &&
+                            (item.mimeType.endsWith("album") || item.mimeType.endsWith("playlist"))
                         CloudItemRow(
                             item = item,
                             onClick = {
@@ -662,7 +665,9 @@ fun CloudBrowserScreen(
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             onSaveOffline = { viewModel.saveDriveOffline(item) },
-                            onRemoveOffline = { viewModel.removeDriveOffline(item.id) }
+                            onRemoveOffline = { viewModel.removeDriveOffline(item.id) },
+                            canPlayAlbum = isSpotifyAlbum,
+                            onPlayAlbum = { viewModel.playSpotifyAlbum(item, onPlaybackStarted = onNavigateToPlayer) }
                         )
                     }
                     if (uiState.searchResults.isEmpty()) {
@@ -949,7 +954,10 @@ fun CloudBrowserScreen(
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             onSaveOffline = { viewModel.saveDriveOffline(item) },
-                            onRemoveOffline = { viewModel.removeDriveOffline(item.id) }
+                            onRemoveOffline = { viewModel.removeDriveOffline(item.id) },
+                            canPlayAlbum = isSpotify && item.isFolder &&
+                                (item.mimeType.endsWith("album") || item.mimeType.endsWith("playlist")),
+                            onPlayAlbum = { viewModel.playSpotifyAlbum(item, onPlaybackStarted = onNavigateToPlayer) }
                         )
                     }
                     if (uiState.items.isEmpty() && uiState.driveFavourites.isEmpty()) {
@@ -1474,7 +1482,9 @@ private fun CloudItemRow(
     canManageOffline: Boolean = false,
     isSavingOffline: Boolean = false,
     onSaveOffline: () -> Unit = {},
-    onRemoveOffline: () -> Unit = {}
+    onRemoveOffline: () -> Unit = {},
+    canPlayAlbum: Boolean = false,
+    onPlayAlbum: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -1553,6 +1563,16 @@ private fun CloudItemRow(
                         modifier = Modifier.size(22.dp)
                     )
                 }
+            }
+        }
+        if (canPlayAlbum) {
+            IconButton(onClick = onPlayAlbum, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "Play album",
+                    tint = TealAccent,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
         if (canFavourite) {

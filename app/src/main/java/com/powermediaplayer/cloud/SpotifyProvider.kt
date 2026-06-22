@@ -679,7 +679,7 @@ class SpotifyProvider @Inject constructor(
      *     playback there, then retry the play call.
      */
     suspend fun playTrackOnConnectDevice(
-        spotifyUri: String,
+        spotifyUri: String?,
         contextUri: String? = null
     ): Result<Unit> =
         withContext(Dispatchers.IO) {
@@ -691,8 +691,10 @@ class SpotifyProvider @Inject constructor(
                 IllegalStateException("Spotify session expired — sign in again")
             )
             // If caller didn't supply a context but the URI is a track,
-            // resolve the track's album so /next + /previous work.
-            val resolvedContext = contextUri ?: resolveTrackAlbumUri(token, spotifyUri)
+            // resolve the track's album so /next + /previous work. With a null
+            // spotifyUri (play-whole-album), the context IS the album → no lookup.
+            val resolvedContext = contextUri
+                ?: spotifyUri?.let { resolveTrackAlbumUri(token, it) }
             val firstAttempt = playRequest(token, spotifyUri, resolvedContext, deviceId = null)
             if (firstAttempt.isSuccess) return@withContext firstAttempt
 
@@ -745,6 +747,28 @@ class SpotifyProvider @Inject constructor(
             kotlinx.coroutines.delay(400)
             playRequest(token, spotifyUri, resolvedContext, deviceId = first.first)
         }
+
+    /** Set Connect repeat mode: "context" (loop the album/playlist), "track",
+     *  or "off". Best-effort — playing an album sets this to "context" so it
+     *  loops back to the start at the end. */
+    suspend fun setRepeat(state: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Not authenticated")
+        )
+        val req = Request.Builder()
+            .url("https://api.spotify.com/v1/me/player/repeat?state=$state")
+            .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        try {
+            http.newCall(req).execute().use { resp ->
+                if (resp.code in 200..299) Result.success(Unit)
+                else Result.failure(IllegalStateException("Spotify repeat HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     /**
      * Wake the Spotify app via its launch intent, then schedule our
@@ -826,19 +850,21 @@ class SpotifyProvider @Inject constructor(
 
     private fun playRequest(
         token: String,
-        spotifyUri: String,
+        spotifyUri: String?,
         contextUri: String?,
         deviceId: String?
     ): Result<Unit> {
         val url = StringBuilder("https://api.spotify.com/v1/me/player/play")
         if (deviceId != null) url.append("?device_id=").append(deviceId)
-        // When a context is available, send context_uri + offset so the
-        // Spotify queue is the album/playlist starting at this track.
-        // Without it, fall back to single-track play (legacy behaviour).
-        val bodyJson = if (contextUri != null) {
-            """{"context_uri":"$contextUri","offset":{"uri":"$spotifyUri"}}"""
-        } else {
-            """{"uris":["$spotifyUri"]}"""
+        // context_uri + offset → play the album/playlist STARTING at this track
+        // (next/prev traverse it). context_uri alone → play it from track 1.
+        // Neither → single-track play (legacy behaviour).
+        val bodyJson = when {
+            contextUri != null && !spotifyUri.isNullOrBlank() ->
+                """{"context_uri":"$contextUri","offset":{"uri":"$spotifyUri"}}"""
+            contextUri != null -> """{"context_uri":"$contextUri"}"""
+            !spotifyUri.isNullOrBlank() -> """{"uris":["$spotifyUri"]}"""
+            else -> return Result.failure(IllegalStateException("Nothing to play"))
         }
         val body = okhttp3.RequestBody.create(
             "application/json".toMediaTypeOrNull(),
