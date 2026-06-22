@@ -1310,6 +1310,14 @@ class CloudViewModel @Inject constructor(
                 )
                 return false
             }
+            // STABLE identity for this item, INDEPENDENT of whether we resolved to
+            // the offline file or the network stream. mediaId + the resume-position
+            // tick + enrichment all key on THIS, so an offline↔stream switch (e.g.
+            // after trashing the download) keeps the SAME Recents row + resume
+            // point. For streaming it already equals the resolved uri (no change);
+            // only the offline case is realigned onto this stable stream key —
+            // which is also what recordCloudPlay + cold-start use.
+            val stableKey = item.downloadUrl.ifEmpty { item.id }
             // ── "Hold" fast-path ─────────────────────────────────────
             // If this EXACT item is already loaded in the player, don't rebuild
             // it: rebuilding re-prepares the stream, re-runs Drive enrichment,
@@ -1321,7 +1329,7 @@ class CloudViewModel @Inject constructor(
             // are unaffected — worst case it simply doesn't optimise.
             val loadedPlayer = playbackConnection.getPlayer()
             if (loadedPlayer != null && loadedPlayer.mediaItemCount > 0 &&
-                loadedPlayer.currentMediaItem?.mediaId == uri.toString() &&
+                loadedPlayer.currentMediaItem?.mediaId == stableKey &&
                 // Don't "hold" an errored/idle player — play() won't re-prepare
                 // it; fall through to a real reload so a retry actually retries.
                 loadedPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE &&
@@ -1340,7 +1348,7 @@ class CloudViewModel @Inject constructor(
                 } else if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
                     !item.isFolder
                 ) {
-                    driveTagEnricher.enrich(viewModelScope, item, uri.toString())
+                    driveTagEnricher.enrich(viewModelScope, item, stableKey)
                 }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
@@ -1393,7 +1401,7 @@ class CloudViewModel @Inject constructor(
                     .getOrDefault(uri)
             } else uri
             val mediaItem = MediaItem.Builder()
-                .setMediaId(uri.toString())
+                .setMediaId(stableKey)
                 .setUri(playUri)
                 .setRequestMetadata(
                     MediaItem.RequestMetadata.Builder()
@@ -1431,7 +1439,7 @@ class CloudViewModel @Inject constructor(
             // when we already have this item's tags cached this session.
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder &&
                 cachedEnriched == null) {
-                driveTagEnricher.enrich(viewModelScope, item, uri.toString())
+                driveTagEnricher.enrich(viewModelScope, item, stableKey)
             }
         }
         // Reaching here means setMediaItems was called — playback has been
