@@ -722,8 +722,21 @@ fun CloudBrowserScreen(
                             )
                         }
                         gridItems(favTracks, key = { "favtrack_${it.id}" }) { fav ->
+                            val favItem = CloudMediaItem(
+                                id = fav.id,
+                                name = fav.name,
+                                mimeType = "",
+                                size = 0L,
+                                downloadUrl = "",
+                                sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                                isFolder = false
+                            )
                             FavouriteTrackRow(
                                 fav = fav,
+                                isOffline = offlineIds.containsKey(fav.id),
+                                isSaving = fav.id in savingOffline,
+                                onSaveOffline = { viewModel.saveDriveOffline(favItem) },
+                                onRemoveOffline = { viewModel.removeDriveOffline(fav.id) },
                                 onClick = {
                                     viewModel.playDriveFavouriteTrack(
                                         fav.id,
@@ -1502,9 +1515,9 @@ private fun CloudItemRow(
                 else -> IconButton(onClick = onSaveOffline, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Filled.Download,
-                        contentDescription = "Save offline",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
+                        contentDescription = "Download / save offline",
+                        tint = TealAccent,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
@@ -1584,7 +1597,11 @@ private fun SpotifyFavRow(
 private fun FavouriteTrackRow(
     fav: com.powermediaplayer.data.preferences.DriveFavouriteFolder,
     onClick: () -> Unit,
-    onUnstar: () -> Unit
+    onUnstar: () -> Unit,
+    isOffline: Boolean = false,
+    isSaving: Boolean = false,
+    onSaveOffline: () -> Unit = {},
+    onRemoveOffline: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -1616,6 +1633,22 @@ private fun FavouriteTrackRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        // Visible download / remove-offline (favourite Drive tracks had none).
+        when {
+            isSaving -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)
+                )
+            }
+            isOffline -> IconButton(onClick = onRemoveOffline, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove offline copy",
+                    tint = TealAccent, modifier = Modifier.size(20.dp))
+            }
+            else -> IconButton(onClick = onSaveOffline, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.Download, contentDescription = "Download / save offline",
+                    tint = TealAccent, modifier = Modifier.size(20.dp))
+            }
+        }
         IconButton(onClick = onUnstar, modifier = Modifier.size(36.dp)) {
             Icon(
                 imageVector = Icons.Filled.Star,
