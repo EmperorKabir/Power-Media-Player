@@ -1375,6 +1375,15 @@ private fun PlayerScreenExpanded(
                     Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
                         tint = TealAccent)
                 }
+                // Shuffle the playback queue (teal on / grey off).
+                val shuffleOnE by viewModel.shuffleEnabled.collectAsStateWithLifecycle()
+                IconButton(onClick = { viewModel.toggleShuffle() }, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        Icons.Filled.Shuffle,
+                        contentDescription = if (shuffleOnE) "Shuffle on" else "Shuffle off",
+                        tint = if (shuffleOnE) TealAccent else TextTertiary
+                    )
+                }
                 // Audio effects (reverb / stereo flip / mono mix /
                 // passthrough) — applies to any audio track so it's
                 // present in both layouts. Greyed out while casting

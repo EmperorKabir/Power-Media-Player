@@ -2347,6 +2347,10 @@ class PlaybackService : MediaSessionService() {
         val currentIndex = current.currentMediaItemIndex
         val currentPosition = current.currentPosition
         val playWhenReady = current.playWhenReady
+        // Preserve shuffle across a local↔cast switch (else casting would silently
+        // reset it; the local player honours it, a cast receiver that lacks the
+        // command no-ops it harmlessly).
+        val shuffleOn = current.shuffleModeEnabled
         // Cache sender-side metadata + the full original item for every
         // item already in the queue so album art / title / artist
         // survive the receiver echo when we switch to CastPlayer, and
@@ -2486,6 +2490,7 @@ class PlaybackService : MediaSessionService() {
             if (safe.isNotEmpty()) {
                 target.setMediaItems(safe, currentIndex.coerceIn(0, safe.size - 1), currentPosition)
                 target.playWhenReady = playWhenReady
+                target.shuffleModeEnabled = shuffleOn
                 target.prepare()
             } else {
                 com.powermediaplayer.util.Diag.w(
