@@ -349,7 +349,18 @@ class PlaybackConnection @Inject constructor(
     fun seekToPrevious() { controller?.seekToPreviousMediaItem() }
 
     /** Shuffle the playback queue (ExoPlayer reorders next/previous traversal). */
-    fun setShuffleMode(enabled: Boolean) { controller?.shuffleModeEnabled = enabled }
+    fun setShuffleMode(enabled: Boolean) {
+        val c = controller ?: return
+        c.shuffleModeEnabled = enabled
+        // Evidence: confirm the flag landed AND whether the queue can shuffle
+        // (multi-item) + what ExoPlayer now reports as the next index.
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "setShuffleMode($enabled) applied=${c.shuffleModeEnabled} " +
+                "player=${c.javaClass.simpleName} count=${c.mediaItemCount} " +
+                "curIdx=${c.currentMediaItemIndex} nextIdx=${c.nextMediaItemIndex}"
+        )
+    }
     fun isShuffleEnabled(): Boolean = controller?.shuffleModeEnabled == true
 
     fun skipBack(seconds: Int) {

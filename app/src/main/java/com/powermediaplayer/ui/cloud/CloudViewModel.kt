@@ -1097,6 +1097,11 @@ class CloudViewModel @Inject constructor(
             val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri = null, contextUri = contextUri)
             if (r.isSuccess) {
                 runCatching { spotifyProvider.setRepeat("context") }
+                // Honour the persisted shuffle preference for the album launch
+                // (Spotify-Connect shuffle is server-side, set via Web API).
+                runCatching {
+                    spotifyProvider.setShuffle(settingsDataStore.shuffleEnabled.first())
+                }
                 spotifyProvider.startPlaybackPolling(expectPlayback = true, expectedTrack = contextUri)
                 recordCloudPlay(item)
                 _uiState.value = _uiState.value.copy(errorMessage = "Playing album: ${item.name}")

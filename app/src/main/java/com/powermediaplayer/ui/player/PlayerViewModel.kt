@@ -59,7 +59,17 @@ class PlayerViewModel @Inject constructor(
 
     fun toggleShuffle() {
         val next = !shuffleEnabled.value
+        // Local/Drive queue: ExoPlayer-level shuffle (no-op for the Spotify mirror).
         playbackConnection.setShuffleMode(next)
+        // Spotify-Connect playback runs on the Spotify device, so in-app shuffle
+        // must be pushed via the Web API — the local mirror's flag is inert there.
+        if (isSpotifyActive) {
+            viewModelScope.launch { spotifyProvider.setShuffle(next) }
+        }
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "VM.toggleShuffle -> $next src=${if (isSpotifyActive) "spotify" else "local"}"
+        )
         viewModelScope.launch { settingsDataStore.setShuffleEnabled(next) }
     }
 

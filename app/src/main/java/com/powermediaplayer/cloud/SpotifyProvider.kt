@@ -770,6 +770,32 @@ class SpotifyProvider @Inject constructor(
         }
     }
 
+    /** Toggle Connect shuffle on the active Spotify device. Best-effort —
+     *  in-app shuffle for a Spotify-Connect album/playlist MUST go through
+     *  this Web API call; setting the local mirror player's shuffleModeEnabled
+     *  has no effect because real playback runs on the Spotify device. */
+    suspend fun setShuffle(enabled: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Not authenticated")
+        )
+        val req = Request.Builder()
+            .url("https://api.spotify.com/v1/me/player/shuffle?state=$enabled")
+            .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        try {
+            http.newCall(req).execute().use { resp ->
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG", "Spotify.setShuffle($enabled) -> HTTP ${resp.code}"
+                )
+                if (resp.code in 200..299) Result.success(Unit)
+                else Result.failure(IllegalStateException("Spotify shuffle HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * Wake the Spotify app via its launch intent, then schedule our
      * own MainActivity to come back to the foreground a moment later.
