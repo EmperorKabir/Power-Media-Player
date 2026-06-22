@@ -260,42 +260,81 @@ class DriveOAuthProvider @Inject constructor(
             val picked = settingsDataStore.driveOauthPickedFolders.first()
             if (picked.isEmpty()) return@withContext Result.success(emptyList())
             try {
-                val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
-                // drive.file scope already restricts the API to picker-granted
-                // files (the app can't see the rest of your Drive), so a SINGLE
-                // global name-search returns matches across ALL granted folders
-                // AND their sub-folders. The old `'<root>' in parents` clause only
-                // matched DIRECT children, so nested files never showed up.
-                val q = "name contains '$escaped' and trashed = false " +
-                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
-                    "or mimeType = '$MIME_FOLDER')"
-                val url = "https://www.googleapis.com/drive/v3/files?" +
-                    "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
-                    "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
-                    "&pageSize=200"
-                val req = Request.Builder().url(url)
-                    .addHeader("Authorization", "Bearer $token").build()
+                // RECURSIVE enumeration. Under the drive.file scope a global
+                // `name contains` query does NOT surface a granted folder's
+                // descendants (only files the app explicitly opened) — but
+                // listing children via `'<id>' in parents` DOES (it's what
+                // browsing uses). So walk every picked folder's tree, matching
+                // names on audio/video files + sub-folders. Bounded so a huge
+                // tree can't hang the UI.
+                val needle = query.lowercase()
                 val out = mutableListOf<CloudMediaItem>()
-                http.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        return@withContext Result.failure(
-                            IllegalStateException("Drive search HTTP ${resp.code}")
-                        )
-                    }
-                    val body = resp.body?.string().orEmpty()
-                    val root2 = JsonParser.parseString(body).asJsonObject
-                    val arr = root2.getAsJsonArray("files") ?: return@withContext Result.success(out)
-                    for (el in arr) {
-                        if (!el.isJsonObject) continue
-                        toCloudItem(el.asJsonObject, parentId = null)?.let { out.add(it) }
-                        if (out.size >= 200) break
+                val queue = ArrayDeque(picked.map { it.id })
+                val seen = HashSet<String>()
+                var folderQueries = 0
+                val cap = 200
+                while (queue.isNotEmpty() && out.size < 200 && folderQueries < cap) {
+                    val folderId = queue.removeFirst()
+                    if (!seen.add(folderId)) continue
+                    folderQueries++
+                    val q = "'$folderId' in parents and trashed = false"
+                    val url = "https://www.googleapis.com/drive/v3/files?" +
+                        "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
+                        "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
+                        "&pageSize=200"
+                    val req = Request.Builder().url(url)
+                        .addHeader("Authorization", "Bearer $token").build()
+                    runCatching {
+                        http.newCall(req).execute().use { resp ->
+                            if (!resp.isSuccessful) return@use
+                            val body = resp.body?.string().orEmpty()
+                            val arr = JsonParser.parseString(body).asJsonObject
+                                .getAsJsonArray("files") ?: return@use
+                            for (el in arr) {
+                                if (!el.isJsonObject) continue
+                                val f = el.asJsonObject
+                                val id = f.get("id")?.asString ?: continue
+                                val mime = f.get("mimeType")?.asString.orEmpty()
+                                val name = f.get("name")?.asString.orEmpty()
+                                val matches = name.lowercase().contains(needle)
+                                if (mime == MIME_FOLDER) {
+                                    queue.add(id)                       // always recurse
+                                    if (matches) toCloudItem(f, folderId)?.let { out.add(it) }
+                                } else if (matches &&
+                                    (mime.contains("audio/") || mime.contains("video/"))
+                                ) {
+                                    toCloudItem(f, folderId)?.let { out.add(it) }
+                                }
+                            }
+                        }
                     }
                 }
-                Result.success(out)
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Drive OAuth search '$query' → ${out.size} (walked $folderQueries folders)"
+                )
+                Result.success(out.take(200))
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+
+    /** §C28 — fetch a Drive file's display name by id (for backfilling the
+     *  Downloads list of copies saved before names were tracked). Null on failure. */
+    suspend fun fetchFileName(fileId: String): String? = withContext(Dispatchers.IO) {
+        val token = fetchAccessTokenBlocking() ?: return@withContext null
+        val req = Request.Builder()
+            .url("https://www.googleapis.com/drive/v3/files/$fileId?fields=name")
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        runCatching {
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                JsonParser.parseString(resp.body?.string().orEmpty())
+                    .asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString
+            }
+        }.getOrNull()
+    }
 
     override suspend fun getMediaStreamUri(item: CloudMediaItem): Result<Uri> =
         Result.success(Uri.parse(item.downloadUrl))

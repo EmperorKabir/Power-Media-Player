@@ -31,6 +31,10 @@ interface OfflineCopyDao {
     @Query("UPDATE offline_copy SET isStarred = :starred WHERE driveFileId = :id")
     suspend fun setStarred(id: String, starred: Boolean)
 
+    /** §C28 — backfill the friendly Drive name for copies saved before v18. */
+    @Query("UPDATE offline_copy SET displayName = :name WHERE driveFileId = :id")
+    suspend fun setDisplayName(id: String, name: String)
+
     @Query("DELETE FROM offline_copy WHERE driveFileId = :id")
     suspend fun delete(id: String)
 }

@@ -167,6 +167,28 @@ class CloudViewModel @Inject constructor(
         targets.forEach { saveDriveOffline(it) }
     }
 
+    /** §C28 — copies saved before v18 have a blank displayName → the Downloads
+     *  list shows the opaque cache filename. Look up the real Drive name once
+     *  (OAuth REST or SAF DocumentFile) and store it. */
+    private fun backfillOfflineNames() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val rows = runCatching { offlineCopyDao.observeAll().first() }.getOrNull() ?: return@launch
+            rows.filter { it.displayName.isBlank() }.forEach { row ->
+                val name = if (row.driveFileId.startsWith("content://")) {
+                    runCatching {
+                        androidx.documentfile.provider.DocumentFile
+                            .fromSingleUri(context, android.net.Uri.parse(row.driveFileId))?.name
+                    }.getOrNull()
+                } else {
+                    driveOAuthProvider.fetchFileName(row.driveFileId)
+                }
+                if (!name.isNullOrBlank()) {
+                    runCatching { offlineCopyDao.setDisplayName(row.driveFileId, name) }
+                }
+            }
+        }
+    }
+
     fun removeDriveOffline(driveId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val path = offlineDrivePairs.value[driveId]
@@ -418,6 +440,7 @@ class CloudViewModel @Inject constructor(
                 _uiState.update { it.copy(spotifyFavPodcasts = favs) }
             }
         }
+        backfillOfflineNames()
         // Spotify mirror auto-record: when the polled spotifyState
         // reveals a track that wasn't initiated from our app (e.g. user
         // started playback on a desktop / Google Home and we picked up
