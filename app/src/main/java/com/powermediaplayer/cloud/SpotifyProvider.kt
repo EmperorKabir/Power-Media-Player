@@ -801,6 +801,49 @@ class SpotifyProvider @Inject constructor(
     }
 
     /**
+     * Re-assert the current album/playlist context so a just-changed shuffle
+     * state actually reshuffles the UPCOMING queue. Spotify builds the queue at
+     * play time and does NOT reliably reshuffle an already-built queue when
+     * shuffle is toggled mid-context (the docs warn the order of execution with
+     * other Player endpoints is not guaranteed). Re-playing the context with the
+     * current track as the offset + position keeps the listener exactly in place
+     * while Spotify rebuilds the order. No-op when there is no album/playlist
+     * context (a single-track play has nothing to shuffle).
+     */
+    suspend fun reshuffleCurrentContext(): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Not authenticated")
+        )
+        val st = _spotifyState.value ?: return@withContext Result.success(Unit)
+        val ctx = st.contextUri
+        if (ctx == null || !(ctx.startsWith("spotify:album:") || ctx.startsWith("spotify:playlist:"))) {
+            return@withContext Result.success(Unit)
+        }
+        val offsetJson = if (st.trackUri.startsWith("spotify:track:"))
+            ",\"offset\":{\"uri\":\"${st.trackUri}\"}" else ""
+        val bodyJson =
+            "{\"context_uri\":\"$ctx\"$offsetJson,\"position_ms\":${st.positionMs.coerceAtLeast(0L)}}"
+        val body = okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), bodyJson)
+        val req = Request.Builder()
+            .url("https://api.spotify.com/v1/me/player/play")
+            .put(body)
+            .addHeader("Authorization", "Bearer $token")
+            .addHeader("Content-Type", "application/json")
+            .build()
+        try {
+            http.newCall(req).execute().use { resp ->
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG", "Spotify.reshuffleCurrentContext ctx=$ctx -> HTTP ${resp.code}"
+                )
+                if (resp.code in 200..299) Result.success(Unit)
+                else Result.failure(IllegalStateException("Spotify reshuffle HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Wake the Spotify app via its launch intent, then schedule our
      * own MainActivity to come back to the foreground a moment later.
      * The user briefly sees Spotify's splash, then is dropped back
