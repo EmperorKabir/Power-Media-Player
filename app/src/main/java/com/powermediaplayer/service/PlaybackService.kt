@@ -2012,6 +2012,13 @@ class PlaybackService : MediaSessionService() {
         // Bluetooth is LOCAL audio (it IS the focus stream) and is never skipped —
         // it follows the per-scenario pause/duck/continue policy below.
         if (Companion.castActiveFlow.value && !pauseCastOnInterruption) {
+            // Output is the cast device now, so any residual LOCAL transient-focus
+            // state is meaningless — DRAIN it before skipping. Otherwise a duck/pause
+            // that began before the cast (whose recovering GAIN we skip here) would
+            // strand focusDuckFactor at 0.3 (30% local volume after stop-cast) or
+            // leave pausedDueToFocus=true (ghost focus owner that never abandons).
+            if (duckedDueToFocus) { Companion.setFocusDuck(false); duckedDueToFocus = false }
+            pausedDueToFocus = false
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG", "AudioFocus change=$change ignored — casting (remote output)"
             )
