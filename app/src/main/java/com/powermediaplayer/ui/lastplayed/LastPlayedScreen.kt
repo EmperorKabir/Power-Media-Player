@@ -67,7 +67,7 @@ fun LastPlayedScreen(
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsStateWithLifecycle()
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
-    val downloadedPodcastUrls by viewModel.downloadedPodcastUrls.collectAsStateWithLifecycle()
+    val offlineKeys by viewModel.offlineKeys.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // Surface VM-side play-failure messages (e.g. Spotify Connect has no
@@ -235,7 +235,7 @@ fun LastPlayedScreen(
                         )
                         ReorderablePinnedList(
                             items = pinned,
-                            offlineUrls = downloadedPodcastUrls,
+                            offlineUrls = offlineKeys,
                             onMove = { from, to ->
                                 val movedFavId = pinned[from].id
                                 viewModel.reorderPinned(movedFavId, to)
@@ -287,7 +287,7 @@ fun LastPlayedScreen(
                         HistoryRowWithBookmarks(
                             item = item,
                             bookmarkCap = RECENT_BOOKMARK_CAP,
-                            isOffline = downloadedPodcastUrls.contains(item.mediaUri),
+                            isOffline = offlineKeys.contains(item.mediaUri),
                             bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
                             onTap = {
                                 viewModel.playLocalAt(item)

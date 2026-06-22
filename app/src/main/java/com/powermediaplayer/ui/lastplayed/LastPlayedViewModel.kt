@@ -39,18 +39,32 @@ class LastPlayedViewModel @Inject constructor(
     private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver,
     private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     @param:dagger.hilt.android.qualifiers.ApplicationContext
     private val context: android.content.Context
 ) : ViewModel() {
 
     /**
-     * §C10 — stream urls of downloaded podcast episodes, so a Recents/Pinned row
-     * can show an "Offline" badge. Keyed by audioUrl = the row's mediaUri.
+     * §C10/§C28 — every "offline" KEY a Last Played row's mediaUri might equal:
+     * downloaded-podcast audioUrls + Drive offline ids (the SAF content uri AS-IS,
+     * plus the OAuth `files/{id}?alt=media` url that recordCloudPlay stores as the
+     * mediaUri). A row shows an "Offline" badge when its mediaUri is in this set.
      */
-    val downloadedPodcastUrls: StateFlow<Set<String>> =
-        podcastDao.observeDownloaded()
-            .map { list -> list.mapTo(HashSet()) { it.audioUrl } }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+    val offlineKeys: StateFlow<Set<String>> =
+        kotlinx.coroutines.flow.combine(
+            podcastDao.observeDownloaded(),
+            offlineCopyDao.observeAll()
+        ) { pods, drives ->
+            val s = HashSet<String>()
+            pods.forEach { s.add(it.audioUrl) }
+            drives.forEach { d ->
+                s.add(d.driveFileId)
+                if (!d.driveFileId.startsWith("content://")) {
+                    s.add("https://www.googleapis.com/drive/v3/files/${d.driveFileId}?alt=media")
+                }
+            }
+            s
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     /**
      * Transient user-visible messages emitted by failure paths in this

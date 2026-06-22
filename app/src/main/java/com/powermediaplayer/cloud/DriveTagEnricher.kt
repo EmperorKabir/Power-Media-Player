@@ -34,7 +34,8 @@ class DriveTagEnricher @Inject constructor(
     private val driveProvider: GoogleDriveProvider,
     private val driveOAuthProvider: DriveOAuthProvider,
     private val playbackConnection: PlaybackConnection,
-    private val lastPlayedRepo: LastPlayedRepository
+    private val lastPlayedRepo: LastPlayedRepository,
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao
 ) {
     /** Tags already extracted this process, keyed by Drive file id — a re-open
      *  (cast-return, re-tap) restores them instantly with no re-download. */
@@ -60,12 +61,26 @@ class DriveTagEnricher @Inject constructor(
                 playbackConnection.setCloudFetchInProgress(true)
                 val isSaf = item.id.startsWith("content://")
                 var found = false
-                var temp = try {
+                // §C28 — REUSE an existing offline copy first: no re-download, works
+                // with no network, and avoids a second copy of a file already saved.
+                val offlinePath = runCatching { offlineCopyDao.get(item.id)?.localPath }.getOrNull()
+                if (!offlinePath.isNullOrBlank()) {
+                    val offUri = android.net.Uri.parse(offlinePath)
+                    val readable = runCatching {
+                        when (offUri.scheme) {
+                            "content" ->
+                                context.contentResolver.openFileDescriptor(offUri, "r")?.use { true } ?: false
+                            else -> java.io.File(offUri.path ?: offlinePath).exists()
+                        }
+                    }.getOrDefault(false)
+                    if (readable) found = parseAndApply(item, offUri, stableKey)
+                }
+                var temp = if (found) null else try {
                     if (isSaf) driveProvider.downloadToCache(item)
                     else driveOAuthProvider.downloadToCache(item)
                 } catch (_: Throwable) { null }
                 if (temp != null) {
-                    found = parseAndApply(item, temp, stableKey)
+                    found = parseAndApply(item, android.net.Uri.fromFile(temp), stableKey)
                     runCatching { temp.delete() }
                 }
                 if (!found) {
@@ -74,7 +89,7 @@ class DriveTagEnricher @Inject constructor(
                         else driveOAuthProvider.downloadFullToCache(item)
                     } catch (_: Throwable) { null }
                     if (temp != null) {
-                        parseAndApply(item, temp, stableKey)
+                        parseAndApply(item, android.net.Uri.fromFile(temp), stableKey)
                         runCatching { temp.delete() }
                     }
                 }
@@ -88,14 +103,13 @@ class DriveTagEnricher @Inject constructor(
 
     private suspend fun parseAndApply(
         item: CloudMediaItem,
-        tempFile: java.io.File,
+        tempUri: android.net.Uri,
         stableKey: String
     ): Boolean {
         var found = false
-        val tempUri = android.net.Uri.fromFile(tempFile)
         com.powermediaplayer.util.Diag.i(
             "PowerMediaPlayer",
-            "DriveTagEnricher: file=${tempFile.absolutePath} bytes=${tempFile.length()}"
+            "DriveTagEnricher: uri=$tempUri"
         )
         runCatching {
             android.media.MediaMetadataRetriever().use { mmr ->

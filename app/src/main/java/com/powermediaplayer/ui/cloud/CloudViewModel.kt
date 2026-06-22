@@ -150,6 +150,21 @@ class CloudViewModel @Inject constructor(
         }
     }
 
+    /** §C28 — download every not-yet-offline audio file in the current Drive
+     *  folder. Each runs through saveDriveOffline (own spinner + LRU + status). */
+    fun saveFolderOffline(items: List<CloudMediaItem>) {
+        val targets = items.filter {
+            !it.isFolder && it.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
+                it.mimeType.startsWith("audio/") && !hasOfflineCopy(it.id)
+        }
+        if (targets.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "Nothing to download (already offline or no audio).") }
+            return
+        }
+        _uiState.update { it.copy(errorMessage = "Downloading ${targets.size} file(s) offline…") }
+        targets.forEach { saveDriveOffline(it) }
+    }
+
     fun removeDriveOffline(driveId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val path = offlineDrivePairs.value[driveId]

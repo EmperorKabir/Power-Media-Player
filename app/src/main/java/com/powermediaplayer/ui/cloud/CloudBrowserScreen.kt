@@ -727,7 +727,12 @@ fun CloudBrowserScreen(
                                 name = fav.name,
                                 mimeType = "",
                                 size = 0L,
-                                downloadUrl = "",
+                                // The download providers fetch from downloadUrl (SAF
+                                // = the content uri; OAuth = the files/{id}?alt=media
+                                // endpoint) — an empty url would fail. Reconstruct it
+                                // the same way the providers' toCloudItem does.
+                                downloadUrl = if (fav.id.startsWith("content://")) fav.id
+                                    else "https://www.googleapis.com/drive/v3/files/${fav.id}?alt=media",
                                 sourceProvider = CloudProviderType.GOOGLE_DRIVE,
                                 isFolder = false
                             )
@@ -856,6 +861,38 @@ fun CloudBrowserScreen(
                                         )
                                         Text(
                                             "$audioCount tracks → Last Played → Pinned",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        item(key = "download_folder", span = { GridItemSpan(maxLineSpan) }) {
+                            Surface(
+                                color = SurfaceElevated,
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.saveFolderOffline(uiState.items) }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Download, contentDescription = null,
+                                        tint = TealAccent, modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Download all in this folder",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = TealAccent
+                                        )
+                                        Text(
+                                            "$audioCount audio file(s) → offline",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = TextSecondary
                                         )
