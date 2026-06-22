@@ -49,6 +49,11 @@ data class CloudUiState(
     val searchQuery: String = "",
     val searchResults: List<CloudMediaItem> = emptyList(),
     val searchInProgress: Boolean = false,
+    // Snapshot of the search the user drilled into an album/series FROM, so
+    // pressing back restores the search results instead of dropping to the
+    // section listing. Blank when the current view wasn't reached via search.
+    val priorSearchQuery: String = "",
+    val priorSearchResults: List<CloudMediaItem> = emptyList(),
     val spotifySection: com.powermediaplayer.cloud.SpotifySection? = null,
     /**
      * Snapshot of source-picker roots (Drive, OneDrive, internal
@@ -1029,6 +1034,22 @@ class CloudViewModel @Inject constructor(
 
     fun navigateUp() {
         val stack = _uiState.value.folderStack
+        // Backing out of an album/series that was drilled into FROM a search →
+        // restore those search results (the user expects "back" to return one
+        // search level, not drop to the section listing).
+        if (_uiState.value.priorSearchQuery.isNotBlank() &&
+            _uiState.value.activeProvider == CloudProviderType.SPOTIFY && stack.size >= 2
+        ) {
+            _uiState.value = _uiState.value.copy(
+                folderStack = stack.dropLast(1),
+                items = emptyList(),
+                searchQuery = _uiState.value.priorSearchQuery,
+                searchResults = _uiState.value.priorSearchResults,
+                priorSearchQuery = "",
+                priorSearchResults = emptyList()
+            )
+            return
+        }
         // Spotify drill-down (album/playlist/show contents) → pop the
         // top folder and re-load the section listing.
         if (_uiState.value.activeProvider == CloudProviderType.SPOTIFY &&
@@ -1150,6 +1171,13 @@ class CloudViewModel @Inject constructor(
                     // search-results branch keeps rendering and the album's
                     // tracks (now in `items`) never show.
                     searchJob?.cancel()
+                    // Remember the search we're leaving so back-navigation can
+                    // restore it (only capture when we actually came from a search
+                    // — don't overwrite an earlier snapshot on a deeper drill-in).
+                    val curQuery = _uiState.value.searchQuery
+                    val curResults = _uiState.value.searchResults
+                    val keepPriorQuery = if (curQuery.isNotBlank()) curQuery else _uiState.value.priorSearchQuery
+                    val keepPriorResults = if (curQuery.isNotBlank()) curResults else _uiState.value.priorSearchResults
                     viewModelScope.launch(Dispatchers.IO) {
                         _uiState.value = _uiState.value.copy(
                             isLoading = true,
@@ -1164,6 +1192,8 @@ class CloudViewModel @Inject constructor(
                             items = list,
                             searchQuery = "",
                             searchResults = emptyList(),
+                            priorSearchQuery = keepPriorQuery,
+                            priorSearchResults = keepPriorResults,
                             folderStack = _uiState.value.folderStack + (containerUri to item.name),
                             errorMessage = r.exceptionOrNull()?.message
                         )
@@ -1510,7 +1540,10 @@ class CloudViewModel @Inject constructor(
     fun setSearchQuery(query: String) {
         _uiState.value = _uiState.value.copy(
             searchQuery = query,
-            searchInProgress = query.isNotBlank()
+            searchInProgress = query.isNotBlank(),
+            // A fresh search supersedes any saved drill-in snapshot.
+            priorSearchQuery = if (query.isNotBlank()) "" else _uiState.value.priorSearchQuery,
+            priorSearchResults = if (query.isNotBlank()) emptyList() else _uiState.value.priorSearchResults
         )
         searchJob?.cancel()
         searchJob = viewModelScope.launch {

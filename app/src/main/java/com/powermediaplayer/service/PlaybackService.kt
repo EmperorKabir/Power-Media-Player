@@ -1257,6 +1257,20 @@ class PlaybackService : MediaSessionService() {
                 com.powermediaplayer.diag.DiagLog.player(
                     "mediaItemTransition reason=$rname id=${com.powermediaplayer.diag.DiagLog.hash(mediaItem?.mediaId)}"
                 )
+                // Always-on (logcat) shuffle trace: on every track change show
+                // whether shuffle is live on THIS player + the queue size + the
+                // index ExoPlayer picked. Sequential `next` while shuffle=true on
+                // a multi-item queue = the smoking gun. shuffle=false here while
+                // the user toggled it on = the toggle isn't reaching this player.
+                player?.let { pl ->
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "SHUF transition reason=$rname shuffle=${pl.shuffleModeEnabled} " +
+                            "count=${pl.mediaItemCount} cur=${pl.currentMediaItemIndex} " +
+                            "next=${pl.nextMediaItemIndex} prev=${pl.previousMediaItemIndex} " +
+                            "player=${pl.javaClass.simpleName}"
+                    )
+                }
                 // Webhooks: new track started. PLAYLIST_CHANGED fires on
                 // both fresh tap-to-play AND on cold-start adopt. AUTO
                 // fires on advance to next item in queue. Both count as

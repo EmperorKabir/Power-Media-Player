@@ -837,6 +837,62 @@ fun CloudBrowserScreen(
                             }
                         }
                     }
+                    // "Play album / playlist / series" — visible when the user
+                    // has drilled INTO a Spotify album/playlist/show (so its
+                    // tracks/episodes are listed). Plays the whole container on
+                    // the Connect device + loops it (repeat=context). The ▶ on
+                    // the list ROW only appears one level up, in search/section.
+                    val spotifyContainerUri = uiState.folderStack.lastOrNull()?.first
+                    val insideSpotifyContainer = uiState.activeProvider == CloudProviderType.SPOTIFY &&
+                        uiState.folderStack.size > 1 &&
+                        spotifyContainerUri?.startsWith("spotify:") == true
+                    if (insideSpotifyContainer && spotifyContainerUri != null) {
+                        item(key = "play_spotify_container", span = { GridItemSpan(maxLineSpan) }) {
+                            val type = spotifyContainerUri.split(":").getOrNull(1) ?: "album"
+                            val playLabel = when (type) {
+                                "show" -> "Play series"
+                                "playlist" -> "Play playlist"
+                                else -> "Play album"
+                            }
+                            val containerName = uiState.folderStack.lastOrNull()?.second ?: "this"
+                            Surface(
+                                color = SurfaceElevated,
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.playSpotifyAlbum(
+                                            com.powermediaplayer.cloud.CloudMediaItem(
+                                                id = spotifyContainerUri.substringAfterLast(':'),
+                                                name = containerName,
+                                                mimeType = "application/spotify-$type",
+                                                size = 0L,
+                                                downloadUrl = spotifyContainerUri,
+                                                sourceProvider = CloudProviderType.SPOTIFY,
+                                                isFolder = true
+                                            ),
+                                            onPlaybackStarted = onNavigateToPlayer
+                                        )
+                                    }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.PlayArrow, contentDescription = null,
+                                        tint = TealAccent, modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        playLabel,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = TealAccent
+                                    )
+                                }
+                            }
+                        }
+                    }
                     // "Pin this folder as album" — visible when the user is
                     // inside a Drive folder (not at root) and the folder
                     // contains at least one audio file. The Library tab
