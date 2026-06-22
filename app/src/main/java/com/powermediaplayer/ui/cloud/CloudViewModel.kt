@@ -1379,6 +1379,7 @@ class CloudViewModel @Inject constructor(
                     "openItem: '${item.name}' already loaded → HOLD (no rebuild; " +
                         "tags ${if (cached != null) "from cache" else "enriching"})"
                 )
+                maybePrefetchNextCloud(item)
                 return true
             }
             // mediaId MUST be the URI string and requestMetadata MUST carry
@@ -1465,10 +1466,38 @@ class CloudViewModel @Inject constructor(
                 cachedEnriched == null) {
                 driveTagEnricher.enrich(viewModelScope, item, stableKey)
             }
+            maybePrefetchNextCloud(item)
         }
         // Reaching here means setMediaItems was called — playback has been
         // handed to the service and (network permitting) will start.
         return true
+    }
+
+    /**
+     * §T339 — make the "prefetch next cloud track" setting real (it was a dead
+     * toggle). Drive plays one track at a time, so there is no in-player queue to
+     * look ahead in — instead we pre-warm the embedded tags of the NEXT audio
+     * track in the browsed folder. When the user taps it next, openItem finds the
+     * tags already in [DriveTagEnricher.cache] and shows title/art/chapters with
+     * no download wait. Silent: never flashes the current track's loading spinner.
+     * Gated by the prefetchNextCloud preference (default on).
+     */
+    private fun maybePrefetchNextCloud(current: CloudMediaItem) {
+        if (current.sourceProvider != CloudProviderType.GOOGLE_DRIVE || current.isFolder) return
+        viewModelScope.launch {
+            if (!settingsDataStore.prefetchNextCloud.first()) return@launch
+            val items = _uiState.value.items
+            val idx = items.indexOfFirst { it.id == current.id }
+            if (idx < 0) return@launch
+            val next = items.drop(idx + 1).firstOrNull {
+                !it.isFolder && it.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
+                    it.mimeType.startsWith("audio/") &&
+                    driveTagEnricher.cached(it.id) == null
+            } ?: return@launch
+            val nextKey = next.downloadUrl.ifEmpty { next.id }
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "prefetch next cloud tags: ${next.name}")
+            driveTagEnricher.enrich(viewModelScope, next, nextKey, silent = true)
+        }
     }
 
     private var searchJob: kotlinx.coroutines.Job? = null

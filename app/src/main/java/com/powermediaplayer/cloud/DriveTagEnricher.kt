@@ -48,7 +48,18 @@ class DriveTagEnricher @Inject constructor(
      *        .downloadUrl): the key cold-start's `cachedOnly` and the history
      *        row are looked up by, so persistence lands where resume reads it.
      */
-    fun enrich(scope: CoroutineScope, item: CloudMediaItem, stableKey: String) {
+    /**
+     * @param silent when true (a look-ahead prefetch of a NOT-yet-playing track)
+     *        the global "cloud fetch in progress" spinner is left alone — the
+     *        current track is already loaded, so a background prefetch must not
+     *        flash a loading state. Tags still land in [cache] for an instant tap.
+     */
+    fun enrich(
+        scope: CoroutineScope,
+        item: CloudMediaItem,
+        stableKey: String,
+        silent: Boolean = false
+    ) {
         scope.launch(Dispatchers.IO) {
             // Dedup: if the same file is already being enriched (e.g. tapped from
             // the Cloud tab AND Last Played near-simultaneously), don't start a
@@ -58,7 +69,7 @@ class DriveTagEnricher @Inject constructor(
             // unmarkFilling is unreachable only if markFilling itself threw —
             // i.e. the fill flag can never get permanently stuck for the process.
             try {
-                playbackConnection.setCloudFetchInProgress(true)
+                if (!silent) playbackConnection.setCloudFetchInProgress(true)
                 val isSaf = item.id.startsWith("content://")
                 var found = false
                 // §C28 — REUSE an existing offline copy first: no re-download, works
@@ -95,7 +106,7 @@ class DriveTagEnricher @Inject constructor(
                 }
             } finally {
                 // finally so a cancel mid-download doesn't stick the spinner.
-                playbackConnection.setCloudFetchInProgress(false)
+                if (!silent) playbackConnection.setCloudFetchInProgress(false)
                 ChapterCache.shared.unmarkFilling(stableKey)
             }
         }
