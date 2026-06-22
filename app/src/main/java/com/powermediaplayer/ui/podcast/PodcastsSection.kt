@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -95,6 +97,7 @@ class PodcastsViewModel @Inject constructor(
     val downloading: StateFlow<Set<String>> = _downloading
     private fun markDownloading(guid: String, on: Boolean) {
         _downloading.value = if (on) _downloading.value + guid else _downloading.value - guid
+        if (!on) com.powermediaplayer.util.DownloadProgressBus.clear(guid)
     }
 
     val shows: StateFlow<List<PodcastShowEntity>> =
@@ -730,13 +733,12 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
         val isDownloaded = !e.localPath.isNullOrBlank()
         var confirmDelete by remember(e.guid) { mutableStateOf(false) }
         Spacer(Modifier.width(4.dp))
-        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.heightIn(min = 40.dp).widthIn(min = 40.dp),
+            contentAlignment = Alignment.Center
+        ) {
             when {
-                isDownloading -> CircularProgressIndicator(
-                    color = TealAccent,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(20.dp)
-                )
+                isDownloading -> com.powermediaplayer.ui.components.DownloadProgressMini(e.guid)
                 // Downloaded → a clear DELETE affordance (a tick read as a passive
                 // status, not something you could remove). Teal = it IS downloaded.
                 isDownloaded -> IconButton(onClick = { confirmDelete = true }) {

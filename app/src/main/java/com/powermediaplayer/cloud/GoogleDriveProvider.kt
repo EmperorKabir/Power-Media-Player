@@ -387,7 +387,8 @@ class GoogleDriveProvider @Inject constructor(
         item: CloudMediaItem,
         rangeStart: Long?,
         rangeEnd: Long?,
-        suffix: String = "tmp"
+        suffix: String = "tmp",
+        progressId: String? = null
     ): java.io.File? = withContext(Dispatchers.IO) {
         val tag = "PowerMediaPlayer"
         val sourceUri = runCatching { Uri.parse(item.downloadUrl) }.getOrNull()
@@ -410,9 +411,11 @@ class GoogleDriveProvider @Inject constructor(
                     channel.position(start.coerceAtLeast(0L))
                     val maxBytes = if (end == Long.MAX_VALUE) Long.MAX_VALUE
                     else (end - start + 1).coerceAtLeast(0L)
+                    val progTotal = if (item.size > 0L) item.size else maxBytes
                     cacheFile.outputStream().use { out ->
                         val buf = ByteArray(64 * 1024)
                         var written = 0L
+                        var lastReport = -1L
                         while (true) {
                             val toRead = if (maxBytes == Long.MAX_VALUE) buf.size
                             else minOf(buf.size.toLong(), maxBytes - written).toInt()
@@ -421,6 +424,13 @@ class GoogleDriveProvider @Inject constructor(
                             if (n < 0) break
                             out.write(buf, 0, n)
                             written += n
+                            if (progressId != null && (lastReport < 0 || written - lastReport >= 256L * 1024)) {
+                                com.powermediaplayer.util.DownloadProgressBus.update(progressId, written, progTotal)
+                                lastReport = written
+                            }
+                        }
+                        if (progressId != null) {
+                            com.powermediaplayer.util.DownloadProgressBus.update(progressId, written, progTotal)
                         }
                         com.powermediaplayer.util.Diag.i(tag, "Drive cache wrote $written bytes to ${cacheFile.name}")
                     }
@@ -458,7 +468,7 @@ class GoogleDriveProvider @Inject constructor(
      * is willing to stream; on Drive's Android client this is bounded
      * by available storage rather than a fixed size.
      */
-    suspend fun downloadFullToCache(item: CloudMediaItem): java.io.File? {
+    suspend fun downloadFullToCache(item: CloudMediaItem, progressId: String? = null): java.io.File? {
         val cap = 4L * 1024 * 1024 * 1024
         if (item.size in 1L..Long.MAX_VALUE && item.size > cap) {
             com.powermediaplayer.util.Diag.w(
@@ -467,7 +477,7 @@ class GoogleDriveProvider @Inject constructor(
             )
             return null
         }
-        return downloadRangeToCache(item, 0L, null, "full")
+        return downloadRangeToCache(item, 0L, null, "full", progressId)
     }
 
     // ── Helpers ─────────────────────────────────────────────────

@@ -1536,11 +1536,7 @@ private fun CloudItemRow(
         // the long-press menu — undiscoverable). Mirrors the podcast row.
         if (canManageOffline) {
             when {
-                isSavingOffline -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(
-                        color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)
-                    )
-                }
+                isSavingOffline -> com.powermediaplayer.ui.components.DownloadProgressMini(item.id)
                 isOffline -> IconButton(onClick = onRemoveOffline, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Filled.DeleteOutline,
@@ -1672,11 +1668,7 @@ private fun FavouriteTrackRow(
         )
         // Visible download / remove-offline (favourite Drive tracks had none).
         when {
-            isSaving -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)
-                )
-            }
+            isSaving -> com.powermediaplayer.ui.components.DownloadProgressMini(fav.id)
             isOffline -> IconButton(onClick = onRemoveOffline, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove offline copy",
                     tint = TealAccent, modifier = Modifier.size(20.dp))

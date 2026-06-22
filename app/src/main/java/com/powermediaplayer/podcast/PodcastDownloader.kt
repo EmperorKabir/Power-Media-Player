@@ -67,9 +67,9 @@ class PodcastDownloader(
             ?.let { runCatching { Uri.parse(it) }.getOrNull() }
 
         return if (treeUri != null && SafStorage.hasWriteAccess(context, treeUri)) {
-            downloadToTree(show, treeUri, fileName, mimeFor(ext), req)
+            downloadToTree(show, treeUri, fileName, mimeFor(ext), req, episode.guid)
         } else {
-            downloadToAppDir(show, fileName, req)
+            downloadToAppDir(show, fileName, req, episode.guid)
         }
     }
 
@@ -78,7 +78,8 @@ class PodcastDownloader(
         treeUri: Uri,
         fileName: String,
         mime: String,
-        req: Request
+        req: Request,
+        id: String
     ): Saved? {
         val showSlug = slug(show.title.ifBlank { show.feedUrl })
         val dir = SafStorage.resolveDir(context, treeUri, "PowerMediaPlayer", "podcasts", showSlug)
@@ -87,8 +88,11 @@ class PodcastDownloader(
         val bytes = runCatching {
             httpClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@runCatching 0L
-                resp.body?.byteStream()?.use { input ->
-                    SafStorage.writeStream(context, child.uri, input)
+                val total = resp.body?.contentLength() ?: -1L
+                resp.body?.byteStream()?.let { raw ->
+                    com.powermediaplayer.util.ProgressInputStream(raw, id, total).use { input ->
+                        SafStorage.writeStream(context, child.uri, input)
+                    }
                 } ?: 0L
             }
         }.getOrDefault(0L)
@@ -102,7 +106,8 @@ class PodcastDownloader(
     private fun downloadToAppDir(
         show: PodcastShowEntity,
         fileName: String,
-        req: Request
+        req: Request,
+        id: String
     ): Saved? {
         val base = context.getExternalFilesDir(null) ?: context.filesDir
         val showSlug = slug(show.title.ifBlank { show.feedUrl })
@@ -111,8 +116,11 @@ class PodcastDownloader(
         val bytes = runCatching {
             httpClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@runCatching 0L
-                resp.body?.byteStream()?.use { input ->
-                    target.outputStream().use { input.copyTo(it) }
+                val total = resp.body?.contentLength() ?: -1L
+                resp.body?.byteStream()?.let { raw ->
+                    com.powermediaplayer.util.ProgressInputStream(raw, id, total).use { input ->
+                        target.outputStream().use { input.copyTo(it) }
+                    }
                 } ?: 0L
             }
         }.getOrDefault(0L)

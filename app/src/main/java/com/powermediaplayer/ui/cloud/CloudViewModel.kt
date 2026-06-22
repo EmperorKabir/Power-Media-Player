@@ -116,8 +116,8 @@ class CloudViewModel @Inject constructor(
           try {
             val file: java.io.File? = runCatching {
                 if (item.id.startsWith("content://"))
-                    driveProvider.downloadFullToCache(item)
-                else driveOAuthProvider.downloadFullToCache(item)
+                    driveProvider.downloadFullToCache(item, progressId = item.id)
+                else driveOAuthProvider.downloadFullToCache(item, progressId = item.id)
             }.getOrNull()
             if (file != null && file.exists()) {
                 // §C28/Part 4.3 — relocate into the user's single global Drive
@@ -147,6 +147,7 @@ class CloudViewModel @Inject constructor(
             }
           } finally {
             _savingOffline.update { it - item.id }
+            com.powermediaplayer.util.DownloadProgressBus.clear(item.id)
           }
         }
     }

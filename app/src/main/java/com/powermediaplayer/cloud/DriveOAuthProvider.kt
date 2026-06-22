@@ -330,7 +330,8 @@ class DriveOAuthProvider @Inject constructor(
         item: CloudMediaItem,
         rangeStart: Long?,
         rangeEnd: Long?,
-        suffix: String = "tmp"
+        suffix: String = "tmp",
+        progressId: String? = null
     ): java.io.File? = withContext(Dispatchers.IO) {
         val tag = "PowerMediaPlayer"
         val token = fetchAccessTokenBlocking() ?: run {
@@ -354,7 +355,10 @@ class DriveOAuthProvider @Inject constructor(
                     com.powermediaplayer.util.Diag.e(tag, "Drive download failed: HTTP ${resp.code}")
                     return@withContext null
                 }
-                resp.body?.byteStream()?.use { input ->
+                val total = resp.body?.contentLength()?.takeIf { it > 0 } ?: item.size
+                resp.body?.byteStream()?.use { raw ->
+                    val input = if (progressId != null)
+                        com.powermediaplayer.util.ProgressInputStream(raw, progressId, total) else raw
                     cacheFile.outputStream().use { out -> input.copyTo(out, 64 * 1024) }
                 }
             }
@@ -379,10 +383,10 @@ class DriveOAuthProvider @Inject constructor(
         }
     }
 
-    suspend fun downloadFullToCache(item: CloudMediaItem): java.io.File? {
+    suspend fun downloadFullToCache(item: CloudMediaItem, progressId: String? = null): java.io.File? {
         val cap = 4L * 1024 * 1024 * 1024
         if (item.size > cap) return null
-        return downloadRangeToCache(item, 0L, null, "full")
+        return downloadRangeToCache(item, 0L, null, "full", progressId)
     }
 
     private fun toCloudItem(f: JsonObject, parentId: String?): CloudMediaItem? {
