@@ -85,6 +85,54 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    // ── Spotify album/playlist track list (the chapters-equivalent for a
+    //    Connect album, which otherwise mirrors only the current track) ───────
+    private val _spotifyContextTracks =
+        MutableStateFlow<List<com.powermediaplayer.cloud.CloudMediaItem>>(emptyList())
+    /** Tracks of the album/playlist the playing Spotify track belongs to. Empty
+     *  for a single-track play or non-Spotify playback. */
+    val spotifyContextTracks: StateFlow<List<com.powermediaplayer.cloud.CloudMediaItem>> =
+        _spotifyContextTracks
+    private var lastContextFetched: String? = null
+
+    /** URI of the currently-playing Spotify track — highlights it in the list. */
+    val spotifyTrackUri: StateFlow<String?> =
+        spotifyProvider.spotifyState
+            .map { it?.trackUri }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    init {
+        // Fetch the album/playlist track list whenever the Connect context
+        // changes to a browsable album/playlist (skip single-track / podcast).
+        viewModelScope.launch {
+            spotifyProvider.spotifyState
+                .map { it?.contextUri }
+                .distinctUntilChanged()
+                .collect { ctx ->
+                    val browsable = ctx != null &&
+                        (ctx.startsWith("spotify:album:") || ctx.startsWith("spotify:playlist:"))
+                    if (!browsable) {
+                        _spotifyContextTracks.value = emptyList()
+                        lastContextFetched = null
+                    } else if (ctx != lastContextFetched) {
+                        lastContextFetched = ctx
+                        _spotifyContextTracks.value =
+                            spotifyProvider.listContainer(ctx!!).getOrDefault(emptyList())
+                    }
+                }
+        }
+    }
+
+    /** Play a track picked from the album/playlist list, KEEPING the album
+     *  context so next/previous + shuffle keep traversing the rest of the album. */
+    fun playSpotifyContextTrack(item: com.powermediaplayer.cloud.CloudMediaItem) {
+        val uri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
+            else "spotify:track:${item.id}"
+        viewModelScope.launch {
+            spotifyProvider.playTrackOnConnectDevice(uri, item.contextUri ?: lastContextFetched)
+        }
+    }
+
     private val musicBrainzClient =
         com.powermediaplayer.enrichment.MusicBrainzClient()
     private val discogsClient =

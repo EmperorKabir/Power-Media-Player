@@ -60,7 +60,11 @@ data class SpotifyPlaybackState(
     // Synced lyrics (when LRCLib has them) — parsed [mm:ss.xx]Line
     // pairs. Empty when only plain text is available. Drives the
     // current-line highlight + tap-to-seek in the player UI.
-    val syncedLyrics: List<LyricLine> = emptyList()
+    val syncedLyrics: List<LyricLine> = emptyList(),
+    // The playback context the current track is part of — "spotify:album:…"
+    // or "spotify:playlist:…" (null for a single-track play). Lets the player
+    // fetch + show the album/playlist track list (chapters-equivalent).
+    val contextUri: String? = null
 )
 
 /** A single time-tagged line from a LRC-format lyric file. */
@@ -1407,9 +1411,11 @@ class SpotifyProvider @Inject constructor(
                 val artwork = album?.getAsJsonArray("images")?.firstOrNull()
                     ?.asJsonObject?.get("url")?.asString
                 val device = root.getAsJsonObject("device")
+                val contextUri = root.getAsJsonObject("context")
+                    ?.get("uri")?.takeIf { !it.isJsonNull }?.asString
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
-                    "Spotify.fetchCurrentState artwork=${artwork ?: "null"}"
+                    "Spotify.fetchCurrentState artwork=${artwork ?: "null"} context=${contextUri ?: "null"}"
                 )
                 SpotifyPlaybackState(
                     title = item.get("name")?.asString.orEmpty(),
@@ -1420,7 +1426,8 @@ class SpotifyProvider @Inject constructor(
                     durationMs = item.get("duration_ms")?.asLong ?: 0L,
                     isPlaying = root.get("is_playing")?.asBoolean ?: false,
                     trackUri = item.get("uri")?.asString.orEmpty(),
-                    deviceName = device?.get("name")?.asString
+                    deviceName = device?.get("name")?.asString,
+                    contextUri = contextUri
                 )
             }
         } catch (_: Exception) { null }

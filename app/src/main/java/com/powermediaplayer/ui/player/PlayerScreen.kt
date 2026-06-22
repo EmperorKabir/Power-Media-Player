@@ -18,6 +18,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +28,8 @@ import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.ui.res.painterResource
 import com.powermediaplayer.R
@@ -68,6 +71,87 @@ import com.powermediaplayer.util.CoverArtColors
  */
 val LocalOpenPopupCount = compositionLocalOf<androidx.compose.runtime.MutableIntState> {
     error("LocalOpenPopupCount not provided")
+}
+
+/**
+ * §T336 — "see the track list" for a Spotify Connect album/playlist (the
+ * chapters-equivalent: a Connect album mirrors only the current track, so the
+ * tracks are fetched from the album context). Renders nothing unless a Spotify
+ * album/playlist is the active context. Tapping a track plays it WITHIN that
+ * context so next/previous + shuffle keep traversing the album.
+ */
+@Composable
+private fun SpotifyAlbumTracksButton(viewModel: PlayerViewModel) {
+    val tracks by viewModel.spotifyContextTracks.collectAsStateWithLifecycle()
+    if (tracks.isEmpty()) return
+    val currentUri by viewModel.spotifyTrackUri.collectAsStateWithLifecycle()
+    var show by remember { mutableStateOf(false) }
+    IconButton(onClick = { show = true }, modifier = Modifier.size(48.dp)) {
+        Icon(
+            Icons.AutoMirrored.Filled.QueueMusic,
+            contentDescription = "Album track list",
+            tint = TextTertiary
+        )
+    }
+    if (show) {
+        AlertDialog(
+            onDismissRequest = { show = false },
+            containerColor = OledBlack,
+            title = { Text("Tracks", color = TextPrimary) },
+            text = {
+                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    itemsIndexed(tracks) { idx, t ->
+                        val isCurrent = currentUri != null &&
+                            (t.downloadUrl == currentUri || currentUri!!.endsWith(t.id))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.playSpotifyContextTrack(t)
+                                    show = false
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "${idx + 1}",
+                                color = TextTertiary,
+                                modifier = Modifier.width(28.dp)
+                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    t.name,
+                                    color = if (isCurrent) TealAccent else TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (t.subtitle.isNotBlank()) {
+                                    Text(
+                                        t.subtitle,
+                                        color = TextTertiary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            if (isCurrent) {
+                                Icon(
+                                    Icons.Filled.GraphicEq,
+                                    contentDescription = "Now playing",
+                                    tint = TealAccent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { show = false }) { Text("Close", color = TealAccent) }
+            }
+        )
+    }
 }
 
 /**
@@ -1116,6 +1200,9 @@ private fun OverlayContent(
                     tint = if (shuffleOn) TealAccent else TextTertiary
                 )
             }
+            // Spotify album/playlist track list (chapters-equivalent) — only
+            // renders when a Spotify album/playlist context is active.
+            SpotifyAlbumTracksButton(viewModel)
             // Video effects (mirror H/V, B&W, rotation) — visible only
             // when the current media is a video AND not casting (the
             // receiver renders the actual stream; local-TextureView
@@ -1384,6 +1471,8 @@ private fun PlayerScreenExpanded(
                         tint = if (shuffleOnE) TealAccent else TextTertiary
                     )
                 }
+                // Spotify album/playlist track list (chapters-equivalent).
+                SpotifyAlbumTracksButton(viewModel)
                 // Audio effects (reverb / stereo flip / mono mix /
                 // passthrough) — applies to any audio track so it's
                 // present in both layouts. Greyed out while casting

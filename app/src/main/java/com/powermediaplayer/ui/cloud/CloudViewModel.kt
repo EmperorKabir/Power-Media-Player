@@ -1100,7 +1100,8 @@ class CloudViewModel @Inject constructor(
                     durationMs = 0L,
                     isPlaying = true,
                     trackUri = contextUri,
-                    deviceName = null
+                    deviceName = null,
+                    contextUri = contextUri
                 )
             )
             val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri = null, contextUri = contextUri)
