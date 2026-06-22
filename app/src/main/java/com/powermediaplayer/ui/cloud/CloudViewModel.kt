@@ -128,7 +128,8 @@ class CloudViewModel @Inject constructor(
                     com.powermediaplayer.data.db.entity.OfflineCopyEntity(
                         driveFileId = item.id,
                         localPath = storedPath,
-                        byteSize = storedSize
+                        byteSize = storedSize,
+                        displayName = item.name
                     )
                 )
                 evictOfflineLruIfOverLimit()
@@ -825,9 +826,14 @@ class CloudViewModel @Inject constructor(
 
     fun browseDrive(folderId: String?, label: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            // Switching provider/folder must drop any active search, else the
+            // search-results branch keeps rendering the old (e.g. Spotify) hits.
+            searchJob?.cancel()
             _uiState.value = _uiState.value.copy(
                 isLoading = true,
-                activeProvider = CloudProviderType.GOOGLE_DRIVE
+                activeProvider = CloudProviderType.GOOGLE_DRIVE,
+                searchQuery = "",
+                searchResults = emptyList()
             )
             val result = if (folderId == null) {
                 // Root view: union of SAF tree URIs + Drive OAuth picked
@@ -863,12 +869,15 @@ class CloudViewModel @Inject constructor(
     fun browseSpotify() {
         // Land on the section picker — empty items + spotifySection=null
         // signals the UI to render the section cards.
+        searchJob?.cancel()
         _uiState.value = _uiState.value.copy(
             isLoading = false,
             activeProvider = CloudProviderType.SPOTIFY,
             items = emptyList(),
             spotifySection = null,
             errorMessage = null,
+            searchQuery = "",
+            searchResults = emptyList(),
             folderStack = listOf(null to "Spotify Library")
         )
     }

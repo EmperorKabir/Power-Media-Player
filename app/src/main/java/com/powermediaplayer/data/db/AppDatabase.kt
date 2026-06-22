@@ -90,7 +90,9 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     //      the repository layer.
     // v17: §C10 downloads — adds episode localPath/localBytes/downloadedAt +
     //      per-show downloadTreeUri (user-chosen storage). Additive.
-    version = 17,
+    // v18: §C28 — offline_copy gains displayName so the Downloads list shows
+    //      the real Drive file name, not the cache filename. Additive.
+    version = 18,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -206,6 +208,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE podcast_episodes ADD COLUMN localBytes INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE podcast_episodes ADD COLUMN downloadedAt INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE podcast_shows ADD COLUMN downloadTreeUri TEXT")
+            }
+        }
+
+        // v17 → v18 (§C28): offline_copy.displayName for friendly Drive names.
+        val MIGRATION_17_18: Migration = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE offline_copy ADD COLUMN displayName TEXT NOT NULL DEFAULT ''")
             }
         }
 

@@ -16,5 +16,8 @@ data class OfflineCopyEntity(
     val byteSize: Long,
     val createdAt: Long = System.currentTimeMillis(),
     val lastPlayedAt: Long = System.currentTimeMillis(),
-    val isStarred: Boolean = false
+    val isStarred: Boolean = false,
+    // The Drive file's real name, so the Downloads list shows "This Inevitable
+    // Ruin.m4b" not the opaque cache filename. Blank for pre-v18 rows.
+    val displayName: String = ""
 )

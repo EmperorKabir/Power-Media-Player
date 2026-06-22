@@ -100,7 +100,7 @@ class DownloadsViewModel @Inject constructor(
         val dRows = drive.map { r ->
             DownloadRow(
                 key = "drv_${r.driveFileId}",
-                title = nameFromPath(r.localPath),
+                title = r.displayName.ifBlank { nameFromPath(r.localPath) },
                 isPodcast = false,
                 bytes = r.byteSize,
                 driveId = r.driveFileId

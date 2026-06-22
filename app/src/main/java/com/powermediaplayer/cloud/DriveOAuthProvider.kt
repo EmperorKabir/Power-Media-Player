@@ -261,40 +261,37 @@ class DriveOAuthProvider @Inject constructor(
             if (picked.isEmpty()) return@withContext Result.success(emptyList())
             try {
                 val escaped = query.replace("\\", "\\\\").replace("'", "\\'")
-                // One Drive REST call per picked folder — independent
-                // queries, so run them together (audit 5.3).
-                val lists = coroutineScope {
-                    picked.map { root ->
-                        async {
-                            val out = mutableListOf<CloudMediaItem>()
-                            val q = "'${root.id}' in parents and name contains '$escaped' " +
-                                "and trashed = false " +
-                                "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
-                                "or mimeType = '$MIME_FOLDER')"
-                            val url = "https://www.googleapis.com/drive/v3/files?" +
-                                "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
-                                "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
-                                "&pageSize=100"
-                            val req = Request.Builder().url(url)
-                                .addHeader("Authorization", "Bearer $token").build()
-                            runCatching {
-                                http.newCall(req).execute().use { resp ->
-                                    if (!resp.isSuccessful) return@use
-                                    val body = resp.body?.string().orEmpty()
-                                    val root2 = JsonParser.parseString(body).asJsonObject
-                                    val arr = root2.getAsJsonArray("files") ?: return@use
-                                    for (el in arr) {
-                                        val f = el.asJsonObject
-                                        toCloudItem(f, parentId = root.id)?.let { out.add(it) }
-                                        if (out.size >= 200) return@use
-                                    }
-                                }
-                            }
-                            out
-                        }
-                    }.map { it.await() }
+                // drive.file scope already restricts the API to picker-granted
+                // files (the app can't see the rest of your Drive), so a SINGLE
+                // global name-search returns matches across ALL granted folders
+                // AND their sub-folders. The old `'<root>' in parents` clause only
+                // matched DIRECT children, so nested files never showed up.
+                val q = "name contains '$escaped' and trashed = false " +
+                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
+                    "or mimeType = '$MIME_FOLDER')"
+                val url = "https://www.googleapis.com/drive/v3/files?" +
+                    "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
+                    "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
+                    "&pageSize=200"
+                val req = Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer $token").build()
+                val out = mutableListOf<CloudMediaItem>()
+                http.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        return@withContext Result.failure(
+                            IllegalStateException("Drive search HTTP ${resp.code}")
+                        )
+                    }
+                    val body = resp.body?.string().orEmpty()
+                    val root2 = JsonParser.parseString(body).asJsonObject
+                    val arr = root2.getAsJsonArray("files") ?: return@withContext Result.success(out)
+                    for (el in arr) {
+                        if (!el.isJsonObject) continue
+                        toCloudItem(el.asJsonObject, parentId = null)?.let { out.add(it) }
+                        if (out.size >= 200) break
+                    }
                 }
-                Result.success(lists.flatten().take(200))
+                Result.success(out)
             } catch (e: Exception) {
                 Result.failure(e)
             }
