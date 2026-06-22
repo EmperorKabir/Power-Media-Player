@@ -34,7 +34,8 @@ class PlaybackSessionCoordinator @Inject constructor(
     private val replayGainDao: com.powermediaplayer.data.db.dao.ReplayGainDao,
     private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
     private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
-    private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver
+    private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver,
+    private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver
 ) {
 
     private val musicBrainzClient =
@@ -617,6 +618,7 @@ class PlaybackSessionCoordinator @Inject constructor(
                         // SOURCE (localConfiguration.uri) swaps to the local copy.
                         val playUri = withContext(Dispatchers.IO) {
                             podcastOfflineResolver.localUriFor(recent.mediaUri)
+                                ?: driveOfflineResolver.localUriFor(recent.mediaUri)
                         } ?: uri
                         // vc32: the launch restore must never parse a
                         // remote file inline — on a slow network that

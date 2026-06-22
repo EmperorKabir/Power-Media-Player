@@ -38,6 +38,7 @@ class LastPlayedViewModel @Inject constructor(
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver,
+    private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver,
     private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     @param:dagger.hilt.android.qualifiers.ApplicationContext
@@ -461,10 +462,12 @@ class LastPlayedViewModel @Inject constructor(
                             .getOrDefault(uri)
                     }
                 } else {
-                    // §C10 — true offline: tap a downloaded podcast in Recents →
-                    // play the LOCAL file (mediaId/key stays the stream url).
+                    // §C10/§C28 — true offline: tap a downloaded podcast OR Drive
+                    // item in Recents → play the LOCAL file (instant, offline; the
+                    // mediaId/key stays the stream url so the resume point matches).
                     withContext(Dispatchers.IO) {
                         podcastOfflineResolver.localUriFor(item.mediaUri)
+                            ?: driveOfflineResolver.localUriFor(item.mediaUri)
                     } ?: uri
                 }
                 val mediaItem = withContext(Dispatchers.IO) {
