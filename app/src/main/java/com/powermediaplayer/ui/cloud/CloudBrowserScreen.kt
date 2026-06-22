@@ -672,12 +672,31 @@ fun CloudBrowserScreen(
                     }
                     if (uiState.searchResults.isEmpty()) {
                         item(key = "search_empty", span = { GridItemSpan(maxLineSpan) }) {
-                            Text(
-                                text = "No results for \"${uiState.searchQuery}\"",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextTertiary,
-                                modifier = Modifier.padding(24.dp)
-                            )
+                            if (uiState.searchInProgress) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = TealAccent, strokeWidth = 2.dp,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        "Searching your Drive folders…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "No results for \"${uiState.searchQuery}\"",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = TextTertiary,
+                                    modifier = Modifier.padding(24.dp)
+                                )
+                            }
                         }
                     }
                 }

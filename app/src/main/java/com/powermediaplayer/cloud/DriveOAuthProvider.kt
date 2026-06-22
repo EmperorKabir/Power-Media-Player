@@ -256,68 +256,84 @@ class DriveOAuthProvider @Inject constructor(
         withContext(Dispatchers.IO) {
             if (query.isBlank()) return@withContext Result.success(emptyList())
             val token = fetchAccessTokenBlocking()
-                ?: return@withContext Result.failure(IllegalStateException("Not authenticated"))
             val picked = settingsDataStore.driveOauthPickedFolders.first()
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG",
+                "DriveOAuth.searchFiles START q='$query' tokenOk=${token != null} pickedFolders=${picked.size}"
+            )
+            if (token == null) return@withContext Result.failure(IllegalStateException("Not authenticated"))
             if (picked.isEmpty()) return@withContext Result.success(emptyList())
             try {
-                // RECURSIVE enumeration. Under the drive.file scope a global
+                // PARALLEL breadth-first walk. Under drive.file a global
                 // `name contains` query does NOT surface a granted folder's
-                // descendants (only files the app explicitly opened) — but
-                // listing children via `'<id>' in parents` DOES (it's what
-                // browsing uses). So walk every picked folder's tree, matching
-                // names on audio/video files + sub-folders. Bounded so a huge
-                // tree can't hang the UI.
+                // descendants (only files the app opened) — but listing children
+                // via `'<id>' in parents` DOES (what browsing uses). Each DEPTH
+                // level is queried CONCURRENTLY so a deep tree resolves in ~1-2 s
+                // instead of one-folder-at-a-time. Bounded so a huge tree can't run away.
                 val needle = query.lowercase()
-                val out = mutableListOf<CloudMediaItem>()
-                val queue = ArrayDeque(picked.map { it.id })
-                val seen = HashSet<String>()
+                val out = java.util.Collections.synchronizedList(mutableListOf<CloudMediaItem>())
+                var level = picked.map { it.id }.distinct()
+                val seen = HashSet<String>(level)
                 var folderQueries = 0
-                val cap = 200
-                while (queue.isNotEmpty() && out.size < 200 && folderQueries < cap) {
-                    val folderId = queue.removeFirst()
-                    if (!seen.add(folderId)) continue
-                    folderQueries++
-                    val q = "'$folderId' in parents and trashed = false"
-                    val url = "https://www.googleapis.com/drive/v3/files?" +
-                        "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
-                        "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
-                        "&pageSize=200"
-                    val req = Request.Builder().url(url)
-                        .addHeader("Authorization", "Bearer $token").build()
-                    runCatching {
-                        http.newCall(req).execute().use { resp ->
-                            if (!resp.isSuccessful) return@use
-                            val body = resp.body?.string().orEmpty()
-                            val arr = JsonParser.parseString(body).asJsonObject
-                                .getAsJsonArray("files") ?: return@use
-                            for (el in arr) {
-                                if (!el.isJsonObject) continue
-                                val f = el.asJsonObject
-                                val id = f.get("id")?.asString ?: continue
-                                val mime = f.get("mimeType")?.asString.orEmpty()
-                                val name = f.get("name")?.asString.orEmpty()
-                                val matches = name.lowercase().contains(needle)
-                                if (mime == MIME_FOLDER) {
-                                    queue.add(id)                       // always recurse
-                                    if (matches) toCloudItem(f, folderId)?.let { out.add(it) }
-                                } else if (matches &&
-                                    (mime.contains("audio/") || mime.contains("video/"))
-                                ) {
-                                    toCloudItem(f, folderId)?.let { out.add(it) }
-                                }
-                            }
-                        }
+                val cap = 600
+                while (level.isNotEmpty() && out.size < 200 && folderQueries < cap) {
+                    folderQueries += level.size
+                    val nextLevel = coroutineScope {
+                        level.map { folderId ->
+                            async { searchOneFolder(token, folderId, needle, out) }
+                        }.flatMap { it.await() }
                     }
+                    level = nextLevel.filter { seen.add(it) }
                 }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
                     "Drive OAuth search '$query' → ${out.size} (walked $folderQueries folders)"
                 )
-                Result.success(out.take(200))
+                Result.success(out.toList().take(200))
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+
+    /** List [folderId]'s children: append name-matching audio/video files to
+     *  [out] and return the sub-folder ids to descend into. Blocking HTTP — run
+     *  inside an async on the IO dispatcher. */
+    private fun searchOneFolder(
+        token: String,
+        folderId: String,
+        needle: String,
+        out: MutableList<CloudMediaItem>
+    ): List<String> {
+        val subFolders = mutableListOf<String>()
+        val q = "'$folderId' in parents and trashed = false"
+        val url = "https://www.googleapis.com/drive/v3/files?" +
+            "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
+            "&fields=files(id,name,mimeType,size,parents,thumbnailLink)&pageSize=200"
+        val req = Request.Builder().url(url)
+            .addHeader("Authorization", "Bearer $token").build()
+        runCatching {
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use
+                val arr = JsonParser.parseString(resp.body?.string().orEmpty())
+                    .asJsonObject.getAsJsonArray("files") ?: return@use
+                for (el in arr) {
+                    if (!el.isJsonObject) continue
+                    val f = el.asJsonObject
+                    val id = f.get("id")?.asString ?: continue
+                    val mime = f.get("mimeType")?.asString.orEmpty()
+                    val name = f.get("name")?.asString.orEmpty()
+                    val matches = name.lowercase().contains(needle)
+                    if (mime == MIME_FOLDER) {
+                        subFolders.add(id)
+                        if (matches) toCloudItem(f, folderId)?.let { out.add(it) }
+                    } else if (matches && (mime.contains("audio/") || mime.contains("video/"))) {
+                        toCloudItem(f, folderId)?.let { out.add(it) }
+                    }
+                }
+            }
+        }
+        return subFolders
+    }
 
     /** §C28 — fetch a Drive file's display name by id (for backfilling the
      *  Downloads list of copies saved before names were tracked). Null on failure. */

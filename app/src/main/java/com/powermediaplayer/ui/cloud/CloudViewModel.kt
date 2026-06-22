@@ -48,6 +48,7 @@ data class CloudUiState(
     val spotifyFavPodcasts: List<com.powermediaplayer.data.preferences.SpotifyFavourite> = emptyList(),
     val searchQuery: String = "",
     val searchResults: List<CloudMediaItem> = emptyList(),
+    val searchInProgress: Boolean = false,
     val spotifySection: com.powermediaplayer.cloud.SpotifySection? = null,
     /**
      * Snapshot of source-picker roots (Drive, OneDrive, internal
@@ -1445,7 +1446,10 @@ class CloudViewModel @Inject constructor(
      * keystrokes don't trigger an API call per character.
      */
     fun setSearchQuery(query: String) {
-        _uiState.value = _uiState.value.copy(searchQuery = query)
+        _uiState.value = _uiState.value.copy(
+            searchQuery = query,
+            searchInProgress = query.isNotBlank()
+        )
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(300)
@@ -1477,7 +1481,7 @@ class CloudViewModel @Inject constructor(
                 }
                 else -> emptyList()
             }
-            _uiState.value = _uiState.value.copy(searchResults = results)
+            _uiState.value = _uiState.value.copy(searchResults = results, searchInProgress = false)
         }
     }
 

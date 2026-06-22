@@ -314,6 +314,9 @@ class GoogleDriveProvider @Inject constructor(
             try {
                 val needle = query.lowercase()
                 val roots = settingsDataStore.drivePickedRoots.first()
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG", "DriveSAF.searchFiles q='$query' safRoots=${roots.size}"
+                )
                 val out = mutableListOf<CloudMediaItem>()
                 // visited[0] caps TRAVERSAL, not just matches — the old
                 // walk kept crawling a 50k-node tree when nothing matched.
