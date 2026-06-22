@@ -33,7 +33,8 @@ class PlaybackSessionCoordinator @Inject constructor(
     private val subtitleAutoFetcher: com.powermediaplayer.subtitles.SubtitleAutoFetcher,
     private val replayGainDao: com.powermediaplayer.data.db.dao.ReplayGainDao,
     private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
-    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver
 ) {
 
     private val musicBrainzClient =
@@ -610,6 +611,13 @@ class PlaybackSessionCoordinator @Inject constructor(
                             return@runCatching
                         }
                         val uri = android.net.Uri.parse(recent.mediaUri)
+                        // §C10 — true offline: if this episode was downloaded, play
+                        // the LOCAL file. mediaId + requestMetadata.mediaUri stay the
+                        // stream url (the resume-position key), only the playback
+                        // SOURCE (localConfiguration.uri) swaps to the local copy.
+                        val playUri = withContext(Dispatchers.IO) {
+                            podcastOfflineResolver.localUriFor(recent.mediaUri)
+                        } ?: uri
                         // vc32: the launch restore must never parse a
                         // remote file inline — on a slow network that
                         // holds the loading banner for minutes and its
@@ -630,7 +638,7 @@ class PlaybackSessionCoordinator @Inject constructor(
                         }
                         val item = androidx.media3.common.MediaItem.Builder()
                             .setMediaId(recent.mediaUri)
-                            .setUri(uri)
+                            .setUri(playUri)
                             .setRequestMetadata(
                                 androidx.media3.common.MediaItem.RequestMetadata.Builder()
                                     .setMediaUri(uri).build()

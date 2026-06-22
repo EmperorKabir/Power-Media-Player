@@ -560,6 +560,15 @@ class SpotifyProvider @Inject constructor(
             Result.success(lists.flatten())
         }
 
+    // Gson member access that tolerates a missing OR JsonNull OR wrong-typed
+    // value. Spotify search arrays can contain null entries (delisted playlists/
+    // shows) and optional nested objects — a raw getAsJsonObject/Array would throw
+    // "Not a JSON Object: null" / ClassCastException and kill the whole response.
+    private fun com.google.gson.JsonObject.objOrNull(key: String): com.google.gson.JsonObject? =
+        get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+    private fun com.google.gson.JsonObject.arrOrNull(key: String): com.google.gson.JsonArray? =
+        get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+
     private fun jsonToCloudItem(obj: com.google.gson.JsonObject, type: String): CloudMediaItem {
         val id = obj.get("id")?.asString ?: ""
         val name = obj.get("name")?.asString ?: "Untitled"
@@ -570,7 +579,7 @@ class SpotifyProvider @Inject constructor(
         // single track. For albums and playlists the URI itself IS the
         // context so we pass it through.
         val contextUri = when (type) {
-            "track" -> obj.getAsJsonObject("album")?.get("uri")?.takeIf { !it.isJsonNull }?.asString
+            "track" -> obj.objOrNull("album")?.get("uri")?.takeIf { !it.isJsonNull }?.asString
             "album", "playlist" -> spotifyUri
             else -> null
         }
@@ -578,23 +587,25 @@ class SpotifyProvider @Inject constructor(
         // playlists carry images directly. Without this the item had no
         // thumbnailUri, so the Last Played row stored null → no cover.
         val images = when (type) {
-            "track" -> obj.getAsJsonObject("album")?.getAsJsonArray("images")
-            else -> obj.getAsJsonArray("images")
+            "track" -> obj.objOrNull("album")?.arrOrNull("images")
+            else -> obj.arrOrNull("images")
         }
         val artworkUrl = images?.takeIf { it.size() > 0 }
-            ?.get(0)?.asJsonObject?.get("url")?.takeIf { !it.isJsonNull }?.asString
+            ?.get(0)?.takeIf { it.isJsonObject }?.asJsonObject
+            ?.get("url")?.takeIf { !it.isJsonNull }?.asString
         // Secondary line so result rows read "Title · Artist" rather than a
         // bare title (the reported quality defect). Source varies by type.
         val subtitle = when (type) {
-            "track", "album" -> obj.getAsJsonArray("artists")
+            "track", "album" -> obj.arrOrNull("artists")
                 ?.mapNotNull { el ->
-                    el.asJsonObject?.get("name")?.takeIf { !it.isJsonNull }?.asString
+                    el.takeIf { it.isJsonObject }?.asJsonObject
+                        ?.get("name")?.takeIf { !it.isJsonNull }?.asString
                 }
                 ?.joinToString(", ").orEmpty()
             "show" -> obj.get("publisher")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-            "episode" -> obj.getAsJsonObject("show")
+            "episode" -> obj.objOrNull("show")
                 ?.get("name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-            "playlist" -> obj.getAsJsonObject("owner")
+            "playlist" -> obj.objOrNull("owner")
                 ?.get("display_name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             "artist" -> "Artist"
             else -> ""
@@ -1105,11 +1116,13 @@ class SpotifyProvider @Inject constructor(
                            "artists" to "artist",
                            "playlists" to "playlist", "shows" to "show",
                            "episodes" to "episode").forEach { (key, type) ->
-                        val arr = root.getAsJsonObject(key)
-                            ?.getAsJsonArray("items") ?: return@forEach
+                        val arr = root.objOrNull(key)?.arrOrNull("items") ?: return@forEach
                         for (el in arr) {
-                            val obj = el.asJsonObject
-                            results.add(jsonToCloudItem(obj, type))
+                            // Spotify returns null entries in these arrays (delisted
+                            // playlists/shows) — skip them; never let one bad item
+                            // throw and blank the whole search.
+                            if (!el.isJsonObject) continue
+                            runCatching { results.add(jsonToCloudItem(el.asJsonObject, type)) }
                         }
                     }
                 }

@@ -106,8 +106,14 @@ class CloudViewModel @Inject constructor(
 
     fun hasOfflineCopy(driveId: String): Boolean = offlineDrivePairs.value.containsKey(driveId)
 
+    /** Drive ids with an in-flight offline save — drives the row's spinner. */
+    private val _savingOffline = MutableStateFlow<Set<String>>(emptySet())
+    val savingOffline: StateFlow<Set<String>> = _savingOffline
+
     fun saveDriveOffline(item: CloudMediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
+            _savingOffline.update { it + item.id }
+          try {
             val file: java.io.File? = runCatching {
                 if (item.id.startsWith("content://"))
                     driveProvider.downloadFullToCache(item)
@@ -138,6 +144,9 @@ class CloudViewModel @Inject constructor(
                     it.copy(errorMessage = "Couldn't save offline — try again on Wi-Fi.")
                 }
             }
+          } finally {
+            _savingOffline.update { it - item.id }
+          }
         }
     }
 

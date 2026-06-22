@@ -74,6 +74,7 @@ fun CloudBrowserScreen(
         }
     }
     val offlineIds by viewModel.offlineDrivePairs.collectAsStateWithLifecycle()
+    val savingOffline by viewModel.savingOffline.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<CloudMediaItem?>(null) }
@@ -650,12 +651,18 @@ fun CloudBrowserScreen(
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     gridItems(uiState.searchResults, key = { "search_${it.id}_${it.sourceProvider}" }) { item ->
+                        val isDriveTrack = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
                         CloudItemRow(
                             item = item,
                             onClick = {
                                 viewModel.openItem(item, onPlaybackStarted = onNavigateToPlayer)
                             },
-                            onLongClick = { if (!item.isFolder) contextItem = item }
+                            onLongClick = { if (!item.isFolder) contextItem = item },
+                            isOffline = isDriveTrack && offlineIds.containsKey(item.id),
+                            canManageOffline = isDriveTrack,
+                            isSavingOffline = item.id in savingOffline,
+                            onSaveOffline = { viewModel.saveDriveOffline(item) },
+                            onRemoveOffline = { viewModel.removeDriveOffline(item.id) }
                         )
                     }
                     if (uiState.searchResults.isEmpty()) {
@@ -888,7 +895,11 @@ fun CloudBrowserScreen(
                                 }
                             },
                             onLongClick = { if (!item.isFolder) contextItem = item },
-                            isOffline = isDriveTrack && offlineIds.containsKey(item.id)
+                            isOffline = isDriveTrack && offlineIds.containsKey(item.id),
+                            canManageOffline = isDriveTrack,
+                            isSavingOffline = item.id in savingOffline,
+                            onSaveOffline = { viewModel.saveDriveOffline(item) },
+                            onRemoveOffline = { viewModel.removeDriveOffline(item.id) }
                         )
                     }
                     if (uiState.items.isEmpty() && uiState.driveFavourites.isEmpty()) {
@@ -1409,7 +1420,11 @@ private fun CloudItemRow(
     canForget: Boolean = false,
     onForget: () -> Unit = {},
     onLongClick: () -> Unit = {},
-    isOffline: Boolean = false
+    isOffline: Boolean = false,
+    canManageOffline: Boolean = false,
+    isSavingOffline: Boolean = false,
+    onSaveOffline: () -> Unit = {},
+    onRemoveOffline: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -1465,6 +1480,33 @@ private fun CloudItemRow(
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
+            }
+        }
+        // Visible save/remove-offline affordance for Drive tracks (was only in
+        // the long-press menu — undiscoverable). Mirrors the podcast row.
+        if (canManageOffline) {
+            when {
+                isSavingOffline -> Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(18.dp)
+                    )
+                }
+                isOffline -> IconButton(onClick = onRemoveOffline, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Filled.DeleteOutline,
+                        contentDescription = "Remove offline copy",
+                        tint = TealAccent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                else -> IconButton(onClick = onSaveOffline, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Filled.Download,
+                        contentDescription = "Save offline",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
         if (canFavourite) {

@@ -738,12 +738,14 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
                     strokeWidth = 2.dp,
                     modifier = Modifier.size(20.dp)
                 )
+                // Downloaded → a clear DELETE affordance (a tick read as a passive
+                // status, not something you could remove). Teal = it IS downloaded.
                 isDownloaded -> IconButton(onClick = { confirmDelete = true }) {
                     Icon(
-                        Icons.Filled.DownloadDone,
+                        Icons.Filled.DeleteOutline,
                         contentDescription = "Downloaded — tap to delete",
                         tint = TealAccent,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
                 else -> IconButton(onClick = { vm.downloadEpisode(e) }) {
