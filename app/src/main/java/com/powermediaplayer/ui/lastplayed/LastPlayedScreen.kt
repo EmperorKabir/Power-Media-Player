@@ -67,6 +67,7 @@ fun LastPlayedScreen(
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsStateWithLifecycle()
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
+    val downloadedPodcastUrls by viewModel.downloadedPodcastUrls.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // Surface VM-side play-failure messages (e.g. Spotify Connect has no
@@ -234,6 +235,7 @@ fun LastPlayedScreen(
                         )
                         ReorderablePinnedList(
                             items = pinned,
+                            offlineUrls = downloadedPodcastUrls,
                             onMove = { from, to ->
                                 val movedFavId = pinned[from].id
                                 viewModel.reorderPinned(movedFavId, to)
@@ -285,6 +287,7 @@ fun LastPlayedScreen(
                         HistoryRowWithBookmarks(
                             item = item,
                             bookmarkCap = RECENT_BOOKMARK_CAP,
+                            isOffline = downloadedPodcastUrls.contains(item.mediaUri),
                             bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
                             onTap = {
                                 viewModel.playLocalAt(item)
@@ -558,7 +561,8 @@ private fun ReorderablePinnedList(
     onDeleteBookmark: (Long) -> Unit,
     onUnpin: (Long) -> Unit,
     bookmarkProvider: (Long) -> Flow<List<LastPlayedViewModel.BookmarkRow>>,
-    onLongClick: (HistoryItem) -> Unit = {}
+    onLongClick: (HistoryItem) -> Unit = {},
+    offlineUrls: Set<String> = emptySet()
 ) {
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -575,6 +579,7 @@ private fun ReorderablePinnedList(
                 HistoryRowWithBookmarks(
                     item = item,
                     bookmarkCap = Int.MAX_VALUE, // pinned: unlimited
+                    isOffline = offlineUrls.contains(item.mediaUri),
                     bookmarkProvider = { bookmarkProvider(item.id) },
                     onTap = { onTap(item) },
                     onTapBookmark = { bookmark -> onTapBookmark(item, bookmark) },
@@ -629,6 +634,7 @@ private fun HistoryRowWithBookmarks(
     trailing: @Composable RowScope.() -> Unit,
     onLongClick: () -> Unit = {},
     elevated: Boolean = false,
+    isOffline: Boolean = false,
     /**
      * When true, each bookmark in the dropdown is swipe-to-dismiss
      * (in addition to the inline delete icon). Recents rows opt in;
@@ -657,7 +663,8 @@ private fun HistoryRowWithBookmarks(
                 onToggleExpanded = { expanded = !expanded },
                 onClick = onTap,
                 onLongClick = onLongClick,
-                trailing = trailing
+                trailing = trailing,
+                isOffline = isOffline
             )
             AnimatedVisibility(visible = expanded && bookmarks.isNotEmpty()) {
                 Column(modifier = Modifier
@@ -708,7 +715,8 @@ private fun HistoryHeaderRow(
     onToggleExpanded: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
-    trailing: @Composable RowScope.() -> Unit
+    trailing: @Composable RowScope.() -> Unit,
+    isOffline: Boolean = false
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -770,7 +778,14 @@ private fun HistoryHeaderRow(
                 style = MaterialTheme.typography.labelLarge,
                 color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SourcePill(item.source)
+                // A podcast is stored as source=LOCAL with a remote (http) audio
+                // uri — show "Podcast", not the misleading "Local" provider tag.
+                val isPodcast = item.source == Source.LOCAL && item.mediaUri.startsWith("http")
+                SourcePill(item.source, isPodcast)
+                if (isOffline) {
+                    Spacer(Modifier.width(6.dp))
+                    OfflineBadge()
+                }
                 if (item.subtitle.isNotBlank() && item.subtitle != item.source.name) {
                     Spacer(Modifier.width(6.dp))
                     Text(item.subtitle,
@@ -860,11 +875,12 @@ private fun BookmarkRowUi(
 }
 
 @Composable
-private fun SourcePill(source: Source) {
-    val (label, color) = when (source) {
-        Source.LOCAL -> "Local" to LocalTeal
-        Source.DRIVE -> "Drive" to DriveBlue
-        Source.SPOTIFY -> "Spotify" to SpotifyGreen
+private fun SourcePill(source: Source, isPodcast: Boolean = false) {
+    val (label, color) = when {
+        isPodcast -> "Podcast" to Color(0xFFB388FF)   // violet — distinct from the providers
+        source == Source.LOCAL -> "Local" to LocalTeal
+        source == Source.DRIVE -> "Drive" to DriveBlue
+        else -> "Spotify" to SpotifyGreen
     }
     Surface(
         color = color.copy(alpha = 0.16f),
@@ -873,6 +889,21 @@ private fun SourcePill(source: Source) {
         Text(label,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
             color = color,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+    }
+}
+
+/** §C10 — a small "Offline" pill shown when a Recents row's media has a
+ *  downloaded local copy (currently: downloaded podcast episodes). */
+@Composable
+private fun OfflineBadge() {
+    Surface(
+        color = TealAccent.copy(alpha = 0.16f),
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Text("Offline",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = TealAccent,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }

@@ -38,9 +38,19 @@ class LastPlayedViewModel @Inject constructor(
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver,
+    private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
     @param:dagger.hilt.android.qualifiers.ApplicationContext
     private val context: android.content.Context
 ) : ViewModel() {
+
+    /**
+     * §C10 — stream urls of downloaded podcast episodes, so a Recents/Pinned row
+     * can show an "Offline" badge. Keyed by audioUrl = the row's mediaUri.
+     */
+    val downloadedPodcastUrls: StateFlow<Set<String>> =
+        podcastDao.observeDownloaded()
+            .map { list -> list.mapTo(HashSet()) { it.audioUrl } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     /**
      * Transient user-visible messages emitted by failure paths in this

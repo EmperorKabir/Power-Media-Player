@@ -406,9 +406,9 @@ class SpotifyProvider @Inject constructor(
                     val root = JsonParser.parseString(body).asJsonObject
                     val arr = root.getAsJsonArray("items") ?: return@withContext Result.success(items)
                     for (el in arr) {
-                        val obj = el.asJsonObject
+                        val obj = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
                         val type = obj.get("type")?.asString ?: continue
-                        val item = obj.getAsJsonObject(type) ?: obj
+                        val item = obj.objOrNull(type) ?: obj
                         items.add(jsonToCloudItem(item, type))
                     }
                     com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listFiles parsed=${items.size}")
@@ -472,55 +472,65 @@ class SpotifyProvider @Inject constructor(
         root: com.google.gson.JsonObject,
         items: MutableList<CloudMediaItem>
     ) {
+        // Every loop tolerates null / wrong-typed array entries (Spotify returns
+        // them for delisted content) — skip, never throw and blank the section.
         when (section) {
             SpotifySection.LIKED_SONGS, SpotifySection.SAVED_EPISODES -> {
-                val arr = root.getAsJsonArray("items") ?: return
+                val arr = root.arrOrNull("items") ?: return
                 val key = if (section == SpotifySection.LIKED_SONGS) "track" else "episode"
-                val type = key
                 for (el in arr) {
-                    val core = el.asJsonObject.getAsJsonObject(key) ?: continue
-                    items.add(jsonToCloudItem(core, type))
+                    val core = el.takeIf { it.isJsonObject }?.asJsonObject?.objOrNull(key) ?: continue
+                    items.add(jsonToCloudItem(core, key))
                 }
             }
             SpotifySection.SAVED_ALBUMS -> {
-                val arr = root.getAsJsonArray("items") ?: return
+                val arr = root.arrOrNull("items") ?: return
                 for (el in arr) {
-                    val core = el.asJsonObject.getAsJsonObject("album") ?: continue
+                    val core = el.takeIf { it.isJsonObject }?.asJsonObject?.objOrNull("album") ?: continue
                     items.add(jsonToCloudItem(core, "album"))
                 }
             }
             SpotifySection.SAVED_SHOWS -> {
-                val arr = root.getAsJsonArray("items") ?: return
+                val arr = root.arrOrNull("items") ?: return
                 for (el in arr) {
-                    val core = el.asJsonObject.getAsJsonObject("show") ?: continue
+                    val core = el.takeIf { it.isJsonObject }?.asJsonObject?.objOrNull("show") ?: continue
                     items.add(jsonToCloudItem(core, "show"))
                 }
             }
             SpotifySection.SAVED_PLAYLISTS, SpotifySection.TOP_TRACKS,
             SpotifySection.TOP_ARTISTS -> {
-                val arr = root.getAsJsonArray("items") ?: return
+                val arr = root.arrOrNull("items") ?: return
                 val type = when (section) {
                     SpotifySection.SAVED_PLAYLISTS -> "playlist"
                     SpotifySection.TOP_TRACKS -> "track"
                     SpotifySection.TOP_ARTISTS -> "artist"
                     else -> "track"
                 }
-                for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, type))
+                for (el in arr) {
+                    val core = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+                    items.add(jsonToCloudItem(core, type))
+                }
             }
             SpotifySection.RECENT -> {
-                val arr = root.getAsJsonArray("items") ?: return
+                val arr = root.arrOrNull("items") ?: return
                 for (el in arr) {
-                    val core = el.asJsonObject.getAsJsonObject("track") ?: continue
+                    val core = el.takeIf { it.isJsonObject }?.asJsonObject?.objOrNull("track") ?: continue
                     items.add(jsonToCloudItem(core, "track"))
                 }
             }
             SpotifySection.NEW_RELEASES -> {
-                val arr = root.getAsJsonObject("albums")?.getAsJsonArray("items") ?: return
-                for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, "album"))
+                val arr = root.objOrNull("albums")?.arrOrNull("items") ?: return
+                for (el in arr) {
+                    val core = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+                    items.add(jsonToCloudItem(core, "album"))
+                }
             }
             SpotifySection.FEATURED_PLAYLISTS -> {
-                val arr = root.getAsJsonObject("playlists")?.getAsJsonArray("items") ?: return
-                for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, "playlist"))
+                val arr = root.objOrNull("playlists")?.arrOrNull("items") ?: return
+                for (el in arr) {
+                    val core = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+                    items.add(jsonToCloudItem(core, "playlist"))
+                }
             }
         }
     }
@@ -548,8 +558,8 @@ class SpotifyProvider @Inject constructor(
                             val root = JsonParser.parseString(body).asJsonObject
                             val arr = root.getAsJsonArray("items") ?: return@use
                             for (el in arr) {
-                                val obj = el.asJsonObject
-                                val core = obj.getAsJsonObject(type) ?: obj
+                                val obj = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+                                val core = obj.objOrNull(type) ?: obj
                                 out.add(jsonToCloudItem(core, type))
                             }
                         }
@@ -607,7 +617,7 @@ class SpotifyProvider @Inject constructor(
                 ?.get("name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             "playlist" -> obj.objOrNull("owner")
                 ?.get("display_name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-            "artist" -> "Artist"
+            // Artist rows: the name IS the artist — a "· Artist" suffix is noise.
             else -> ""
         }
         return CloudMediaItem(
@@ -1064,10 +1074,10 @@ class SpotifyProvider @Inject constructor(
                                     // Spotify's current playlist response wraps the
                                     // track under "item" (singular). Older docs say
                                     // "track" — check both.
-                                    obj.getAsJsonObject("item"),
-                                    obj.getAsJsonObject("track"),
-                                    obj.getAsJsonObject("episode"),
-                                    obj.getAsJsonObject("show")
+                                    obj.objOrNull("item"),
+                                    obj.objOrNull("track"),
+                                    obj.objOrNull("episode"),
+                                    obj.objOrNull("show")
                                 )
                                 val core = candidates.firstOrNull {
                                     it.has("id") && !it.get("id").isJsonNull
@@ -1078,8 +1088,11 @@ class SpotifyProvider @Inject constructor(
                             com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer items=${items.size}")
                         }
                         "artist" -> {
-                            val arr = root.getAsJsonArray("tracks") ?: return@withContext Result.success(items)
-                            for (el in arr) items.add(jsonToCloudItem(el.asJsonObject, "track"))
+                            val arr = root.arrOrNull("tracks") ?: return@withContext Result.success(items)
+                            for (el in arr) {
+                                val core = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+                                items.add(jsonToCloudItem(core, "track"))
+                            }
                         }
                     }
                 }
