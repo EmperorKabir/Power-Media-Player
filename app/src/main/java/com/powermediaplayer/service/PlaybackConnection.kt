@@ -348,6 +348,10 @@ class PlaybackConnection @Inject constructor(
     fun seekToNext() { controller?.seekToNextMediaItem() }
     fun seekToPrevious() { controller?.seekToPreviousMediaItem() }
 
+    /** Shuffle the playback queue (ExoPlayer reorders next/previous traversal). */
+    fun setShuffleMode(enabled: Boolean) { controller?.shuffleModeEnabled = enabled }
+    fun isShuffleEnabled(): Boolean = controller?.shuffleModeEnabled == true
+
     fun skipBack(seconds: Int) {
         val action = when (seconds) {
             5 -> PlaybackService.ACTION_SKIP_BACK_5

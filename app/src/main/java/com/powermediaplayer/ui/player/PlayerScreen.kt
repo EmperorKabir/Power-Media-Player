@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.ui.res.painterResource
@@ -1105,6 +1106,15 @@ private fun OverlayContent(
             IconButton(onClick = { viewModel.addBookmarkHere() }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Filled.BookmarkBorder, contentDescription = "Add bookmark",
                     tint = TealAccent)
+            }
+            // Shuffle the playback queue (greyed when off, accent when on).
+            val shuffleOn by viewModel.shuffleEnabled.collectAsStateWithLifecycle()
+            IconButton(onClick = { viewModel.toggleShuffle() }, modifier = Modifier.size(48.dp)) {
+                Icon(
+                    Icons.Filled.Shuffle,
+                    contentDescription = if (shuffleOn) "Shuffle on" else "Shuffle off",
+                    tint = if (shuffleOn) TealAccent else TextTertiary
+                )
             }
             // Video effects (mirror H/V, B&W, rotation) — visible only
             // when the current media is a video AND not casting (the

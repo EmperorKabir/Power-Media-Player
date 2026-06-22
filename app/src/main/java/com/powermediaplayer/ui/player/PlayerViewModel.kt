@@ -48,6 +48,33 @@ class PlayerViewModel @Inject constructor(
     val currentOverride =
         mediaOverrideRepo.activeOverride
 
+    /** Shuffle the playback queue. Persisted; applied to the player whenever it
+     *  (re)connects or the preference changes. */
+    val shuffleEnabled: kotlinx.coroutines.flow.StateFlow<Boolean> =
+        settingsDataStore.shuffleEnabled.stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+            false
+        )
+
+    fun toggleShuffle() {
+        val next = !shuffleEnabled.value
+        playbackConnection.setShuffleMode(next)
+        viewModelScope.launch { settingsDataStore.setShuffleEnabled(next) }
+    }
+
+    init {
+        // Keep the live player's shuffle mode in sync with the persisted pref
+        // (covers controller reconnect + the toggle).
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                settingsDataStore.shuffleEnabled,
+                playbackConnection.playerFlow
+            ) { sh, player -> sh to player }
+                .collect { (sh, player) -> if (player != null) playbackConnection.setShuffleMode(sh) }
+        }
+    }
+
     private val musicBrainzClient =
         com.powermediaplayer.enrichment.MusicBrainzClient()
     private val discogsClient =

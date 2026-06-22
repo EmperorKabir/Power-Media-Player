@@ -29,7 +29,8 @@ val playerInfo: InfoSheetData = InfoSheetData(
                 "Skip ±5/10/15/20/30 — Jump that many seconds back or forward.",
                 "Previous / Next — Jumps to previous/next chapter if the file has chapters; otherwise the previous/next track.",
                 "A-B Loop — Tap once to mark A, again to mark B; playback then loops between them. The Track bar shows live markers — an amber A while only A is set, turning teal with a banded A-B region once the loop is active. Tap a third time to clear. A loop is remembered per file and clears itself when you move to a different track.",
-                "Frame step ± — One frame back or forward. Video only. Pauses the video first."
+                "Frame step ± — One frame back or forward. Video only. Pauses the video first.",
+                "Shuffle — The shuffle icon (next to the bookmark button) plays the current queue in a random order; Previous/Next then follow the shuffled order. Teal = on, grey = off. It applies to multi-track queues (e.g. an album or folder played from the Library) and is remembered across restarts. A single track has nothing to shuffle. For Spotify, use Spotify's own shuffle — this controls the app's local queue."
             )
         ),
         InfoSection(

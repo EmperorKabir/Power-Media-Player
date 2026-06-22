@@ -297,6 +297,8 @@ class SettingsDataStore @Inject constructor(
         // keeps playing. (Bluetooth is LOCAL audio and always follows the
         // per-scenario pause/duck/continue policy above.)
         val AUDIO_INTERRUPTIONS_PAUSE_CAST = booleanPreferencesKey("audio_interruptions_pause_cast")
+        // Shuffle the playback queue. Persisted so it survives relaunch.
+        val SHUFFLE_ENABLED = booleanPreferencesKey("shuffle_enabled")
 
         // §C17 — online metadata enrichment via Discogs + MusicBrainz.
         // Stub: just the toggle for now; the actual API integrations
@@ -753,6 +755,14 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setInterruptionsPauseCast(enabled: Boolean) {
         context.dataStore.edit { it[Keys.AUDIO_INTERRUPTIONS_PAUSE_CAST] = enabled }
+    }
+
+    /** Shuffle the playback queue. Default off; persisted across relaunch. */
+    val shuffleEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.SHUFFLE_ENABLED] ?: false
+    }
+    suspend fun setShuffleEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.SHUFFLE_ENABLED] = enabled }
     }
 
     // ── §C17 Online metadata enrichment ───────────────────────────────

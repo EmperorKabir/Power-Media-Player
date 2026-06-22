@@ -1131,14 +1131,24 @@ class CloudViewModel @Inject constructor(
                     // to the section view.
                     val containerUri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
                         else "spotify:${item.mimeType.substringAfter("application/spotify-")}:${item.id}"
+                    // Drilling in from SEARCH must drop the search, else the
+                    // search-results branch keeps rendering and the album's
+                    // tracks (now in `items`) never show.
+                    searchJob?.cancel()
                     viewModelScope.launch(Dispatchers.IO) {
-                        _uiState.value = _uiState.value.copy(isLoading = true)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = true,
+                            searchQuery = "",
+                            searchResults = emptyList()
+                        )
                         val r = spotifyProvider.listContainer(containerUri)
                         val list = r.getOrDefault(emptyList())
                         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cloud.openItem container loaded n=${list.size} first=${list.firstOrNull()?.name}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             items = list,
+                            searchQuery = "",
+                            searchResults = emptyList(),
                             folderStack = _uiState.value.folderStack + (containerUri to item.name),
                             errorMessage = r.exceptionOrNull()?.message
                         )

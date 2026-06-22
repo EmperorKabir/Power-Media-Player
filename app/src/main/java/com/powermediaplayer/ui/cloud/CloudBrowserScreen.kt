@@ -486,11 +486,13 @@ fun CloudBrowserScreen(
                 }
             } else if (uiState.activeProvider == CloudProviderType.SPOTIFY &&
                        uiState.spotifySection == null &&
-                       uiState.searchQuery.isBlank()) {
+                       uiState.searchQuery.isBlank() &&
+                       uiState.folderStack.size <= 1) {
                 // Spotify section picker — landing screen when entering
                 // Spotify. Each card opens a single Web API endpoint.
                 // A non-blank query falls through to the search-results
-                // branch below (Part 5.2 ordering fix).
+                // branch below (Part 5.2 ordering fix); a pushed folderStack
+                // (drilled into an album from search) falls to the browse list.
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 360.dp),   // audit 8.1 (F4)
                     modifier = Modifier.fillMaxSize(),
