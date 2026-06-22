@@ -142,15 +142,24 @@ class CloudViewModel @Inject constructor(
                     "C28 saved offline id=${item.id} path=$storedPath size=$storedSize"
                 )
             } else {
-                _uiState.update {
-                    it.copy(errorMessage = "Couldn't save offline — try again on Wi-Fi.")
-                }
+                val msg = if (com.powermediaplayer.util.DownloadProgressBus.isCancelled(item.id))
+                    "Download cancelled: ${item.name}"
+                else "Couldn't save offline — try again on Wi-Fi."
+                _uiState.update { it.copy(errorMessage = msg) }
             }
           } finally {
             _savingOffline.update { it - item.id }
             com.powermediaplayer.util.DownloadProgressBus.clear(item.id)
           }
         }
+    }
+
+    /** Cancel an in-flight Drive offline save. The shared copy path throws at the
+     *  next chunk; the provider deletes the partial cache file; saveDriveOffline's
+     *  null branch skips the DB write. No fragment is left behind. */
+    fun cancelDownload(id: String) {
+        com.powermediaplayer.util.DownloadProgressBus.requestCancel(id)
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "cancelDownload requested id=$id")
     }
 
     /** §C28 — download every not-yet-offline audio file in the current Drive

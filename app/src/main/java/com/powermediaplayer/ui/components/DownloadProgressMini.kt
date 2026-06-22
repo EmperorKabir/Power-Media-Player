@@ -2,10 +2,15 @@ package com.powermediaplayer.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,32 +31,52 @@ import com.powermediaplayer.util.DownloadProgressBus
  * the podcast episode rows + Drive file/favourite rows during a download.
  */
 @Composable
-fun DownloadProgressMini(id: String, modifier: Modifier = Modifier) {
+fun DownloadProgressMini(
+    id: String,
+    modifier: Modifier = Modifier,
+    onCancel: (() -> Unit)? = null
+) {
     val map by DownloadProgressBus.flow.collectAsStateWithLifecycle()
     val p = map[id]
-    Column(
-        modifier = modifier.width(60.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
-        if (p != null && p.total > 0L) {
-            LinearProgressIndicator(
-                progress = { p.fraction },
-                color = TealAccent,
-                trackColor = TealAccent.copy(alpha = 0.2f),
-                modifier = Modifier.width(52.dp).height(4.dp)
-            )
-            Text(
-                "${fmtMb(p.done)}/${fmtMb(p.total)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary
-            )
-        } else {
-            CircularProgressIndicator(
-                color = TealAccent,
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(18.dp)
-            )
+        Column(
+            modifier = Modifier.width(60.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (p != null && p.total > 0L) {
+                LinearProgressIndicator(
+                    progress = { p.fraction },
+                    color = TealAccent,
+                    trackColor = TealAccent.copy(alpha = 0.2f),
+                    modifier = Modifier.width(52.dp).height(4.dp)
+                )
+                Text(
+                    "${fmtMb(p.done)}/${fmtMb(p.total)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary
+                )
+            } else {
+                CircularProgressIndicator(
+                    color = TealAccent,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        if (onCancel != null) {
+            IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Cancel download",
+                    tint = TextTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

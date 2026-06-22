@@ -215,13 +215,23 @@ class PodcastsViewModel @Inject constructor(
                 if (saved != null) {
                     podcastDao.setLocalPath(e.guid, saved.uri, saved.bytes, System.currentTimeMillis())
                     setStatus("Downloaded: ${e.title}")
+                } else if (com.powermediaplayer.util.DownloadProgressBus.isCancelled(e.guid)) {
+                    setStatus("Download cancelled: ${e.title}")
                 } else {
                     setStatus("Download failed: ${e.title}")
                 }
             } finally {
                 markDownloading(e.guid, false)
+                com.powermediaplayer.util.DownloadProgressBus.clear(e.guid)
             }
         }
+    }
+
+    /** Cancel an in-flight episode download. The shared copy path aborts at the
+     *  next chunk; PodcastDownloader deletes the partial file and returns null,
+     *  so no local path is recorded. */
+    fun cancelDownload(guid: String) {
+        com.powermediaplayer.util.DownloadProgressBus.requestCancel(guid)
     }
 
     fun deleteEpisodeDownload(e: PodcastEpisodeEntity) {
@@ -738,7 +748,9 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
             contentAlignment = Alignment.Center
         ) {
             when {
-                isDownloading -> com.powermediaplayer.ui.components.DownloadProgressMini(e.guid)
+                isDownloading -> com.powermediaplayer.ui.components.DownloadProgressMini(
+                    e.guid, onCancel = { vm.cancelDownload(e.guid) }
+                )
                 // Downloaded → a clear DELETE affordance (a tick read as a passive
                 // status, not something you could remove). Teal = it IS downloaded.
                 isDownloaded -> IconButton(onClick = { confirmDelete = true }) {

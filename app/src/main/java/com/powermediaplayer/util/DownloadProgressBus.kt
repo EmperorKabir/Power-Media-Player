@@ -20,12 +20,26 @@ object DownloadProgressBus {
     private val _flow = MutableStateFlow<Map<String, Prog>>(emptyMap())
     val flow: StateFlow<Map<String, Prog>> = _flow
 
+    /** Ids the user has asked to cancel mid-download. The shared copy paths poll
+     *  this set and throw [DownloadCancelledException] so the provider's existing
+     *  partial-file cleanup (catch { cacheFile.delete() }) fires. */
+    private val cancelled = java.util.Collections.synchronizedSet(HashSet<String>())
+
     fun update(id: String, done: Long, total: Long) {
         _flow.value = _flow.value + (id to Prog(done, total))
     }
 
     fun clear(id: String) {
         if (_flow.value.containsKey(id)) _flow.value = _flow.value - id
+        cancelled.remove(id)
+    }
+
+    /** Signal that the in-flight download for [id] should abort at the next chunk. */
+    fun requestCancel(id: String) { cancelled.add(id) }
+    fun isCancelled(id: String): Boolean = cancelled.contains(id)
+    /** Throw if [id] was cancelled — called from the copy loops between chunks. */
+    fun throwIfCancelled(id: String?) {
+        if (id != null && cancelled.contains(id)) throw DownloadCancelledException(id)
     }
 
     /**
@@ -39,6 +53,7 @@ object DownloadProgressBus {
         var lastReport = -1L
         update(id, 0L, total)
         while (true) {
+            throwIfCancelled(id)
             val n = input.read(buf)
             if (n < 0) break
             output.write(buf, 0, n)
@@ -53,6 +68,9 @@ object DownloadProgressBus {
         return done
     }
 }
+
+/** Thrown by the shared download copy paths when the user cancels a download. */
+class DownloadCancelledException(id: String) : java.io.IOException("Download cancelled: $id")
 
 /**
  * Wraps a source [InputStream] so every byte read is counted and reported to
@@ -78,12 +96,14 @@ class ProgressInputStream(
     }
 
     override fun read(): Int {
+        DownloadProgressBus.throwIfCancelled(id)
         val b = delegate.read()
         if (b >= 0) bump(1)
         return b
     }
 
     override fun read(b: ByteArray, off: Int, len: Int): Int {
+        DownloadProgressBus.throwIfCancelled(id)
         val n = delegate.read(b, off, len)
         bump(n.toLong())
         return n

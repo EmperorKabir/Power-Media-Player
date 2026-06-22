@@ -420,6 +420,7 @@ class GoogleDriveProvider @Inject constructor(
                         var written = 0L
                         var lastReport = -1L
                         while (true) {
+                            com.powermediaplayer.util.DownloadProgressBus.throwIfCancelled(progressId)
                             val toRead = if (maxBytes == Long.MAX_VALUE) buf.size
                             else minOf(buf.size.toLong(), maxBytes - written).toInt()
                             if (toRead <= 0) break

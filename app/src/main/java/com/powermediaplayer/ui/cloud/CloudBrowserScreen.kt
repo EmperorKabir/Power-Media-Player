@@ -668,6 +668,7 @@ fun CloudBrowserScreen(
                             isSavingOffline = item.id in savingOffline,
                             onSaveOffline = { viewModel.saveDriveOffline(item) },
                             onRemoveOffline = { viewModel.removeDriveOffline(item.id) },
+                            onCancelOffline = { viewModel.cancelDownload(item.id) },
                             canPlayAlbum = isSpotifyAlbum,
                             onPlayAlbum = { viewModel.playSpotifyAlbum(item, onPlaybackStarted = onNavigateToPlayer) }
                         )
@@ -768,6 +769,7 @@ fun CloudBrowserScreen(
                                 isSaving = fav.id in savingOffline,
                                 onSaveOffline = { viewModel.saveDriveOffline(favItem) },
                                 onRemoveOffline = { viewModel.removeDriveOffline(fav.id) },
+                                onCancelOffline = { viewModel.cancelDownload(fav.id) },
                                 onClick = {
                                     viewModel.playDriveFavouriteTrack(
                                         fav.id,
@@ -976,6 +978,7 @@ fun CloudBrowserScreen(
                             isSavingOffline = item.id in savingOffline,
                             onSaveOffline = { viewModel.saveDriveOffline(item) },
                             onRemoveOffline = { viewModel.removeDriveOffline(item.id) },
+                            onCancelOffline = { viewModel.cancelDownload(item.id) },
                             canPlayAlbum = isSpotify && item.isFolder &&
                                 (item.mimeType.endsWith("album") || item.mimeType.endsWith("playlist")),
                             onPlayAlbum = { viewModel.playSpotifyAlbum(item, onPlaybackStarted = onNavigateToPlayer) }
@@ -1504,6 +1507,7 @@ private fun CloudItemRow(
     isSavingOffline: Boolean = false,
     onSaveOffline: () -> Unit = {},
     onRemoveOffline: () -> Unit = {},
+    onCancelOffline: () -> Unit = {},
     canPlayAlbum: Boolean = false,
     onPlayAlbum: () -> Unit = {}
 ) {
@@ -1567,7 +1571,9 @@ private fun CloudItemRow(
         // the long-press menu — undiscoverable). Mirrors the podcast row.
         if (canManageOffline) {
             when {
-                isSavingOffline -> com.powermediaplayer.ui.components.DownloadProgressMini(item.id)
+                isSavingOffline -> com.powermediaplayer.ui.components.DownloadProgressMini(
+                    item.id, onCancel = onCancelOffline
+                )
                 isOffline -> IconButton(onClick = onRemoveOffline, modifier = Modifier.size(36.dp)) {
                     Icon(
                         Icons.Filled.DeleteOutline,
@@ -1675,7 +1681,8 @@ private fun FavouriteTrackRow(
     isOffline: Boolean = false,
     isSaving: Boolean = false,
     onSaveOffline: () -> Unit = {},
-    onRemoveOffline: () -> Unit = {}
+    onRemoveOffline: () -> Unit = {},
+    onCancelOffline: () -> Unit = {}
 ) {
     Row(
         modifier = Modifier
@@ -1709,7 +1716,9 @@ private fun FavouriteTrackRow(
         )
         // Visible download / remove-offline (favourite Drive tracks had none).
         when {
-            isSaving -> com.powermediaplayer.ui.components.DownloadProgressMini(fav.id)
+            isSaving -> com.powermediaplayer.ui.components.DownloadProgressMini(
+                fav.id, onCancel = onCancelOffline
+            )
             isOffline -> IconButton(onClick = onRemoveOffline, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove offline copy",
                     tint = TealAccent, modifier = Modifier.size(20.dp))
