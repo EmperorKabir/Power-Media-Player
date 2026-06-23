@@ -370,7 +370,11 @@ private fun ImmersiveVideoTabOverlay(
                         currentDestination?.hierarchy?.any { it.route == screen.route } == true
                     NavigationRailItem(
                         selected = selected,
-                        onClick = { onNavigate(screen.route) },
+                        onClick = {
+                            // Re-tap the active tab → reset that screen to top.
+                            if (selected) TabReselectBus.reselected(screen.route)
+                            else onNavigate(screen.route)
+                        },
                         icon = { Icon(screen.icon, contentDescription = screen.title) },
                         label = {
                             Text(screen.title, style = MaterialTheme.typography.labelSmall)

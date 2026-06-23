@@ -135,6 +135,15 @@ class DownloadsViewModel @Inject constructor(
         _selected.value = (s.podcasts + s.drive).map { it.key }.toSet()
     }
 
+    /** Toggle-select every podcast row (select all if not all selected, else clear them). */
+    fun selectAllPodcasts() = toggleSection(state.value.podcasts.map { it.key }.toSet())
+    /** Toggle-select every Drive row. */
+    fun selectAllDrive() = toggleSection(state.value.drive.map { it.key }.toSet())
+    private fun toggleSection(keys: Set<String>) {
+        _selected.value = if (_selected.value.containsAll(keys) && keys.isNotEmpty())
+            _selected.value - keys else _selected.value + keys
+    }
+
     fun clearSelection() { _selected.value = emptySet() }
 
     /** Delete every selected row (reuses single-row delete), then exit selection. */
@@ -287,7 +296,11 @@ fun DownloadsScreen(
 
             if (s.podcasts.isNotEmpty()) {
                 item(key = "h_pod") {
-                    SectionHeader(Icons.Filled.Podcasts, "Podcasts (${s.podcasts.size})")
+                    SectionHeader(
+                        Icons.Filled.Podcasts, "Podcasts (${s.podcasts.size})",
+                        allSelected = s.podcasts.all { it.key in sel },
+                        onSelectAll = { vm.selectAllPodcasts() }
+                    )
                 }
                 items(s.podcasts, key = { it.key }) { row ->
                     DownloadRowView(
@@ -300,7 +313,11 @@ fun DownloadsScreen(
             }
             if (s.drive.isNotEmpty()) {
                 item(key = "h_drv") {
-                    SectionHeader(Icons.Filled.Cloud, "Google Drive (${s.drive.size})")
+                    SectionHeader(
+                        Icons.Filled.Cloud, "Google Drive (${s.drive.size})",
+                        allSelected = s.drive.all { it.key in sel },
+                        onSelectAll = { vm.selectAllDrive() }
+                    )
                 }
                 items(s.drive, key = { it.key }) { row ->
                     DownloadRowView(
@@ -316,14 +333,28 @@ fun DownloadsScreen(
 }
 
 @Composable
-private fun SectionHeader(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+private fun SectionHeader(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    allSelected: Boolean = false,
+    onSelectAll: (() -> Unit)? = null
+) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null, tint = TealAccent, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
-        Text(label, color = TextSecondary, style = MaterialTheme.typography.titleSmall)
+        Text(label, color = TextSecondary, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        if (onSelectAll != null) {
+            TextButton(onClick = onSelectAll) {
+                Text(
+                    if (allSelected) "Deselect all" else "Select all",
+                    color = TealAccent,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
     }
 }
 

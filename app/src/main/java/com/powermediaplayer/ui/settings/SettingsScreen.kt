@@ -105,6 +105,14 @@ fun SettingsScreen(
     // loop supplies the dividers. A2 inventory guard: SETTINGS_ITEM_IDS.
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
+    // Tap the already-active Settings tab again → clear the search filter (the
+    // settings "top level" is the unfiltered list).
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.powermediaplayer.ui.navigation.TabReselectBus.events.collect { route ->
+            if (route == "settings") searchQuery = ""
+        }
+    }
+
     // The catalog is structurally static; the content lambdas read
     // the DELEGATED uiState property, so they always see the live
     // value. Audit 4.2: remember(uiState) re-allocated all 8 groups,

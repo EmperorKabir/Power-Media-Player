@@ -263,6 +263,16 @@ fun LibraryScreen(
     LaunchedEffect(Unit) {
         viewModel.refreshIfStale()
     }
+    // Tap the already-active Library tab again → reset to top level (clear the
+    // search, back to the Audio tab; the list scroll resets on the tab change).
+    LaunchedEffect(Unit) {
+        com.powermediaplayer.ui.navigation.TabReselectBus.events.collect { route ->
+            if (route == "library") {
+                viewModel.setSearchQuery("")
+                viewModel.setSelectedTab(0)
+            }
+        }
+    }
 
     // §F — first-run deep-scan opt-in dialog. Shows once on the first
     // Library-tab open after fresh install (after media permissions
