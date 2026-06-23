@@ -145,6 +145,10 @@ class SpotifyProvider @Inject constructor(
      */
     @Volatile private var expectedTrackUri: String? = null
 
+    /** Last track URI logged by the SP_ORDER order-trace, so it logs only on an
+     *  actual track change instead of every ~1 s poll. */
+    @Volatile private var lastOrderUri: String = ""
+
     /**
      * vc32: true while the mirror holds a PROVISIONAL state
      * synthesised from the row the user tapped (not yet confirmed by
@@ -1479,17 +1483,20 @@ class SpotifyProvider @Inject constructor(
                 val device = root.getAsJsonObject("device")
                 val contextUri = root.getAsJsonObject("context")
                     ?.get("uri")?.takeIf { !it.isJsonNull }?.asString
-                // ORDER TRACE: the track + Spotify's OWN shuffle_state on every
-                // poll. Pressing next/prev moves this; comparing the track
-                // sequence with shuffle_state=true vs false shows whether the
-                // device is actually shuffling (Spotify is the source of truth).
-                com.powermediaplayer.util.Diag.i(
-                    "PMP_DIAG",
-                    "SP_ORDER track='${item.get("name")?.asString.orEmpty()}' " +
-                        "uri=${item.get("uri")?.asString.orEmpty()} " +
-                        "spotifyShuffle=${root.get("shuffle_state")?.takeIf { !it.isJsonNull }?.asBoolean} " +
-                        "context=${contextUri ?: "null"}"
-                )
+                // ORDER TRACE (on track-change only): the track + Spotify's OWN
+                // shuffle_state. Pressing next/prev moves this; comparing the
+                // track sequence with shuffle_state=true vs false shows whether
+                // the device is actually shuffling (Spotify is the source of truth).
+                val orderUri = item.get("uri")?.asString.orEmpty()
+                if (orderUri != lastOrderUri) {
+                    lastOrderUri = orderUri
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "SP_ORDER track='${item.get("name")?.asString.orEmpty()}' uri=$orderUri " +
+                            "spotifyShuffle=${root.get("shuffle_state")?.takeIf { !it.isJsonNull }?.asBoolean} " +
+                            "context=${contextUri ?: "null"}"
+                    )
+                }
                 SpotifyPlaybackState(
                     title = item.get("name")?.asString.orEmpty(),
                     artist = artists,
