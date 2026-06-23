@@ -829,9 +829,17 @@ class SpotifyProvider @Inject constructor(
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Not authenticated")
         )
-        val st = _spotifyState.value ?: return@withContext Result.success(Unit)
-        val ctx = st.contextUri
+        val st = _spotifyState.value
+        val ctx = st?.contextUri
+        com.powermediaplayer.util.Diag.i(
+            "PMP_DIAG",
+            "Spotify.reshuffleCurrentContext entry ctx=${ctx ?: "null"} track=${st?.trackUri ?: "null"}"
+        )
+        if (st == null) return@withContext Result.success(Unit)
         if (ctx == null || !(ctx.startsWith("spotify:album:") || ctx.startsWith("spotify:playlist:"))) {
+            com.powermediaplayer.util.Diag.i(
+                "PMP_DIAG", "Spotify.reshuffleCurrentContext SKIP (no album/playlist context)"
+            )
             return@withContext Result.success(Unit)
         }
         val offsetJson = if (st.trackUri.startsWith("spotify:track:"))
@@ -1471,9 +1479,16 @@ class SpotifyProvider @Inject constructor(
                 val device = root.getAsJsonObject("device")
                 val contextUri = root.getAsJsonObject("context")
                     ?.get("uri")?.takeIf { !it.isJsonNull }?.asString
+                // ORDER TRACE: the track + Spotify's OWN shuffle_state on every
+                // poll. Pressing next/prev moves this; comparing the track
+                // sequence with shuffle_state=true vs false shows whether the
+                // device is actually shuffling (Spotify is the source of truth).
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
-                    "Spotify.fetchCurrentState artwork=${artwork ?: "null"} context=${contextUri ?: "null"}"
+                    "SP_ORDER track='${item.get("name")?.asString.orEmpty()}' " +
+                        "uri=${item.get("uri")?.asString.orEmpty()} " +
+                        "spotifyShuffle=${root.get("shuffle_state")?.takeIf { !it.isJsonNull }?.asBoolean} " +
+                        "context=${contextUri ?: "null"}"
                 )
                 SpotifyPlaybackState(
                     title = item.get("name")?.asString.orEmpty(),
