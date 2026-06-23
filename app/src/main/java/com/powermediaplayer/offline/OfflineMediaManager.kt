@@ -57,9 +57,12 @@ class OfflineMediaManager @Inject constructor(
         else -> Regex("/files/([^?]+)").find(uri)?.groupValues?.getOrNull(1)
     }
 
-    private fun isDriveUri(uri: String): Boolean =
-        (uri.contains("/files/") && uri.contains("googleapis")) ||
-            (uri.startsWith("content://") && uri.contains("document"))
+    /** True ONLY for an unambiguous OAuth Drive download url. A SAF content://
+     *  uri is deliberately NOT inferred as Drive — a locally-picked file has the
+     *  identical shape, so Drive-via-SAF is offered only when an explicit "DRIVE"
+     *  source hint says so (Last Played), never inferred on the Player path. */
+    private fun isOAuthDriveUri(uri: String): Boolean =
+        uri.contains("/files/") && uri.contains("googleapis")
 
     /**
      * Synchronous state from a URI + a reactive downloadedKeys snapshot (so it
@@ -70,22 +73,27 @@ class OfflineMediaManager @Inject constructor(
         if (uri.isNullOrBlank() || isSpotify || uri.startsWith("spotify:") || sourceHint == "SPOTIFY") {
             return OfflineState.NOT_APPLICABLE
         }
+        // DOWNLOADED is unambiguous: only real offline copies are in `downloaded`,
+        // so a plain local file (never in the DAO) can't false-positive here.
         val driveId = driveIdOf(uri)
         if ((driveId != null && driveId in downloaded) || uri in downloaded) return OfflineState.DOWNLOADED
-        if (sourceHint == "DRIVE" || isDriveUri(uri)) return OfflineState.DOWNLOADABLE
-        // Podcast: a LOCAL-source http uri from Last Played, or any non-Drive http
-        // uri the Player is on — downloadable only if we actually know the episode.
-        if (uri.startsWith("http") && (sourceHint == "LOCAL" || sourceHint == null)) {
-            // Best-effort sync hint; the suspend download() re-checks authoritatively.
-            return OfflineState.DOWNLOADABLE
-        }
+        // DOWNLOADABLE — an explicit hint (Last Played), or an unambiguous OAuth
+        // Drive url. A SAF content:// uri is NEVER inferred as Drive (it looks
+        // identical to a locally-picked file → would copy a local file + write a
+        // bogus Drive-offline row), so SAF Drive is offered only on a DRIVE hint.
+        if (sourceHint == "DRIVE") return OfflineState.DOWNLOADABLE
+        if (isOAuthDriveUri(uri)) return OfflineState.DOWNLOADABLE
+        // Podcast: a LOCAL-source http uri from a Last Played row (those rows are
+        // genuinely podcast episodes). Not inferred on the Player path, where a
+        // bare http uri isn't necessarily a subscribed episode.
+        if (sourceHint == "LOCAL" && uri.startsWith("http")) return OfflineState.DOWNLOADABLE
         return OfflineState.NOT_APPLICABLE
     }
 
     /** Download the media at [uri] for offline use. [title] names the stored file. */
     suspend fun download(uri: String, title: String): Result<Unit> = withContext(Dispatchers.IO) {
         // Podcast first: a non-Drive http uri with a known episode.
-        if (uri.startsWith("http") && !isDriveUri(uri)) {
+        if (uri.startsWith("http") && !isOAuthDriveUri(uri)) {
             val ep = podcastDao.episodeByAudioUrl(uri)
             if (ep != null) return@withContext downloadPodcast(ep)
         }

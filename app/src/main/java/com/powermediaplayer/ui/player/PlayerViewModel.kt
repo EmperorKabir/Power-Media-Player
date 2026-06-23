@@ -163,6 +163,10 @@ class PlayerViewModel @Inject constructor(
     fun currentDriveId(): String? =
         offlineMediaManager.driveIdOf(playbackConnection.playerState.value.currentMediaUri)
 
+    /** Transient download/delete result for the player button (→ Toast). */
+    private val _offlineStatus = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val offlineStatus: kotlinx.coroutines.flow.SharedFlow<String> = _offlineStatus
+
     /** Download the current item offline, or delete its local copy. */
     fun toggleOffline() {
         val uri = playbackConnection.playerState.value.currentMediaUri
@@ -171,8 +175,15 @@ class PlayerViewModel @Inject constructor(
         val state = offlineState.value
         viewModelScope.launch {
             when (state) {
-                com.powermediaplayer.offline.OfflineState.DOWNLOADED -> offlineMediaManager.deleteLocal(uri)
-                com.powermediaplayer.offline.OfflineState.DOWNLOADABLE -> offlineMediaManager.download(uri, title)
+                com.powermediaplayer.offline.OfflineState.DOWNLOADED -> {
+                    val r = offlineMediaManager.deleteLocal(uri)
+                    _offlineStatus.tryEmit(if (r.isSuccess) "Deleted local copy" else (r.exceptionOrNull()?.message ?: "Delete failed"))
+                }
+                com.powermediaplayer.offline.OfflineState.DOWNLOADABLE -> {
+                    _offlineStatus.tryEmit("Downloading…")
+                    val r = offlineMediaManager.download(uri, title)
+                    _offlineStatus.tryEmit(if (r.isSuccess) "Saved offline" else (r.exceptionOrNull()?.message ?: "Download failed"))
+                }
                 else -> {}
             }
         }

@@ -165,6 +165,12 @@ private fun SpotifyAlbumTracksButton(viewModel: PlayerViewModel) {
 @Composable
 private fun PlayerOfflineButton(viewModel: PlayerViewModel) {
     val state by viewModel.offlineState.collectAsStateWithLifecycle()
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(Unit) {
+        viewModel.offlineStatus.collect {
+            android.widget.Toast.makeText(appCtx, it, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
     if (state == com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE) return
     val progress by com.powermediaplayer.util.DownloadProgressBus.flow.collectAsStateWithLifecycle()
     val driveId = viewModel.currentDriveId()
