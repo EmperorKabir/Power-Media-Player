@@ -1177,11 +1177,6 @@ class CloudViewModel @Inject constructor(
             "PMP_DIAG",
             "Cloud.openItem name=${item.name} provider=${item.sourceProvider} folder=${item.isFolder} mime=${item.mimeType}"
         )
-        // Acting on a search result → that query was useful; remember it. (Only
-        // here, not on every keystroke, so the history holds whole queries.)
-        _uiState.value.searchQuery.takeIf { it.isNotBlank() }?.let { q ->
-            viewModelScope.launch { settingsDataStore.addRecentSearchCloud(q) }
-        }
         if (!item.isFolder) {
             // vc32: new play intent — supersedes any in-flight slow resume.
             com.powermediaplayer.playback.ResumeGate.end(
