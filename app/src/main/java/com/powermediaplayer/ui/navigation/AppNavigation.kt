@@ -392,7 +392,12 @@ private fun ImmersiveVideoTabOverlay(
                         currentDestination?.hierarchy?.any { it.route == screen.route } == true
                     NavigationBarItem(
                         selected = selected,
-                        onClick = { onNavigate(screen.route) },
+                        onClick = {
+                            // Tapping the already-active tab again resets that
+                            // screen to its top level (Cloud → provider picker).
+                            if (selected) TabReselectBus.reselected(screen.route)
+                            else onNavigate(screen.route)
+                        },
                         icon = { Icon(screen.icon, contentDescription = screen.title) },
                         label = {
                             Text(screen.title, style = MaterialTheme.typography.labelSmall)

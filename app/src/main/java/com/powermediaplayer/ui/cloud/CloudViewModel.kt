@@ -1041,6 +1041,23 @@ class CloudViewModel @Inject constructor(
         }
     }
 
+    /** Reset the Cloud tab to its top level (provider picker) — used when the
+     *  user taps the already-active Cloud nav tab again. */
+    fun navigateToRoot() {
+        searchJob?.cancel()
+        _uiState.value = _uiState.value.copy(
+            activeProvider = null,
+            spotifySection = null,
+            items = emptyList(),
+            folderStack = listOf(null to "Root"),
+            searchQuery = "",
+            searchResults = emptyList(),
+            searchInProgress = false,
+            priorSearchQuery = "",
+            priorSearchResults = emptyList()
+        )
+    }
+
     fun navigateUp() {
         val stack = _uiState.value.folderStack
         // Backing out of an album/series that was drilled into FROM a search →
@@ -1591,6 +1608,12 @@ class CloudViewModel @Inject constructor(
                 else -> emptyList()
             }
             _uiState.value = _uiState.value.copy(searchResults = results, searchInProgress = false)
+            // Record the query in recent searches once it returns results — for
+            // BOTH Drive and Spotify, and whether or not the user taps a result
+            // (the earlier record-on-tap missed Drive + most Spotify searches).
+            if (query.isNotBlank() && results.isNotEmpty()) {
+                settingsDataStore.addRecentSearchCloud(query)
+            }
         }
     }
 

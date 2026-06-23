@@ -98,6 +98,12 @@ fun CloudBrowserScreen(
     androidx.compose.runtime.LaunchedEffect(Unit) {
         viewModel.refreshIfStale()
     }
+    // Tap the already-active Cloud tab again → jump back to the top level.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.powermediaplayer.ui.navigation.TabReselectBus.events.collect { route ->
+            if (route == "cloud") viewModel.navigateToRoot()
+        }
+    }
 
     // Refresh on every screen-resume (Compose ON_RESUME). Fixes the
     // user-reported bug: "when adding a file or folder from Google

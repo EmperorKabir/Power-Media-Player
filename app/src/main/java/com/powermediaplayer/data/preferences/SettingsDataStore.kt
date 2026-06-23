@@ -1371,7 +1371,10 @@ class SettingsDataStore @Inject constructor(
         if (q.isBlank()) return
         context.dataStore.edit { prefs ->
             val cur = decodeRecent(prefs[key]).toMutableList()
-            cur.removeAll { it.equals(q, ignoreCase = true) } // de-dupe → moves to top
+            // De-dupe AND drop a just-typed prefix the user was building toward
+            // ("lin" → "linkin park" leaves only the latter), so incremental
+            // searches don't pile up.
+            cur.removeAll { it.equals(q, ignoreCase = true) || q.startsWith(it, ignoreCase = true) }
             cur.add(0, q)
             while (cur.size > 12) cur.removeAt(cur.size - 1)
             prefs[key] = cur.joinToString(rsSep)
