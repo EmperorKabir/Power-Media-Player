@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PushPin
@@ -174,10 +176,10 @@ fun TrackContextSheet(
                 Item(Icons.Filled.OpenInNew, "Open in other app", onClick = it)
             }
             actions.onSaveOffline?.let {
-                Item(Icons.Filled.Headset, "Save offline copy", onClick = it)
+                Item(Icons.Filled.Download, "Download for offline use", onClick = it)
             }
             actions.onRemoveOffline?.let {
-                Item(Icons.Filled.Headset, "Remove offline copy", onClick = it, tint = ErrorRed)
+                Item(Icons.Filled.DeleteOutline, "Delete from local storage", onClick = it, tint = ErrorRed)
             }
             actions.onPinOffline?.let {
                 Item(Icons.Filled.PushPin, "Protect from auto-cleanup", onClick = it)

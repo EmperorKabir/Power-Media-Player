@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.ui.res.painterResource
@@ -151,6 +153,41 @@ private fun SpotifyAlbumTracksButton(viewModel: PlayerViewModel) {
                 TextButton(onClick = { show = false }) { Text("Close", color = TealAccent) }
             }
         )
+    }
+}
+
+/**
+ * Download the CURRENT item for offline use, or delete its local copy. Renders
+ * nothing for Spotify / plain local-library files (offlineState NOT_APPLICABLE);
+ * shows a live progress spinner while a Drive download is in flight. Added to
+ * BOTH player layouts so it works folded and unfolded.
+ */
+@Composable
+private fun PlayerOfflineButton(viewModel: PlayerViewModel) {
+    val state by viewModel.offlineState.collectAsStateWithLifecycle()
+    if (state == com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE) return
+    val progress by com.powermediaplayer.util.DownloadProgressBus.flow.collectAsStateWithLifecycle()
+    val driveId = viewModel.currentDriveId()
+    val downloading = driveId != null && progress.containsKey(driveId)
+    IconButton(
+        onClick = { if (!downloading) viewModel.toggleOffline() },
+        modifier = Modifier.size(48.dp)
+    ) {
+        when {
+            downloading -> CircularProgressIndicator(
+                color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp)
+            )
+            state == com.powermediaplayer.offline.OfflineState.DOWNLOADED -> Icon(
+                Icons.Filled.DeleteOutline,
+                contentDescription = "Delete from local storage",
+                tint = TealAccent
+            )
+            else -> Icon(
+                Icons.Filled.Download,
+                contentDescription = "Download for offline use",
+                tint = TextTertiary
+            )
+        }
     }
 }
 
@@ -1203,6 +1240,8 @@ private fun OverlayContent(
             // Spotify album/playlist track list (chapters-equivalent) — only
             // renders when a Spotify album/playlist context is active.
             SpotifyAlbumTracksButton(viewModel)
+            // Download-offline / delete-local for the current Drive/podcast item.
+            PlayerOfflineButton(viewModel)
             // Video effects (mirror H/V, B&W, rotation) — visible only
             // when the current media is a video AND not casting (the
             // receiver renders the actual stream; local-TextureView
@@ -1473,6 +1512,8 @@ private fun PlayerScreenExpanded(
                 }
                 // Spotify album/playlist track list (chapters-equivalent).
                 SpotifyAlbumTracksButton(viewModel)
+                // Download-offline / delete-local for the current Drive/podcast item.
+                PlayerOfflineButton(viewModel)
                 // Audio effects (reverb / stereo flip / mono mix /
                 // passthrough) — applies to any audio track so it's
                 // present in both layouts. Greyed out while casting

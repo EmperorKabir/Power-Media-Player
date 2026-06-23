@@ -41,9 +41,53 @@ class LastPlayedViewModel @Inject constructor(
     private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver,
     private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
+    private val offlineMediaManager: com.powermediaplayer.offline.OfflineMediaManager,
     @param:dagger.hilt.android.qualifiers.ApplicationContext
     private val context: android.content.Context
 ) : ViewModel() {
+
+    // ── Offline download / delete from the 3-dot menu ─────────────────────────
+    /** Keys (Drive ids + podcast audio urls) currently downloaded — the screen
+     *  matches a row's mediaUri against these to pick Download vs Delete. */
+    val downloadedKeys: kotlinx.coroutines.flow.StateFlow<Set<String>> =
+        offlineMediaManager.downloadedKeys.stateIn(
+            viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptySet()
+        )
+
+    private val _offlineStatus = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val offlineStatus: kotlinx.coroutines.flow.SharedFlow<String> = _offlineStatus
+
+    /** Offline state of a Last Played row given a downloadedKeys snapshot. */
+    fun offlineStateOf(
+        item: LastPlayedRepository.HistoryItem,
+        keys: Set<String>
+    ): com.powermediaplayer.offline.OfflineState = offlineMediaManager.stateOf(
+        item.mediaUri,
+        item.source == LastPlayedRepository.Source.SPOTIFY,
+        keys,
+        item.source.name
+    )
+
+    fun downloadOffline(item: LastPlayedRepository.HistoryItem) {
+        viewModelScope.launch {
+            _offlineStatus.tryEmit("Downloading: ${item.title}…")
+            val r = offlineMediaManager.download(item.mediaUri, item.title)
+            _offlineStatus.tryEmit(
+                if (r.isSuccess) "Saved offline: ${item.title}"
+                else r.exceptionOrNull()?.message ?: "Download failed"
+            )
+        }
+    }
+
+    fun deleteOffline(item: LastPlayedRepository.HistoryItem) {
+        viewModelScope.launch {
+            val r = offlineMediaManager.deleteLocal(item.mediaUri)
+            _offlineStatus.tryEmit(
+                if (r.isSuccess) "Deleted local copy: ${item.title}"
+                else r.exceptionOrNull()?.message ?: "Nothing to delete"
+            )
+        }
+    }
 
     /**
      * §C10/§C28 — every "offline" KEY a Last Played row's mediaUri might equal:

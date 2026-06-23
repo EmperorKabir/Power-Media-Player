@@ -37,6 +37,7 @@ class PlayerViewModel @Inject constructor(
     private val replayGainDao: com.powermediaplayer.data.db.dao.ReplayGainDao,
     private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
     private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    private val offlineMediaManager: com.powermediaplayer.offline.OfflineMediaManager,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -142,6 +143,38 @@ class PlayerViewModel @Inject constructor(
             else "spotify:track:${item.id}"
         viewModelScope.launch {
             spotifyProvider.playTrackOnConnectDevice(uri, item.contextUri ?: lastContextFetched)
+        }
+    }
+
+    // ── Offline download / delete of the CURRENT item (Drive or podcast) ──────
+    /** NOT_APPLICABLE (Spotify / plain local file), DOWNLOADABLE, or DOWNLOADED —
+     *  drives the player's offline button (hidden when NOT_APPLICABLE). */
+    val offlineState: StateFlow<com.powermediaplayer.offline.OfflineState> =
+        kotlinx.coroutines.flow.combine(
+            playbackConnection.playerState,
+            spotifyProvider.spotifyState,
+            offlineMediaManager.downloadedKeys
+        ) { ps, spotify, keys ->
+            offlineMediaManager.stateOf(ps.currentMediaUri, spotify != null, keys)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE)
+
+    /** The Drive file id of the current item (or null) — lets the button show a
+     *  live download-progress spinner via DownloadProgressBus while saving. */
+    fun currentDriveId(): String? =
+        offlineMediaManager.driveIdOf(playbackConnection.playerState.value.currentMediaUri)
+
+    /** Download the current item offline, or delete its local copy. */
+    fun toggleOffline() {
+        val uri = playbackConnection.playerState.value.currentMediaUri
+        if (uri.isBlank()) return
+        val title = playbackConnection.playerState.value.title.ifBlank { "track" }
+        val state = offlineState.value
+        viewModelScope.launch {
+            when (state) {
+                com.powermediaplayer.offline.OfflineState.DOWNLOADED -> offlineMediaManager.deleteLocal(uri)
+                com.powermediaplayer.offline.OfflineState.DOWNLOADABLE -> offlineMediaManager.download(uri, title)
+                else -> {}
+            }
         }
     }
 

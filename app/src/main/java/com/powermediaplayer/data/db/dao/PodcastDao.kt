@@ -86,6 +86,11 @@ interface PodcastDao {
     @Query("SELECT * FROM podcast_episodes WHERE audioUrl = :url AND localPath IS NOT NULL LIMIT 1")
     suspend fun downloadedByAudioUrl(url: String): PodcastEpisodeEntity?
 
+    /** Any episode (downloaded or not) by its stream url — lets a Last Played /
+     *  Player offline action find the episode + show to download on demand. */
+    @Query("SELECT * FROM podcast_episodes WHERE audioUrl = :url LIMIT 1")
+    suspend fun episodeByAudioUrl(url: String): PodcastEpisodeEntity?
+
     @Query("SELECT IFNULL(SUM(localBytes), 0) FROM podcast_episodes WHERE localPath IS NOT NULL")
     suspend fun totalDownloadedBytes(): Long
 

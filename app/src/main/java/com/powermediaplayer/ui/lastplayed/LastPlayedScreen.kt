@@ -124,7 +124,12 @@ fun LastPlayedScreen(
             onDismiss = { showInfoSheet = false }
         )
     }
+    val offlineDownloadedKeys by viewModel.downloadedKeys.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) {
+        viewModel.offlineStatus.collect { snackbar.showSnackbar(it) }
+    }
     contextItem?.let { item ->
+        val offlineState = viewModel.offlineStateOf(item, offlineDownloadedKeys)
         com.powermediaplayer.ui.player.components.TrackContextSheet(
             title = item.title,
             subtitle = item.subtitle,
@@ -160,6 +165,12 @@ fun LastPlayedScreen(
                     ctx.startActivity(android.content.Intent.createChooser(send, "Share"))
                     contextItem = null
                 },
+                onSaveOffline = if (offlineState == com.powermediaplayer.offline.OfflineState.DOWNLOADABLE) {
+                    { viewModel.downloadOffline(item); contextItem = null }
+                } else null,
+                onRemoveOffline = if (offlineState == com.powermediaplayer.offline.OfflineState.DOWNLOADED) {
+                    { viewModel.deleteOffline(item); contextItem = null }
+                } else null,
                 onDelete = if (contextFromRecents) {
                     { viewModel.deleteRecentsRow(item.id); contextItem = null }
                 } else null
