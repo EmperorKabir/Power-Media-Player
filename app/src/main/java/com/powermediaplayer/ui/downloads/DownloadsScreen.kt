@@ -241,7 +241,7 @@ fun DownloadsScreen(
                         val allKeys = (s.podcasts + s.drive).map { it.key }.toSet()
                         val allSelected = sel.isNotEmpty() && sel.containsAll(allKeys)
                         TextButton(onClick = { if (allSelected) vm.clearSelection() else vm.selectAll() }) {
-                            Text(if (allSelected) "None" else "All", color = TealAccent)
+                            Text(if (allSelected) "Deselect all" else "Select all", color = TealAccent)
                         }
                         if (sel.isNotEmpty()) {
                             IconButton(onClick = { confirmBatch = true }) {

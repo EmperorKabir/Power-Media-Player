@@ -174,15 +174,29 @@ private fun PlayerOfflineButton(viewModel: PlayerViewModel) {
     if (state == com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE) return
     val progress by com.powermediaplayer.util.DownloadProgressBus.flow.collectAsStateWithLifecycle()
     val driveId = viewModel.currentDriveId()
-    val downloading = driveId != null && progress.containsKey(driveId)
+    val prog = driveId?.let { progress[it] }
+    val downloading = prog != null
     IconButton(
-        onClick = { if (!downloading) viewModel.toggleOffline() },
+        onClick = {
+            // While downloading, tap = STOP (the shared cancel signal aborts the
+            // copy + removes the partial file); otherwise download / delete.
+            if (downloading) driveId?.let { com.powermediaplayer.util.DownloadProgressBus.requestCancel(it) }
+            else viewModel.toggleOffline()
+        },
         modifier = Modifier.size(48.dp)
     ) {
         when {
-            downloading -> CircularProgressIndicator(
-                color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp)
-            )
+            downloading -> Box(contentAlignment = Alignment.Center) {
+                val frac = prog?.fraction ?: 0f
+                if (frac > 0f) CircularProgressIndicator(
+                    progress = { frac }, color = TealAccent, strokeWidth = 2.dp,
+                    modifier = Modifier.size(24.dp)
+                ) else CircularProgressIndicator(
+                    color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(24.dp)
+                )
+                // ✕ in the ring = tap to stop.
+                Icon(Icons.Filled.Close, "Stop download", tint = TextPrimary, modifier = Modifier.size(12.dp))
+            }
             state == com.powermediaplayer.offline.OfflineState.DOWNLOADED -> Icon(
                 Icons.Filled.DeleteOutline,
                 contentDescription = "Delete from local storage",
@@ -191,7 +205,7 @@ private fun PlayerOfflineButton(viewModel: PlayerViewModel) {
             else -> Icon(
                 Icons.Filled.Download,
                 contentDescription = "Download for offline use",
-                tint = TextTertiary
+                tint = TealAccent
             )
         }
     }
