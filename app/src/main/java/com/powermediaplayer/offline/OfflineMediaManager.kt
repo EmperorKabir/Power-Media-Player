@@ -124,26 +124,32 @@ class OfflineMediaManager @Inject constructor(
             ?: return Result.failure(IllegalStateException("Not a downloadable item"))
         if (offlineCopyDao.get(driveId) != null) return Result.success(Unit)
         com.powermediaplayer.util.DownloadProgressBus.label(driveId, title)
-        val item = CloudMediaItem(
-            id = driveId,
-            name = title,
-            mimeType = mimeForName(title),
-            size = 0L,
-            downloadUrl = uri,
-            sourceProvider = CloudProviderType.GOOGLE_DRIVE
-        )
-        val cache = try {
-            if (uri.startsWith("content://")) driveProvider.downloadFullToCache(item, progressId = driveId)
-            else driveOAuthProvider.downloadFullToCache(item, progressId = driveId)
-        } catch (_: Throwable) { null }
-            ?: return Result.failure(IllegalStateException("Download failed — try again on Wi-Fi"))
-        val (path, size) = relocate(item, cache)
-        settingsDataStore.upsertOfflineDrive(driveId, path)
-        offlineCopyDao.upsert(
-            OfflineCopyEntity(driveFileId = driveId, localPath = path, byteSize = size, displayName = title)
-        )
-        com.powermediaplayer.util.DownloadProgressBus.clear(driveId)
-        return Result.success(Unit)
+        // finally → ALWAYS clear the progress entry (success, failure OR a STOP
+        // cancel). Without this the Player STOP button stuck on the spinner and
+        // a failed download left a permanent "Downloading" row in Manage Downloads.
+        try {
+            val item = CloudMediaItem(
+                id = driveId,
+                name = title,
+                mimeType = mimeForName(title),
+                size = 0L,
+                downloadUrl = uri,
+                sourceProvider = CloudProviderType.GOOGLE_DRIVE
+            )
+            val cache = try {
+                if (uri.startsWith("content://")) driveProvider.downloadFullToCache(item, progressId = driveId)
+                else driveOAuthProvider.downloadFullToCache(item, progressId = driveId)
+            } catch (_: Throwable) { null }
+                ?: return Result.failure(IllegalStateException("Download failed — try again on Wi-Fi"))
+            val (path, size) = relocate(item, cache)
+            settingsDataStore.upsertOfflineDrive(driveId, path)
+            offlineCopyDao.upsert(
+                OfflineCopyEntity(driveFileId = driveId, localPath = path, byteSize = size, displayName = title)
+            )
+            return Result.success(Unit)
+        } finally {
+            com.powermediaplayer.util.DownloadProgressBus.clear(driveId)
+        }
     }
 
     private suspend fun downloadPodcast(ep: com.powermediaplayer.data.db.entity.PodcastEpisodeEntity): Result<Unit> {
@@ -151,10 +157,14 @@ class OfflineMediaManager @Inject constructor(
             ?: return Result.failure(IllegalStateException("Show not subscribed"))
         val global = settingsDataStore.podcastDownloadTreeUri.first().ifBlank { null }
         com.powermediaplayer.util.DownloadProgressBus.label(ep.guid, ep.title)
-        val saved = PodcastDownloader(context).download(show, ep, global)
-            ?: return Result.failure(IllegalStateException("Download failed"))
-        podcastDao.setLocalPath(ep.guid, saved.uri, saved.bytes, System.currentTimeMillis())
-        return Result.success(Unit)
+        try {
+            val saved = PodcastDownloader(context).download(show, ep, global)
+                ?: return Result.failure(IllegalStateException("Download failed"))
+            podcastDao.setLocalPath(ep.guid, saved.uri, saved.bytes, System.currentTimeMillis())
+            return Result.success(Unit)
+        } finally {
+            com.powermediaplayer.util.DownloadProgressBus.clear(ep.guid)
+        }
     }
 
     // ── Drive relocate into the user's single global offline folder (mirrors
