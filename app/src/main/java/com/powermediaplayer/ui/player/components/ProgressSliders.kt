@@ -1,5 +1,6 @@
 package com.powermediaplayer.ui.player.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,6 +41,12 @@ fun ProgressSliders(
     playlistRemainingFormatted: String,
     playlistSliderEnabled: Boolean,
     onPlaylistSeek: (Float) -> Unit,
+    // #4 — tapping a time label opens the numeric-jump dialog (handled upward,
+    // since this composable only knows fractions). Track + Full each get a pair.
+    onTrackSeekToElapsedMs: (() -> Unit)? = null,
+    onTrackSeekToRemainingMs: (() -> Unit)? = null,
+    onPlaylistSeekToElapsedMs: (() -> Unit)? = null,
+    onPlaylistSeekToRemainingMs: (() -> Unit)? = null,
     // Track info
     trackIndexDisplay: String,
     // Live A-B loop markers (0..1 of the Track bar), null when not set.
@@ -66,6 +73,8 @@ fun ProgressSliders(
             remainingFormatted = trackRemainingFormatted,
             enabled = trackSliderEnabled,
             onSeek = onTrackSeek,
+            onSeekToElapsedMs = onTrackSeekToElapsedMs,
+            onSeekToRemainingMs = onTrackSeekToRemainingMs,
             activeColor = TealAccent,
             abStartFraction = abStartFraction,
             abEndFraction = abEndFraction
@@ -102,6 +111,8 @@ fun ProgressSliders(
             remainingFormatted = playlistRemainingFormatted,
             enabled = playlistSliderEnabled,
             onSeek = onPlaylistSeek,
+            onSeekToElapsedMs = onPlaylistSeekToElapsedMs,
+            onSeekToRemainingMs = onPlaylistSeekToRemainingMs,
             activeColor = Teal300
         )
     }
@@ -120,6 +131,8 @@ private fun PositionSlider(
     remainingFormatted: String,
     enabled: Boolean,
     onSeek: (Float) -> Unit,
+    onSeekToElapsedMs: (() -> Unit)? = null,
+    onSeekToRemainingMs: (() -> Unit)? = null,
     activeColor: androidx.compose.ui.graphics.Color = TealAccent,
     abStartFraction: Float? = null,
     abEndFraction: Float? = null,
@@ -229,13 +242,29 @@ private fun PositionSlider(
             Text(
                 text = positionFormatted,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (enabled) TextSecondary else DisabledGrey
+                color = if (enabled) TextSecondary else DisabledGrey,
+                // #4 — tap elapsed → numeric jump dialog; 48dp touch target.
+                modifier = if (enabled && onSeekToElapsedMs != null) {
+                    Modifier
+                        .clickable { onSeekToElapsedMs() }
+                        .heightIn(min = 48.dp)
+                        .wrapContentHeight(Alignment.CenterVertically)
+                        .padding(horizontal = 4.dp)
+                } else Modifier
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = remainingFormatted,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (enabled) TextSecondary.copy(alpha = 0.75f) else DisabledGrey
+                    color = if (enabled) TextSecondary.copy(alpha = 0.75f) else DisabledGrey,
+                    // #4 — tap remaining → "jump so this much remains" dialog.
+                    modifier = if (enabled && onSeekToRemainingMs != null) {
+                        Modifier
+                            .clickable { onSeekToRemainingMs() }
+                            .heightIn(min = 48.dp)
+                            .wrapContentHeight(Alignment.CenterVertically)
+                            .padding(horizontal = 4.dp)
+                    } else Modifier
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(

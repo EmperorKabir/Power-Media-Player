@@ -1093,40 +1093,13 @@ private fun OverlayContent(
     } else {
         Modifier
     }
-    // Info icon top-right. For video this OverlayContent sits inside the
-    // controls alpha layer, so the icon fades + becomes non-interactive with
-    // the controls (the hidden-state tap catcher swallows phantom taps) per
-    // Q1 LOCKED. For audio mode (rendered directly at alpha 1) the icon stays
-    // visible. Q2 LOCKED Option A: scrim fades with controls (same layer).
-    Box(modifier = Modifier.fillMaxSize().then(cutoutPad).then(topBarInset)) {
-        InfoIcon(
-            onClick = onShowInfo,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 8.dp, end = 8.dp)
-        )
-        // 8.3b — rotate-to-fullscreen for video on COMPACT widths only:
-        // 12L+ large-screen devices may ignore orientation requests by
-        // policy, and wide windows already show video large. No
-        // permission needed — activity-level requests override the
-        // auto-rotate quick-setting on phones.
-        val compactWidth = androidx.compose.ui.platform.LocalConfiguration
-            .current.screenWidthDp < 600
-        if (uiState.isVideoContent && compactWidth) {
-            androidx.compose.material3.IconButton(
-                onClick = { com.powermediaplayer.MainActivityHolder.toggleVideoOrientation() },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 8.dp, start = 8.dp)
-            ) {
-                androidx.compose.material3.Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Filled.ScreenRotation,
-                    contentDescription = "Rotate video to fullscreen",
-                    tint = com.powermediaplayer.ui.theme.TealAccent
-                )
-            }
-        }
-    }
+    // #14 — the Info-icon Box (top-right "i" + the video rotate button) is
+    // declared LAST, AFTER the controls Column, so it is the top-most hit-test
+    // sibling and its 48dp clickable wins the pointer chain over the folded
+    // controls Column (fillMaxSize().verticalScroll captures pointer-down across
+    // the whole screen). Declaration order — NOT zIndex — governs hit order; the
+    // empty area of this fillMaxSize Box has no hit target so scroll/taps fall
+    // through to the Column. This mirrors PlayerScreenExpanded (InfoIcon last).
     // Audit 6.8 - the video overlay's ~500dp control stack clipped at
     // compact window heights (split screen, landscape phones): controls
     // above the bottom anchor became unreachable. Scroll when short.
@@ -1369,6 +1342,39 @@ private fun OverlayContent(
             )
         }
         Spacer(modifier = Modifier.height(16.dp))
+    }
+    // #14 — Info icon top-right, declared LAST so it is the top-most hit
+    // sibling (see the note where it used to sit). For video this OverlayContent
+    // is inside the controls alpha layer, so the icon fades + goes
+    // non-interactive with the controls; for audio it stays visible.
+    Box(modifier = Modifier.fillMaxSize().then(cutoutPad).then(topBarInset)) {
+        InfoIcon(
+            onClick = onShowInfo,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 8.dp, end = 8.dp)
+        )
+        // 8.3b — rotate-to-fullscreen for video on COMPACT widths only:
+        // 12L+ large-screen devices may ignore orientation requests by
+        // policy, and wide windows already show video large. No
+        // permission needed — activity-level requests override the
+        // auto-rotate quick-setting on phones.
+        val compactWidth = androidx.compose.ui.platform.LocalConfiguration
+            .current.screenWidthDp < 600
+        if (uiState.isVideoContent && compactWidth) {
+            androidx.compose.material3.IconButton(
+                onClick = { com.powermediaplayer.MainActivityHolder.toggleVideoOrientation() },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 8.dp, start = 8.dp)
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Filled.ScreenRotation,
+                    contentDescription = "Rotate video to fullscreen",
+                    tint = com.powermediaplayer.ui.theme.TealAccent
+                )
+            }
+        }
     }
 }
 
@@ -2126,6 +2132,8 @@ private fun PositionSection(
         val f = (ms - pos.chapterStartMs).toFloat() / pos.durationMs.toFloat()
         return if (f in 0f..1f) f else null
     }
+    // #4 — pending numeric-seek dialog (which bar + which end), shown once.
+    var seekDialog by remember { mutableStateOf<SeekDialogReq?>(null) }
     ProgressSliders(
         trackPosition = pos.trackProgress,
         trackPositionFormatted = pos.positionFormatted,
@@ -2134,6 +2142,28 @@ private fun PositionSection(
         trackSliderEnabled = controls.trackSlider,
         onTrackSeek = { fraction ->
             viewModel.seekTo(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
+        },
+        // #4 — Track time taps. Math mirrors onTrackSeek (chapterStartMs + ms).
+        onTrackSeekToElapsedMs = {
+            seekDialog = SeekDialogReq("Jump to time", pos.positionFormatted, pos.durationMs) { ms ->
+                viewModel.seekTo(pos.chapterStartMs + ms)
+            }
+        },
+        onTrackSeekToRemainingMs = {
+            seekDialog = SeekDialogReq("Jump to time remaining", pos.remainingFormatted, pos.durationMs) { ms ->
+                viewModel.seekTo(pos.chapterStartMs + (pos.durationMs - ms))
+            }
+        },
+        // #4 — Full/playlist time taps. Mirrors onPlaylistSeek (absolute ms).
+        onPlaylistSeekToElapsedMs = {
+            seekDialog = SeekDialogReq("Jump in album/book", pos.playlistPositionFormatted, pos.totalPlaylistDurationMs) { ms ->
+                viewModel.seekToPlaylistPosition(ms)
+            }
+        },
+        onPlaylistSeekToRemainingMs = {
+            seekDialog = SeekDialogReq("Jump — album/book remaining", pos.playlistRemainingFormatted, pos.totalPlaylistDurationMs) { ms ->
+                viewModel.seekToPlaylistPosition(pos.totalPlaylistDurationMs - ms)
+            }
         },
         abStartFraction = abFraction(abStart),
         abEndFraction = abFraction(abEnd),
@@ -2147,4 +2177,21 @@ private fun PositionSection(
         },
         trackIndexDisplay = trackIndexDisplay
     )
+    seekDialog?.let { req ->
+        com.powermediaplayer.ui.player.components.SeekTimeDialog(
+            title = req.title,
+            currentLabel = req.currentLabel,
+            maxMs = req.maxMs,
+            onConfirmMs = req.onConfirmMs,
+            onDismiss = { seekDialog = null }
+        )
+    }
 }
+
+/** #4 — a pending numeric-seek dialog request raised by tapping a time label. */
+private data class SeekDialogReq(
+    val title: String,
+    val currentLabel: String,
+    val maxMs: Long,
+    val onConfirmMs: (Long) -> Unit
+)

@@ -149,11 +149,18 @@ fun VolumeAndBrightnessControls(
         if (!canWrite) {
             Text(
                 text = "Tap to grant brightness permission",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium, // up from bodySmall for legibility
                 color = TealAccent,
                 modifier = Modifier
-                    .padding(start = 28.dp, top = 2.dp)
+                    // #1 — clickable BEFORE padding so the 28dp lead margin is
+                    // INSIDE the hit region (it was a dead zone), plus a >=48dp
+                    // touch target. Folded clearance below the bottom-nav overlay
+                    // is already reserved by the parent controls Column's 80dp
+                    // bottomBarInset (PlayerScreen.OverlayContent).
                     .clickable { BrightnessHelper.requestWriteSettingsPermission(context) }
+                    .heightIn(min = 48.dp)
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .padding(start = 28.dp, top = 6.dp, bottom = 6.dp)
             )
         }
     }

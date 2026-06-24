@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -337,6 +338,7 @@ fun AppNavigation(
  * it, exactly as before); it has no video surface, so composing it per-route is
  * cheap (no surface re-bind, unlike the shared FloatingVideoMiniPlayer).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NonPlayerRoute(
     contentInset: Modifier,
@@ -345,12 +347,14 @@ private fun NonPlayerRoute(
 ) {
     Column(modifier = Modifier.fillMaxSize().then(contentInset)) {
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) { content() }
-        // Float the mini-player above the soft keyboard (the app is edge-to-edge,
-        // so the IME draws over content — imePadding lifts the bar by the live IME
-        // height and drops it back when the keyboard closes). Adaptive for free:
-        // on phone/folded it rises above the bottom keyboard; on tablet/unfolded
-        // the keyboard doesn't reach the side rail so there's nothing to avoid.
-        Box(modifier = Modifier.imePadding()) {
+        // Float the mini-player above the soft keyboard. #15 — apply imePadding
+        // ONLY while the IME is genuinely visible. Under edge-to-edge the Fold6
+        // cover screen mis-reports a residual/animating IME inset, which injected
+        // an OledBlack strip above the bar when no keyboard was up. Gating on
+        // isImeVisible removes the strip while preserving keep-above-keyboard
+        // (search fields etc. still lift the bar).
+        val imeVisible = WindowInsets.isImeVisible
+        Box(modifier = if (imeVisible) Modifier.imePadding() else Modifier) {
             com.powermediaplayer.ui.components.MiniPlayerBar(onClick = onMiniClick)
         }
     }

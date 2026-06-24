@@ -80,6 +80,11 @@ fun EqualizerScreen(
 
     // Audit 8.1 (F5) — content capped at 720dp and centred so the band
     // grid and sliders don't stretch edge-to-edge on tablets.
+    // NOTE (#14): this screen shares the fillMaxSize().verticalScroll + nested
+    // InfoIcon pattern of PlayerScreen.OverlayContent. Its folded hit-capture is
+    // deliberately NOT addressed here per scope (user: leave EQ hitboxes alone);
+    // the PlayerScreen #14 fix does not affect it. Revisit only if the EQ "i"
+    // proves untappable folded.
     Box(
         modifier = Modifier
             .fillMaxSize()
