@@ -90,6 +90,31 @@ class OfflineMediaManager @Inject constructor(
         return OfflineState.NOT_APPLICABLE
     }
 
+    /**
+     * Player-path state (no source hint): the sync [stateOf] PLUS an authoritative
+     * podcast check — a bare http uri that is a GENUINE subscribed episode (in the
+     * DB) is downloadable, while arbitrary http (radio/remote streams) is not. This
+     * is why the player offline button now also appears for podcasts, not only Drive.
+     */
+    suspend fun stateOfAsync(uri: String?, isSpotify: Boolean, downloaded: Set<String>): OfflineState {
+        val sync = stateOf(uri, isSpotify, downloaded, null)
+        if (sync != OfflineState.NOT_APPLICABLE) return sync
+        if (!uri.isNullOrBlank() && !isSpotify && uri.startsWith("http") && !isOAuthDriveUri(uri)) {
+            if (podcastDao.episodeByAudioUrl(uri) != null) return OfflineState.DOWNLOADABLE
+        }
+        return OfflineState.NOT_APPLICABLE
+    }
+
+    /** The DownloadProgressBus key for [uri] — a Drive file id OR a podcast episode
+     *  guid — so the player button can show progress + STOP for BOTH download types. */
+    suspend fun progressIdFor(uri: String?): String? {
+        if (uri.isNullOrBlank()) return null
+        if (isOAuthDriveUri(uri)) return driveIdOf(uri)
+        if (uri.startsWith("content://")) return driveIdOf(uri)
+        if (uri.startsWith("http")) return podcastDao.episodeByAudioUrl(uri)?.guid
+        return null
+    }
+
     /** Download the media at [uri] for offline use. [title] names the stored file. */
     suspend fun download(uri: String, title: String): Result<Unit> = withContext(Dispatchers.IO) {
         // Podcast first: a non-Drive http uri with a known episode.

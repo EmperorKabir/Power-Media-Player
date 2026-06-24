@@ -154,14 +154,23 @@ class PlayerViewModel @Inject constructor(
             playbackConnection.playerState,
             spotifyProvider.spotifyState,
             offlineMediaManager.downloadedKeys
-        ) { ps, spotify, keys ->
-            offlineMediaManager.stateOf(ps.currentMediaUri, spotify != null, keys)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE)
+        ) { ps, spotify, keys -> Triple(ps.currentMediaUri, spotify != null, keys) }
+            .distinctUntilChanged()
+            // async: a genuine podcast episode (in the DB) is downloadable too, not
+            // only Drive — needs a suspend DAO check, so mapLatest off the combine.
+            .mapLatest { (uri, isSpotify, keys) -> offlineMediaManager.stateOfAsync(uri, isSpotify, keys) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE)
 
-    /** The Drive file id of the current item (or null) — lets the button show a
-     *  live download-progress spinner via DownloadProgressBus while saving. */
-    fun currentDriveId(): String? =
-        offlineMediaManager.driveIdOf(playbackConnection.playerState.value.currentMediaUri)
+    /** DownloadProgressBus key of the current item (Drive file id OR podcast guid),
+     *  so the button shows a live progress spinner + STOP for both download types. */
+    val currentProgressId: StateFlow<String?> =
+        kotlinx.coroutines.flow.combine(
+            playbackConnection.playerState,
+            spotifyProvider.spotifyState
+        ) { ps, spotify -> ps.currentMediaUri to (spotify != null) }
+            .distinctUntilChanged()
+            .mapLatest { (uri, isSpotify) -> if (isSpotify) null else offlineMediaManager.progressIdFor(uri) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** Transient download/delete result for the player button (→ Toast). */
     private val _offlineStatus = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)

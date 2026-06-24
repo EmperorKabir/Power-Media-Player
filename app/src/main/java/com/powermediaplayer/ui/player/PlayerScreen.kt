@@ -173,14 +173,14 @@ private fun PlayerOfflineButton(viewModel: PlayerViewModel) {
     }
     if (state == com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE) return
     val progress by com.powermediaplayer.util.DownloadProgressBus.flow.collectAsStateWithLifecycle()
-    val driveId = viewModel.currentDriveId()
-    val prog = driveId?.let { progress[it] }
+    val progressId by viewModel.currentProgressId.collectAsStateWithLifecycle()
+    val prog = progressId?.let { progress[it] }
     val downloading = prog != null
     IconButton(
         onClick = {
             // While downloading, tap = STOP (the shared cancel signal aborts the
             // copy + removes the partial file); otherwise download / delete.
-            if (downloading) driveId?.let { com.powermediaplayer.util.DownloadProgressBus.requestCancel(it) }
+            if (downloading) progressId?.let { com.powermediaplayer.util.DownloadProgressBus.requestCancel(it) }
             else viewModel.toggleOffline()
         },
         modifier = Modifier.size(48.dp)
