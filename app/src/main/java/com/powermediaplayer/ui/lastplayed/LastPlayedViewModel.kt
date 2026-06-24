@@ -57,6 +57,11 @@ class LastPlayedViewModel @Inject constructor(
     private val _offlineStatus = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
     val offlineStatus: kotlinx.coroutines.flow.SharedFlow<String> = _offlineStatus
 
+    /** mediaUri → DownloadProgressBus id for downloads STARTED from this screen,
+     *  so the row shows a live progress bar + STOP (✕) while it is in flight. */
+    private val _downloadingIds = kotlinx.coroutines.flow.MutableStateFlow<Map<String, String>>(emptyMap())
+    val downloadingIds: kotlinx.coroutines.flow.StateFlow<Map<String, String>> = _downloadingIds
+
     /** Offline state of a Last Played row given a downloadedKeys snapshot. */
     fun offlineStateOf(
         item: LastPlayedRepository.HistoryItem,
@@ -70,12 +75,18 @@ class LastPlayedViewModel @Inject constructor(
 
     fun downloadOffline(item: LastPlayedRepository.HistoryItem) {
         viewModelScope.launch {
+            val pid = offlineMediaManager.progressIdFor(item.mediaUri)
+            if (pid != null) _downloadingIds.value = _downloadingIds.value + (item.mediaUri to pid)
             _offlineStatus.tryEmit("Downloading: ${item.title}…")
-            val r = offlineMediaManager.download(item.mediaUri, item.title)
-            _offlineStatus.tryEmit(
-                if (r.isSuccess) "Saved offline: ${item.title}"
-                else r.exceptionOrNull()?.message ?: "Download failed"
-            )
+            try {
+                val r = offlineMediaManager.download(item.mediaUri, item.title)
+                _offlineStatus.tryEmit(
+                    if (r.isSuccess) "Saved offline: ${item.title}"
+                    else r.exceptionOrNull()?.message ?: "Download failed"
+                )
+            } finally {
+                _downloadingIds.value = _downloadingIds.value - item.mediaUri
+            }
         }
     }
 

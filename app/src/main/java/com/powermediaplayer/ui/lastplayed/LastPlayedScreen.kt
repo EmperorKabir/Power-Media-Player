@@ -68,6 +68,7 @@ fun LastPlayedScreen(
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsStateWithLifecycle()
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
     val offlineKeys by viewModel.offlineKeys.collectAsStateWithLifecycle()
+    val downloadingIds by viewModel.downloadingIds.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // Surface VM-side play-failure messages (e.g. Spotify Connect has no
@@ -247,6 +248,7 @@ fun LastPlayedScreen(
                         ReorderablePinnedList(
                             items = pinned,
                             offlineUrls = offlineKeys,
+                            downloadingIds = downloadingIds,
                             onMove = { from, to ->
                                 val movedFavId = pinned[from].id
                                 viewModel.reorderPinned(movedFavId, to)
@@ -315,6 +317,14 @@ fun LastPlayedScreen(
                             },
                             swipeBookmark = true,
                             trailing = {
+                                // Live download progress + STOP (✕) while THIS row's
+                                // item is downloading (started from its 3-dot menu).
+                                downloadingIds[item.mediaUri]?.let { pid ->
+                                    com.powermediaplayer.ui.components.DownloadProgressMini(
+                                        pid,
+                                        onCancel = { com.powermediaplayer.util.DownloadProgressBus.requestCancel(pid) }
+                                    )
+                                }
                                 IconButton(onClick = {
                                     scope.launch {
                                         val ok = viewModel.pinSession(item.id)
@@ -573,7 +583,8 @@ private fun ReorderablePinnedList(
     onUnpin: (Long) -> Unit,
     bookmarkProvider: (Long) -> Flow<List<LastPlayedViewModel.BookmarkRow>>,
     onLongClick: (HistoryItem) -> Unit = {},
-    offlineUrls: Set<String> = emptySet()
+    offlineUrls: Set<String> = emptySet(),
+    downloadingIds: Map<String, String> = emptyMap()
 ) {
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -598,6 +609,14 @@ private fun ReorderablePinnedList(
                     onLongClick = { onLongClick(item) },
                     elevated = dragging,
                     trailing = {
+                        // Live download progress + STOP while THIS pinned item is
+                        // downloading (started from its 3-dot menu).
+                        downloadingIds[item.mediaUri]?.let { pid ->
+                            com.powermediaplayer.ui.components.DownloadProgressMini(
+                                pid,
+                                onCancel = { com.powermediaplayer.util.DownloadProgressBus.requestCancel(pid) }
+                            )
+                        }
                         IconButton(onClick = { onUnpin(item.id) }) {
                             Icon(Icons.Filled.Star, contentDescription = "Unpin",
                                 tint = TealAccent)
