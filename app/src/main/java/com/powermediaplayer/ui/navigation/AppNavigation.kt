@@ -301,15 +301,25 @@ fun AppNavigation(
                 if (immersiveTabsOnSide) Alignment.CenterStart else Alignment.BottomCenter
             )
         ) { route ->
-            // Leaving a DETAIL screen (Manage Downloads) → land on the tapped
-            // tab's FRESH root, not a restored stack that still has Downloads on
-            // top (that's why "tap Settings from Manage Downloads" didn't reach
-            // the Settings top level). Normal tab→tab keeps state preservation.
-            val onDetail = navController.currentDestination?.route == Screen.Downloads.route
-            navController.navigate(route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = !onDetail }
-                launchSingleTop = true
-                restoreState = !onDetail
+            // If this tab's destination is ALREADY on the back stack (a play /
+            // expand pushed the Player on top of the tab you were browsing, or you
+            // opened Manage Downloads from it), pop straight back to it so its open
+            // folder / scroll state is preserved — instead of rebuilding it fresh
+            // at the top level. (Bug: tapping the Cloud tab after playing a Drive
+            // file from a deep folder reset Cloud to root, because the play pushed a
+            // duplicate Player entry that defeated the popUpTo+restoreState below.)
+            val poppedBackToExisting = navController.currentDestination?.route != route &&
+                navController.popBackStack(route, inclusive = false)
+            if (!poppedBackToExisting) {
+                // Not on the stack → canonical cross-tab nav with state save/restore.
+                // Leaving a DETAIL route (Manage Downloads) → land on the tapped
+                // tab's FRESH root, not a restored Downloads-on-top stack.
+                val onDetail = navController.currentDestination?.route == Screen.Downloads.route
+                navController.navigate(route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = !onDetail }
+                    launchSingleTop = true
+                    restoreState = !onDetail
+                }
             }
         }
         }
