@@ -95,8 +95,15 @@ class CloudViewModel @Inject constructor(
     private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
-    private val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao
+    private val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao,
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao
 ) : ViewModel() {
+
+    // #16 — favourite-time enrich: dedup guard + a non-blocking "enriching…"
+    // hint (ids currently being enriched in the background).
+    private val enrichInFlight = java.util.Collections.synchronizedSet(HashSet<String>())
+    private val _enrichingIds = kotlinx.coroutines.flow.MutableStateFlow<Set<String>>(emptySet())
+    val enrichingIds: kotlinx.coroutines.flow.StateFlow<Set<String>> = _enrichingIds.asStateFlow()
 
     /**
      * §C28 — current snapshot of {driveFileId → cachedAbsolutePath} for
@@ -527,7 +534,53 @@ class CloudViewModel @Inject constructor(
     fun toggleDriveFavouriteTrack(item: CloudMediaItem) {
         if (item.isFolder || item.sourceProvider != CloudProviderType.GOOGLE_DRIVE) return
         viewModelScope.launch(Dispatchers.IO) {
-            settingsDataStore.toggleDriveFavouriteTrack(item.id, item.name)
+            val nowFavourited = settingsDataStore.toggleDriveFavouriteTrack(item.id, item.name)
+            if (nowFavourited) maybeEnrichFavourite(item)
+        }
+    }
+
+    /**
+     * #16 (D6) — when a Drive item is favourited, enrich it in the background so
+     * its author/series are searchable BEFORE first play. Always-on (no flag, no
+     * Wi-Fi/size gate — user directive). Deduped; the enricher reuses a durable
+     * offline copy internally (no re-download). Off the UI thread → no freeze.
+     */
+    private fun maybeEnrichFavourite(item: CloudMediaItem) {
+        val id = item.id
+        viewModelScope.launch(Dispatchers.IO) {
+            val alreadyEnriched = runCatching {
+                playbackHistoryDao.countDriveRow(item.downloadUrl) > 0 ||
+                    enrichmentCacheDao.get(id) != null
+            }.getOrDefault(false)
+            val offlinePath = runCatching { offlineCopyDao.get(id)?.localPath }.getOrNull()
+            val inFlight = !enrichInFlight.add(id)
+            val plan = com.powermediaplayer.cloud.FavouriteEnrichPlanner.plan(
+                alreadyEnriched = alreadyEnriched,
+                offlineLocalPath = offlinePath,
+                inFlight = inFlight
+            )
+            if (plan == com.powermediaplayer.cloud.EnrichPlan.Skip) {
+                if (!inFlight) enrichInFlight.remove(id) // release our own add
+                return@launch
+            }
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cloud.favouriteEnrich plan=$plan id=$id")
+            _enrichingIds.update { it + id }
+            // Non-blocking hint (the Cloud screen surfaces this as a transient
+            // status); enrichingIds is also exposed for a per-row indicator.
+            _uiState.update { it.copy(errorMessage = "Updating \"${item.name}\" for search…") }
+            // enrich() reuses an offline copy when present (FromLocal) or downloads
+            // (FromDownload); writeSearchCache stores the extracted tags in
+            // enrichment_cache so the item is searchable. onDone clears the
+            // in-flight guard + hint when the background job completes.
+            driveTagEnricher.enrich(
+                viewModelScope, item, item.downloadUrl,
+                silent = true,
+                writeSearchCache = true,
+                onDone = {
+                    enrichInFlight.remove(id)
+                    _enrichingIds.update { it - id }
+                }
+            )
         }
     }
 
@@ -1601,8 +1654,32 @@ class CloudViewModel @Inject constructor(
                     sourceProvider = CloudProviderType.GOOGLE_DRIVE, subtitle = "Offline"
                 )
             }
-            com.powermediaplayer.cloud.DriveMetadataSearch.mergeDriveResults(hist, offline)
+            // #16 — favourite-enriched items (never played) live in enrichment_cache
+            // keyed by the Drive file id; reconstruct a playable item from the id.
+            val enriched = enrichmentCacheDao.searchEnriched(pattern).mapNotNull { row ->
+                if (row.provider != ENRICH_PROVIDER) return@mapNotNull null
+                val id = row.cacheKey
+                val dl = if (id.startsWith("content://")) id
+                    else "https://www.googleapis.com/drive/v3/files/$id?alt=media"
+                CloudMediaItem(
+                    id = id, name = row.title ?: id, mimeType = "audio/*", size = 0L,
+                    downloadUrl = dl,
+                    thumbnailUri = row.artworkUrl?.let { android.net.Uri.parse(it) },
+                    sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                    subtitle = listOfNotNull(row.artist, row.album)
+                        .filter { it.isNotBlank() }.distinct().joinToString(" · ")
+                )
+            }
+            val playedOrOffline = com.powermediaplayer.cloud.DriveMetadataSearch
+                .mergeDriveResults(hist, offline)
+            com.powermediaplayer.cloud.DriveMetadataSearch
+                .mergeDriveResults(playedOrOffline, enriched)
         }
+    }
+
+    private companion object {
+        /** provider tag for favourite-time enrichment rows (#16). */
+        const val ENRICH_PROVIDER = "drive-fav-tags"
     }
 
     fun setSearchQuery(query: String) {

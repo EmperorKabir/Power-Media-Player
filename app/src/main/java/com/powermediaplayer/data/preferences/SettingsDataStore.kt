@@ -1288,9 +1288,10 @@ class SettingsDataStore @Inject constructor(
             }.sortedBy { it.name.lowercase() }
         }
 
-    suspend fun toggleDriveFavouriteTrack(id: String, name: String) {
+    /** Returns true if the item is now favourited (added), false if removed —
+     *  so the caller can fire the favourite-time enrich only on an add (#16). */
+    suspend fun toggleDriveFavouriteTrack(id: String, name: String): Boolean =
         toggleSetEntry(Keys.DRIVE_FAVOURITE_TRACKS, id, name)
-    }
 
     val spotifyFavouriteTracks: Flow<List<SpotifyFavourite>> =
         spotifyFavSet(Keys.SPOTIFY_FAVOURITE_TRACKS)
@@ -1315,18 +1316,24 @@ class SettingsDataStore @Inject constructor(
             }.sortedBy { it.name.lowercase() }
         }
 
+    /** @return true if the entry is now present (added), false if removed. */
     private suspend fun toggleSetEntry(
         key: Preferences.Key<Set<String>>,
         id: String,
         name: String
-    ) {
+    ): Boolean {
+        var added = false
         context.dataStore.edit { prefs ->
             val current = (prefs[key] ?: emptySet()).toMutableSet()
             val existing = current.firstOrNull { it.startsWith("$id|") }
-            if (existing != null) current.remove(existing)
-            else current.add("$id|$name")
+            if (existing != null) {
+                current.remove(existing); added = false
+            } else {
+                current.add("$id|$name"); added = true
+            }
             prefs[key] = current
         }
+        return added
     }
 
     // ── Power-user toggles ──────────────────────────────────────

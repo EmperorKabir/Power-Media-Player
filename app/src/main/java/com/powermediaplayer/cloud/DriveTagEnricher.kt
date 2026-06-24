@@ -35,7 +35,8 @@ class DriveTagEnricher @Inject constructor(
     private val driveOAuthProvider: DriveOAuthProvider,
     private val playbackConnection: PlaybackConnection,
     private val lastPlayedRepo: LastPlayedRepository,
-    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao
 ) {
     /** Tags already extracted this process, keyed by Drive file id — a re-open
      *  (cast-return, re-tap) restores them instantly with no re-download. */
@@ -58,9 +59,16 @@ class DriveTagEnricher @Inject constructor(
         scope: CoroutineScope,
         item: CloudMediaItem,
         stableKey: String,
-        silent: Boolean = false
+        silent: Boolean = false,
+        // #16 — persist the extracted tags to enrichment_cache so a favourited-
+        // but-never-played item is searchable by author/series before first play.
+        writeSearchCache: Boolean = false,
+        // #16 — called exactly once when this enrich attempt finishes (even if it
+        // bailed on the in-flight dedup) so the caller can clear its own guard/hint.
+        onDone: (() -> Unit)? = null
     ) {
         scope.launch(Dispatchers.IO) {
+          try {
             // Dedup: if the same file is already being enriched (e.g. tapped from
             // the Cloud tab AND Last Played near-simultaneously), don't start a
             // second hundreds-of-MB download — let the in-flight one finish.
@@ -104,11 +112,32 @@ class DriveTagEnricher @Inject constructor(
                         runCatching { temp.delete() }
                     }
                 }
+                // #16 — store extracted tags in enrichment_cache (favourite-enrich)
+                // so a never-played item is searchable by author/series.
+                // cache[item.id] was populated by parseAndApply when tags exist.
+                if (writeSearchCache) {
+                    cache[item.id]?.let { ov ->
+                        runCatching {
+                            enrichmentCacheDao.put(
+                                com.powermediaplayer.data.db.entity.EnrichmentCacheEntity(
+                                    cacheKey = item.id, provider = "drive-fav-tags",
+                                    title = ov.title, artist = ov.artist, album = ov.album,
+                                    year = null, genre = null,
+                                    artworkUrl = ov.artworkUri?.toString(),
+                                    fetchedAtMs = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                    }
+                }
             } finally {
                 // finally so a cancel mid-download doesn't stick the spinner.
                 if (!silent) playbackConnection.setCloudFetchInProgress(false)
                 ChapterCache.shared.unmarkFilling(stableKey)
             }
+          } finally {
+            onDone?.invoke()
+          }
         }
     }
 
