@@ -300,10 +300,15 @@ fun AppNavigation(
                 if (immersiveTabsOnSide) Alignment.CenterStart else Alignment.BottomCenter
             )
         ) { route ->
+            // Leaving a DETAIL screen (Manage Downloads) → land on the tapped
+            // tab's FRESH root, not a restored stack that still has Downloads on
+            // top (that's why "tap Settings from Manage Downloads" didn't reach
+            // the Settings top level). Normal tab→tab keeps state preservation.
+            val onDetail = navController.currentDestination?.route == Screen.Downloads.route
             navController.navigate(route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                popUpTo(navController.graph.findStartDestination().id) { saveState = !onDetail }
                 launchSingleTop = true
-                restoreState = true
+                restoreState = !onDetail
             }
         }
         }
