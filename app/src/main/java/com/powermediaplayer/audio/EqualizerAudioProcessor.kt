@@ -38,6 +38,24 @@ class EqualizerAudioProcessor(
         )
         const val Q = 1.41        // ~1 octave per band (graphic-EQ standard)
         const val N = 10
+
+        // #7 — kill the "robotic / low-bitrate" artefact. The biquads are
+        // correct; the artefact was a HARD soft-knee firing at ~-2 dBFS on
+        // boosted peaks with no headroom and no oversampling → high-order
+        // harmonics that alias. Fix = reserve input headroom so boosts no
+        // longer slam a low threshold (the EQ becomes headroom-managed /
+        // relative — a boosted band sits near unity while the rest sits a
+        // touch lower, the standard clean graphic-EQ behaviour), and replace
+        // the hard knee with a C-infinity-smooth tanh limiter as a last-resort
+        // ceiling whose harmonic spill rolls off fast.
+        const val FULL_SCALE = 32767f
+        // Below LIMIT_LINEAR*FS the transfer is exactly unity (no colour);
+        // above it the tanh knee bends smoothly to the FULL_SCALE asymptote.
+        const val LIMIT_LINEAR = 0.85f
+        // Floor on the reserved-headroom attenuation (-24 dB) so a pathological
+        // preset can't drive the signal to silence; the tanh limiter mops up the
+        // tiny residual beyond this.
+        const val MIN_PREGAIN = 0.063
     }
 
     private var channels = 0
@@ -57,6 +75,11 @@ class EqualizerAudioProcessor(
 
     private var lastLevels: List<Int> = listOf(-1)   // force first recompute
     private var anyActive = false
+
+    // #7 — input attenuation reserved for the active preset's worst-case boost.
+    // 1.0 when flat; < 1.0 once any band is boosted, so a boosted resonant peak
+    // no longer crosses a low hard-knee threshold.
+    private var preGain = 1.0
 
     override fun onConfigure(input: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (input.encoding != C.ENCODING_PCM_16BIT) return AudioProcessor.AudioFormat.NOT_SET
@@ -96,6 +119,38 @@ class EqualizerAudioProcessor(
             active = true
         }
         anyActive = active
+        // #7 — reserve headroom equal to the cascade's ACTUAL worst-case peak
+        // linear gain, so a boosted band sits at unity (never clips) while the
+        // rest sits proportionally lower. We evaluate |H(f)| of the active
+        // cascade at each band centre and reserve the maximum. This keeps the
+        // per-sample tanh limiter from engaging on normal programme at all — so
+        // there are NO harmonics to alias (the +12 dB-all-bands extreme that a
+        // crude dB-sum headroom left at ~9 % THD now measures ~0 %), making
+        // polyphase oversampling unnecessary. A cut-only preset reserves nothing
+        // (maxGain<=1 → preGain=1, no level loss). There is deliberately no
+        // make-up restore: restoring would push the peak back over full scale and
+        // re-introduce the clipping that caused the artefact — the headroom IS
+        // the fix; tanh only mops up any tiny between-centre overshoot.
+        var maxGain = 1.0
+        for (fIdx in 0 until N) {
+            if (!bandActive[fIdx]) continue
+            val f = CENTERS[fIdx]
+            if (sampleRate <= 0 || f >= sampleRate * 0.45) continue
+            val w = 2.0 * Math.PI * f / sampleRate
+            val cw = Math.cos(w); val sw = Math.sin(w)
+            val c2 = Math.cos(2.0 * w); val s2 = Math.sin(2.0 * w)
+            var g = 1.0
+            for (i in 0 until N) {
+                if (!bandActive[i]) continue
+                val nre = b0[i] + b1[i] * cw + b2[i] * c2
+                val nim = -(b1[i] * sw + b2[i] * s2)
+                val dre = 1.0 + a1[i] * cw + a2[i] * c2
+                val dim = -(a1[i] * sw + a2[i] * s2)
+                g *= Math.sqrt((nre * nre + nim * nim) / (dre * dre + dim * dim))
+            }
+            if (g > maxGain) maxGain = g
+        }
+        preGain = (1.0 / maxGain).coerceIn(MIN_PREGAIN, 1.0)
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -112,12 +167,12 @@ class EqualizerAudioProcessor(
 
         val out = replaceOutputBuffer(remaining)
         val samples = remaining / 2
-        // Soft knee: linear up to the threshold, then compressed — cumulative
-        // band boosts round off instead of squaring (the audible hard-clip).
-        val knee = 26000f
+        val threshold = LIMIT_LINEAR * FULL_SCALE
+        val span = (1f - LIMIT_LINEAR) * FULL_SCALE
         var ch = 0
         repeat(samples) {
-            var x = inputBuffer.short.toDouble()
+            // Pre-attenuate into the cascade by the reserved headroom (#7).
+            var x = inputBuffer.short.toDouble() * preGain
             for (i in 0 until N) {
                 if (!bandActive[i]) continue
                 val y = b0[i] * x + z1[i][ch]
@@ -126,11 +181,17 @@ class EqualizerAudioProcessor(
                 x = y
             }
             var v = x.toFloat()
-            val mag = kotlin.math.abs(v)
-            if (mag > knee) {
-                v = Math.signum(v) * (knee + (mag - knee) * 0.25f)
+            val a = kotlin.math.abs(v)
+            if (a > threshold) {
+                // Smooth tanh knee from `threshold` up to the FULL_SCALE
+                // asymptote — C-infinity, so its harmonic spill rolls off far
+                // faster than the old hard knee (which aliased).
+                val over = (a - threshold) / span
+                v = Math.signum(v) * FULL_SCALE *
+                    (LIMIT_LINEAR + (1f - LIMIT_LINEAR) *
+                        kotlin.math.tanh(over.toDouble()).toFloat())
             }
-            out.putShort(v.coerceIn(-32760f, 32760f).toInt().toShort())
+            out.putShort(v.coerceIn(-FULL_SCALE, FULL_SCALE).toInt().toShort())
             ch++
             if (ch >= channels) ch = 0
         }
@@ -150,5 +211,6 @@ class EqualizerAudioProcessor(
         z2 = Array(N) { DoubleArray(0) }
         lastLevels = listOf(-1)
         anyActive = false
+        preGain = 1.0
     }
 }

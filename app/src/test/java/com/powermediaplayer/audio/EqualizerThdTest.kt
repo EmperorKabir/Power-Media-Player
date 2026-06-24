@@ -107,6 +107,16 @@ class EqualizerThdTest {
         assertTrue("THD too high (allBands)=$t", t < 0.05)
     }
 
+    @Test fun plus12dbAllBandsStress() {
+        // A3 predicate: the extreme case (every band +12 dB). If THD stays under
+        // 8 % here, oversampling (A3) is genuinely unnecessary; if not, A3 adds it.
+        val levels = MutableList(10) { 1200 }
+        val x = processSine(levels, 1000.0, 20_000.0)
+        val t = thd(x, 9_600, 9_600, 1000.0)
+        println("THD-DIAG plus12=$t")
+        assertTrue("THD too high (+12dB)=$t", t < 0.08)
+    }
+
     @Test fun loudBoostPeakBounded() {
         val levels = MutableList(10) { 0 }.also { it[5] = 600 }
         val x = processSine(levels, 1000.0, 30_000.0)
