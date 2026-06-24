@@ -30,7 +30,9 @@ val playerInfo: InfoSheetData = InfoSheetData(
                 "Previous / Next — Jumps to previous/next chapter if the file has chapters; otherwise the previous/next track.",
                 "A-B Loop — Tap once to mark A, again to mark B; playback then loops between them. The Track bar shows live markers — an amber A while only A is set, turning teal with a banded A-B region once the loop is active. Tap a third time to clear. A loop is remembered per file and clears itself when you move to a different track.",
                 "Frame step ± — One frame back or forward. Video only. Pauses the video first.",
-                "Shuffle — The shuffle icon (next to the bookmark button) plays the current queue in a random order; Previous/Next then follow the shuffled order. Teal = on, grey = off. It applies to multi-track queues (e.g. an album or folder played from the Library) and is remembered across restarts. A single track has nothing to shuffle. For Spotify, use Spotify's own shuffle — this controls the app's local queue."
+                "Shuffle — The shuffle icon (next to the bookmark button) plays the current queue in a random order; Previous/Next then follow the shuffled order. Teal = on, grey = off. It applies to multi-track queues (e.g. an album or folder played from the Library) and is remembered across restarts. A single track has nothing to shuffle. For a Spotify album it drives Spotify's own shuffle (the queue is re-shuffled the moment you toggle it on).",
+                "Download for offline use — The download icon (teal) appears in the controls row whenever the current item can be taken offline (a Google Drive file or a podcast episode — not Spotify, not an already-local file). Tap to download; while downloading it shows live progress and tapping again STOPS it (the partial file is removed). Once saved it becomes a delete icon — tap to remove the local copy. A Toast confirms each result.",
+                "Album track list (Spotify) — When a Spotify album or playlist is playing, the queue/list icon opens its full track list; tap any track to jump to it within the album."
             )
         ),
         InfoSection(
@@ -123,6 +125,13 @@ val libraryInfo: InfoSheetData = InfoSheetData(
                 "Create — Tap the \"Smart playlists\" header or the \"+\". Pick a name, add one or more rules (e.g. Favourite = Yes, Play count at least 3), choose how to sort and a max number of tracks. Rules combine with AND (all must match).",
                 "Rule fields — Title, Artist, Album, Length, Play count, Last played, Favourite, Bookmarked. Length is in seconds; Last played is in days."
             )
+        ),
+        InfoSection(
+            title = "Getting around",
+            bullets = listOf(
+                "Tap the active tab again — When you're already on Library, Cloud or Settings, tapping that same tab again jumps you back to its top level (clears the search / returns to the provider picker / unfilters Settings). Switching between different tabs keeps each one where you left it.",
+                "Floating mini-player — The now-playing mini-player at the bottom rises above the on-screen keyboard when it opens (so it stays visible while you type) and drops back down when the keyboard closes. Works on phone, foldable and tablet layouts."
+            )
         )
     )
 )
@@ -143,6 +152,7 @@ val lastPlayedInfo: InfoSheetData = InfoSheetData(
             title = "Actions",
             bullets = listOf(
                 "Resume — Tap any row to resume from where you stopped.",
+                "Download for offline use — The 3-dot menu on a Drive or podcast row offers 'Download for offline use' (or 'Delete from local storage' once it's saved). The download runs in the background — watch its progress, and stop it if needed, in Cloud → Manage downloads. Spotify rows can't be downloaded (DRM).",
                 "Bookmarks within Recents/Pinned — Each row has a dropdown showing every bookmark you'd added during that listen. Tap a bookmark to jump straight to that moment.",
                 "Reorder — Long press and drag a Pinned row to change its order."
             )
@@ -182,7 +192,9 @@ val cloudInfo: InfoSheetData = InfoSheetData(
             title = "Discovery",
             bullets = listOf(
                 "Favourites — Star tracks, albums, podcasts to keep them at the top of this tab.",
-                "Search — Searches inside the active provider only. Spotify catalogue search returns tracks, albums, artists, playlists, shows and single episodes. Result rows show 'Title · Artist' (or show publisher). Tap an artist to drill into their top tracks; tap a standalone episode to play the FULL episode on your Spotify Connect device (Premium). Drive search → Drive files only.",
+                "Search — Searches inside the active provider only. Spotify catalogue search returns tracks, albums, artists, playlists, shows (podcasts) and single episodes. Result rows show 'Title · Artist' (or show publisher). Tap an artist to drill into their top tracks; tap a standalone episode to play the FULL episode on your Spotify Connect device (Premium). Drive search → Drive files only (across all the folders you've granted).",
+                "Recent searches — Focus an empty search box (Cloud, Library or Podcasts) to see your recent queries; tap one to re-run it, or 'Clear' to wipe them.",
+                "Play album / playlist / series — Tapping a Spotify album/playlist/show row browses its tracks; the ▶ on the row, OR the 'Play album/playlist/series' button shown once you're inside it, plays the whole thing on your Connect device (and loops it). Backing out of an album you opened from a search returns you to those search results.",
                 "Pin folder as album — When you're INSIDE a Drive sub-folder containing audio, a 'Pin this folder as album' row appears at the top of the list. Tap to snapshot every audio file in that folder as a single album pin in Last Played → Pinned. Counts against the unified 10-cap.",
                 "Auto-refresh on return — The Cloud tab now refreshes on every resume (e.g. after the picker / OAuth / Drive web returns). Earlier builds got stuck on the sign-in cards even after a successful pick; this is fixed.",
                 "Spotify Connect tap failure — If you tap a Spotify recents row and the play fails (no active device, session expired, etc.), a Toast appears with a clear reason — replaces an earlier silent-fail bug where the Player screen opened with no audio."
@@ -194,9 +206,9 @@ val cloudInfo: InfoSheetData = InfoSheetData(
                 "Subtitles auto-fetch — Sign in to OpenSubtitles (Settings → Subtitles). The app looks up matching SRTs by filename or by content hash (your choice). Configure: language chip set (12 languages), match-by-hash radio, save next to the video file vs in app cache, override-existing-.srt switch.",
                 "Podcasts — Add by RSS feed URL OR via the iTunes / Apple Podcasts directory search. Per-show settings: auto-download new, retain last N episodes, notify on new, AND a per-show download folder. Each episode row has a download button (and a 'downloaded' tick → tap to delete); a downloaded episode plays the local file offline, so progress is kept even if you delete the file. Per show: 'Download latest N' / 'Delete downloads'.",
                 "Download storage — By default episodes save to app-private storage. Pick any folder per show (in its settings) OR a global default folder (Settings → Cloud → Podcast download folder). Drive offline files use one global folder (Settings → Cloud → Google Drive files folder). Spotify content can't be downloaded (DRM; Connect-only).",
-                "Downloads manager — Cloud tab → 'Manage downloads' (also in Settings → Cloud). Lists every downloaded podcast episode + offline Drive file with size, grouped by source, with total usage vs the cap and a per-row delete.",
+                "Downloads manager — Cloud tab → 'Manage downloads' (also in Settings → Cloud). A live 'Downloading' section at the top shows every in-progress download (started from anywhere — the Player, Last Played, Cloud or Podcasts) with a progress bar, size, and a stop (✕) button. Below it, completed downloads (podcast episodes + offline Drive files) are listed with size, grouped by source, with total usage vs the cap. Per-row delete, OR multi-select: tick rows (or 'Select all' / 'Deselect all' per section) and batch-delete with a confirm dialog. The 5 GB cap is the offline storage limit — change it (1/5/10 GB or Unlimited) in Settings → Cloud.",
                 "Online metadata enrichment — Off by default. When on, the app looks up missing track / artist / album / year / genre fields from MusicBrainz and / or Discogs. Per-result cache so repeat lookups skip the network. Apply scope: all files OR only files with no embedded tags.",
-                "Offline copy — Long-press a Drive track → 'Save offline copy' to make a local copy that plays without internet. Settings → Cloud → Offline storage limit caps total size; LRU eviction clears the oldest copy first. Long-press an offline row → 'Protect from auto-cleanup' to pin it so eviction never reclaims it ('Unpin' to allow it again). Copies land in your chosen Google Drive files folder, or app cache if none is set."
+                "Offline copy — Several ways to take a Drive file or podcast episode offline: the download icon on its Cloud/podcast row; the Player controls-row download button while it plays; or the Last Played 3-dot menu → 'Download for offline use'. Each shows live progress and can be stopped mid-download (the partial file is removed). To remove a local copy: the same button flips to delete, or use 'Delete from local storage' in the 3-dot menu, or Manage downloads. Settings → Cloud → Offline storage limit caps total size; LRU eviction clears the oldest copy first. Long-press an offline row → 'Protect from auto-cleanup' to pin it. Copies land in your chosen Google Drive files folder, or app cache if none is set."
             )
         )
     )
