@@ -19,4 +19,13 @@ interface EnrichmentCacheDao {
 
     @Query("SELECT COUNT(*) FROM enrichment_cache")
     suspend fun count(): Int
+
+    /** #16 — search the full enriched field set (title/artist/album/genre) so an
+     *  author (artist), series (album) or narrator/genre search all hit. */
+    @Query(
+        "SELECT * FROM enrichment_cache " +
+            "WHERE title LIKE :pattern ESCAPE '\\' OR artist LIKE :pattern ESCAPE '\\' " +
+            "OR album LIKE :pattern ESCAPE '\\' OR genre LIKE :pattern ESCAPE '\\' LIMIT 50"
+    )
+    suspend fun searchEnriched(pattern: String): List<EnrichmentCacheEntity>
 }

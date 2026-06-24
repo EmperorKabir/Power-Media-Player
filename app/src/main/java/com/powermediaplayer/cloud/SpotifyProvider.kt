@@ -159,6 +159,23 @@ class SpotifyProvider @Inject constructor(
     @Volatile private var provisionalActive: Boolean = false
 
     private val pollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // #2 — lyrics fetched OFF the poll loop so the "loading metadata" banner
+    // clears as soon as title/artist/art resolve, not after a slow LRCLib miss.
+    private data class LyricsResult(val plain: String?, val synced: List<LyricLine>)
+    private val MISS_SENTINEL = Any()
+    // Bounded process-scoped LRU; a null value is a confirmed miss (negative
+    // cache) so permanent misses (e.g. tracks LRCLib lacks) never re-hit network.
+    private val lyricsCache = object : LinkedHashMap<String, LyricsResult?>(16, 0.75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, LyricsResult?>) = size > 64
+    }
+    private fun lyricsKey(title: String, artist: String, album: String, durMs: Long) =
+        (title + "|" + artist.substringBefore(',').trim() + "|" + album + "|" + (durMs / 1000)).lowercase()
+    // Short-timeout derived client (shares the SharedHttp pool/cache) so a miss
+    // can't tie up a worker for the default ~30 s.
+    private val lyricsHttp = com.powermediaplayer.util.SharedHttp.base.newBuilder()
+        .callTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private var pollJob: Job? = null
 
     // Audit 3.8/8.7 — the class doc promised a ">30s backgrounded" poll
@@ -1326,25 +1343,34 @@ class SpotifyProvider @Inject constructor(
                             )
                         } else {
                         expectedTrackUri = null
-                        if (snap.trackUri != lastTrackUri) {
-                            // Mid-session track change also re-fires the
-                            // banner — the upcoming lyrics fetch is the
-                            // slow point and the user shouldn't see a
-                            // half-resolved track.
-                            if (lastTrackUri.isNotEmpty()) {
-                                _spotifyMetadataFetching.value = true
-                            }
+                        val step = trackResolveStep(isNewTrack = snap.trackUri != lastTrackUri)
+                        if (step.fetchLyrics) {
                             lastTrackUri = snap.trackUri
-                            val pair = fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
-                            if (gen != pollGen) return@launch
-                            lastLyrics = pair?.first
-                            lastSynced = pair?.second.orEmpty()
+                            // #2 — lyrics no longer block the banner. Cached
+                            // (incl. negative) lyrics attach immediately; a miss
+                            // fires an async fetch that paints later, off the loop.
+                            val key = lyricsKey(snap.title, snap.artist, snap.album, snap.durationMs)
+                            val cached = synchronized(lyricsCache) {
+                                if (lyricsCache.containsKey(key)) lyricsCache[key] else MISS_SENTINEL
+                            }
+                            if (cached !== MISS_SENTINEL) {
+                                val lr = cached as LyricsResult?
+                                lastLyrics = lr?.plain
+                                lastSynced = lr?.synced.orEmpty()
+                            } else {
+                                lastLyrics = null
+                                lastSynced = emptyList()
+                                fetchLyricsAsync(gen, snap)
+                            }
                         }
-                        _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
-                        // Metadata fully resolved for this track.
+                        if (step.emitState) {
+                            _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
+                        }
+                        // #2 — metadata (title/artist/art) is resolved NOW; clear
+                        // the banner immediately, independent of the lyrics fetch.
                         provisionalActive = false // real data now
                         bannerGraceUntilMs = 0L // handoff resolved
-                        _spotifyMetadataFetching.value = false
+                        if (step.clearBanner) _spotifyMetadataFetching.value = false
                         }
                     } else {
                         // vc32: during a handoff Spotify
@@ -1381,6 +1407,32 @@ class SpotifyProvider @Inject constructor(
     }
 
     /**
+     * #2 — fetch lyrics for [snap] off the poll loop (a child of pollScope,
+     * torn down with the poll via the [gen] guard). Caches the result (incl. a
+     * miss) and paints it onto the live state only if still the same generation
+     * AND the same track — never blocks the banner or a track change.
+     */
+    private fun fetchLyricsAsync(gen: Int, snap: SpotifyPlaybackState) {
+        val key = lyricsKey(snap.title, snap.artist, snap.album, snap.durationMs)
+        pollScope.launch {
+            val res = try {
+                fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
+                    ?.let { LyricsResult(it.first, it.second) }
+            } catch (ce: kotlinx.coroutines.CancellationException) {
+                throw ce
+            } catch (_: Exception) {
+                null
+            }
+            synchronized(lyricsCache) { lyricsCache[key] = res }
+            if (gen == pollGen && _spotifyState.value?.trackUri == snap.trackUri) {
+                _spotifyState.value = _spotifyState.value?.copy(
+                    lyrics = res?.plain, syncedLyrics = res?.synced.orEmpty()
+                )
+            }
+        }
+    }
+
+    /**
      * Fetch plain lyrics from LRCLib by track title / artist / album /
      * duration. Returns null on miss. LRCLib is free and doesn't
      * require an API key. https://lrclib.net/docs
@@ -1401,7 +1453,7 @@ class SpotifyProvider @Inject constructor(
             "&duration=" + durSec
         val req = Request.Builder().url(url).build()
         return try {
-            http.newCall(req).execute().use { resp ->
+            lyricsHttp.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@use null
                 val body = resp.body?.string().orEmpty()
                 val root = JsonParser.parseString(body).asJsonObject
@@ -1708,3 +1760,18 @@ internal fun shouldEmitSnap(
     if (nowMs >= graceUntilMs) return true
     return snapUri == expectedUri
 }
+
+/**
+ * #2 — the per-snap resolve invariant: metadata (title/artist/art) is ready as
+ * soon as a snap resolves, so the state emits and the banner clears NOW,
+ * regardless of lyrics; lyrics are fetched (async) only on a track change.
+ * Pure → unit-testable (SpotifyLyricsDecoupleTest) and load-bearing in the loop.
+ */
+internal data class TrackResolveStep(
+    val emitState: Boolean,
+    val clearBanner: Boolean,
+    val fetchLyrics: Boolean
+)
+
+internal fun trackResolveStep(isNewTrack: Boolean): TrackResolveStep =
+    TrackResolveStep(emitState = true, clearBanner = true, fetchLyrics = isNewTrack)

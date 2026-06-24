@@ -94,7 +94,8 @@ class CloudViewModel @Inject constructor(
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
     private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
-    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
+    private val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao
 ) : ViewModel() {
 
     /**
@@ -1158,11 +1159,13 @@ class CloudViewModel @Inject constructor(
             )
             val r = spotifyProvider.playTrackOnConnectDevice(spotifyUri = null, contextUri = contextUri)
             if (r.isSuccess) {
-                runCatching { spotifyProvider.setRepeat("context") }
-                // Honour the persisted shuffle preference for the album launch
-                // (Spotify-Connect shuffle is server-side, set via Web API).
-                runCatching {
-                    spotifyProvider.setShuffle(settingsDataStore.shuffleEnabled.first())
+                // #2 — setRepeat + setShuffle are independent of each other and of
+                // the poll start; fire concurrently to save ~1 round trip of
+                // perceived launch latency (both already runCatching-wrapped).
+                val shuffleWanted = settingsDataStore.shuffleEnabled.first()
+                coroutineScope {
+                    launch { runCatching { spotifyProvider.setRepeat("context") } }
+                    launch { runCatching { spotifyProvider.setShuffle(shuffleWanted) } }
                 }
                 spotifyProvider.startPlaybackPolling(expectPlayback = true, expectedTrack = contextUri)
                 recordCloudPlay(item)
@@ -1568,6 +1571,40 @@ class CloudViewModel @Inject constructor(
      * Search the active provider. Debounced 300 ms so a fast typist's
      * keystrokes don't trigger an API call per character.
      */
+    /**
+     * #16 — search the local enriched metadata (played/offline Drive items) so a
+     * query that isn't in the filename (e.g. the author "Matt") still finds the
+     * item. Maps history/offline rows back to playable Drive [CloudMediaItem]s.
+     * The drive.file scope blocks a true whole-Drive metadata search; this is the
+     * within-scope way to surface non-filename matches.
+     */
+    private suspend fun searchDriveMetadata(query: String): List<CloudMediaItem> {
+        val needle = query.trim()
+        if (needle.length < 2) return emptyList() // avoid trivially-broad scans
+        val pattern = "%" + needle
+            .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            val hist = playbackHistoryDao.searchDriveMetadata(pattern).map { row ->
+                CloudMediaItem(
+                    id = row.mediaUri, name = row.title, mimeType = "audio/*",
+                    size = 0L, downloadUrl = row.mediaUri,
+                    thumbnailUri = row.artworkUri?.let { android.net.Uri.parse(it) },
+                    sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                    subtitle = row.subtitle
+                )
+            }
+            val offline = offlineCopyDao.searchDisplayName(pattern).map { row ->
+                CloudMediaItem(
+                    id = row.driveFileId, name = row.displayName, mimeType = "audio/*",
+                    size = row.byteSize,
+                    downloadUrl = "https://www.googleapis.com/drive/v3/files/${row.driveFileId}?alt=media",
+                    sourceProvider = CloudProviderType.GOOGLE_DRIVE, subtitle = "Offline"
+                )
+            }
+            com.powermediaplayer.cloud.DriveMetadataSearch.mergeDriveResults(hist, offline)
+        }
+    }
+
     fun setSearchQuery(query: String) {
         _uiState.update { it.copy(
             searchQuery = query,
@@ -1584,15 +1621,20 @@ class CloudViewModel @Inject constructor(
                 query.isBlank() -> emptyList()
                 provider == CloudProviderType.GOOGLE_DRIVE ->
                     coroutineScope {
-                        // SAF walk and Drive REST search are independent —
-                        // run together (audit 5.3).
+                        // SAF walk, Drive REST search, and the local enriched-
+                        // metadata search are independent — run together (audit
+                        // 5.3). #16 — the metadata search finds items by enriched
+                        // author/series even when the needle isn't in the filename.
                         val saf = async {
                             driveProvider.searchFiles(query).getOrDefault(emptyList())
                         }
                         val oauth = async {
                             driveOAuthProvider.searchFiles(query).getOrDefault(emptyList())
                         }
-                        saf.await() + oauth.await()
+                        val meta = async { searchDriveMetadata(query) }
+                        val filename = saf.await() + oauth.await()
+                        com.powermediaplayer.cloud.DriveMetadataSearch
+                            .mergeDriveResults(filename, meta.await())
                     }
                 provider == CloudProviderType.SPOTIFY -> {
                     // Surface a search failure (expired token / 401 / network) so it

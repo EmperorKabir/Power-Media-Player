@@ -132,4 +132,22 @@ interface PlaybackHistoryDao {
 
     @Query("SELECT MAX(durationMs) FROM playback_history")
     suspend fun longestTrackDurationMs(): Long?
+
+    // ── #16 enriched-metadata Drive search ──────────────────────────
+    /** Search DRIVE-source rows by enriched title/author (subtitle). mediaUri
+     *  here is the Drive download/stream URL (recordCloudPlay stores it), so a
+     *  hit maps back to a playable CloudMediaItem. Distinct by mediaUri
+     *  (most-recent row wins). ESCAPE handles literal % / _ in the needle. */
+    @Query(
+        "SELECT * FROM playback_history " +
+            "WHERE source = 'DRIVE' AND id IN (" +
+            "  SELECT MAX(id) FROM playback_history WHERE source='DRIVE' GROUP BY mediaUri" +
+            ") AND (title LIKE :pattern ESCAPE '\\' OR subtitle LIKE :pattern ESCAPE '\\') " +
+            "ORDER BY lastPlayedAt DESC LIMIT 50"
+    )
+    suspend fun searchDriveMetadata(pattern: String): List<PlaybackHistoryEntity>
+
+    /** #16 — is this Drive uri already enriched into history? (skip re-enrich). */
+    @Query("SELECT COUNT(*) FROM playback_history WHERE source='DRIVE' AND mediaUri = :uri")
+    suspend fun countDriveRow(uri: String): Int
 }

@@ -37,4 +37,8 @@ interface OfflineCopyDao {
 
     @Query("DELETE FROM offline_copy WHERE driveFileId = :id")
     suspend fun delete(id: String)
+
+    /** #16 — search offline copies by their friendly Drive name. */
+    @Query("SELECT * FROM offline_copy WHERE displayName LIKE :pattern ESCAPE '\\' LIMIT 50")
+    suspend fun searchDisplayName(pattern: String): List<OfflineCopyEntity>
 }
