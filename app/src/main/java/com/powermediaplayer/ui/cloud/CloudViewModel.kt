@@ -128,6 +128,7 @@ class CloudViewModel @Inject constructor(
     fun saveDriveOffline(item: CloudMediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
             _savingOffline.update { it + item.id }
+            com.powermediaplayer.util.DownloadProgressBus.label(item.id, item.name)
           try {
             val file: java.io.File? = runCatching {
                 if (item.id.startsWith("content://"))

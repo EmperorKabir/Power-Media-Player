@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.AlertDialog
@@ -196,6 +197,8 @@ fun DownloadsScreen(
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     val sel by vm.selected.collectAsStateWithLifecycle()
+    val inProgress by com.powermediaplayer.util.DownloadProgressBus.flow.collectAsStateWithLifecycle()
+    val dlLabels by com.powermediaplayer.util.DownloadProgressBus.labels.collectAsStateWithLifecycle()
     val hasItems = s.podcasts.isNotEmpty() || s.drive.isNotEmpty()
     var confirmBatch by remember { mutableStateOf(false) }
 
@@ -277,13 +280,24 @@ fun DownloadsScreen(
                 HorizontalDivider(color = TextTertiary.copy(alpha = 0.2f))
             }
 
+            // Live in-progress downloads (started from anywhere: Player, Last
+            // Played, Cloud, Podcasts) with a progress bar + a stop (✕) button.
+            if (inProgress.isNotEmpty()) {
+                item(key = "h_inprogress") {
+                    SectionHeader(Icons.Filled.Download, "Downloading (${inProgress.size})")
+                }
+                items(inProgress.keys.toList(), key = { "ip_$it" }) { id ->
+                    InProgressRow(label = dlLabels[id] ?: "Downloading…", id = id)
+                }
+            }
+
             if (!s.loaded) {
                 item(key = "loading") {
                     Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = TealAccent)
                     }
                 }
-            } else if (s.podcasts.isEmpty() && s.drive.isEmpty()) {
+            } else if (s.podcasts.isEmpty() && s.drive.isEmpty() && inProgress.isEmpty()) {
                 item(key = "empty") {
                     Text(
                         "Nothing downloaded yet. Download podcast episodes or save Drive files offline to manage them here. Spotify content can't be downloaded (DRM).",
@@ -355,6 +369,29 @@ private fun SectionHeader(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun InProgressRow(label: String, id: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                label,
+                color = TextPrimary,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text("Downloading…", color = TextTertiary, style = MaterialTheme.typography.labelSmall)
+        }
+        com.powermediaplayer.ui.components.DownloadProgressMini(
+            id,
+            onCancel = { com.powermediaplayer.util.DownloadProgressBus.requestCancel(id) }
+        )
     }
 }
 

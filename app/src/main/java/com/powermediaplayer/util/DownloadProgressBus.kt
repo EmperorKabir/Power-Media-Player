@@ -20,6 +20,14 @@ object DownloadProgressBus {
     private val _flow = MutableStateFlow<Map<String, Prog>>(emptyMap())
     val flow: StateFlow<Map<String, Prog>> = _flow
 
+    /** Human label per in-flight id (file/episode title) so a Manage Downloads
+     *  "In progress" row can name the download, not just show its opaque id. */
+    private val _labels = MutableStateFlow<Map<String, String>>(emptyMap())
+    val labels: StateFlow<Map<String, String>> = _labels
+    fun label(id: String, name: String) {
+        if (name.isNotBlank()) _labels.value = _labels.value + (id to name)
+    }
+
     /** Ids the user has asked to cancel mid-download. The shared copy paths poll
      *  this set and throw [DownloadCancelledException] so the provider's existing
      *  partial-file cleanup (catch { cacheFile.delete() }) fires. */
@@ -31,6 +39,7 @@ object DownloadProgressBus {
 
     fun clear(id: String) {
         if (_flow.value.containsKey(id)) _flow.value = _flow.value - id
+        if (_labels.value.containsKey(id)) _labels.value = _labels.value - id
         cancelled.remove(id)
     }
 

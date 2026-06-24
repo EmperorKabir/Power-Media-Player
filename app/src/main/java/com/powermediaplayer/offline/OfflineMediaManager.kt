@@ -123,6 +123,7 @@ class OfflineMediaManager @Inject constructor(
         val driveId = driveIdOf(uri)
             ?: return Result.failure(IllegalStateException("Not a downloadable item"))
         if (offlineCopyDao.get(driveId) != null) return Result.success(Unit)
+        com.powermediaplayer.util.DownloadProgressBus.label(driveId, title)
         val item = CloudMediaItem(
             id = driveId,
             name = title,
@@ -149,6 +150,7 @@ class OfflineMediaManager @Inject constructor(
         val show = podcastDao.getShow(ep.feedUrl)
             ?: return Result.failure(IllegalStateException("Show not subscribed"))
         val global = settingsDataStore.podcastDownloadTreeUri.first().ifBlank { null }
+        com.powermediaplayer.util.DownloadProgressBus.label(ep.guid, ep.title)
         val saved = PodcastDownloader(context).download(show, ep, global)
             ?: return Result.failure(IllegalStateException("Download failed"))
         podcastDao.setLocalPath(ep.guid, saved.uri, saved.bytes, System.currentTimeMillis())

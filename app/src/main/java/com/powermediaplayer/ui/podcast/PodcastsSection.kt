@@ -209,6 +209,7 @@ class PodcastsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             if (_downloading.value.contains(e.guid)) return@launch
             markDownloading(e.guid, true)
+            com.powermediaplayer.util.DownloadProgressBus.label(e.guid, e.title)
             try {
                 val show = podcastDao.getShow(e.feedUrl) ?: return@launch
                 val global = settings.podcastDownloadTreeUri.first().ifBlank { null }
