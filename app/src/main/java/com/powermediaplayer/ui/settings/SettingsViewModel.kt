@@ -125,6 +125,8 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1f)
     val themeAccentHexFlow: StateFlow<String> = settingsDataStore.themeAccentHex
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val subtitleTextSizeFlow: StateFlow<Float> = settingsDataStore.subtitleTextSize
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1f)
 
     val uiState: StateFlow<SettingsUiState> = combine(
         listOf<Flow<Any>>(
@@ -823,6 +825,10 @@ class SettingsViewModel @Inject constructor(
     fun setSubtitleDelay(ms: Int) = viewModelScope.launch {
         com.powermediaplayer.diag.DiagLog.ui("settings subtitleDelay=${ms}ms")
         settingsDataStore.setSubtitleDelayMs(ms)
+    }.let{}
+    fun setSubtitleTextSize(scale: Float) = viewModelScope.launch {
+        com.powermediaplayer.diag.DiagLog.ui("settings subtitleTextSize=$scale")
+        settingsDataStore.setSubtitleTextSize(scale)
     }.let{}
     fun setAudioDelay(ms: Int) = viewModelScope.launch {
         com.powermediaplayer.diag.DiagLog.ui("settings audioDelay=${ms}ms")

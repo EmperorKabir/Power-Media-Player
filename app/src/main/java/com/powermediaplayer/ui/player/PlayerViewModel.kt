@@ -287,6 +287,8 @@ class PlayerViewModel @Inject constructor(
         mediaOverrideRepo.withOverrideBool(settingsDataStore.videoInvert) { it.videoInvert }
     val effectiveVideoRotation =
         mediaOverrideRepo.withOverrideInt(settingsDataStore.videoRotation) { it.videoRotation }
+    /** Global subtitle text-size scale (0.5–2.0) for the video SubtitleView overlay. */
+    val subtitleTextSize: kotlinx.coroutines.flow.Flow<Float> = settingsDataStore.subtitleTextSize
 
     /**
      * Most recent play session id, observed from the repository. Used

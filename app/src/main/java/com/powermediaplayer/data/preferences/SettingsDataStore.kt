@@ -119,6 +119,7 @@ class SettingsDataStore @Inject constructor(
         val PITCH_INDEPENDENT = floatPreferencesKey("pitch_independent")
         val VOLUME_BOOST_MB = intPreferencesKey("volume_boost_mb")
         val SUBTITLE_DELAY_MS = intPreferencesKey("subtitle_delay_ms")
+        val SUBTITLE_TEXT_SIZE = floatPreferencesKey("subtitle_text_size")
         val AUDIO_DELAY_MS = intPreferencesKey("audio_delay_ms")
         val GAPLESS_PLAYBACK = booleanPreferencesKey("gapless_playback")
         val REPLAY_GAIN_ENABLED = booleanPreferencesKey("replay_gain_enabled")
@@ -1347,6 +1348,8 @@ class SettingsDataStore @Inject constructor(
     val pitchIndependent: Flow<Float> = context.dataStore.data.map { it[Keys.PITCH_INDEPENDENT] ?: 1.0f }
     val volumeBoostMb: Flow<Int> = context.dataStore.data.map { it[Keys.VOLUME_BOOST_MB] ?: 0 }
     val subtitleDelayMs: Flow<Int> = context.dataStore.data.map { it[Keys.SUBTITLE_DELAY_MS] ?: 0 }
+    /** Subtitle text-size scale for the video SubtitleView overlay (0.5–2.0; 1.0 = system default). */
+    val subtitleTextSize: Flow<Float> = context.dataStore.data.map { (it[Keys.SUBTITLE_TEXT_SIZE] ?: 1.0f).coerceIn(0.5f, 2.0f) }
     val audioDelayMs: Flow<Int> = context.dataStore.data.map { it[Keys.AUDIO_DELAY_MS] ?: 0 }
     val gaplessPlayback: Flow<Boolean> = context.dataStore.data.map { it[Keys.GAPLESS_PLAYBACK] ?: true }
     val replayGainEnabled: Flow<Boolean> = context.dataStore.data.map { it[Keys.REPLAY_GAIN_ENABLED] ?: false }
@@ -1398,6 +1401,7 @@ class SettingsDataStore @Inject constructor(
     suspend fun setPitchIndependent(p: Float) { context.dataStore.edit { it[Keys.PITCH_INDEPENDENT] = p } }
     suspend fun setVolumeBoostMb(mb: Int) { context.dataStore.edit { it[Keys.VOLUME_BOOST_MB] = mb } }
     suspend fun setSubtitleDelayMs(ms: Int) { context.dataStore.edit { it[Keys.SUBTITLE_DELAY_MS] = ms } }
+    suspend fun setSubtitleTextSize(s: Float) { context.dataStore.edit { it[Keys.SUBTITLE_TEXT_SIZE] = s.coerceIn(0.5f, 2.0f) } }
     suspend fun setAudioDelayMs(ms: Int) { context.dataStore.edit { it[Keys.AUDIO_DELAY_MS] = ms } }
     suspend fun setGaplessPlayback(v: Boolean) { context.dataStore.edit { it[Keys.GAPLESS_PLAYBACK] = v } }
     suspend fun setReplayGainEnabled(v: Boolean) { context.dataStore.edit { it[Keys.REPLAY_GAIN_ENABLED] = v } }

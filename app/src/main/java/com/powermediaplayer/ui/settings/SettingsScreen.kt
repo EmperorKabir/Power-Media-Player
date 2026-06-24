@@ -43,6 +43,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val subtitleTextSize by viewModel.subtitleTextSizeFlow.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
     var showAlarmsSheet by remember { mutableStateOf(false) }
@@ -544,6 +545,9 @@ fun SettingsScreen(
                 SliderRow("Subtitle delay", "${uiState.subtitleDelayMs} ms",
                     uiState.subtitleDelayMs.toFloat(), -5000f..5000f,
                     default = 0f) { viewModel.setSubtitleDelay(it.toInt()) }
+                SliderRow("Subtitle text size", "${(subtitleTextSize * 100).toInt()}%",
+                    subtitleTextSize, 0.5f..2.0f,
+                    default = 1f) { viewModel.setSubtitleTextSize(it) }
                 Text(
                     text = "Positive = subtitles appear later; negative = earlier. " +
                         "Typical nudge is ±100–500 ms.",

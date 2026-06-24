@@ -167,6 +167,51 @@ fun VideoSurface(
             },
             modifier = aspectMod.then(transformMod)
         )
+
+        // Subtitle overlay — a Media3 SubtitleView placed as a SIBLING of the
+        // video, so it is OUTSIDE the TextureView's ColorFilter (B&W/sepia/invert)
+        // and the graphicsLayer flip/rotation: captions stay upright + correctly
+        // coloured no matter the active video effects. Fed by the bound player's
+        // onCues — the cue TIMING already carries the user's subtitle-delay (shifted
+        // at parse time), and audio effects are processed in the audio sink so they
+        // never touch it. Hidden while casting to a video-capable receiver (which
+        // renders its own subtitles); shown for local playback AND audio-only cast
+        // (on-phone picture). Size honours the user's Settings scale + the system
+        // caption style. Works in both player layouts (both call VideoSurface).
+        val subtitleScale by playerVm.subtitleTextSize.collectAsStateWithLifecycle(initialValue = 1f)
+        val castActive by com.powermediaplayer.service.PlaybackService.castActiveFlow.collectAsStateWithLifecycle()
+        val castLocalVideo by com.powermediaplayer.service.PlaybackService.castLocalVideoActiveFlow.collectAsStateWithLifecycle()
+        if (!castActive || castLocalVideo) {
+            val cues = remember { androidx.compose.runtime.mutableStateOf<List<androidx.media3.common.text.Cue>>(emptyList()) }
+            androidx.compose.runtime.DisposableEffect(Unit) {
+                val p = PlaybackService.getExoPlayer()
+                val listener = object : androidx.media3.common.Player.Listener {
+                    override fun onCues(cueGroup: androidx.media3.common.text.CueGroup) {
+                        cues.value = cueGroup.cues
+                    }
+                }
+                p?.let { cues.value = it.currentCues.cues; it.addListener(listener) }
+                onDispose { p?.removeListener(listener) }
+            }
+            AndroidView(
+                factory = { ctx ->
+                    androidx.media3.ui.SubtitleView(ctx).apply {
+                        setApplyEmbeddedStyles(true)
+                        setApplyEmbeddedFontSizes(true)
+                        // Honour the user's Android Accessibility caption style
+                        // (colours/background) where they've set one.
+                        setUserDefaultStyle()
+                    }
+                },
+                update = { sv ->
+                    sv.setFractionalTextSize(
+                        androidx.media3.ui.SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * subtitleScale
+                    )
+                    sv.setCues(cues.value)
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 
