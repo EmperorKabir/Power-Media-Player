@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -334,7 +335,14 @@ private fun NonPlayerRoute(
 ) {
     Column(modifier = Modifier.fillMaxSize().then(contentInset)) {
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) { content() }
-        com.powermediaplayer.ui.components.MiniPlayerBar(onClick = onMiniClick)
+        // Float the mini-player above the soft keyboard (the app is edge-to-edge,
+        // so the IME draws over content — imePadding lifts the bar by the live IME
+        // height and drops it back when the keyboard closes). Adaptive for free:
+        // on phone/folded it rises above the bottom keyboard; on tablet/unfolded
+        // the keyboard doesn't reach the side rail so there's nothing to avoid.
+        Box(modifier = Modifier.imePadding()) {
+            com.powermediaplayer.ui.components.MiniPlayerBar(onClick = onMiniClick)
+        }
     }
 }
 
