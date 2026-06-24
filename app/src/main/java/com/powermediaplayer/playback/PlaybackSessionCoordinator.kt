@@ -35,7 +35,8 @@ class PlaybackSessionCoordinator @Inject constructor(
     private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
     private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
     private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver,
-    private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver
+    private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver,
+    private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher
 ) {
 
     private val musicBrainzClient =
@@ -691,6 +692,34 @@ class PlaybackSessionCoordinator @Inject constructor(
                             "PMP_DIAG",
                             "Cold-start restored '${recent.title}' [src=${recent.source}] @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id})"
                         )
+                        // Seamless metadata on auto-resume: a streamed Drive item
+                        // that was never enriched (no durable chapter-cache entry)
+                        // resumes showing only its filename — the tap-time enrich
+                        // (Cloud / Last Played) never fired. Enrich it NOW in the
+                        // background on the app scope (so it outlives this coroutine),
+                        // after playback has already started (non-blocking — launch
+                        // stays instant). Once-per-file: the enrich populates the
+                        // chapter cache, so the next resume skips the re-download.
+                        if (recent.source == "DRIVE" &&
+                            com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri) == null
+                        ) {
+                            val driveId = if (recent.mediaUri.startsWith("content://")) recent.mediaUri
+                                else recent.mediaUri.substringAfter("/files/", "").substringBefore("?")
+                                    .ifEmpty { recent.mediaUri.hashCode().toString() }
+                            driveTagEnricher.enrich(
+                                scope,
+                                com.powermediaplayer.cloud.CloudMediaItem(
+                                    id = driveId,
+                                    name = recent.title,
+                                    mimeType = "audio/mp4",
+                                    size = 0L,
+                                    downloadUrl = recent.mediaUri,
+                                    sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
+                                ),
+                                recent.mediaUri,
+                                silent = true
+                            )
+                        }
                     }.onFailure { t ->
                         com.powermediaplayer.util.Diag.w(
                             "PMP_DIAG", "Cold-start restore FAILED mid-way", t

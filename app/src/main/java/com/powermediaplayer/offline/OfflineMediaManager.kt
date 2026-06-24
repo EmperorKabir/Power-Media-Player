@@ -24,6 +24,10 @@ import kotlinx.coroutines.withContext
 /** Whether the currently-resolved media can be taken offline / is already local. */
 enum class OfflineState { NOT_APPLICABLE, DOWNLOADABLE, DOWNLOADED }
 
+/** OAuth Drive download url → file id. Hoisted so [OfflineMediaManager.driveIdOf]
+ *  (called per offline-state evaluation) does not recompile the pattern each call. */
+private val DRIVE_FILE_ID_RE = Regex("/files/([^?]+)")
+
 /**
  * Single entry point for "download for offline use" / "delete from local
  * storage" of a Drive file or a podcast episode, identified by its play URI.
@@ -47,14 +51,28 @@ class OfflineMediaManager @Inject constructor(
         offlineCopyDao.observeAll(),
         podcastDao.observeDownloaded()
     ) { drive, pods ->
-        drive.map { it.driveFileId }.toSet() + pods.map { it.audioUrl }.toSet()
+        // Every key a play URI might equal: podcast audioUrls; the Drive id AS
+        // STORED (SAF content:// uri or bare OAuth id); PLUS the OAuth
+        // `files/{id}?alt=media` url that recordCloudPlay stores as a Last Played
+        // row's mediaUri — so a downloaded OAuth row badges "Offline" by direct
+        // equality too, not only via driveIdOf. Additive superset: driveIdOf-based
+        // consumers (Player/Library) are unaffected by the extra alias entries.
+        val s = HashSet<String>()
+        pods.forEach { s.add(it.audioUrl) }
+        drive.forEach { d ->
+            s.add(d.driveFileId)
+            if (!d.driveFileId.startsWith("content://")) {
+                s.add("https://www.googleapis.com/drive/v3/files/${d.driveFileId}?alt=media")
+            }
+        }
+        s
     }
 
     /** The Drive file id a URI maps to: a SAF content:// uri IS the id; an OAuth
      *  download url carries it as `.../files/{id}?...`. Null = not a Drive uri. */
     fun driveIdOf(uri: String): String? = when {
         uri.startsWith("content://") && uri.contains("document") -> uri
-        else -> Regex("/files/([^?]+)").find(uri)?.groupValues?.getOrNull(1)
+        else -> DRIVE_FILE_ID_RE.find(uri)?.groupValues?.getOrNull(1)
     }
 
     /** True ONLY for an unambiguous OAuth Drive download url. A SAF content://
@@ -195,19 +213,23 @@ class OfflineMediaManager @Inject constructor(
     // ── Drive relocate into the user's single global offline folder (mirrors
     //    CloudViewModel.relocateDriveOffline) ─────────────────────────────────
     private suspend fun relocate(item: CloudMediaItem, cacheFile: java.io.File): Pair<String, Long> {
-        val fallback = cacheFile.absolutePath to cacheFile.length()
+        // No SAF folder (or the move fails) → DON'T leave the copy in cacheDir: the
+        // OS evicts it AND the enricher's same-named temp (drive_<hash>_full) deletes
+        // it, so a cache-stored "offline" file silently vanishes → slow re-streaming.
+        // Move it into persistent filesDir/offline instead.
+        fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
         val tree = settingsDataStore.driveOfflineTreeUri.first().ifBlank { null }
-            ?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return fallback
-        if (!SafStorage.hasWriteAccess(context, tree)) return fallback
-        val dir = SafStorage.resolveDir(context, tree, "PowerMediaPlayer", "drive") ?: return fallback
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return durable()
+        if (!SafStorage.hasWriteAccess(context, tree)) return durable()
+        val dir = SafStorage.resolveDir(context, tree, "PowerMediaPlayer", "drive") ?: return durable()
         val name = item.name.ifBlank { cacheFile.name }
-        val child = SafStorage.createChild(dir, name, mimeForName(name)) ?: return fallback
+        val child = SafStorage.createChild(dir, name, mimeForName(name)) ?: return durable()
         val bytes = runCatching {
             cacheFile.inputStream().use { SafStorage.writeStream(context, child.uri, it) }
         }.getOrDefault(0L)
         if (bytes <= 0L) {
             runCatching { child.delete() }
-            return fallback
+            return durable()
         }
         runCatching { cacheFile.delete() }
         return child.uri.toString() to bytes

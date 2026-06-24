@@ -243,18 +243,22 @@ class CloudViewModel @Inject constructor(
         item: CloudMediaItem,
         cacheFile: java.io.File
     ): Pair<String, Long> {
-        val fallback = cacheFile.absolutePath to cacheFile.length()
+        // No SAF folder (or the move fails) → move into persistent filesDir/offline,
+        // NOT cacheDir: cacheDir is OS-evicted AND shares the enricher's temp name
+        // (drive_<hash>_full, deleted after tag-read), so a cache-stored offline copy
+        // silently disappears and playback falls back to slow re-streaming.
+        fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
         val tree = settingsDataStore.driveOfflineTreeUri.first().ifBlank { null }
             ?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
-            ?: return fallback
-        if (!com.powermediaplayer.util.SafStorage.hasWriteAccess(context, tree)) return fallback
+            ?: return durable()
+        if (!com.powermediaplayer.util.SafStorage.hasWriteAccess(context, tree)) return durable()
         val dir = com.powermediaplayer.util.SafStorage.resolveDir(
             context, tree, "PowerMediaPlayer", "drive"
-        ) ?: return fallback
+        ) ?: return durable()
         val name = item.name.ifBlank { cacheFile.name }
         val child = com.powermediaplayer.util.SafStorage.createChild(
             dir, name, mimeForName(name)
-        ) ?: return fallback
+        ) ?: return durable()
         val bytes = runCatching {
             cacheFile.inputStream().use {
                 com.powermediaplayer.util.SafStorage.writeStream(context, child.uri, it)
@@ -262,12 +266,12 @@ class CloudViewModel @Inject constructor(
         }.getOrDefault(0L)
         if (bytes <= 0L) {
             // Empty write (revoked grant / provider error mid-copy) — clean up the
-            // stub child so it can't orphan in the user's folder, and keep the cache.
+            // stub child so it can't orphan in the user's folder, keep a durable copy.
             com.powermediaplayer.util.Diag.w(
-                "PMP_DIAG", "C28 relocate wrote 0 bytes for ${item.name}; kept app-cache copy"
+                "PMP_DIAG", "C28 relocate wrote 0 bytes for ${item.name}; kept durable copy"
             )
             runCatching { child.delete() }
-            return fallback
+            return durable()
         }
         runCatching { cacheFile.delete() }   // moved into the user's folder
         return child.uri.toString() to bytes
@@ -636,17 +640,17 @@ class CloudViewModel @Inject constructor(
                     parentId = null
                 )
                 recordCloudPlay(item)
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     errorMessage = "Playing on Spotify: $name"
-                )
+                ) }
                 onPlaybackStarted()
             }.onFailure { ex ->
                 // vc32: never leave a provisional mirror for a
                 // track that failed to play.
                 spotifyProvider.clearProvisionalMirror()
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     errorMessage = ex.message ?: "Spotify playback failed"
-                )
+                ) }
             }
         }
     }
@@ -846,12 +850,12 @@ class CloudViewModel @Inject constructor(
 
     fun handleDriveResult(data: Intent?) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.update { it.copy(isLoading = true) }
             val result = driveProvider.handleSignInResult(data)
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 isLoading = false,
                 errorMessage = result.exceptionOrNull()?.message
-            )
+            ) }
             if (result.isSuccess) browseDrive(null, "Root")
         }
     }
@@ -863,12 +867,12 @@ class CloudViewModel @Inject constructor(
         // policy starting from the next focus event.
         com.powermediaplayer.service.PlaybackService.oauthInFlight = false
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.update { it.copy(isLoading = true) }
             val result = spotifyProvider.handleAuthResponse(data)
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 isLoading = false,
                 errorMessage = result.exceptionOrNull()?.message
-            )
+            ) }
             if (result.isSuccess) browseSpotify()
         }
     }
@@ -878,12 +882,12 @@ class CloudViewModel @Inject constructor(
             // Switching provider/folder must drop any active search, else the
             // search-results branch keeps rendering the old (e.g. Spotify) hits.
             searchJob?.cancel()
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 isLoading = true,
                 activeProvider = CloudProviderType.GOOGLE_DRIVE,
                 searchQuery = "",
                 searchResults = emptyList()
-            )
+            ) }
             val result = if (folderId == null) {
                 // Root view: union of SAF tree URIs + Drive OAuth picked
                 // folders. Each appears as a virtual folder entry the
@@ -894,13 +898,13 @@ class CloudViewModel @Inject constructor(
             } else {
                 pickerForId(folderId).listFiles(folderId)
             }
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 isLoading = false,
                 items = result.getOrDefault(emptyList()),
                 errorMessage = result.exceptionOrNull()?.message,
                 folderStack = if (folderId == null) listOf(null to "Root")
-                else _uiState.value.folderStack + (folderId to label)
-            )
+                else it.folderStack + (folderId to label)
+            ) }
         }
     }
 
@@ -919,7 +923,7 @@ class CloudViewModel @Inject constructor(
         // Land on the section picker — empty items + spotifySection=null
         // signals the UI to render the section cards.
         searchJob?.cancel()
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             isLoading = false,
             activeProvider = CloudProviderType.SPOTIFY,
             items = emptyList(),
@@ -928,32 +932,32 @@ class CloudViewModel @Inject constructor(
             searchQuery = "",
             searchResults = emptyList(),
             folderStack = listOf(null to "Spotify Library")
-        )
+        ) }
     }
 
     fun openSpotifySection(section: com.powermediaplayer.cloud.SpotifySection) {
         viewModelScope.launch(Dispatchers.IO) {
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 isLoading = true,
                 activeProvider = CloudProviderType.SPOTIFY,
                 spotifySection = section
-            )
+            ) }
             val result = spotifyProvider.listSection(section)
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 isLoading = false,
                 items = result.getOrDefault(emptyList()),
                 errorMessage = result.exceptionOrNull()?.message,
                 folderStack = listOf(null to "Spotify Library", null to section.label)
-            )
+            ) }
         }
     }
 
     fun spotifyBackToSections() {
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             spotifySection = null,
             items = emptyList(),
             folderStack = listOf(null to "Spotify Library")
-        )
+        ) }
     }
 
     /**
@@ -1046,7 +1050,7 @@ class CloudViewModel @Inject constructor(
      *  user taps the already-active Cloud nav tab again. */
     fun navigateToRoot() {
         searchJob?.cancel()
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             activeProvider = null,
             spotifySection = null,
             items = emptyList(),
@@ -1056,7 +1060,7 @@ class CloudViewModel @Inject constructor(
             searchInProgress = false,
             priorSearchQuery = "",
             priorSearchResults = emptyList()
-        )
+        ) }
     }
 
     fun navigateUp() {
@@ -1067,14 +1071,14 @@ class CloudViewModel @Inject constructor(
         if (_uiState.value.priorSearchQuery.isNotBlank() &&
             _uiState.value.activeProvider == CloudProviderType.SPOTIFY && stack.size >= 2
         ) {
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 folderStack = stack.dropLast(1),
                 items = emptyList(),
-                searchQuery = _uiState.value.priorSearchQuery,
-                searchResults = _uiState.value.priorSearchResults,
+                searchQuery = it.priorSearchQuery,
+                searchResults = it.priorSearchResults,
                 priorSearchQuery = "",
                 priorSearchResults = emptyList()
-            )
+            ) }
             return
         }
         // Spotify drill-down (album/playlist/show contents) → pop the
@@ -1096,11 +1100,11 @@ class CloudViewModel @Inject constructor(
         // At root of a provider → leave the provider, go back to the
         // provider-selection screen so the user can pick a different one.
         if (stack.size <= 1) {
-            _uiState.value = _uiState.value.copy(
+            _uiState.update { it.copy(
                 activeProvider = null,
                 items = emptyList(),
                 folderStack = listOf(null to "Root")
-            )
+            ) }
             return
         }
         val parent = stack.dropLast(1).last()
@@ -1114,10 +1118,10 @@ class CloudViewModel @Inject constructor(
                 } else {
                     pickerForId(parent.first!!).listFiles(parent.first)
                 }
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     items = result.getOrDefault(emptyList()),
                     folderStack = stack.dropLast(1)
-                )
+                ) }
             }
         }
     }
@@ -1162,13 +1166,13 @@ class CloudViewModel @Inject constructor(
                 }
                 spotifyProvider.startPlaybackPolling(expectPlayback = true, expectedTrack = contextUri)
                 recordCloudPlay(item)
-                _uiState.value = _uiState.value.copy(errorMessage = "Playing album: ${item.name}")
+                _uiState.update { it.copy(errorMessage = "Playing album: ${item.name}") }
                 onPlaybackStarted()
             } else {
                 spotifyProvider.clearProvisionalMirror()
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     errorMessage = r.exceptionOrNull()?.message ?: "Spotify playback failed"
-                )
+                ) }
             }
         }
     }
@@ -1206,24 +1210,24 @@ class CloudViewModel @Inject constructor(
                     val keepPriorQuery = if (curQuery.isNotBlank()) curQuery else _uiState.value.priorSearchQuery
                     val keepPriorResults = if (curQuery.isNotBlank()) curResults else _uiState.value.priorSearchResults
                     viewModelScope.launch(Dispatchers.IO) {
-                        _uiState.value = _uiState.value.copy(
+                        _uiState.update { it.copy(
                             isLoading = true,
                             searchQuery = "",
                             searchResults = emptyList()
-                        )
+                        ) }
                         val r = spotifyProvider.listContainer(containerUri)
                         val list = r.getOrDefault(emptyList())
                         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cloud.openItem container loaded n=${list.size} first=${list.firstOrNull()?.name}")
-                        _uiState.value = _uiState.value.copy(
+                        _uiState.update { it.copy(
                             isLoading = false,
                             items = list,
                             searchQuery = "",
                             searchResults = emptyList(),
                             priorSearchQuery = keepPriorQuery,
                             priorSearchResults = keepPriorResults,
-                            folderStack = _uiState.value.folderStack + (containerUri to item.name),
+                            folderStack = it.folderStack + (containerUri to item.name),
                             errorMessage = r.exceptionOrNull()?.message
-                        )
+                        ) }
                     }
                 }
                 else -> { }
@@ -1271,17 +1275,17 @@ class CloudViewModel @Inject constructor(
                         expectPlayback = true, expectedTrack = spotifyUri
                     )
                     recordCloudPlay(item)
-                    _uiState.value = _uiState.value.copy(
+                    _uiState.update { it.copy(
                         errorMessage = "Playing on Spotify: ${item.name}"
-                    )
+                    ) }
                     onPlaybackStarted()
                 }.onFailure { ex ->
                     // vc32: never leave a provisional mirror for a
                     // track that failed to play.
                     spotifyProvider.clearProvisionalMirror()
-                    _uiState.value = _uiState.value.copy(
+                    _uiState.update { it.copy(
                         errorMessage = ex.message ?: "Spotify playback failed"
-                    )
+                    ) }
                 }
                 // Track played WITHIN an album/playlist context → loop the
                 // context so it returns to the start at the end (user request).
@@ -1302,9 +1306,9 @@ class CloudViewModel @Inject constructor(
                 }
             } catch (t: Throwable) {
                 com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "openItem failed", t)
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     errorMessage = "Couldn't play: ${t.javaClass.simpleName}: ${t.message}"
-                )
+                ) }
             }
         }
     }
@@ -1381,15 +1385,15 @@ class CloudViewModel @Inject constructor(
             // track without a preview clip), surface the reason so the user
             // isn't left staring at a blank player.
             streamResult.exceptionOrNull()?.let { ex ->
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     errorMessage = ex.message ?: "Cannot play this item"
-                )
+                ) }
                 return false
             }
             val uri = streamResult.getOrNull() ?: run {
-                _uiState.value = _uiState.value.copy(
+                _uiState.update { it.copy(
                     errorMessage = "No playable URL for this item"
-                )
+                ) }
                 return false
             }
             // STABLE identity for this item, INDEPENDENT of whether we resolved to
@@ -1477,9 +1481,9 @@ class CloudViewModel @Inject constructor(
                     .ensureReversedWav(context, uri)
                     .map { android.net.Uri.fromFile(it) }
                     .onFailure { t ->
-                        _uiState.value = _uiState.value.copy(
+                        _uiState.update { it.copy(
                             errorMessage = t.message ?: "Reverse mode failed — playing forward"
-                        )
+                        ) }
                     }
                     .getOrDefault(uri)
             } else uri
@@ -1565,13 +1569,13 @@ class CloudViewModel @Inject constructor(
      * keystrokes don't trigger an API call per character.
      */
     fun setSearchQuery(query: String) {
-        _uiState.value = _uiState.value.copy(
+        _uiState.update { it.copy(
             searchQuery = query,
             searchInProgress = query.isNotBlank(),
             // A fresh search supersedes any saved drill-in snapshot.
-            priorSearchQuery = if (query.isNotBlank()) "" else _uiState.value.priorSearchQuery,
-            priorSearchResults = if (query.isNotBlank()) emptyList() else _uiState.value.priorSearchResults
-        )
+            priorSearchQuery = if (query.isNotBlank()) "" else it.priorSearchQuery,
+            priorSearchResults = if (query.isNotBlank()) emptyList() else it.priorSearchResults
+        ) }
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             kotlinx.coroutines.delay(300)
@@ -1595,15 +1599,15 @@ class CloudViewModel @Inject constructor(
                     // doesn't read as "no results" — mirrors the folder-open path.
                     val r = spotifyProvider.search(query)
                     r.exceptionOrNull()?.let { ex ->
-                        _uiState.value = _uiState.value.copy(
+                        _uiState.update { it.copy(
                             errorMessage = ex.message ?: "Spotify search failed"
-                        )
+                        ) }
                     }
                     r.getOrDefault(emptyList())
                 }
                 else -> emptyList()
             }
-            _uiState.value = _uiState.value.copy(searchResults = results, searchInProgress = false)
+            _uiState.update { it.copy(searchResults = results, searchInProgress = false) }
             // Record the query in recent searches once it returns results — for
             // BOTH Drive and Spotify, and whether or not the user taps a result
             // (the earlier record-on-tap missed Drive + most Spotify searches).
@@ -1619,7 +1623,7 @@ class CloudViewModel @Inject constructor(
      */
     fun clearError() {
         if (_uiState.value.errorMessage != null) {
-            _uiState.value = _uiState.value.copy(errorMessage = null)
+            _uiState.update { it.copy(errorMessage = null) }
         }
     }
 

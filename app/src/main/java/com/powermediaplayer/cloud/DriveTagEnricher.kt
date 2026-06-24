@@ -125,10 +125,20 @@ class DriveTagEnricher @Inject constructor(
         runCatching {
             android.media.MediaMetadataRetriever().use { mmr ->
                 mmr.setDataSource(context, tempUri)
+                // Repair mojibake AT THE SOURCE: MediaMetadataRetriever decodes a
+                // UTF-8 ©nam/©ART tag as Windows-1252 for some M4Bs, so "’" (E2 80
+                // 99) comes back as "â€™" ("Philosopherâ€™s"). Without this the
+                // corrupted title was persisted to the Recents row + senderMetadata
+                // + the system-notification — everything downstream, not just one
+                // screen. TextNormalizer.fixMojibake is idempotent (no-op on clean
+                // text) and keeps the proper curly apostrophe.
                 val title = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)
-                val artist = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
-                    ?: mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+                    ?.let { com.powermediaplayer.util.TextNormalizer.fixMojibake(it) }
+                val artist = (mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                    ?: mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST))
+                    ?.let { com.powermediaplayer.util.TextNormalizer.fixMojibake(it) }
                 val album = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM)
+                    ?.let { com.powermediaplayer.util.TextNormalizer.fixMojibake(it) }
                 val artBytes = mmr.embeddedPicture
                 val artUri = (artBytes?.let {
                     ArtworkCache.write(context, stableKey, it)

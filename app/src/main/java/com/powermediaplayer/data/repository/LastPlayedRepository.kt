@@ -296,8 +296,11 @@ class LastPlayedRepository @Inject constructor(
                 HistoryItem(
                     id = e.id,
                     mediaUri = e.mediaUri,
-                    title = e.title,
-                    subtitle = e.subtitle,
+                    // Display safety-net: repair any mojibake already PERSISTED in a
+                    // row (e.g. a title enriched before the source fix) so the list
+                    // matches the player. Idempotent + cheap (no-op on clean text).
+                    title = com.powermediaplayer.util.TextNormalizer.fixMojibake(e.title),
+                    subtitle = com.powermediaplayer.util.TextNormalizer.fixMojibake(e.subtitle),
                     artworkUri = e.artworkUri,
                     source = sourceOf(e.source),
                     mediaKindOrdinal = e.mediaKindOrdinal,
@@ -323,8 +326,8 @@ class LastPlayedRepository @Inject constructor(
                 HistoryItem(
                     id = f.id,
                     mediaUri = f.mediaUri,
-                    title = f.title,
-                    subtitle = f.subtitle,
+                    title = com.powermediaplayer.util.TextNormalizer.fixMojibake(f.title),
+                    subtitle = com.powermediaplayer.util.TextNormalizer.fixMojibake(f.subtitle),
                     artworkUri = f.artworkUri,
                     source = sourceOf(f.source),
                     mediaKindOrdinal = f.mediaKindOrdinal,
