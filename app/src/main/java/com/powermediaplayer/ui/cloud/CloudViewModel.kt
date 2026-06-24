@@ -247,7 +247,7 @@ class CloudViewModel @Inject constructor(
         // NOT cacheDir: cacheDir is OS-evicted AND shares the enricher's temp name
         // (drive_<hash>_full, deleted after tag-read), so a cache-stored offline copy
         // silently disappears and playback falls back to slow re-streaming.
-        fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
+        suspend fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
         val tree = settingsDataStore.driveOfflineTreeUri.first().ifBlank { null }
             ?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
             ?: return durable()

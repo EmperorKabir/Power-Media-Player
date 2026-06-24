@@ -217,7 +217,7 @@ class OfflineMediaManager @Inject constructor(
         // OS evicts it AND the enricher's same-named temp (drive_<hash>_full) deletes
         // it, so a cache-stored "offline" file silently vanishes → slow re-streaming.
         // Move it into persistent filesDir/offline instead.
-        fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
+        suspend fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
         val tree = settingsDataStore.driveOfflineTreeUri.first().ifBlank { null }
             ?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return durable()
         if (!SafStorage.hasWriteAccess(context, tree)) return durable()

@@ -23,6 +23,12 @@ object TextNormalizer {
 
     private val INVISIBLE_FORMATTING = Regex("[\\u200B-\\u200D\\uFEFF]")
 
+    // Hoisted off [fixMojibake] — that runs per row per emission on the
+    // Compose-collected Last Played flow, so allocating this Set per call was
+    // pure churn on the hot path. Windows-1252 chars that signal UTF-8-misread
+    // mojibake; any string with none of these can't be mojibake'd.
+    private val MOJIBAKE_MARKERS = setOf('â', 'Ã', '€', '™', 'š', 'ž', 'œ')
+
     // Audit 4.1 — Collator.getInstance is an expensive ICU construction
     // and was being built PER COMPARISON inside library sorts. One cached
     // instance per locale; key generation synchronises on it (Collator is
@@ -59,8 +65,7 @@ object TextNormalizer {
         if (s.isEmpty()) return s
         // Quick reject — strings with no characters in the Windows-1252
         // mojibake-suspect range can't possibly be mojibake'd.
-        val mojibakeMarkers = setOf('â', 'Ã', '€', '™', 'š', 'ž', 'œ', '€')
-        if (s.none { it in mojibakeMarkers }) return s
+        if (s.none { it in MOJIBAKE_MARKERS }) return s
         return try {
             val cp1252 = java.nio.charset.Charset.forName("windows-1252")
             val bytes = s.toByteArray(cp1252)
