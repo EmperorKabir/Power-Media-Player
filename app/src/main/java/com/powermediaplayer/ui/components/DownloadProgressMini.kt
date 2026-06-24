@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.powermediaplayer.ui.theme.ErrorRed
 import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextTertiary
 import com.powermediaplayer.util.DownloadProgressBus
@@ -72,8 +73,8 @@ fun DownloadProgressMini(
             IconButton(onClick = onCancel, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Filled.Close,
-                    contentDescription = "Cancel download",
-                    tint = TextTertiary,
+                    contentDescription = "Stop download",
+                    tint = ErrorRed,
                     modifier = Modifier.size(18.dp)
                 )
             }

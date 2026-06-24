@@ -195,7 +195,7 @@ private fun PlayerOfflineButton(viewModel: PlayerViewModel) {
                     color = TealAccent, strokeWidth = 2.dp, modifier = Modifier.size(24.dp)
                 )
                 // ✕ in the ring = tap to stop.
-                Icon(Icons.Filled.Close, "Stop download", tint = TextPrimary, modifier = Modifier.size(12.dp))
+                Icon(Icons.Filled.Close, "Stop download", tint = ErrorRed, modifier = Modifier.size(12.dp))
             }
             state == com.powermediaplayer.offline.OfflineState.DOWNLOADED -> Icon(
                 Icons.Filled.DeleteOutline,

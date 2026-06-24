@@ -152,7 +152,7 @@ val lastPlayedInfo: InfoSheetData = InfoSheetData(
             title = "Actions",
             bullets = listOf(
                 "Resume — Tap any row to resume from where you stopped.",
-                "Download for offline use — The 3-dot menu on a Drive or podcast row offers 'Download for offline use' (or 'Delete from local storage' once it's saved). The download runs in the background — watch its progress, and stop it if needed, in Cloud → Manage downloads. Spotify rows can't be downloaded (DRM).",
+                "Download for offline use — The 3-dot menu on a Drive or podcast row offers 'Download for offline use' (or 'Delete from local storage' once it's saved). While it downloads, the row itself shows a live progress bar with a red stop (✕); you can also watch or stop it in Cloud → Manage downloads. Spotify rows can't be downloaded (DRM).",
                 "Bookmarks within Recents/Pinned — Each row has a dropdown showing every bookmark you'd added during that listen. Tap a bookmark to jump straight to that moment.",
                 "Reorder — Long press and drag a Pinned row to change its order."
             )
