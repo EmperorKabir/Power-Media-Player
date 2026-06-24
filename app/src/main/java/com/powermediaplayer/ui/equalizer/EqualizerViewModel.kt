@@ -67,9 +67,19 @@ class EqualizerViewModel @Inject constructor(
             initialValue = false
         )
 
-    /** Push current band levels through to the platform Equalizer. */
-    private fun pushLevels(levels: List<Int>) {
-        eqEffect.bandLevels.value = levels
+    /**
+     * Push current band levels to the live EQ. Interactive callers (user
+     * selecting a preset / dragging a band / reset) mark the live value as a
+     * deliberate USER write so a later VM construction won't clobber it; the
+     * construction-time restore uses [EqualizerEffectController.restoreIfUntouched]
+     * instead (see [restoreLastPreset]). (#9)
+     */
+    private fun pushLevels(
+        levels: List<Int>,
+        source: com.powermediaplayer.audio.EqualizerEffectController.EqSource =
+            com.powermediaplayer.audio.EqualizerEffectController.EqSource.USER
+    ) {
+        eqEffect.setLive(levels, source)
     }
 
     init {
@@ -90,6 +100,11 @@ class EqualizerViewModel @Inject constructor(
             audioOutputDetector.isHeadphonesConnected
                 .combine(settingsDataStore.headphoneEqPresetId) { hp, id -> hp to id }
                 .distinctUntilChanged()
+                // #9 — the first combined value is the state AT construction, not
+                // a plug/unplug transition. Dropping it stops a freshly built VM
+                // (e.g. on expanding the Audio settings group) from auto-applying
+                // a headphone preset over the live/override EQ.
+                .drop(1)
                 .collect { (connected, headphonePresetId) ->
                     if (headphonePresetId <= 0L) return@collect
                     if (connected) {
@@ -249,12 +264,22 @@ class EqualizerViewModel @Inject constructor(
     }
 
     private suspend fun restoreLastPreset() {
-        settingsDataStore.lastEqPresetId.first().let { lastId ->
-            if (lastId > 0) {
-                presetDao.getPresetById(lastId)?.let { preset ->
-                    selectPreset(preset)
-                }
-            }
+        val lastId = settingsDataStore.lastEqPresetId.first()
+        if (lastId > 0) {
+            val preset = presetDao.getPresetById(lastId) ?: return
+            val levels = parseBandLevels(preset.bandLevels)
+            // UI reflects the restored preset so the EQ screen shows it…
+            _uiState.value = _uiState.value.copy(
+                bandLevels = levels,
+                selectedPresetId = preset.id,
+                selectedPresetName = preset.name,
+                isCustomModified = false
+            )
+            manuallySelectedPresetId = preset.id      // restore target only
+            // …but the live engine is touched ONLY if nothing deliberate (a
+            // per-track override / a value the user already set this session) is
+            // live — this is the #9 fix for the audible shift on settings-expand.
+            eqEffect.restoreIfUntouched(levels)
         }
     }
 

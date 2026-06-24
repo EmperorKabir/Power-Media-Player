@@ -37,7 +37,10 @@ object EqualizerOverrideRouter {
         val levels: List<Int> = runCatching { gson.fromJson<List<Int>>(preset.bandLevels, type) }
             .getOrDefault(emptyList())
         if (levels.isEmpty()) return
-        deps.eq().bandLevels.value = levels
+        // #9 — the per-track override IS the deliberate, audio-affecting live
+        // value; mark ownership so a later VM construction (settings-expand)
+        // sees a non-DEFAULT source and leaves it alone.
+        deps.eq().setLive(levels, EqualizerEffectController.EqSource.LIVE_OVERRIDE)
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
             "C7 EQ override applied preset=${preset.name} (id=$presetId)"
