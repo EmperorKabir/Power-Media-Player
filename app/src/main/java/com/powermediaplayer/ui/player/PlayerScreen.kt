@@ -165,16 +165,23 @@ private fun SpotifyAlbumTracksButton(viewModel: PlayerViewModel) {
 @Composable
 private fun PlayerOfflineButton(viewModel: PlayerViewModel) {
     val state by viewModel.offlineState.collectAsStateWithLifecycle()
-    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    // applicationContext: the Toast collector outlives this composable's Activity
+    // context across config changes; the app context is the safe long-lived one.
+    val appCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
     LaunchedEffect(Unit) {
         viewModel.offlineStatus.collect {
             android.widget.Toast.makeText(appCtx, it, android.widget.Toast.LENGTH_SHORT).show()
         }
     }
     if (state == com.powermediaplayer.offline.OfflineState.NOT_APPLICABLE) return
-    val progress by com.powermediaplayer.util.DownloadProgressBus.flow.collectAsStateWithLifecycle()
     val progressId by viewModel.currentProgressId.collectAsStateWithLifecycle()
-    val prog = progressId?.let { progress[it] }
+    // Per-id progress (remembered per progressId) so the button recomposes only on
+    // THIS item's download ticks, not on every other in-flight download's chunk.
+    val progressFlow = remember(progressId) {
+        progressId?.let { com.powermediaplayer.util.DownloadProgressBus.progressFor(it) }
+            ?: kotlinx.coroutines.flow.flowOf<com.powermediaplayer.util.DownloadProgressBus.Prog?>(null)
+    }
+    val prog by progressFlow.collectAsStateWithLifecycle(initialValue = null)
     val downloading = prog != null
     IconButton(
         onClick = {

@@ -41,7 +41,7 @@ import androidx.compose.material3.TextButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -394,11 +394,11 @@ class PodcastsViewModel @Inject constructor(
 fun PodcastsSection(
     vm: PodcastsViewModel = hiltViewModel()
 ) {
-    val shows by vm.shows.collectAsState()
-    val status by vm.status.collectAsState()
+    val shows by vm.shows.collectAsStateWithLifecycle()
+    val status by vm.status.collectAsStateWithLifecycle()
     var url by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
-    val recentSearches by vm.recentSearches.collectAsState()
+    val recentSearches by vm.recentSearches.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
@@ -451,7 +451,7 @@ fun PodcastsSection(
         }
         // §C10 LOCKED — iTunes podcast search results inline. Tap a
         // row to subscribe.
-        val hits by vm.itunesResults.collectAsState()
+        val hits by vm.itunesResults.collectAsStateWithLifecycle()
         if (hits.isNotEmpty()) {
             Spacer(Modifier.height(4.dp))
             Text("Apple Podcasts results:", color = TextSecondary,
@@ -488,7 +488,7 @@ fun PodcastsSection(
                 color = TextTertiary
             )
         } else {
-            val counts by vm.feedCounts.collectAsState()
+            val counts by vm.feedCounts.collectAsStateWithLifecycle()
             var expandedFeed by remember { mutableStateOf<String?>(null) }
             // Content-wrapping Column (NOT a fixed-height nested LazyColumn): the
             // host's outer scroll list provides scrolling, so the section sizes to
@@ -673,7 +673,7 @@ private fun EpisodeList(
     feedUrl: String,
     vm: PodcastsViewModel
 ) {
-    val episodes by vm.episodesFor(feedUrl).collectAsState(initial = emptyList())
+    val episodes by vm.episodesFor(feedUrl).collectAsStateWithLifecycle(initialValue = emptyList())
     Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
         if (episodes.isEmpty()) {
             Text(
@@ -692,7 +692,7 @@ private fun EpisodeList(
  *  New (accent dot) / In-progress (bar + "min left") / Played (check). */
 @Composable
 private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
-    val posMs by vm.episodePosition(e.audioUrl).collectAsState(initial = null)
+    val posMs by vm.episodePosition(e.audioUrl).collectAsStateWithLifecycle(initialValue = null)
     val durMs = e.durationS * 1000L
     val pos = posMs ?: 0L
     // A feed's declared itunes:duration is sometimes wrong (seen: 4 min for a
@@ -759,7 +759,7 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
             }
         }
         // §C10 — per-episode download / downloaded-badge+delete affordance.
-        val downloadingSet by vm.downloading.collectAsState()
+        val downloadingSet by vm.downloading.collectAsStateWithLifecycle()
         val isDownloading = downloadingSet.contains(e.guid)
         val isDownloaded = !e.localPath.isNullOrBlank()
         var confirmDelete by remember(e.guid) { mutableStateOf(false) }

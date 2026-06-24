@@ -26,6 +26,7 @@ import net.openid.appauth.ResponseTypeValues
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -780,7 +781,7 @@ class SpotifyProvider @Inject constructor(
         )
         val req = Request.Builder()
             .url("https://api.spotify.com/v1/me/player/repeat?state=$state")
-            .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .put(ByteArray(0).toRequestBody())
             .addHeader("Authorization", "Bearer $token")
             .build()
         try {
@@ -803,7 +804,7 @@ class SpotifyProvider @Inject constructor(
         )
         val req = Request.Builder()
             .url("https://api.spotify.com/v1/me/player/shuffle?state=$enabled")
-            .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .put(ByteArray(0).toRequestBody())
             .addHeader("Authorization", "Bearer $token")
             .build()
         try {
@@ -850,7 +851,7 @@ class SpotifyProvider @Inject constructor(
             ",\"offset\":{\"uri\":\"${st.trackUri}\"}" else ""
         val bodyJson =
             "{\"context_uri\":\"$ctx\"$offsetJson,\"position_ms\":${st.positionMs.coerceAtLeast(0L)}}"
-        val body = okhttp3.RequestBody.create("application/json".toMediaTypeOrNull(), bodyJson)
+        val body = bodyJson.toRequestBody("application/json".toMediaTypeOrNull())
         val req = Request.Builder()
             .url("https://api.spotify.com/v1/me/player/play")
             .put(body)
@@ -966,10 +967,7 @@ class SpotifyProvider @Inject constructor(
             !spotifyUri.isNullOrBlank() -> """{"uris":["$spotifyUri"]}"""
             else -> return Result.failure(IllegalStateException("Nothing to play"))
         }
-        val body = okhttp3.RequestBody.create(
-            "application/json".toMediaTypeOrNull(),
-            bodyJson
-        )
+        val body = bodyJson.toRequestBody("application/json".toMediaTypeOrNull())
         val req = Request.Builder()
             .url(url.toString())
             .put(body)
@@ -1082,10 +1080,7 @@ class SpotifyProvider @Inject constructor(
 
     private fun transferPlayback(token: String, deviceId: String): Result<Unit> {
         val bodyJson = """{"device_ids":["$deviceId"],"play":false}"""
-        val body = okhttp3.RequestBody.create(
-            "application/json".toMediaTypeOrNull(),
-            bodyJson
-        )
+        val body = bodyJson.toRequestBody("application/json".toMediaTypeOrNull())
         val req = Request.Builder()
             .url("https://api.spotify.com/v1/me/player")
             .put(body)
@@ -1582,7 +1577,7 @@ class SpotifyProvider @Inject constructor(
     private fun simplePut(token: String, url: String): Result<Unit> {
         val req = Request.Builder()
             .url(url)
-            .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .put(ByteArray(0).toRequestBody())
             .addHeader("Authorization", "Bearer $token")
             .build()
         return execControl(req)
@@ -1591,7 +1586,7 @@ class SpotifyProvider @Inject constructor(
     private fun simplePost(token: String, url: String): Result<Unit> {
         val req = Request.Builder()
             .url(url)
-            .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .post(ByteArray(0).toRequestBody())
             .addHeader("Authorization", "Bearer $token")
             .build()
         return execControl(req)

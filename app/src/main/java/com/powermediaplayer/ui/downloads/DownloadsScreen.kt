@@ -147,34 +147,38 @@ class DownloadsViewModel @Inject constructor(
 
     fun clearSelection() { _selected.value = emptySet() }
 
-    /** Delete every selected row (reuses single-row delete), then exit selection. */
+    /** Delete every selected row, then exit selection. ONE coroutine for the whole
+     *  batch — a forEach { delete(it) } would spawn N IO coroutines all contending
+     *  on the single DataStore write mutex (settings.removeOfflineDrive). */
     fun deleteSelected() {
         val s = state.value
         val keys = _selected.value
         val rows = (s.podcasts + s.drive).filter { it.key in keys }
         _selected.value = emptySet()
-        rows.forEach { delete(it) }
+        viewModelScope.launch(Dispatchers.IO) { rows.forEach { deleteRow(it) } }
     }
 
     fun delete(row: DownloadRow) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (row.isPodcast && row.podcastGuid != null) {
-                row.podcastPath?.takeIf { it.isNotBlank() }?.let {
-                    com.powermediaplayer.util.SafStorage.delete(appContext, Uri.parse(it))
-                }
-                podcastDao.clearLocalPath(row.podcastGuid)
-            } else if (row.driveId != null) {
-                val r = offlineCopyDao.get(row.driveId)
-                r?.localPath?.let {
-                    if (it.startsWith("content://")) {
-                        com.powermediaplayer.util.SafStorage.delete(appContext, Uri.parse(it))
-                    } else {
-                        runCatching { java.io.File(it).delete() }
-                    }
-                }
-                offlineCopyDao.delete(row.driveId)
-                settings.removeOfflineDrive(row.driveId)
+        viewModelScope.launch(Dispatchers.IO) { deleteRow(row) }
+    }
+
+    private suspend fun deleteRow(row: DownloadRow) {
+        if (row.isPodcast && row.podcastGuid != null) {
+            row.podcastPath?.takeIf { it.isNotBlank() }?.let {
+                com.powermediaplayer.util.SafStorage.delete(appContext, Uri.parse(it))
             }
+            podcastDao.clearLocalPath(row.podcastGuid)
+        } else if (row.driveId != null) {
+            val r = offlineCopyDao.get(row.driveId)
+            r?.localPath?.let {
+                if (it.startsWith("content://")) {
+                    com.powermediaplayer.util.SafStorage.delete(appContext, Uri.parse(it))
+                } else {
+                    runCatching { java.io.File(it).delete() }
+                }
+            }
+            offlineCopyDao.delete(row.driveId)
+            settings.removeOfflineDrive(row.driveId)
         }
     }
 

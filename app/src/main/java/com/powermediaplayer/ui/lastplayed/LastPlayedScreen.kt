@@ -67,7 +67,6 @@ fun LastPlayedScreen(
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsStateWithLifecycle()
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
-    val offlineKeys by viewModel.offlineKeys.collectAsStateWithLifecycle()
     val downloadingIds by viewModel.downloadingIds.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -247,7 +246,7 @@ fun LastPlayedScreen(
                         )
                         ReorderablePinnedList(
                             items = pinned,
-                            offlineUrls = offlineKeys,
+                            offlineUrls = offlineDownloadedKeys,
                             downloadingIds = downloadingIds,
                             onMove = { from, to ->
                                 val movedFavId = pinned[from].id
@@ -300,7 +299,7 @@ fun LastPlayedScreen(
                         HistoryRowWithBookmarks(
                             item = item,
                             bookmarkCap = RECENT_BOOKMARK_CAP,
-                            isOffline = offlineKeys.contains(item.mediaUri),
+                            isOffline = offlineDownloadedKeys.contains(item.mediaUri),
                             bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
                             onTap = {
                                 viewModel.playLocalAt(item)

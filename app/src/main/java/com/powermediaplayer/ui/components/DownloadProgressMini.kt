@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,8 +38,11 @@ fun DownloadProgressMini(
     modifier: Modifier = Modifier,
     onCancel: (() -> Unit)? = null
 ) {
-    val map by DownloadProgressBus.flow.collectAsStateWithLifecycle()
-    val p = map[id]
+    // Per-id flow (remembered so it re-subscribes only when [id] changes) — this
+    // row recomposes on ITS download's ticks, not every other in-flight chunk.
+    val progress = remember(id) { DownloadProgressBus.progressFor(id) }
+    val pState by progress.collectAsStateWithLifecycle(initialValue = null)
+    val p = pState   // stable snapshot (delegated property can't smart-cast)
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -59,7 +63,9 @@ fun DownloadProgressMini(
                 Text(
                     "${fmtMb(p.done)}/${fmtMb(p.total)}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary
+                    color = TextTertiary,
+                    maxLines = 1,
+                    softWrap = false
                 )
             } else {
                 CircularProgressIndicator(

@@ -1,15 +1,19 @@
 package com.powermediaplayer.util
 
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import java.io.InputStream
-import java.io.OutputStream
 
 /**
  * Process-wide download progress, keyed by a stable id (podcast episode guid OR
  * Drive file id). The download paths report bytes as they copy; UI rows collect
- * [flow] and render a progress bar + "12.0 / 45.3 MB" while a download is live.
- * An entry is removed when the download finishes (success or failure).
+ * [flow] (aggregate) or [progressFor] (a single id) and render a progress bar +
+ * "12.0 / 45.3 MB" while a download is live. An entry is removed when the
+ * download finishes (success or failure).
  */
 object DownloadProgressBus {
     data class Prog(val done: Long, val total: Long) {
@@ -20,12 +24,18 @@ object DownloadProgressBus {
     private val _flow = MutableStateFlow<Map<String, Prog>>(emptyMap())
     val flow: StateFlow<Map<String, Prog>> = _flow
 
+    /** Progress for a SINGLE id — point consumers (the player button, a Last
+     *  Played row) collect this so they only recompose on THEIR download's ticks,
+     *  not on every other in-flight download's 256 KB chunk. */
+    fun progressFor(id: String): Flow<Prog?> =
+        _flow.map { it[id] }.distinctUntilChanged()
+
     /** Human label per in-flight id (file/episode title) so a Manage Downloads
      *  "In progress" row can name the download, not just show its opaque id. */
     private val _labels = MutableStateFlow<Map<String, String>>(emptyMap())
     val labels: StateFlow<Map<String, String>> = _labels
     fun label(id: String, name: String) {
-        if (name.isNotBlank()) _labels.value = _labels.value + (id to name)
+        if (name.isNotBlank()) _labels.update { it + (id to name) }
     }
 
     /** Ids the user has asked to cancel mid-download. The shared copy paths poll
@@ -33,48 +43,30 @@ object DownloadProgressBus {
      *  partial-file cleanup (catch { cacheFile.delete() }) fires. */
     private val cancelled = java.util.Collections.synchronizedSet(HashSet<String>())
 
+    // Atomic CAS updates: CloudViewModel.saveFolderOffline fans out N parallel
+    // downloads, each reporting a distinct id from its own IO thread — a plain
+    // `value = value + x` read-modify-write would drop a racing sibling's entry.
     fun update(id: String, done: Long, total: Long) {
-        _flow.value = _flow.value + (id to Prog(done, total))
+        _flow.update { it + (id to Prog(done, total)) }
     }
 
     fun clear(id: String) {
-        if (_flow.value.containsKey(id)) _flow.value = _flow.value - id
-        if (_labels.value.containsKey(id)) _labels.value = _labels.value - id
+        _flow.update { it - id }
+        _labels.update { it - id }
         cancelled.remove(id)
     }
 
-    /** Signal that the in-flight download for [id] should abort at the next chunk. */
-    fun requestCancel(id: String) { cancelled.add(id) }
+    /** Signal that the in-flight download for [id] should abort at the next chunk.
+     *  Guarded to a REGISTERED download (progress or label present) so a stray tap
+     *  with nothing in flight can't leave a stale flag that aborts a later same-id
+     *  download before its first chunk. */
+    fun requestCancel(id: String) {
+        if (_flow.value.containsKey(id) || _labels.value.containsKey(id)) cancelled.add(id)
+    }
     fun isCancelled(id: String): Boolean = cancelled.contains(id)
     /** Throw if [id] was cancelled — called from the copy loops between chunks. */
     fun throwIfCancelled(id: String?) {
         if (id != null && cancelled.contains(id)) throw DownloadCancelledException(id)
-    }
-
-    /**
-     * Copy [input] → [output] while reporting progress for [id]. [total] is the
-     * content length (0 if unknown → indeterminate bar). Returns bytes copied.
-     * Throttled to ~every 256 KB so the StateFlow isn't spammed.
-     */
-    fun copy(id: String, input: InputStream, output: OutputStream, total: Long): Long {
-        val buf = ByteArray(64 * 1024)
-        var done = 0L
-        var lastReport = -1L
-        update(id, 0L, total)
-        while (true) {
-            throwIfCancelled(id)
-            val n = input.read(buf)
-            if (n < 0) break
-            output.write(buf, 0, n)
-            done += n
-            if (lastReport < 0 || done - lastReport >= 256L * 1024) {
-                update(id, done, total)
-                lastReport = done
-            }
-        }
-        output.flush()
-        update(id, done, total)
-        return done
     }
 }
 
