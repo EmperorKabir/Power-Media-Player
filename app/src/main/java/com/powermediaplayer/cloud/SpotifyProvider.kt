@@ -140,11 +140,12 @@ class SpotifyProvider @Inject constructor(
 
     /**
      * vc32: the track the user actually requested. While the grace
-     * is active, snaps for any OTHER track (Spotify's eventually-consistent
-     * /me/player reporting the previous song for up to ~11 s) are
-     * suppressed instead of overwriting the mirror overlay.
+     * is active, the snap for THIS specific outgoing track (Spotify's
+     * eventually-consistent /me/player reporting the previous song for up to
+     * ~11 s after a play) is suppressed; any OTHER track — the requested one OR
+     * a shuffled/skipped one — emits immediately, so navigation never freezes.
      */
-    @Volatile private var expectedTrackUri: String? = null
+    @Volatile private var suppressTrackUri: String? = null
 
     /** Last track URI logged by the SP_ORDER order-trace, so it logs only on an
      *  actual track change instead of every ~1 s poll. */
@@ -236,7 +237,10 @@ class SpotifyProvider @Inject constructor(
     fun armProvisionalMirror(provisional: SpotifyPlaybackState) {
         bannerGraceUntilMs =
             android.os.SystemClock.uptimeMillis() + HANDOFF_GRACE_MS
-        expectedTrackUri = provisional.trackUri
+        // Hide the track we're LEAVING (the one /me/player keeps reporting
+        // during the brief handoff lag); a different/shuffled/requested track
+        // emits immediately. Capture it BEFORE the provisional overwrites state.
+        suppressTrackUri = _spotifyState.value?.trackUri?.takeIf { it != provisional.trackUri }
         provisionalActive = true
         _spotifyState.value = provisional
         _spotifyMetadataFetching.value = true
@@ -255,7 +259,7 @@ class SpotifyProvider @Inject constructor(
     fun clearProvisionalMirror() {
         if (provisionalActive) {
             provisionalActive = false
-            expectedTrackUri = null
+            suppressTrackUri = null
             bannerGraceUntilMs = 0L
             _spotifyState.value = null
             _spotifyMetadataFetching.value = false
@@ -1302,7 +1306,10 @@ class SpotifyProvider @Inject constructor(
             // and force the banner ON even if polling is already active.
             bannerGraceUntilMs =
                 android.os.SystemClock.uptimeMillis() + HANDOFF_GRACE_MS
-            expectedTrackUri = expectedTrack
+            // suppressTrackUri is set by armProvisionalMirror (the OUTGOING
+            // track to hide). Do NOT set it from the incoming expectedTrack —
+            // that re-created the bug where a shuffled/real track that differs
+            // from the request was frozen for the whole grace window.
             _spotifyMetadataFetching.value = true
         }
         if (pollJob?.isActive == true) return
@@ -1333,7 +1340,7 @@ class SpotifyProvider @Inject constructor(
                         // PREVIOUS track for up to ~11 s (measured) — hold
                         // the overlay until the REQUESTED track arrives.
                         val emit = shouldEmitSnap(
-                            snap.trackUri, expectedTrackUri,
+                            snap.trackUri, suppressTrackUri,
                             android.os.SystemClock.uptimeMillis(), bannerGraceUntilMs
                         )
                         if (!emit) {
@@ -1342,7 +1349,7 @@ class SpotifyProvider @Inject constructor(
                                 "Spotify stale snap suppressed (${snap.trackUri})"
                             )
                         } else {
-                        expectedTrackUri = null
+                        suppressTrackUri = null
                         val step = trackResolveStep(isNewTrack = snap.trackUri != lastTrackUri)
                         if (step.fetchLyrics) {
                             lastTrackUri = snap.trackUri
@@ -1364,7 +1371,18 @@ class SpotifyProvider @Inject constructor(
                             }
                         }
                         if (step.emitState) {
-                            _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
+                            // Resolve lyrics from the CACHE (the async fetch writes
+                            // there) rather than the loop-local lastLyrics — so a
+                            // miss that resolves a moment later PERSISTS across polls
+                            // instead of being wiped by the next emit (the reported
+                            // "lyrics appeared then disappeared"). Absent key = not
+                            // fetched yet → null.
+                            val lr = synchronized(lyricsCache) {
+                                lyricsCache[lyricsKey(snap.title, snap.artist, snap.album, snap.durationMs)]
+                            } as? LyricsResult
+                            _spotifyState.value = snap.copy(
+                                lyrics = lr?.plain, syncedLyrics = lr?.synced.orEmpty()
+                            )
                         }
                         // #2 — metadata (title/artist/art) is resolved NOW; clear
                         // the banner immediately, independent of the lyrics fetch.
@@ -1503,7 +1521,7 @@ class SpotifyProvider @Inject constructor(
         pollJob = null
         _spotifyState.value = null
         bannerGraceUntilMs = 0L // stop = nothing to wait for (vc32)
-        expectedTrackUri = null
+        suppressTrackUri = null
         provisionalActive = false
         _spotifyMetadataFetching.value = false
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
@@ -1745,21 +1763,22 @@ internal fun shouldClearBannerOnNullSnap(nowMs: Long, graceUntilMs: Long): Boole
     nowMs >= graceUntilMs
 
 /**
- * vc32: suppress stale snaps — Spotify's /me/player lagged
- * PUT /play by up to ~11 s in testing, reporting the PREVIOUS track. While the
- * handoff grace is active and a specific track was requested, only that
- * track may be emitted into the mirror state; grace expiry is the
- * failsafe (emit whatever is actually playing).
+ * Suppress only the OUTGOING track during a handoff. Spotify's /me/player
+ * lags PUT /play by up to ~11 s, reporting the PREVIOUS (outgoing) track — that
+ * one snap is hidden so the overlay isn't overwritten by the old song. Crucially
+ * ANY OTHER track emits immediately: the requested track when it lands, AND a
+ * shuffled/skipped track that differs from both (the old code froze that for the
+ * whole grace, which read as "very slow metadata"). Grace expiry is the failsafe.
  */
 internal fun shouldEmitSnap(
     snapUri: String,
-    expectedUri: String?,
+    suppressUri: String?,
     nowMs: Long,
     graceUntilMs: Long
 ): Boolean {
-    if (expectedUri == null) return true
+    if (suppressUri == null) return true
     if (nowMs >= graceUntilMs) return true
-    return snapUri == expectedUri
+    return snapUri != suppressUri
 }
 
 /**

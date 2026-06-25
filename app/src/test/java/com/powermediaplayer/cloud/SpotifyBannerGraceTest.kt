@@ -26,14 +26,23 @@ class SpotifyBannerGraceTest {
         assertTrue(shouldClearBannerOnNullSnap(nowMs = 1L, graceUntilMs = 0L))
     }
 
-    /** vc32 (E14): Spotify's /me/player lagged PUT /play by a measured
-     *  11 s, reporting the OLD track — the overlay must hold until the
-     *  REQUESTED track is reported (grace expiry as failsafe). */
+    /** The handoff hides only the OUTGOING track (Spotify's /me/player lags
+     *  PUT /play ~11 s, reporting the previous song). ANY other track — the
+     *  requested one OR a shuffled/skipped one — emits immediately, so
+     *  navigation/shuffle metadata is never frozen (the prior "==expected" gate
+     *  froze a shuffled track for the whole grace = "very slow metadata"). */
     @Test
-    fun staleSnapSuppressedUntilRequestedTrackArrives() {
-        assertFalse(shouldEmitSnap("spotify:track:OLD", "spotify:track:NEW", 1_000L, 45_000L))
-        assertTrue(shouldEmitSnap("spotify:track:NEW", "spotify:track:NEW", 2_000L, 45_000L))
-        assertTrue(shouldEmitSnap("spotify:track:OLD", "spotify:track:NEW", 50_000L, 45_000L)) // grace expired failsafe
-        assertTrue(shouldEmitSnap("spotify:track:OLD", null, 0L, 0L)) // no expectation
+    fun outgoingTrackSuppressedButAnyOtherEmitsImmediately() {
+        // OLD = the outgoing track being left → suppressed during grace.
+        assertFalse(shouldEmitSnap("spotify:track:OLD", "spotify:track:OLD", 1_000L, 45_000L))
+        // the requested track lands → emit immediately.
+        assertTrue(shouldEmitSnap("spotify:track:NEW", "spotify:track:OLD", 2_000L, 45_000L))
+        // a shuffled/skipped track differing from the outgoing one → emit NOW
+        // (this is the slow-metadata fix).
+        assertTrue(shouldEmitSnap("spotify:track:SHUFFLED", "spotify:track:OLD", 1_500L, 45_000L))
+        // grace-expiry failsafe — even the outgoing track emits after grace.
+        assertTrue(shouldEmitSnap("spotify:track:OLD", "spotify:track:OLD", 50_000L, 45_000L))
+        // nothing to suppress → emit.
+        assertTrue(shouldEmitSnap("spotify:track:OLD", null, 0L, 0L))
     }
 }

@@ -84,13 +84,20 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.setShuffleMode(next)
         // Spotify-Connect playback runs on the Spotify device, so in-app shuffle
         // must be pushed via the Web API — the local mirror's flag is inert there.
-        // Enabling: re-assert the album context after setting shuffle, because
-        // Spotify does NOT reliably reshuffle an already-built queue when shuffle
-        // is toggled mid-context (verified: setShuffle returns HTTP 200 yet /next
-        // kept walking the album in order). Re-playing the context rebuilds the
-        // upcoming order while keeping the current track + position.
+        // Enabling reshuffles the UPCOMING queue, which Spotify only does by
+        // re-asserting the context (setShuffle alone returns HTTP 200 yet /next
+        // kept walking the album in order). The re-assert keeps the current track
+        // + position but causes a brief device re-buffer — so FIRST overlay the
+        // current track as a provisional mirror: its metadata then stays put
+        // through the re-buffer (no flicker/blank), giving a full reshuffle with
+        // no visible payoff. The suppress-outgoing logic keeps the overlay stable.
         if (isSpotifyActive) {
             viewModelScope.launch {
+                if (next) {
+                    spotifyProvider.spotifyState.value?.let {
+                        spotifyProvider.armProvisionalMirror(it)
+                    }
+                }
                 spotifyProvider.setShuffle(next)
                 if (next) spotifyProvider.reshuffleCurrentContext()
             }
