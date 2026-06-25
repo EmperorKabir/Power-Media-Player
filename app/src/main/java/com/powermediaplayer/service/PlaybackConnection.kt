@@ -951,7 +951,15 @@ class PlaybackConnection @Inject constructor(
         // Strictly count==0 so the cast/switchPlayer window — where
         // currentMediaItem is briefly null but the count stays >0 — still
         // gets the lastKnownMediaId fallback it relies on.
-        if (c.mediaItemCount == 0) {
+        // #18 — the service session is the source of truth on every reopen:
+        // surface it when present (warm-reopen fix), drop to empty when not
+        // (swipe-stop ghost fix). Behaviour is byte-identical to the old
+        // `count == 0` guard; the seam is now a unit-tested pure helper.
+        if (!SessionSurface.shouldSurfaceSession(
+                serviceHasSession = c.mediaItemCount > 0,
+                uiHasSession = _playerState.value.mediaItemCount > 0
+            )
+        ) {
             lastKnownMediaId = null
             localMetadata = null
             lastEmbeddedArt = null
