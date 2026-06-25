@@ -328,7 +328,24 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 |---|------|-----------|-----------|------|---------|
 | metadata | HP title+author | **PASS** p6: clean title + "J.K. Rowling" (was filename p2) | **PASS** DB session 20 title clean + subtitle "J.K. Rowling"; cold-start log clean | f9b472a: MediaClassifier.firstNonRawTitle + LastPlayedRepository.cleanRowForUri (author-preferred) + record/cold-start guards | **DONE-VERIFIED** (triangulated screenshot+DB+log; unit 135/0; holistic assessment doc 099c6c3) |
 | 15 | mini-player black band (KEYBOARD UP) | **PASS** kb4 list fills + bar snug above keyboard (was 626px void); kb5 kb-down no strip | **PASS** mInputShown=true captures; container max(ime,nav) inset | 9f7de86: AppNavigation contentInset max(ime,nav) + removed double imePadding (mini-bar + Library/Settings/EQ lists) | **DONE-VERIFIED** (folded, keyboard up+down + Settings) |
-| 1-14,16-19 | (the rest) | PENDING rigorous re-check after the 2 fixes land | | | PENDING |
+| 1 | brightness hitbox folded | banner [31,1970][461,2063]=93px≈48dp (pl.xml) | — | SecondaryControls | **PASS** |
+| 4 | timer-tap numeric jump | "Jump to time" dialog on tap (t4.png); both elapsed+remaining clickable, 93px hit | node clickable=true both | SeekTimeDialog | **PASS** |
+| 8 | audiobook sub-kind labels | Book/Chapter transport + chapter chip on HP (pl.png) | — | MediaClassifier | **PASS** |
+| 14 | info-icon hitbox folded | tap top-right i → "Player — what each control does" sheet (t14.png) | — | PlayerScreen InfoIcon | **PASS** |
+| 10 | webhooks layman | "A webhook lets this player tell another app…paste a web address from a home-automation app (Home Assistant/IFTTT/Tasker)…" + privacy note (set2.xml) | — | InfoContent/Settings | **PASS** |
+| 11 | layman + About version | "Version 1.3.4" = BuildConfig.VERSION_NAME (s5.xml) + plain webhooks/info | — | SettingsScreen:763 | **PASS** |
+| 12 | Library video thumbnail | Video tab: real frame thumbnails per clip vs audio icons (v12.png) | — | coil-video | **PASS** |
+| 19 | star Fixed/Live dialog | "Save to Favourites — where should it resume from?" Hold position(default)/Resume live/Both on starring UNPINNED item (s19d.png) | — | LastPlayedScreen:130 | **PASS** |
+| 5 | podcast reorder | 3 shows each with drag handle (≡) + "Reorder X" desc + artwork (cl.png) | — | ReorderableShowList; PodcastShowOrderTest 3/3 | **PASS** |
+| 6 | per-episode effects | long-press episode → "Custom settings for this file" Audio/Video/Speed (Stereo flip/Mono/Reverb/Boost) popup (pod3.png) | — | MediaOverridesPopup | **PASS** |
+| 7 | EQ aliasing | 10-band EQ 31Hz–16kHz + working boost, freq-response curve (eq1) | — | EqualizerThdTest 5/5 (aliasing objective) | **PASS** (audible=user ear) |
+| 9 | EQ level persists | 31Hz=+3 before AND after leave→return (eq2/eq3) | — | EqualizerLiveStateTest 4/4 | **PASS** |
+| 3 | cache hygiene | 8 durable covers in filesDir/coverart, under cap | — | ArtworkCache.CAP_BYTES 32MB + OfflineCacheEvictionTest | **PASS(obj+device)** |
+| 13 | Cloud audiobook icon | HP .m4b shows audiobook cover/audio everywhere on device (player/mini/LastPlayed), never video/camera; #12 proved classifier renders correctly | — | CloudBrowserScreen:1617 isVideoByName (old MIME line grep=0); MediaClassifierTest | **PASS(device-adjacent+code)** ; live Drive-folder browse not re-driven (Google Picker WebView) |
+| 18 | resume after star+close | cold-start resume DEVICE-VERIFIED (HP restored @5872810ms exactly, repeatedly, p4/p5/p6) | log "Cold-start restored" | SessionSurfaceTest 4/4 | **PASS(device)** |
+| 16 | Drive metadata search | objective: searches enriched title/author (DB LIKE) | — | DriveMetadataSearch + MetadataSearchDaoTest 4/4 | **OBJECTIVE-PASS** ; live Drive search not re-driven (Picker WebView nav) |
+| 17 | background when closed | swipe-away fired; PlaybackService still BOUND (not playing, startForegroundCount=0) — Media3 bound-service lifecycle OR incomplete teardown, INCONCLUSIVE without diag-trace (logging off) | — | DiagLog.bg 5-vector instrumentation + transparency note (d6b4179) | **NEEDS DIAG-TRACE** (enable diag logging + re-swipe) |
+| 2 | Spotify metadata slow | — | — | SpotifyLyricsDecoupleTest 2/2 + fetchLyricsAsync off-loop | **BLOCKED(needs active Spotify Premium playback; not headlessly scriptable)** |
 
 ### HOLISTIC METADATA ASSESSMENT (user 2026-06-25: "assess metadata speed + visibility on Player tab AND Last Played tab, for ALL file types, as a WHOLE — many fixes over many sessions have accreted")
 - Scope = the metadata SUBSYSTEM, not one bug. Matrix to fill (speed + visibility/correctness) × surfaces {Player tab, Last Played tab} × file types {local audio, local video, Drive audio/audiobook(m4b moov-at-end), Drive video, podcast, Spotify}.
