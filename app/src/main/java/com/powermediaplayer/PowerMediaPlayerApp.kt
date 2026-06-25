@@ -53,6 +53,8 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider,
             .components {
                 add(com.powermediaplayer.util.LocalTrackArtFetcher.ArtKeyer())
                 add(com.powermediaplayer.util.LocalTrackArtFetcher.Factory(context))
+                // #12 — decode a local video's first frame as a row thumbnail.
+                add(coil3.video.VideoFrameDecoder.Factory())
             }
             .build()
 

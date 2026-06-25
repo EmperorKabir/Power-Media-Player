@@ -27,6 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.video.videoFrameMillis
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -764,7 +769,8 @@ private fun MediaFileItem(
             )
             Spacer(modifier = Modifier.width(4.dp))
         }
-        // Icon
+        // Icon / video-frame thumbnail (#12 — local video rows show a real
+        // first frame; audio rows + .m4b keep the generic icon).
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -772,12 +778,31 @@ private fun MediaFileItem(
                 .background(SurfaceElevated),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = if (file.isVideo) Icons.Filled.VideoFile else Icons.Filled.AudioFile,
-                contentDescription = if (file.isVideo) "Video file" else "Audio file",
-                tint = TealAccent,
-                modifier = Modifier.size(28.dp)
-            )
+            val ctx = LocalContext.current
+            if (com.powermediaplayer.util.MediaClassifier
+                    .shouldThumbnailVideo(file.title, file.isVideo)
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(ctx)
+                        .data(file.uri)
+                        .videoFrameMillis(1000L) // ~1s in — skip black lead frames
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Video thumbnail",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    error = androidx.compose.ui.graphics.vector.rememberVectorPainter(
+                        Icons.Filled.VideoFile
+                    )
+                )
+            } else {
+                Icon(
+                    imageVector = if (file.isVideo) Icons.Filled.VideoFile else Icons.Filled.AudioFile,
+                    contentDescription = if (file.isVideo) "Video file" else "Audio file",
+                    tint = TealAccent,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.width(12.dp))

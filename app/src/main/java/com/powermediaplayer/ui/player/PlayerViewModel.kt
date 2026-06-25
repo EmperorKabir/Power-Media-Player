@@ -38,8 +38,28 @@ class PlayerViewModel @Inject constructor(
     private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
     private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
     private val offlineMediaManager: com.powermediaplayer.offline.OfflineMediaManager,
+    private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    // #8 — podcast membership for the CURRENT item (display sub-kind only; never
+    // gates playback or BT). A known episode by audioUrl is a podcast. Resolved
+    // off the synchronous inferMediaKind path; inferMediaKind reads .value and
+    // self-corrects on the next playerState emission once this resolves.
+    private val _currentIsPodcast = kotlinx.coroutines.flow.MutableStateFlow(false)
+
+    init {
+        viewModelScope.launch {
+            playbackConnection.playerState
+                .map { it.currentMediaUri }
+                .distinctUntilChanged()
+                .collect { uri ->
+                    _currentIsPodcast.value = uri.isNotBlank() && uri.startsWith("http") &&
+                        runCatching { podcastDao.episodeByAudioUrl(uri) != null }
+                            .getOrDefault(false)
+                }
+        }
+    }
 
     /**
      * §C7 — currently-active per-file override row, sourced from the
@@ -1628,12 +1648,25 @@ class PlayerViewModel @Inject constructor(
      * buttons. Spotify mirror always wins; otherwise we inspect
      * tracks, chapters, and queue size.
      */
-    private fun inferMediaKind(s: PlayerState): MediaKind = when {
-        s.isVideoContent -> MediaKind.VIDEO
-        s.hasChapters -> MediaKind.AUDIOBOOK
-        s.mediaItemCount > 1 -> MediaKind.ALBUM
-        s.mediaItemCount == 1 -> MediaKind.MUSIC
-        else -> MediaKind.UNKNOWN
+    private fun inferMediaKind(s: PlayerState): MediaKind {
+        if (s.isVideoContent) return MediaKind.VIDEO
+        // #8 — display sub-kind: podcast wins, then audiobook (.m4b/chapters),
+        // else fall through to album/song by queue size. Labels ONLY — BT
+        // controls stay global (PlaybackService.applyAction is kind-agnostic).
+        val sub = com.powermediaplayer.util.MediaClassifier.classifyAudioSubKind(
+            name = s.title,
+            hasChapters = s.hasChapters,
+            isPodcast = _currentIsPodcast.value
+        )
+        return when (sub) {
+            com.powermediaplayer.util.AudioSubKind.PODCAST -> MediaKind.PODCAST
+            com.powermediaplayer.util.AudioSubKind.AUDIOBOOK -> MediaKind.AUDIOBOOK
+            com.powermediaplayer.util.AudioSubKind.SONG -> when {
+                s.mediaItemCount > 1 -> MediaKind.ALBUM
+                s.mediaItemCount == 1 -> MediaKind.MUSIC
+                else -> MediaKind.UNKNOWN
+            }
+        }
     }
 
     /**

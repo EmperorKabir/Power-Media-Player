@@ -260,6 +260,9 @@ dependencies {
     // Without this, AsyncImage fails with
     // "Unable to create a fetcher that supports: https://..."
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
+    // Video-frame thumbnails for LOCAL library video rows (#12). Pin to the same
+    // 3.1.0 as coil-compose/coil-network-okhttp above — do NOT bump.
+    implementation("io.coil-kt.coil3:coil-video:3.1.0")
 
     // ── Palette API ──────────────────────────────────────────────
     implementation("androidx.palette:palette-ktx:1.0.0")

@@ -1602,7 +1602,12 @@ private fun CloudItemRow(
             val (icon, label) = when {
                 item.isFolder -> Icons.Filled.Folder to "Folder"
                 item.sourceProvider == CloudProviderType.SPOTIFY -> Icons.Filled.MusicNote to "Spotify track"
-                item.mimeType.startsWith("video/") -> Icons.Filled.VideoFile to "Video"
+                // #13 — extension-authoritative: a .m4b audiobook arrives from
+                // Drive with mime "video/mp4" (the MP4 container can hold video).
+                // The file extension is the real signal, matching the play-path
+                // override in CloudViewModel.openItemInternal.
+                com.powermediaplayer.util.MediaClassifier
+                    .isVideoByName(item.name, item.mimeType) -> Icons.Filled.VideoFile to "Video"
                 else -> Icons.Filled.AudioFile to "Audio"
             }
             Icon(icon, contentDescription = label, tint = TealAccent, modifier = Modifier.size(22.dp))
