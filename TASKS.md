@@ -344,7 +344,7 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | 13 | Cloud audiobook icon | HP .m4b shows audiobook cover/audio everywhere on device (player/mini/LastPlayed), never video/camera; #12 proved classifier renders correctly | — | CloudBrowserScreen:1617 isVideoByName (old MIME line grep=0); MediaClassifierTest | **PASS(device-adjacent+code)** ; live Drive-folder browse not re-driven (Google Picker WebView) |
 | 18 | resume after star+close | cold-start resume DEVICE-VERIFIED (HP restored @5872810ms exactly, repeatedly, p4/p5/p6) | log "Cold-start restored" | SessionSurfaceTest 4/4 | **PASS(device)** |
 | 16 | Drive metadata search | objective: searches enriched title/author (DB LIKE) | — | DriveMetadataSearch + MetadataSearchDaoTest 4/4 | **OBJECTIVE-PASS** ; live Drive search not re-driven (Picker WebView nav) |
-| 17 | background when closed | swipe-away fired; PlaybackService still BOUND (not playing, startForegroundCount=0) — Media3 bound-service lifecycle OR incomplete teardown, INCONCLUSIVE without diag-trace (logging off) | — | DiagLog.bg 5-vector instrumentation + transparency note (d6b4179) | **NEEDS DIAG-TRACE** (enable diag logging + re-swipe) |
+| 17 | background when closed | diag-trace (diag2.txt 23:58:09): "PlaybackService.onTaskRemoved stopOnSwipe=true playWhenReady=false" + "BG: FGS stopped reason=onTaskRemoved" + "BG: podcast-sync finished workComplete feeds=3". FGS torn down on swipe; lingering ps process = normal Android CACHED process (no FGS/playback/poll) | — | DiagLog.bg 5-vector instrumentation (d6b4179) | **PASS** (FGS stops on close; vectors finish; cached process is not background work) |
 | 2 | Spotify metadata slow | — | — | SpotifyLyricsDecoupleTest 2/2 + fetchLyricsAsync off-loop | **BLOCKED(needs active Spotify Premium playback; not headlessly scriptable)** |
 
 ### UNFOLDED — REAL physical inner display (user physically unfolded; device_state=3 genuine 1968x2184, NOT an override)
@@ -360,10 +360,10 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 ### FINAL TALLY (folded + unfolded)
 - Reported bugs FIXED+device-verified: metadata title+author (f9b472a); keyboard black band #15 (9f7de86).
-- 17/19 items device-verified (folded and/or unfolded as relevant). #3+#18 device+objective. #13 device-adjacent+code.
-- #16 OBJECTIVE-PASS (live Drive search via Google Picker WebView not scripted).
-- #17 NEEDS DIAG-TRACE (service bound after swipe — enable diag logging + re-swipe for a definite teardown verdict).
-- #2 BLOCKED (active Spotify Premium playback required; not headlessly scriptable).
+- 18/19 items device-verified (folded and/or unfolded as relevant), incl. #17 (diag-trace: FGS stops on swipe). #3+#18 device+objective. #13 device-adjacent+code.
+- #16 OBJECTIVE-PASS (MetadataSearchDaoTest 4/4 + code; live Drive search via Google Picker WebView not adb-scriptable).
+- #2 the ONLY live-blocked item: OBJECTIVE-PASS (SpotifyLyricsDecoupleTest 2/2 + lyrics off the 1Hz poll); a live timing trace needs an active Spotify Premium playback session (user must play a track; not headlessly scriptable).
+- NOTE: left Diagnostic logging ON (was off) for the #17 trace — user can turn off in Settings → Appearance & system → Diagnostic logging.
 
 ### HOLISTIC METADATA ASSESSMENT (user 2026-06-25: "assess metadata speed + visibility on Player tab AND Last Played tab, for ALL file types, as a WHOLE — many fixes over many sessions have accreted")
 - Scope = the metadata SUBSYSTEM, not one bug. Matrix to fill (speed + visibility/correctness) × surfaces {Player tab, Last Played tab} × file types {local audio, local video, Drive audio/audiobook(m4b moov-at-end), Drive video, podcast, Spotify}.
