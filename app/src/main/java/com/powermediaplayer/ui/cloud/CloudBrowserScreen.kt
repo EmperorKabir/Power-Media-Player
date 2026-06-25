@@ -1200,11 +1200,12 @@ private fun SpotifyConnectPickerSheet(
                     .padding(top = 4.dp, bottom = 4.dp)
             ) {
                 Text(
-                    text = "Not yet working — Spotify's public Web API only " +
-                        "exposes Spotify SDK-registered devices. Google Home / " +
-                        "Fire Stick / Sonos / smart TVs don't appear here yet. " +
-                        "Use the Cast icon on the Player tab as a workaround. " +
-                        "Native Spotify SDK integration is on the roadmap.",
+                    text = "Not yet working — Spotify only lets other apps see " +
+                        "Spotify-aware speakers and devices here, so things like " +
+                        "Google Home, Fire Stick, Sonos and smart TVs don't show " +
+                        "up yet. For now, use the Cast icon on the Player tab " +
+                        "instead. A fuller built-in Spotify connection is planned " +
+                        "for a future update.",
                     style = MaterialTheme.typography.bodySmall,
                     color = androidx.compose.ui.graphics.Color(0xFFFFB74D),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
