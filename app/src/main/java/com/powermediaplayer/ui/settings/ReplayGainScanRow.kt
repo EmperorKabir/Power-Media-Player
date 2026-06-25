@@ -94,8 +94,8 @@ fun ReplayGainScanRow(
             Text(
                 if (scanning) "Scanning…"
                 else if (count > 0) "Last scan: $count file(s)"
-                else "Walks every audio file once and saves a per-file gain. " +
-                    "Used at playback when ReplayGain normalisation is on.",
+                else "Measures every audio file once and remembers its loudness. " +
+                    "Used while playing when 'Even out track volumes' is on.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )

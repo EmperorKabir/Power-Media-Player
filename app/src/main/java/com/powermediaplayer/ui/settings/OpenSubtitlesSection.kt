@@ -142,7 +142,7 @@ fun OpenSubtitlesSection(
                     ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     ctx.startActivity(intent)
                 }
-            }) { Text("Sign up at opensubtitles.com", color = TealAccent) }
+            }) { Text("Create a free account", color = TealAccent) }
             if (signedIn) {
                 TextButton(onClick = {
                     scope.launch {

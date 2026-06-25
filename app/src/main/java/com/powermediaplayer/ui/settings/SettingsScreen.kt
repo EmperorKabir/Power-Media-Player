@@ -256,7 +256,7 @@ fun SettingsScreen(
                     uiState.crossfadeMs.toFloat(), 0f..10_000f,
                     default = 0f) { viewModel.setCrossfade(it.toInt()) }
                 Text(
-                    text = "Master crossfade duration. Per-curve and per-trigger sub-toggles live on the Player tab's Crossfade panel.",
+                    text = "How long one track fades into the next. The finer settings (fade shape and when it kicks in) are on the Player tab's Crossfade panel.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -330,10 +330,10 @@ fun SettingsScreen(
                 com.powermediaplayer.ui.settings.ReplayGainScanRow()
                 com.powermediaplayer.ui.settings.ReplayGainModeRow()
                 SettingsToggleItem(
-                    title = "Auto-scan ReplayGain on new files",
-                    description = "Calculate loudness for every newly-discovered audio file so " +
-                        "tracks at different volumes play at consistent loudness. Off by default " +
-                        "(scan can be slow on first import).",
+                    title = "Measure loudness of new files automatically",
+                    description = "Measure the loudness of each new audio file as it's found, so " +
+                        "tracks recorded at different volumes all play at a similar level. Off by " +
+                        "default — the first measurement of a big library can take a while.",
                     icon = Icons.Filled.GraphicEq,
                     checked = uiState.replayGainAutoScan,
                     onCheckedChange = { viewModel.setReplayGainAutoScan(it) }
@@ -686,9 +686,9 @@ fun SettingsScreen(
             ) {
                 SettingsToggleItem(
                     title = "External app control (Tasker / Macrodroid)",
-                    description = "Let other apps trigger play, pause, skip, and seek via Android " +
-                        "intents. Useful for automation workflows. Off by default — turn on only " +
-                        "if you trust the apps you're going to wire it up to.",
+                    description = "Let automation apps like Tasker or MacroDroid control playback — " +
+                        "play, pause, skip and jump. Off by default; only turn it on for apps " +
+                        "you trust.",
                     icon = Icons.Filled.Code,
                     checked = uiState.taskerIntentsEnabled,
                     onCheckedChange = { viewModel.setTaskerIntentsEnabled(it) }
@@ -1739,10 +1739,10 @@ fun BtVideoAudioOffsetRow(
             color = TextPrimary
         )
         Text(
-            text = "If watching video over Bluetooth speakers / headphones, " +
-                "lip-sync may drift because Bluetooth adds AUDIO latency. The " +
-                "fix is to delay the video to match — slide right. Range 0–1 " +
-                "second (the picture can be held back but not advanced).",
+            text = "Watching video through Bluetooth speakers or headphones can " +
+                "make the sound arrive slightly after the picture (Bluetooth adds " +
+                "a short delay). Slide right to hold the picture back so it matches " +
+                "the sound. Range 0-1 second.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
         )
@@ -2062,11 +2062,12 @@ private fun HueSection(
             }
         }
         Text(
-            text = "Pick a room or zone (or an existing Entertainment area). " +
-                "Only the lights inside your pick are addressed. The counts " +
-                "below split each bulb into one bucket only: 'colour' = full " +
-                "RGB; 'white (warm/cool)' = adjustable colour temperature; " +
-                "'white-only' = brightness only; smart plugs are ignored.",
+            text = "Pick a room or zone (or an Entertainment area you've already " +
+                "set up in the Hue app). Only the lights you pick are used. The " +
+                "counts below sort each bulb into one group: 'colour' = can show " +
+                "any colour; 'white (warm/cool)' = white only, but you can make it " +
+                "warmer or cooler; 'white-only' = brightness only. Smart plugs are " +
+                "ignored.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -2287,14 +2288,11 @@ private fun HueSection(
                 modifier = Modifier.padding(horizontal = 24.dp)
             )
             Text(
-                text = "Fine-tune only if white bulbs still feel off-beat after " +
-                    "the automatic brand detection. Negative values fire " +
-                    "commands earlier (compensates for very slow bulbs), " +
-                    "positive values fire them later. Default 'Auto' = 0 ms; " +
-                    "this slider is added on top of each bulb's auto-detected " +
-                    "delay. For rooms and zones the offset is applied to the " +
-                    "group's average bulb delay; for Entertainment-area picks " +
-                    "(no group route) it's applied per bulb individually.",
+                text = "Only needed if plain white bulbs still feel slightly off " +
+                    "the beat. Slide left to flash them a touch earlier, right to " +
+                    "flash a touch later. 'Auto' (0 ms) suits most setups — this is " +
+                    "a small nudge on top of the timing the player already works " +
+                    "out for you.",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextTertiary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -2331,10 +2329,9 @@ private fun HueSection(
                 "swing with the bass, colours change ~once per second. High " +
                 "(80-100) is pulse-driven: white lights sit at a low " +
                 "baseline and JUMP on every transient (beats, drops, " +
-                "transitions), colours change ~twice per second. IKEA / " +
-                "Tradfri / GU10 bulbs have a hardware response limit and " +
-                "can lag the colour stream slightly at high values; native " +
-                "Hue bulbs keep up cleanly.",
+                "transitions), colours change about twice a second. Some " +
+                "non-Hue bulbs react a little slower at the highest settings; " +
+                "genuine Hue colour bulbs keep up best.",
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -2369,13 +2366,11 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp)
         )
         Text(
-            text = "Tune so light flashes line up with what you hear. " +
-                "Phone speaker / wired ~150-250 ms; Bluetooth A2DP " +
-                "~300-500 ms; USB-C DAC near 0 ms. The app auto-adds " +
-                "your 'Audio delay' and 'BT video audio offset' values " +
-                "to this. White-only bulbs subtract a brand-specific " +
-                "delay on top automatically — use the 'Dimmable lag " +
-                "offset' slider above to nudge only those if needed.",
+            text = "Adjust so the light flashes line up with what you hear. " +
+                "Roughly: phone speaker or a cable, 150-250 ms; Bluetooth, " +
+                "300-500 ms; a USB-C headphone adapter, near 0 ms. The player " +
+                "also adds your 'Audio delay' and Bluetooth video offset " +
+                "automatically, so changing those won't throw the lights off.",
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
