@@ -75,4 +75,49 @@ class MediaClassifierTest {
 
     @Test fun audio_row_is_never_thumbnailed() =
         assertFalse(MediaClassifier.shouldThumbnailVideo("track.mp3", false))
+
+    // ---- looksLikeRawMediaFilename: cold-start heal-re-enrich trigger ----
+
+    @Test fun raw_m4b_filename_with_asin_is_raw() = assertTrue(
+        MediaClassifier.looksLikeRawMediaFilename(
+            "Harry Potter and the Philosopher’s Stone (Full-Cast Edition) [B0F14RFHS6].m4b"
+        )
+    )
+
+    @Test fun clean_embedded_title_is_not_raw() = assertFalse(
+        MediaClassifier.looksLikeRawMediaFilename(
+            "Harry Potter and the Philosopher’s Stone (Full-Cast Edition)"
+        )
+    )
+
+    @Test fun clean_title_ending_in_parenthesis_is_not_raw() = assertFalse(
+        MediaClassifier.looksLikeRawMediaFilename(
+            "Harry Potter and the Philosopher’s Stone (Full-Cast Edition) (Unabridged)"
+        )
+    )
+
+    @Test fun raw_video_and_audio_extensions_are_raw() {
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("My Movie.mp4"))
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("clip.mkv"))
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("song.mp3"))
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("audio.flac"))
+    }
+
+    @Test fun raw_filename_extension_is_case_insensitive() =
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("BOOK.M4B"))
+
+    @Test fun url_derived_name_with_query_strips_before_testing_extension() {
+        // a URL-shaped name keeps the media extension testable past ?query/#frag
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("file.m4b?token=abc#frag"))
+        // a clean title carrying a stray query must not false-positive
+        assertFalse(MediaClassifier.looksLikeRawMediaFilename("The Hobbit (Unabridged)?x=1"))
+    }
+
+    @Test fun null_or_blank_title_is_not_raw() {
+        assertFalse(MediaClassifier.looksLikeRawMediaFilename(null))
+        assertFalse(MediaClassifier.looksLikeRawMediaFilename("   "))
+    }
+
+    @Test fun title_with_no_extension_is_not_raw() =
+        assertFalse(MediaClassifier.looksLikeRawMediaFilename("Just A Plain Title"))
 }

@@ -700,8 +700,35 @@ class PlaybackSessionCoordinator @Inject constructor(
                         // after playback has already started (non-blocking — launch
                         // stays instant). Once-per-file: the enrich populates the
                         // chapter cache, so the next resume skips the re-download.
+                        //
+                        // Heal-trigger #2 (player-title bug): the chapter cache
+                        // survives `install -r` / process death but the in-memory
+                        // senderMetadata (title/artist/art) does NOT, and a LEGACY
+                        // row enriched before the title/art writes were reliable
+                        // still holds the raw FILENAME as its title. In both cases
+                        // chapters ARE cached, so the gate above skipped enrich and
+                        // the player showed "…[ASIN].m4b" forever. Re-run enrich
+                        // (which heals the DB title/art AND repopulates
+                        // senderMetadata) whenever the stored title still LOOKS like
+                        // a raw filename, even if chapters are cached. A clean title
+                        // never ends in a media extension, so a healthy item still
+                        // skips the re-download.
+                        //
+                        // Loop guard: a successful heal extracts a clean title →
+                        // looksLikeRawMediaFilename() turns false next launch. The
+                        // only way it could re-fire is a file with NO embedded title
+                        // tag; gate that on the durable cover being ABSENT so an item
+                        // already enriched-with-art (cover cached) never re-downloads.
+                        // For this user's library every audiobook carries embedded
+                        // art, so the heal is strictly one-shot per file.
+                        val coverAlreadyDurable = com.powermediaplayer.util.ArtworkCache
+                            .uriFor(context, recent.mediaUri) != null
+                        val titleLooksLikeFilename =
+                            com.powermediaplayer.util.MediaClassifier
+                                .looksLikeRawMediaFilename(recent.title) && !coverAlreadyDurable
                         if (recent.source == "DRIVE" &&
-                            com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri) == null
+                            (com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri) == null ||
+                                titleLooksLikeFilename)
                         ) {
                             val driveId = if (recent.mediaUri.startsWith("content://")) recent.mediaUri
                                 else recent.mediaUri.substringAfter("/files/", "").substringBefore("?")
@@ -838,6 +865,7 @@ class PlaybackSessionCoordinator @Inject constructor(
             genre = res.genre.orEmpty()
         )
     }
+
 
     companion object {
         /**

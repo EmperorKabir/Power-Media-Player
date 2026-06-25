@@ -1090,12 +1090,23 @@ class PlaybackConnection @Inject constructor(
             // Cast channel, c.mediaMetadata fields come back blank.
             // Fall back to the raw MediaItem.mediaMetadata which was
             // populated locally in rebuildForCast / Library load.
-            title = overTitle ?: metadata.title?.toString().orEmpty()
-                .ifBlank { itemMetadata?.title?.toString() ?: "" },
-            artist = overArtist ?: metadata.artist?.toString().orEmpty()
-                .ifBlank { itemMetadata?.artist?.toString() ?: "" },
-            album = overAlbum ?: metadata.albumTitle?.toString().orEmpty()
-                .ifBlank { itemMetadata?.albumTitle?.toString() ?: "" },
+            // Prefer the DURABLE enriched senderMetadata (`cached`) over the
+            // controller's metadata: a Drive item's controller title is the
+            // FILE NAME (e.g. "...[B0F14RFHS6].m4b"), which is non-blank and so
+            // used to win even though the enricher had extracted the real title.
+            // Album/art only looked right because the controller had no album
+            // (so they fell through to the enriched value); the title didn't.
+            // cached is the current item's own override (keyed by mediaId), so
+            // this is safe; non-enriched items (cached==null) are unchanged.
+            title = overTitle ?: cached?.title?.toString()?.takeIf { it.isNotBlank() }
+                ?: metadata.title?.toString().orEmpty()
+                    .ifBlank { itemMetadata?.title?.toString() ?: "" },
+            artist = overArtist ?: cached?.artist?.toString()?.takeIf { it.isNotBlank() }
+                ?: metadata.artist?.toString().orEmpty()
+                    .ifBlank { itemMetadata?.artist?.toString() ?: "" },
+            album = overAlbum ?: cached?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
+                ?: metadata.albumTitle?.toString().orEmpty()
+                    .ifBlank { itemMetadata?.albumTitle?.toString() ?: "" },
             artworkUri = resolvedArtUri,
             artworkBytes = resolvedArtBytes,
             playbackSpeed = c.playbackParameters.speed,

@@ -26,9 +26,34 @@ object MediaClassifier {
     /** Audiobook-by-extension set (extension-authoritative). */
     private val AUDIOBOOK_EXTENSIONS: Set<String> = setOf("m4b")
 
+    /** Video container extensions — raw-filename detection only. */
+    private val VIDEO_CONTAINER_EXTENSIONS: Set<String> = setOf(
+        "mp4", "mkv", "webm", "m4v", "avi", "mov", "3gp", "ts",
+        "wmv", "flv", "mpg", "mpeg"
+    )
+
     /** Lower-cased file extension after the last dot, or "" when none. */
     private fun extOf(name: String): String =
         name.substringAfterLast('.', "").lowercase()
+
+    /**
+     * True when [title] is still a RAW media filename ("…[B0F14RFHS6].m4b")
+     * rather than an embedded-tag title. Drives the cold-start heal-re-enrich
+     * (PlaybackSessionCoordinator): a stored title that ends in a media
+     * extension means the row never got its embedded title, so re-enrich even
+     * when chapters are already cached. A clean embedded title never ends in a
+     * media extension, so a healthy item returns false and skips the re-download.
+     * Strips a trailing ?query / #fragment first (URL-derived names).
+     */
+    fun looksLikeRawMediaFilename(title: String?): Boolean {
+        if (title.isNullOrBlank()) return false
+        val ext = title.trim()
+            .substringBefore('?')
+            .substringBefore('#')
+            .substringAfterLast('.', "")
+            .lowercase()
+        return ext in AUDIO_EXTENSIONS || ext in VIDEO_CONTAINER_EXTENSIONS
+    }
 
     /**
      * True iff [name]/[mimeType] denote a VIDEO file. Extension wins: an audio
