@@ -5,10 +5,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -207,11 +209,25 @@ fun AppNavigation(
         // status bar + bottom-bar / side-rail clearance), so no individual
         // screen needed internal changes. The Player route is NOT wrapped — it
         // is full-bleed and self-insets inside PlayerScreen.
+        // Bottom clearance = whichever is TALLER (max, not a sum): the system nav
+        // + our tab-bar overlay, OR the on-screen keyboard. This lifts the WHOLE
+        // non-player content — list AND mini-player — to sit snug above the
+        // keyboard with the list filling the space above the bar, then drops back
+        // onto the nav when the keyboard closes. The old approach put imePadding on
+        // the mini-player's Box ALONE: that Box became (bar + keyboard) tall, stole
+        // the list's weight() height (squashing it to a few rows) and left a huge
+        // OledBlack void above the bar whenever the keyboard was up.
+        val navClearance = if (compactWidth) ImmersiveVideoTabBarHeight else 0.dp
+        val sysInsets = WindowInsets.systemBarsIgnoringVisibility.asPaddingValues()
+        val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
         val contentInset = Modifier
-            .windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility)
+            .windowInsetsPadding(
+                WindowInsets.systemBarsIgnoringVisibility
+                    .only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+            )
             .padding(
-                bottom = if (compactWidth) ImmersiveVideoTabBarHeight else 0.dp,
-                start = if (compactWidth) 0.dp else ImmersiveVideoRailWidth
+                start = if (compactWidth) 0.dp else ImmersiveVideoRailWidth,
+                bottom = maxOf(imeBottom, sysInsets.calculateBottomPadding() + navClearance)
             )
         NavHost(
             navController = navController,
@@ -347,16 +363,13 @@ private fun NonPlayerRoute(
 ) {
     Column(modifier = Modifier.fillMaxSize().then(contentInset)) {
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) { content() }
-        // Float the mini-player above the soft keyboard. #15 — apply imePadding
-        // ONLY while the IME is genuinely visible. Under edge-to-edge the Fold6
-        // cover screen mis-reports a residual/animating IME inset, which injected
-        // an OledBlack strip above the bar when no keyboard was up. Gating on
-        // isImeVisible removes the strip while preserving keep-above-keyboard
-        // (search fields etc. still lift the bar).
-        val imeVisible = WindowInsets.isImeVisible
-        Box(modifier = if (imeVisible) Modifier.imePadding() else Modifier) {
-            com.powermediaplayer.ui.components.MiniPlayerBar(onClick = onMiniClick)
-        }
+        // The mini-player sits at the bottom of the column; the caller's
+        // contentInset already lifts the column above whichever is taller — the
+        // keyboard or the nav bar — so the bar is always snug above them with the
+        // list filling the space above it. (No per-bar imePadding: that made only
+        // the bar's Box keyboard-tall, stole the list's weight() height and left a
+        // black void above the bar when the keyboard was up. #15.)
+        com.powermediaplayer.ui.components.MiniPlayerBar(onClick = onMiniClick)
     }
 }
 

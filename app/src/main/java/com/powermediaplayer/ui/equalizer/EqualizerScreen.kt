@@ -1,7 +1,6 @@
 package com.powermediaplayer.ui.equalizer
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -95,7 +94,6 @@ fun EqualizerScreen(
         modifier = Modifier
             .widthIn(max = 720.dp)
             .verticalScroll(rememberScrollState())
-            .imePadding()   // audit 6.6 - keyboard must not cover band fields
     ) {
         if (isCasting) {
             Surface(

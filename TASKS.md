@@ -326,8 +326,8 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 ### Re-verification status (folded)
 | # | Item | screenshot | logcat/DB | code | Verdict |
 |---|------|-----------|-----------|------|---------|
-| metadata | HP title | filename (p2_small 15:07) | DB id=14 raw; cacheHit filename | PlaybackConnection:1109 + Coordinator:728 | FAIL → fixing |
-| 15 | mini-player black bar | bar present (lib_bottom crop) | bounds flush | AppNavigation:348-360 | FAIL → fixing |
+| metadata | HP title+author | **PASS** p6: clean title + "J.K. Rowling" (was filename p2) | **PASS** DB session 20 title clean + subtitle "J.K. Rowling"; cold-start log clean | f9b472a: MediaClassifier.firstNonRawTitle + LastPlayedRepository.cleanRowForUri (author-preferred) + record/cold-start guards | **DONE-VERIFIED** (triangulated screenshot+DB+log; unit 135/0; holistic assessment doc 099c6c3) |
+| 15 | mini-player black bar | bar present (lib_bottom crop) | bounds flush | AppNavigation:348-360 | FAIL → fixing next |
 | 1-14,16-19 | (the rest) | PENDING rigorous re-check after the 2 fixes land | | | PENDING |
 
 ### HOLISTIC METADATA ASSESSMENT (user 2026-06-25: "assess metadata speed + visibility on Player tab AND Last Played tab, for ALL file types, as a WHOLE — many fixes over many sessions have accreted")

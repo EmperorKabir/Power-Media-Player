@@ -6,7 +6,6 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -634,7 +633,12 @@ fun LibraryScreen(
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 360.dp),
                     state = listState,
-                    modifier = Modifier.fillMaxSize().imePadding(),   // audit 6.6
+                    // No imePadding here: the non-player container (AppNavigation
+                    // NonPlayerRoute contentInset) already lifts the whole content
+                    // above the keyboard. A second imePadding on the list reserved
+                    // ANOTHER keyboard-height at its bottom → only a few rows
+                    // showed then a large OledBlack void down to the mini-player.
+                    modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
                     // Audit 6.8 - rail + editor scroll WITH the content:

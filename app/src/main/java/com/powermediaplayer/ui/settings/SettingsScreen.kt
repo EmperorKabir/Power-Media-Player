@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -810,7 +809,6 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(OledBlack)
-                .imePadding()
         ) {
             TopAppBar(
                 title = {
@@ -836,7 +834,6 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .background(OledBlack)
                 .verticalScroll(rememberScrollState())
-                .imePadding()   // audit 6.6
         ) {
             TopAppBar(
                 title = {
