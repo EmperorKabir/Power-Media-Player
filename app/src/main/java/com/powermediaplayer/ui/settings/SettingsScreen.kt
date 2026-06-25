@@ -185,10 +185,10 @@ fun SettingsScreen(
                 SettingsToggleItem("Gapless playback", "Seamless transitions between tracks.",
                     Icons.Filled.SkipNext, uiState.gaplessPlayback) { viewModel.setGapless(it) }
                 SettingsToggleItem(
-                    title = "Low-latency audio buffer",
-                    description = "Snappier pitch / speed / effect changes (~50-100 ms quicker " +
-                        "to take effect). May cause brief glitches under CPU load. Apply by " +
-                        "starting a track after toggling.",
+                    title = "Faster effect response",
+                    description = "Makes pitch, speed and effect changes take hold a touch " +
+                        "faster. On a busy phone it can cause occasional brief glitches. " +
+                        "Start a track after switching this for it to apply.",
                     icon = Icons.Filled.Speed,
                     checked = uiState.audioBufferLowLatency,
                     onCheckedChange = { viewModel.setAudioBufferLowLatency(it) }

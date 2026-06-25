@@ -95,7 +95,7 @@ fun StorageFoldersRow(
             onReset = if (drive.isNotBlank()) ({ vm.setDriveFolder(null) }) else null
         )
         Text(
-            "Spotify content can't be downloaded (DRM; Connect-only), so it has no storage location.",
+            "Spotify tracks can't be saved to your phone — Spotify only allows them to be streamed — so there's no folder to choose for them.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)

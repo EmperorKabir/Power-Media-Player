@@ -53,8 +53,9 @@ fun OfflineStorageLimitRow(
                 color = TextPrimary
             )
             Text(
-                "When a Save Offline takes you over the limit, oldest " +
-                    "unstarred copies are evicted first.",
+                "When saving a new offline copy would go over this limit, the " +
+                    "player deletes your oldest saved copies first (protected ones " +
+                    "are kept).",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )

@@ -87,7 +87,7 @@ fun EnrichmentSubToggles(
             FilterChip(
                 selected = scope == "missing_only",
                 onClick = { cs.launch { ds.setEnrichApplyScope("missing_only") } },
-                label = { Text("Files with no embedded tags") }
+                label = { Text("Files with no details of their own") }
             )
         }
     }
