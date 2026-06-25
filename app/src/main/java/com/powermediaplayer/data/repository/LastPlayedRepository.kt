@@ -276,6 +276,33 @@ class LastPlayedRepository @Inject constructor(
 
     suspend fun mostRecent(): PlaybackHistoryEntity? = historyDao.mostRecent()
 
+    /**
+     * The cleanest (non-raw-filename) known row for a uri, or null when every
+     * stored row for it still holds a raw filename. Lets a record/resume path
+     * heal a raw title + author + cover from a clean sibling session row WITHOUT
+     * a re-download — the enriched metadata is the same across an item's sessions.
+     */
+    suspend fun cleanRowForUri(uri: String): PlaybackHistoryEntity? {
+        val clean = historyDao.rowsForUri(uri).filterNot {
+            com.powermediaplayer.util.MediaClassifier.looksLikeRawMediaFilename(it.title)
+        }
+        if (clean.isEmpty()) return null
+        // Prefer a clean-title row that ALSO carries a real author — not the
+        // bare source-label placeholder ("DRIVE"/"LOCAL"/"SPOTIFY") a row gets
+        // before enrichment fills the author in. Else the most-recent clean
+        // title. (Without this, a clean-title-but-unenriched session shadows the
+        // fully-enriched sibling and the author never propagates.)
+        return clean.firstOrNull { it.subtitle.isNotBlank() && it.subtitle !in SOURCE_LABELS }
+            ?: clean.first()
+    }
+
+    private companion object {
+        val SOURCE_LABELS = setOf("DRIVE", "LOCAL", "SPOTIFY")
+    }
+
+    /** Title-only convenience over [cleanRowForUri]. */
+    suspend fun cleanTitleForUri(uri: String): String? = cleanRowForUri(uri)?.title
+
     /** Resume position for a media uri (podcast episode progress marker). */
     fun observePositionFor(uri: String): kotlinx.coroutines.flow.Flow<Long?> =
         historyDao.observePositionFor(uri)

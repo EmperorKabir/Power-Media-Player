@@ -678,11 +678,20 @@ class LastPlayedViewModel @Inject constructor(
         // rows" contract).
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
+                // Consistency with the Cloud + cold-start paths: never re-record a
+                // RAW filename title when a clean enriched title is known for this
+                // uri (a prior session's clean row). Heal from the sibling, no
+                // re-download; falls back to the row's title when nothing clean exists.
+                val cleanRow = if (com.powermediaplayer.util.MediaClassifier
+                        .looksLikeRawMediaFilename(item.title))
+                    repo.cleanRowForUri(item.mediaUri) else null
+                val recordTitle = cleanRow?.title ?: item.title
+                val recordSubtitle = cleanRow?.subtitle?.takeIf { it.isNotBlank() } ?: item.subtitle
                 repo.recordPlay(
                     com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
                         mediaUri = item.mediaUri,
-                        title = item.title,
-                        subtitle = item.subtitle,
+                        title = recordTitle,
+                        subtitle = recordSubtitle,
                         artworkUri = item.artworkUri,
                         source = when (item.source) {
                             LastPlayedRepository.Source.LOCAL -> "LOCAL"

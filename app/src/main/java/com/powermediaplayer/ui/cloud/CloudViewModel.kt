@@ -418,11 +418,26 @@ class CloudViewModel @Inject constructor(
                     else -> "DRIVE"
                 }
                 val uri = if (item.downloadUrl.isNotBlank()) item.downloadUrl else item.id
+                // Never store a RAW filename ("…[ASIN].m4b") as the title when a
+                // clean enriched title is already known for this item (a prior
+                // session's clean row): that raw row would become the "newest"
+                // cold-start resumes + Last Played shows. Heal from the sibling,
+                // no re-download; falls back to the name on a true first play (the
+                // tap-enrich heals every row for the uri shortly after).
+                val cleanRow = if (com.powermediaplayer.util.MediaClassifier
+                        .looksLikeRawMediaFilename(item.name))
+                    lastPlayedRepo.cleanRowForUri(uri) else null
+                val title = cleanRow?.title ?: item.name
+                // Carry the clean author too (the source label is only a pre-enrich
+                // placeholder); a clean sibling already has the real author.
+                val subtitle = cleanRow?.subtitle?.takeIf {
+                    it.isNotBlank() && it != source
+                } ?: source
                 lastPlayedRepo.recordPlay(
                     com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
                         mediaUri = uri,
-                        title = item.name,
-                        subtitle = source,
+                        title = title,
+                        subtitle = subtitle,
                         artworkUri = item.thumbnailUri?.toString(),
                         source = source,
                         mediaKindOrdinal = 0,

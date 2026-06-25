@@ -31,6 +31,15 @@ interface PlaybackHistoryDao {
     suspend fun mostRecent(): PlaybackHistoryEntity?
 
     /**
+     * All rows for a uri, most-recent first. Used to heal a raw-filename title
+     * (and author/cover) from a CLEAN sibling session row without a re-download
+     * — the enriched metadata is identical across play sessions, so any session
+     * that already extracted it can supply it to one that didn't.
+     */
+    @Query("SELECT * FROM playback_history WHERE mediaUri = :uri ORDER BY lastPlayedAt DESC")
+    suspend fun rowsForUri(uri: String): List<PlaybackHistoryEntity>
+
+    /**
      * Update position for a specific session (id-based) — used by the
      * 5-second persist tick in PlayerViewModel. Avoid wildcarding
      * across all sessions of the same mediaUri because each session

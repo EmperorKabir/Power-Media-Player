@@ -56,6 +56,18 @@ object MediaClassifier {
     }
 
     /**
+     * Pick the first NON-raw-filename, non-blank title from [candidates]
+     * (already in priority / recency order). The enriched title of an item is
+     * the same across every play session, so a raw-filename title can be healed
+     * from a clean sibling Last Played row / enrichment_cache entry WITHOUT a
+     * re-download. Returns null when every candidate is blank or still a raw
+     * filename (then a real enrich download is the only source). Trims the winner.
+     */
+    fun firstNonRawTitle(candidates: List<String?>): String? =
+        candidates.firstOrNull { !it.isNullOrBlank() && !looksLikeRawMediaFilename(it) }
+            ?.trim()
+
+    /**
      * True iff [name]/[mimeType] denote a VIDEO file. Extension wins: an audio
      * extension (incl. .m4b) forces false even when the mime starts with
      * "video/"; otherwise fall back to the mime.

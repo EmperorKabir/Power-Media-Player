@@ -38,6 +38,30 @@ class MediaClassifierTest {
         assertTrue(MediaClassifier.isVideoByName("CLIP.MP4", "VIDEO/MP4"))
     }
 
+    // ---- firstNonRawTitle: heal a raw title from a clean sibling ----
+
+    @Test fun firstNonRawTitle_prefers_clean_over_raw_filename() =
+        assertEquals(
+            "Harry Potter and the Philosopher's Stone (Full-Cast Edition)",
+            MediaClassifier.firstNonRawTitle(
+                listOf(
+                    "Harry Potter and the Philosopher's Stone (Full-Cast Edition) [B0F14RFHS6].m4b",
+                    "Harry Potter and the Philosopher's Stone (Full-Cast Edition)"
+                )
+            )
+        )
+
+    @Test fun firstNonRawTitle_null_when_all_raw_or_blank() {
+        assertEquals(null, MediaClassifier.firstNonRawTitle(listOf("book.m4b", "  ", null, "clip.mp4")))
+        assertEquals(null, MediaClassifier.firstNonRawTitle(emptyList()))
+    }
+
+    @Test fun firstNonRawTitle_keeps_recency_order_and_trims() =
+        assertEquals(
+            "Real Title",
+            MediaClassifier.firstNonRawTitle(listOf("a.mp3", "  Real Title  ", "Older Clean"))
+        )
+
     // ---- classifyAudioSubKind: podcast vs audiobook vs song ----
 
     @Test fun podcast_membership_wins() = assertEquals(

@@ -639,6 +639,31 @@ class PlaybackSessionCoordinator @Inject constructor(
                                 }.getOrDefault(android.os.Bundle())
                             }
                         }
+                        // Heal a raw-filename resume title (+ author) from a CLEAN
+                        // sibling session row that already enriched this item —
+                        // WITHOUT a re-download. Fixes the Player tab showing
+                        // "…[ASIN].m4b" on auto-resume even though earlier sessions
+                        // hold the real title. Persist the heal to every row for the
+                        // uri so Last Played agrees. Only fires when the stored title
+                        // still looks like a raw filename (a healthy item is a no-op).
+                        val cleanSibling = if (com.powermediaplayer.util.MediaClassifier
+                                .looksLikeRawMediaFilename(recent.title))
+                            runCatching { lastPlayedRepo.cleanRowForUri(recent.mediaUri) }.getOrNull()
+                        else null
+                        val resolvedTitle = cleanSibling?.title ?: recent.title
+                        val resolvedSubtitle = cleanSibling?.subtitle
+                            ?.takeIf { it.isNotBlank() && it != recent.source } ?: recent.subtitle
+                        if (cleanSibling != null && resolvedTitle != recent.title) {
+                            runCatching {
+                                lastPlayedRepo.updateDisplayByUri(
+                                    recent.mediaUri, resolvedTitle, resolvedSubtitle
+                                )
+                            }
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Cold-start title-heal from sibling: '$resolvedTitle'"
+                            )
+                        }
                         val item = androidx.media3.common.MediaItem.Builder()
                             .setMediaId(recent.mediaUri)
                             .setUri(playUri)
@@ -648,8 +673,8 @@ class PlaybackSessionCoordinator @Inject constructor(
                             )
                             .setMediaMetadata(
                                 androidx.media3.common.MediaMetadata.Builder()
-                                    .setTitle(recent.title)
-                                    .setArtist(recent.subtitle)
+                                    .setTitle(resolvedTitle)
+                                    .setArtist(resolvedSubtitle)
                                     // Restore the persisted cover (durable cache
                                     // file written when the item was enriched)
                                     // so resume shows the real artwork, not blank.
