@@ -995,10 +995,10 @@ class HueProvider @Inject constructor(
         val displayName: String,
         val description: String
     ) {
-        PARTY("Party", "Cycling saturated colours, full brightness"),
-        AMBIENT("Ambient", "Warm dim, ~2700K, 30% brightness"),
-        CINEMA("Cinema", "Dim deep-red, 15% brightness"),
-        READING("Reading", "Cool white, ~5000K, 80% brightness")
+        PARTY("Party", "Bright, ever-changing colours"),
+        AMBIENT("Ambient", "Warm, dim glow"),
+        CINEMA("Cinema", "Very dim deep red"),
+        READING("Reading", "Bright, cool white")
     }
 
     suspend fun applyScene(preset: ScenePreset) {

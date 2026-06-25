@@ -29,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.data.preferences.BluetoothMediaActions
 import kotlinx.coroutines.launch
 import com.powermediaplayer.ui.theme.*
+import com.powermediaplayer.BuildConfig
 
 /**
  * §D LOCKED order (1 → 15). Each section header carries its §D-NN
@@ -449,8 +450,8 @@ fun SettingsScreen(
                 SettingsToggleItem("Mono mix",
                     "Mix both channels into a centred mono image (still output as stereo so headphones receive the same on both ears).",
                     Icons.Filled.Adjust, uiState.monoMix) { viewModel.setMonoMix(it) }
-                SettingsToggleItem("Multi-channel passthrough",
-                    "When on, 5.1/7.1/Dolby/DTS audio bitstream is sent to a connected receiver / HDMI sink unchanged so it can decode itself. Off forces software downmix to stereo.",
+                SettingsToggleItem("Surround sound passthrough",
+                    "If you're plugged into a home-cinema receiver or soundbar (over HDMI or USB), turn this on to pass surround sound (Dolby / DTS) through untouched, so the receiver decodes it. Leave it off for headphones or your phone speaker — the player then mixes everything down to normal stereo.",
                     Icons.Filled.Speaker, uiState.passthroughAudio) { viewModel.setPassthroughAudio(it) }
                 SliderRow("Volume boost", "+${uiState.volumeBoostMb / 100} dB",
                     uiState.volumeBoostMb.toFloat(), 0f..2000f,
@@ -759,13 +760,13 @@ fun SettingsScreen(
                         color = TealAccent
                     )
                     Text(
-                        text = "Version 1.0.0",
+                        text = "Version " + BuildConfig.VERSION_NAME,
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Built with Media3 ExoPlayer, FFmpeg, Jetpack Compose",
+                        text = "Built with Media3, FFmpeg and Jetpack Compose",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary
                     )
@@ -1817,11 +1818,13 @@ fun SmartHomePlaceholder() {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Philips Hue and Webhooks integrations are on the roadmap. " +
-                "Both are zero-cost. Hue will discover bridges on your local " +
-                "Wi-Fi; Webhooks lets you connect to any service that accepts " +
-                "incoming HTTP — Home Assistant, Pipedream, n8n, Make.com, " +
-                "IFTTT Pro, Tasker, etc.",
+            text = "This player can work with your smart home in two ways, both " +
+                "free and set up elsewhere in Settings:\n\n" +
+                "• Philips Hue — make your lights pulse in time with the music. " +
+                "Set it up just above, under 'Philips Hue'.\n" +
+                "• Webhooks — tell another app (such as Home Assistant or IFTTT) " +
+                "when your music starts or stops, so it can react. Set it up " +
+                "under Settings → Automation → Webhooks.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
         )
@@ -1841,12 +1844,16 @@ private fun WebhooksSection(
     testStatus: String, onTest: () -> Unit
 ) {
     var draft by rememberSaveable(url) { mutableStateOf(url) }
-    SettingsSectionHeader("Webhooks")
+    SettingsSectionHeader("Webhooks (send events to other apps)")
     Text(
-        text = "Send an HTTP POST to your own endpoint when playback events " +
-            "happen. Works with IFTTT, n8n, Home Assistant, Pushover, Google " +
-            "Apps Script — anything that accepts a JSON body. Privacy: only an " +
-            "8-char track hash is sent, no titles or paths.",
+        text = "A webhook lets this player tell another app when your music " +
+            "starts, stops or changes — so that app can react (for example, dim " +
+            "the lights when a track begins). You paste in a web address from a " +
+            "home-automation app (such as Home Assistant, IFTTT or Tasker — its " +
+            "app gives you the address), choose which events to send below, then " +
+            "tap Save. Your privacy is protected: the player never sends song " +
+            "names or file locations — only a short code for the track, the time, " +
+            "and how far through it is.",
         style = MaterialTheme.typography.bodySmall,
         color = TextTertiary,
         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -1854,7 +1861,7 @@ private fun WebhooksSection(
     OutlinedTextField(
         value = draft,
         onValueChange = { draft = it },
-        label = { Text("Webhook URL (https://...)") },
+        label = { Text("Web address from your automation app") },
         singleLine = true,
         modifier = Modifier
             .fillMaxWidth()
@@ -1883,43 +1890,43 @@ private fun WebhooksSection(
         )
     }
     SettingsToggleItem(
-        title = "Fire on track-play start",
-        description = "Sent when a new track begins playing.",
+        title = "When a track starts",
+        description = "Send an event each time a new track begins playing.",
         icon = Icons.Filled.PlayArrow,
         checked = onPlay,
         onCheckedChange = setPlay
     )
     SettingsToggleItem(
-        title = "Fire on pause",
-        description = "Sent when the user pauses (not when the system pauses).",
+        title = "When you pause",
+        description = "Send an event when YOU pause. Automatic pauses — a phone call, another app — don't count.",
         icon = Icons.Filled.Pause,
         checked = onPause,
         onCheckedChange = setPause
     )
     SettingsToggleItem(
-        title = "Fire on resume",
-        description = "Sent when the user resumes after a pause.",
+        title = "When you resume",
+        description = "Send an event when you start playing again after a pause.",
         icon = Icons.Filled.PlayCircle,
         checked = onResume,
         onCheckedChange = setResume
     )
     SettingsToggleItem(
-        title = "Fire on skip-next",
-        description = "Sent when next-track is pressed (in-app or BT remote).",
+        title = "When you skip to the next track",
+        description = "Send an event when you press Next — in the app, or on a Bluetooth remote or car stereo.",
         icon = Icons.Filled.SkipNext,
         checked = onSkipNext,
         onCheckedChange = setSkipNext
     )
     SettingsToggleItem(
-        title = "Fire on skip-previous",
-        description = "Sent when previous-track is pressed.",
+        title = "When you skip to the previous track",
+        description = "Send an event when you press Previous.",
         icon = Icons.Filled.SkipPrevious,
         checked = onSkipPrev,
         onCheckedChange = setSkipPrev
     )
     SettingsToggleItem(
-        title = "Fire on track-end",
-        description = "Sent once when a track plays through to completion.",
+        title = "When a track finishes",
+        description = "Send an event once when a track plays all the way to the end.",
         icon = Icons.Filled.Stop,
         checked = onEnd,
         onCheckedChange = setEnd
