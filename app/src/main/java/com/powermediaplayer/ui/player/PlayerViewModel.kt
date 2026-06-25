@@ -82,25 +82,15 @@ class PlayerViewModel @Inject constructor(
         val next = !shuffleEnabled.value
         // Local/Drive queue: ExoPlayer-level shuffle (no-op for the Spotify mirror).
         playbackConnection.setShuffleMode(next)
-        // Spotify-Connect playback runs on the Spotify device, so in-app shuffle
-        // must be pushed via the Web API — the local mirror's flag is inert there.
-        // Enabling reshuffles the UPCOMING queue, which Spotify only does by
-        // re-asserting the context (setShuffle alone returns HTTP 200 yet /next
-        // kept walking the album in order). The re-assert keeps the current track
-        // + position but causes a brief device re-buffer — so FIRST overlay the
-        // current track as a provisional mirror: its metadata then stays put
-        // through the re-buffer (no flicker/blank), giving a full reshuffle with
-        // no visible payoff. The suppress-outgoing logic keeps the overlay stable.
+        // Spotify-Connect: set Spotify's own shuffle flag — NO re-play, so NO
+        // pause on toggle. Spotify alone won't reliably reshuffle an already-built
+        // queue (setShuffle returns 200 yet /next walked the album in order), and
+        // re-asserting the context to force it caused an audible re-buffer the user
+        // rejected. So the in-app NEXT (spotifyNext) instead jumps to a RANDOM
+        // track in the album/playlist context — shuffle for the UPCOMING song with
+        // only the normal track-change re-buffer, never an extra pause on toggle.
         if (isSpotifyActive) {
-            viewModelScope.launch {
-                if (next) {
-                    spotifyProvider.spotifyState.value?.let {
-                        spotifyProvider.armProvisionalMirror(it)
-                    }
-                }
-                spotifyProvider.setShuffle(next)
-                if (next) spotifyProvider.reshuffleCurrentContext()
-            }
+            viewModelScope.launch { spotifyProvider.setShuffle(next) }
         }
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
@@ -829,8 +819,27 @@ class PlayerViewModel @Inject constructor(
             playbackConnection.seekTo(positionMs)
         }
     }
+    /** Spotify next: with shuffle ON and the album/playlist tracks known, jump to
+     *  a RANDOM context track (shuffle-for-upcoming, no toggle pause — only the
+     *  normal track-change re-buffer). Otherwise Spotify's own /next; also the
+     *  fallback when the context list isn't loaded. */
+    private fun spotifyNext() {
+        val tracks = _spotifyContextTracks.value
+        if (shuffleEnabled.value && tracks.size > 1) {
+            val cur = spotifyProvider.spotifyState.value?.trackUri
+            val pick = tracks.filter {
+                (if (it.downloadUrl.startsWith("spotify:")) it.downloadUrl
+                else "spotify:track:${it.id}") != cur
+            }.randomOrNull() ?: tracks.random()
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "VM.spotifyNext -> random context track (shuffle)")
+            playSpotifyContextTrack(pick)
+        } else {
+            viewModelScope.launch { spotifyProvider.skipNext() }
+        }
+    }
+
     fun seekToNext() {
-        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipNext() }
+        if (isSpotifyActive) spotifyNext()
         else playbackConnection.seekToNext()
     }
     fun seekToPrevious() {
@@ -859,7 +868,7 @@ class PlayerViewModel @Inject constructor(
     fun nextChapter() = playbackConnection.nextChapter()
     fun previousChapter() = playbackConnection.previousChapter()
     fun nextChapterOrTrack() {
-        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipNext() }
+        if (isSpotifyActive) spotifyNext()
         else playbackConnection.nextChapterOrTrack()
     }
     fun previousChapterOrTrack() {
@@ -867,7 +876,7 @@ class PlayerViewModel @Inject constructor(
         else playbackConnection.previousChapterOrTrack()
     }
     fun nextFile() {
-        if (isSpotifyActive) viewModelScope.launch { spotifyProvider.skipNext() }
+        if (isSpotifyActive) spotifyNext()
         else playbackConnection.nextFile()
     }
     fun previousFile() {

@@ -147,6 +147,13 @@ class SpotifyProvider @Inject constructor(
      */
     @Volatile private var suppressTrackUri: String? = null
 
+    // Last resolved lyrics for the current track. CLASS fields (not loop-local)
+    // so the async lyric fetch can persist a late result here; otherwise the next
+    // poll re-emits with a stale null and the lyrics that just painted vanish
+    // (user: "lyrics came up then disappeared" / "aren't loading at all").
+    @Volatile private var lastLyrics: String? = null
+    @Volatile private var lastSynced: List<LyricLine> = emptyList()
+
     /** Last track URI logged by the SP_ORDER order-trace, so it logs only on an
      *  actual track change instead of every ~1 s poll. */
     @Volatile private var lastOrderUri: String = ""
@@ -1322,8 +1329,6 @@ class SpotifyProvider @Inject constructor(
         _spotifyMetadataFetching.value = true
         pollJob = pollScope.launch {
             var lastTrackUri = ""
-            var lastLyrics: String? = null
-            var lastSynced: List<LyricLine> = emptyList()
             // Iteration counter — first ~10 iterations poll at 200 ms
             // because Spotify's /v1/me/player is eventually-consistent
             // for a second or two after a /play call. Without the burst
@@ -1371,18 +1376,7 @@ class SpotifyProvider @Inject constructor(
                             }
                         }
                         if (step.emitState) {
-                            // Resolve lyrics from the CACHE (the async fetch writes
-                            // there) rather than the loop-local lastLyrics — so a
-                            // miss that resolves a moment later PERSISTS across polls
-                            // instead of being wiped by the next emit (the reported
-                            // "lyrics appeared then disappeared"). Absent key = not
-                            // fetched yet → null.
-                            val lr = synchronized(lyricsCache) {
-                                lyricsCache[lyricsKey(snap.title, snap.artist, snap.album, snap.durationMs)]
-                            } as? LyricsResult
-                            _spotifyState.value = snap.copy(
-                                lyrics = lr?.plain, syncedLyrics = lr?.synced.orEmpty()
-                            )
+                            _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
                         }
                         // #2 — metadata (title/artist/art) is resolved NOW; clear
                         // the banner immediately, independent of the lyrics fetch.
@@ -1443,6 +1437,10 @@ class SpotifyProvider @Inject constructor(
             }
             synchronized(lyricsCache) { lyricsCache[key] = res }
             if (gen == pollGen && _spotifyState.value?.trackUri == snap.trackUri) {
+                // Persist into the fields so the next poll's emit KEEPS them —
+                // the fix for lyrics appearing then vanishing / not loading.
+                lastLyrics = res?.plain
+                lastSynced = res?.synced.orEmpty()
                 _spotifyState.value = _spotifyState.value?.copy(
                     lyrics = res?.plain, syncedLyrics = res?.synced.orEmpty()
                 )
