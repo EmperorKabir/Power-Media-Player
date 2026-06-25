@@ -278,6 +278,12 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | T352 | PLAN items #19/#18/#3/#17 (starred fixed-vs-follow-live; resume-after-star; cache-orphan hygiene; background) | P | DONE(`docs/superpowers/plans/2026-06-24-resume-star-storage-background.md`. #19 = `followLive` column (Room v18→v19) + StarPositionResolver + star dialog; #18 = warm-reopen session-surfacing fix ships UNCONDITIONALLY (additive; +18.3b audio-resume if trace shows stopped) + device repro; #3 = ArtworkCache/ChapterCache evict on offline-remove + ArtworkCache 32MB LRU cap; #17 = instrument all 5 vectors + prove termination + hard-stop safeguard + UNCONDITIONAL transparency note. No-downgrade upgrade applied. §Design decisions = recommended defaults, user said proceed.) |
 | T353 | PLAN items #10/#11 (webhooks + full layman settings/info rewrite) | P | DONE(`docs/superpowers/plans/2026-06-24-layman-settings-info-text.md`. Every catalogue-flagged string → exact new wording; factual fixes: About Version 1.0.0→BuildConfig.VERSION_NAME, stale "on the roadmap" placeholder, "colors"→"colours"; strip raw class names from InfoContent. §Design decisions await confirm.) |
 
+## P — Mid-turn bug: player tab shows raw filename title (2026-06-25)
+
+| ID | Task | Phase | Status |
+|----|------|-------|--------|
+| T354 | Player tab showed "…[ASIN].m4b" filename as title despite album/cover/author enriching (offshoot of #16/#300 metadata) | I→M→V | DONE(85d9963). EVIDENCE-LOCKED: pulled DB (binary-safe), pulled MMR logcat. TWO root causes: (1) `PlaybackConnection.updatePlayerState` precedence — the MediaController's `metadata.title` for a Drive item is the FILE NAME (non-blank) and used to win over the enriched `senderMetadata`; album/art only looked right because the controller carried no album. FIX: prefer durable `cached?.title/artist/albumTitle` (senderMetadata, keyed by current mediaId) over the controller value. (2) `PlaybackSessionCoordinator` cold-start resume skipped the heal-enrich whenever chapters were cached — but the chapter cache survives `install -r`/process-death while in-memory senderMetadata does NOT, and a legacy row stored the raw filename. FIX: also re-enrich when the stored title still looks like a raw media filename AND no durable cover exists yet (guarded one-shot — clean title ⇒ `MediaClassifier.looksLikeRawMediaFilename()==false` ⇒ no re-download). MMR ground truth (logcat): HEAD range ⇒ title=null (moov atom absent); FULL download ⇒ title='Harry Potter…(Full-Cast Edition)' artist='J.K. Rowling' album='…(Unabridged)' artBytes=764840. `MediaClassifier.looksLikeRawMediaFilename` pure+JVM-tested (MediaClassifierTest +8 cases, testDebugUnitTest EXIT=0). **DEVICE-VERIFIED end-to-end on RFCY70BARDJ**: corrupted DB (filename title + drive thumbnail + chapters cached + cover cleared) → cold-start fired enrich DESPITE cached chapters (logcat: head null → full clean) → DB+WAL healed (clean title, J.K. Rowling subtitle, durable file://coverart path) → uiautomator dump: player big-title = clean, zero ".m4b" on screen. assembleDebug EXIT=0; pushed 85d9963; install Success) |
+
 **MASTER INDEX + coverage/conflict verification:** `docs/superpowers/plans/2026-06-24-MASTER-INDEX-19-items.md` maps all 19 items (+ every multi-part sub-question) to plan tasks, resolves the cross-plan file overlaps + the TWO `v18→v19` Room-migration clash (podcast `displayOrder` + star `followLive`), and gives the recommended INLINE execution order (superpowers:executing-plans, sequential, per the user — to minimise error + conflict risk).
 
 - vc30 shipped to Play Closed testing — sent for review. ✔
@@ -285,3 +291,41 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
   ALL gate-PASS — evidence tables in
   `docs/superpowers/specs/2026-05-30-vc31-ux-implementation-checklist.md`.
   8 local commits pushed status: see T227.
+
+## Q — MASTER-PLAN EXECUTION (2026-06-25): user directive "everything in one go, no stopping, then on-device evidence pass folded+unfolded for all 1-19"
+
+| Plan | Items | Status |
+|------|-------|--------|
+| P2 | #7 EQ aliasing, #9 EQ-shift | DONE-VERIFIED(code already in HEAD: 5f7dde9+8c81e9c+6d42e31 ancestors of 85d9963; 5 EQ files present; gate green 29 suites/127 tests/0 fail; EqualizerThdTest 5/5 + EqualizerLiveStateTest 4/4) `[DEVICE]` pending consolidated pass |
+| P1 | #1 brightness hitbox, #14 info hitbox, #15 mini-player box, #4 timer popup | DONE-VERIFIED(all 4 already in HEAD: afa8051 ancestor of 85d9963; SeekTimeDialog.kt + SeekTimeParserTest.kt[12] present; #14 InfoIcon last-child PlayerScreen.kt:1350; #1 clickable-first+48dp SecondaryControls.kt:149-165; #15 isImeVisible-gate AppNavigation.kt:356; gate green) `[DEVICE]` pending |
+| P3 | #2 Spotify perf, #16 Drive metadata search | DONE-VERIFIED(de826eb pushed; #2 lyrics-decouple + album-parallelise already present; #16 merge/dedup+DAO LIKE+wiring+scope-note+always-on favourite-enrich already present; B4 covering indices + C4 enriching hint NEWLY implemented; gate green 128 tests/0 fail incl MetadataSearchDaoTest 4/4) `[DEVICE]` pending |
+| ⚠ MIGRATION MAP (verified on disk, AppDatabase.kt) | — | MIGRATION_18_19=podcast displayOrder (P5 ALREADY DONE); MIGRATION_19_20=history_favourites followLive (P6 ALREADY DONE); MIGRATION_20_21=P3 covering indices; @Database(version=21). P5/P6 forks must NOT add/renumber any migration. |
+| P4 | #13 audiobook icon, #12 video thumb, #8 classifier | DONE-VERIFIED(all already in HEAD de826eb; #13 CloudBrowserScreen.kt:1617 isVideoByName, old MIME-only line grep=0; #8 PlayerViewModel PODCAST/AUDIOBOOK labels display-only no BT split; #12 coil-video:3.1.0 build.gradle:265 + VideoFrameDecoder.Factory PowerMediaPlayerApp:57 + LibraryScreen shouldThumbnailVideo; MediaClassifier.kt shared+23 tests; version still 21) `[DEVICE]` pending |
+| P5 | #5 podcast reorder, #6 per-episode effects | DONE-VERIFIED(all already in HEAD de826eb; #5 ReorderableShowList.kt[ui/podcast] + displayOrder ORDER BY + reorderShow contiguous compaction + nextShowOrder append; #6 MediaOverridesPopup off ep.audioUrl long-press+3dot + clear-on-unsubscribe; sh.calvin.reorderable:2.5.0 already dep; PodcastShowOrderTest 3/3; version still 21) `[DEVICE]` pending |
+| P6 | #19 star fixed/live, #18 resume-after-star, #3 cache hygiene, #17 background | DONE-VERIFIED(d6b4179 pushed; #19 followLive+StarPositionResolver+star dialog already present; #3 ArtworkCache 32MB cap+evict orphans already present; #18 NEW SessionSurface.kt seam+SessionSurfaceTest 4/4; #17 NEW DiagLog.bg instrumentation 5 vectors + transparency note; version still 21; gate green 30 suites/132 tests/0 fail) `[DEVICE]` pending |
+| P7 | #10 webhooks layman, #11 full layman settings/info | DONE-VERIFIED(b74700d pushed; all wordings already plain incl ca21766; About=BuildConfig.VERSION_NAME SettingsScreen:763; webhooks/replaygain/VTT/Hue/InfoContent de-jargoned; +CloudBrowserScreen Spotify-devices note rewritten; British colours; gate green 30 suites/132 tests/0 fail) `[DEVICE]` pending |
+| **ALL 7 PLANS COMPLETE** | — | HEAD b74700d on origin/main; @Database version 21; gate green 132 tests; debug build (DEBUGGABLE vc38) on RFCY70BARDJ — installing post-P7 build for device pass |
+| DEVICE | consolidated evidence pass 1-19 folded+unfolded | INVALIDATED(the device-evidence fork produced FALSE PASSES — #15 black bar + metadata title both reported PASS but are visibly broken on device. Verification redone INLINE, triangulated, no subagents — see section R) |
+
+## R — RIGOROUS INLINE RE-VERIFICATION (2026-06-25) — user: "foolproof evidence (screenshot+logcat+code, cross-compared), every part+subpart, folded first, then prompt unfold; all inline, no subagents"
+
+### Verification-failure assessment (root of false passes)
+- Trusted delegated fork PASS reports instead of inspecting artifacts (fork claimed "T354 heal holds clean title" — FALSE).
+- Verified presence-of-element not absence-of-symptom (#15 "PASS" = mini-player exists, not bar gone).
+- Accepted truncated logcat (title cut to 30 chars; clean vs filename share first 30 = "Harry Potter and the Philosoph") as proof.
+- Passed device_state override off as a physical unfold.
+- Forks equated code-presence with behaviour-correct.
+- CORRECTED METHOD: triangulate pixels(screenshot)+runtime(DB/logcat)+code, cross-compare, disprove the symptom; inline only.
+
+### Confirmed bugs (evidence-locked, Phase-1 complete)
+| Bug | Root cause (evidence) | Fix |
+|-----|----------------------|-----|
+| METADATA title = raw filename on HP cold-start resume | DB: playback_history has MULTIPLE rows/uri; newest id=14 = raw filename + Drive-thumbnail (older 11/12/13 clean+file cover). recordPlay=@Insert (no upsert). cold-start mostRecent()→raw→setTitle(filename)→senderMetadata.title=filename. Heal gated `looksLikeRawMediaFilename && !coverAlreadyDurable`; cover durable→heal SKIPPED. Screenshot(15:07) shows filename; logcat cacheHit=true (title truncation hid it). +mojibake Philosopher’s→� | Upsert playback_history by mediaUri (one row/item); never overwrite clean title with raw filename; heal-gate on a real attempted-marker not cover; fix mojibake at enrich source. ARCHITECTURAL (6+ prior fixes T300/304/305/306/307/354). |
+| BLACK BAR under mini-player (#15) folded | bounds: mini-player[0,2180][1080,2289] + nav[0,2289][1080,2445] FLUSH. #15 imePadding-gate fixed a DIFFERENT (above-bar IME) box. Visible band = std 80dp NavigationBar top padding; mini-player doesn't seat against nav (OledBlack shows through). AppNavigation NonPlayerRoute Column + ImmersiveVideoTabOverlay nav overlay. | Seat mini-player flush to nav / merge into one bottom surface so no OledBlack band. Verify by crop pixels + bounds. |
+
+### Re-verification status (folded)
+| # | Item | screenshot | logcat/DB | code | Verdict |
+|---|------|-----------|-----------|------|---------|
+| metadata | HP title | filename (p2_small 15:07) | DB id=14 raw; cacheHit filename | PlaybackConnection:1109 + Coordinator:728 | FAIL → fixing |
+| 15 | mini-player black bar | bar present (lib_bottom crop) | bounds flush | AppNavigation:348-360 | FAIL → fixing |
+| 1-14,16-19 | (the rest) | PENDING rigorous re-check after the 2 fixes land | | | PENDING |
