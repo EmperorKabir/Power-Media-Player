@@ -82,7 +82,8 @@ val playerInfo: InfoSheetData = InfoSheetData(
             bullets = listOf(
                 "Settings → Wake-up alarms — Schedule playback at a chosen time. One-shot or recurring days-of-week.",
                 "Per alarm — Pick the source (any track / playlist / smart playlist / saved bookmark or favourite), start volume %, end volume %, ramp duration, hold duration, wind-down, snooze settings (continue ramp or restart, max snoozes, snooze minutes), stop method (math problem / shake / swipe-to-confirm), vibration.",
-                "Edge cases — Bypasses Do Not Disturb and silent mode. Re-arms after device reboot. Skip-next-N lets you skip the next N occurrences of a recurring alarm."
+                "Edge cases — Bypasses Do Not Disturb and silent mode. Re-arms after device reboot. Skip-next-N lets you skip the next N occurrences of a recurring alarm.",
+                "Background activity — If you set an alarm, your phone may list the app as active in the background. That's the alarm waiting to ring, not continuous playback. Playback and podcast syncing stop when you close the app."
             )
         )
     )

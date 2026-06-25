@@ -160,7 +160,8 @@ class LastPlayedRepository @Inject constructor(
         val durationMs: Long,
         val lastPlayedAt: Long,
         val isPinned: Boolean,         // any pin currently exists for this mediaUri (UI hint only)
-        val pinOrder: Int              // -1 if not applicable; pin's own pinOrder when item is from favourites
+        val pinOrder: Int,             // -1 if not applicable; pin's own pinOrder when item is from favourites
+        val followLive: Boolean = false // #19 — pinned rows only: resume from live position, not the snapshot
     )
 
     enum class Source { LOCAL, DRIVE, SPOTIFY }
@@ -335,7 +336,8 @@ class LastPlayedRepository @Inject constructor(
                     durationMs = f.durationMs,
                     lastPlayedAt = f.pinnedAtMs,
                     isPinned = true,
-                    pinOrder = f.pinOrder
+                    pinOrder = f.pinOrder,
+                    followLive = f.followLive
                 )
             }
         }
@@ -344,7 +346,10 @@ class LastPlayedRepository @Inject constructor(
      * Pin a Recents row. Snapshots its data + bookmarks into the
      * favourites tables. Returns Failure when 10 pins already exist.
      */
-    suspend fun pinSession(historyId: Long): Result<Unit> {
+    /** #19 — one-shot live resume position for a starred row that follows live. */
+    suspend fun livePositionForUri(uri: String): Long? = historyDao.positionForUri(uri)
+
+    suspend fun pinSession(historyId: Long, followLive: Boolean = false): Result<Unit> {
         // Shared cap with pinned albums: both compete for the same 10 slots.
         val used = pinSlotsUsed()
         if (used >= PIN_CAP) return Result.failure(
@@ -364,7 +369,8 @@ class LastPlayedRepository @Inject constructor(
                 lastPositionMs = src.lastPositionMs,
                 durationMs = src.durationMs,
                 pinOrder = n,
-                pinnedAtMs = System.currentTimeMillis()
+                pinnedAtMs = System.currentTimeMillis(),
+                followLive = followLive
             )
         )
         // Snapshot every Recents bookmark for this session into the
@@ -461,4 +467,20 @@ class LastPlayedRepository @Inject constructor(
         "SPOTIFY" -> Source.SPOTIFY
         else -> Source.LOCAL
     }
+}
+
+/**
+ * #19 — decides the resume position for a starred row: an explicit tap wins;
+ * else the live playback_history position when the star follows live (falling
+ * back to the snapshot if no live row exists); else the pinned snapshot. Pure →
+ * trivially unit-testable (StarPositionResolverTest).
+ */
+object StarPositionResolver {
+    fun resolve(
+        followLive: Boolean,
+        snapshotMs: Long,
+        liveMs: Long?,
+        explicitMs: Long? = null
+    ): Long = explicitMs
+        ?: if (followLive) (liveMs ?: snapshotMs) else snapshotMs
 }

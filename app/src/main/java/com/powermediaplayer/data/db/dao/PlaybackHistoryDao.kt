@@ -96,6 +96,14 @@ interface PlaybackHistoryDao {
     )
     fun observePositionFor(uri: String): Flow<Long?>
 
+    /** #19 — one-shot live resume position for a uri (a follow-live starred row
+     *  resolves this at play time). Null = never played. */
+    @Query(
+        "SELECT lastPositionMs FROM playback_history WHERE mediaUri = :uri " +
+            "ORDER BY lastPlayedAt DESC LIMIT 1"
+    )
+    suspend fun positionForUri(uri: String): Long?
+
     @Query("DELETE FROM playback_history")
     suspend fun deleteAll()
 

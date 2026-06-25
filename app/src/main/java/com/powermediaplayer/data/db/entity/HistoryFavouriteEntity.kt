@@ -27,5 +27,9 @@ data class HistoryFavouriteEntity(
     val lastPositionMs: Long,
     val durationMs: Long,
     val pinOrder: Int,
-    val pinnedAtMs: Long
+    val pinnedAtMs: Long,
+    // #19 — when true, playing this pin resumes from the LIVE playback_history
+    // position (resolved at play time) instead of the snapshot frozen at pin
+    // time. Default false = existing fixed-snapshot behaviour. Additive (v20).
+    val followLive: Boolean = false
 )

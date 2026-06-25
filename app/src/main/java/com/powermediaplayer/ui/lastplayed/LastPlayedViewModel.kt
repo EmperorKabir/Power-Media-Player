@@ -208,7 +208,8 @@ class LastPlayedViewModel @Inject constructor(
     }
 
     /** Pin a Recents row by its session id. False on full (10/10). */
-    suspend fun pinSession(historyId: Long): Boolean = repo.pinSession(historyId).isSuccess
+    suspend fun pinSession(historyId: Long, followLive: Boolean = false): Boolean =
+        repo.pinSession(historyId, followLive).isSuccess
 
     fun unpin(favouriteId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -299,6 +300,26 @@ class LastPlayedViewModel @Inject constructor(
         item: LastPlayedRepository.HistoryItem,
         atPositionMs: Long? = null
     ) {
+        // #19 — a follow-live star resumes from the LIVE playback_history
+        // position (resolved now), not the pin-time snapshot. Resolve it off the
+        // Main thread, then RE-ENTER with it as an explicit position so the play
+        // path below is byte-for-byte unchanged. Fixed stars (followLive=false)
+        // and Recents skip this entirely → zero behaviour change.
+        if (item.followLive && atPositionMs == null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val live = runCatching { repo.livePositionForUri(item.mediaUri) }.getOrNull()
+                val resolved = com.powermediaplayer.data.repository.StarPositionResolver.resolve(
+                    followLive = true, snapshotMs = item.lastPositionMs, liveMs = live
+                ).coerceAtLeast(0L)
+                com.powermediaplayer.diag.DiagLog.resume(
+                    "star follow-live resolve snapshot=${item.lastPositionMs} live=$live -> $resolved"
+                )
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    playLocalAt(item, atPositionMs = resolved)
+                }
+            }
+            return
+        }
         // vc32: the vc31 hard tap-IGNORE is gone — it let the
         // cold-start restore's token swallow user taps for the whole of
         // its parse. Stacked loads are prevented by ResumeGate generation

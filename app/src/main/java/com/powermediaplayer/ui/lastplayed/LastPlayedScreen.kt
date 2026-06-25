@@ -109,6 +109,57 @@ fun LastPlayedScreen(
     var contextItem by remember { mutableStateOf<HistoryItem?>(null) }
     var contextFromRecents by remember { mutableStateOf(true) }
     var overrideTarget by remember { mutableStateOf<HistoryItem?>(null) }
+    // #19 — when starring an unpinned Recents row, choose Fixed vs Follow-live.
+    var pinChoiceFor by remember { mutableStateOf<HistoryItem?>(null) }
+    pinChoiceFor?.let { item ->
+        var followLive by remember(item.id) { mutableStateOf(false) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pinChoiceFor = null },
+            containerColor = com.powermediaplayer.ui.theme.SurfaceElevated,
+            title = { Text("Save to Favourites", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column {
+                    Text(
+                        "When you tap this favourite later, where should it resume from?",
+                        color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { followLive = false }.padding(vertical = 6.dp)
+                    ) {
+                        androidx.compose.material3.RadioButton(selected = !followLive, onClick = { followLive = false })
+                        Column(Modifier.padding(start = 4.dp)) {
+                            Text("Fixed position", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+                            Text("Always resume from where you starred it.", color = com.powermediaplayer.ui.theme.TextTertiary, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().clickable { followLive = true }.padding(vertical = 6.dp)
+                    ) {
+                        androidx.compose.material3.RadioButton(selected = followLive, onClick = { followLive = true })
+                        Column(Modifier.padding(start = 4.dp)) {
+                            Text("Follow live", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+                            Text("Resume from wherever you last left off.", color = com.powermediaplayer.ui.theme.TextTertiary, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = item.id; val fl = followLive; pinChoiceFor = null
+                    scope.launch {
+                        val ok = viewModel.pinSession(id, fl)
+                        if (!ok) snackbar.showSnackbar("Favourites full (10/10) — unpin one first")
+                    }
+                }) { Text("Save", color = TealAccent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pinChoiceFor = null }) { Text("Cancel", color = TextSecondary) }
+            }
+        )
+    }
     overrideTarget?.let { item ->
         com.powermediaplayer.ui.overrides.MediaOverridesPopup(
             mediaUri = item.mediaUri,
@@ -325,13 +376,16 @@ fun LastPlayedScreen(
                                     )
                                 }
                                 IconButton(onClick = {
-                                    scope.launch {
-                                        val ok = viewModel.pinSession(item.id)
-                                        if (!ok) {
-                                            snackbar.showSnackbar(
+                                    if (item.isPinned) {
+                                        scope.launch {
+                                            val ok = viewModel.pinSession(item.id)
+                                            if (!ok) snackbar.showSnackbar(
                                                 "Favourites full (10/10) — unpin one first"
                                             )
                                         }
+                                    } else {
+                                        // #19 — choose Fixed vs Follow-live when starring.
+                                        pinChoiceFor = item
                                     }
                                 }) {
                                     Icon(

@@ -95,7 +95,9 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     // v19: #5 podcast reorder — podcast_shows gains displayOrder (Int) so
     //      subscribed shows are user-reorderable. Additive ALTER; existing rows
     //      back-filled by title so the first drag has a stable sequence.
-    version = 19,
+    // v20: #19 starred-position UX — history_favourites gains followLive
+    //      (per-star "follow live position" flag). Additive.
+    version = 20,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -218,6 +220,16 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_17_18: Migration = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE offline_copy ADD COLUMN displayName TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        // v19 → v20 (#19): per-star follow-live flag. Additive ALTER; existing
+        // pins default to 0 (= fixed snapshot, no behaviour change).
+        val MIGRATION_19_20: Migration = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE history_favourites ADD COLUMN followLive INTEGER NOT NULL DEFAULT 0"
+                )
             }
         }
 
