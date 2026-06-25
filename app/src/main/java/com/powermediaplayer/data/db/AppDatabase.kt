@@ -97,7 +97,10 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     //      back-filled by title so the first drag has a stable sequence.
     // v20: #19 starred-position UX — history_favourites gains followLive
     //      (per-star "follow live position" flag). Additive.
-    version = 20,
+    // v21: #16 enriched-metadata Drive search — covering indices on the searched
+    //      text columns (playback_history.title/subtitle, offline_copy.displayName,
+    //      enrichment_cache.title). Additive CREATE INDEX only.
+    version = 21,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -230,6 +233,18 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE history_favourites ADD COLUMN followLive INTEGER NOT NULL DEFAULT 0"
                 )
+            }
+        }
+
+        // v20 → v21 (#16): covering indices backing the enriched-metadata Drive
+        // search LIKE queries. Names match Room's index_<table>_<column>
+        // convention so the entity-declared indices and the DB agree at runtime.
+        val MIGRATION_20_21: Migration = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_history_title ON playback_history(title)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_history_subtitle ON playback_history(subtitle)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_offline_copy_displayName ON offline_copy(displayName)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_enrichment_cache_title ON enrichment_cache(title)")
             }
         }
 

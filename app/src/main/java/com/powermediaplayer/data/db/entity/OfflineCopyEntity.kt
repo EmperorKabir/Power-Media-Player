@@ -1,6 +1,7 @@
 package com.powermediaplayer.data.db.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -8,7 +9,8 @@ import androidx.room.PrimaryKey
  * Set<String> path so we can track byteSize for LRU eviction at the
  * user-configured storage limit.
  */
-@Entity(tableName = "offline_copy")
+// #16 — displayName indexed to back the enriched-metadata Drive search.
+@Entity(tableName = "offline_copy", indices = [Index("displayName")])
 data class OfflineCopyEntity(
     @PrimaryKey
     val driveFileId: String,

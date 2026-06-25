@@ -76,6 +76,9 @@ fun CloudBrowserScreen(
     }
     val offlineIds by viewModel.offlineDrivePairs.collectAsStateWithLifecycle()
     val savingOffline by viewModel.savingOffline.collectAsStateWithLifecycle()
+    // #16 D6 — Drive items being background-enriched after a favourite. Purely
+    // informational; never blocks taps/scroll/playback.
+    val enrichingIds by viewModel.enrichingIds.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<CloudMediaItem?>(null) }
@@ -684,6 +687,7 @@ fun CloudBrowserScreen(
                             isOffline = isDriveTrack && offlineIds.containsKey(item.id),
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
+                            isEnriching = item.id in enrichingIds,
                             onSaveOffline = { viewModel.saveDriveOffline(item) },
                             onRemoveOffline = { viewModel.removeDriveOffline(item.id) },
                             onCancelOffline = { viewModel.cancelDownload(item.id) },
@@ -785,6 +789,7 @@ fun CloudBrowserScreen(
                                 fav = fav,
                                 isOffline = offlineIds.containsKey(fav.id),
                                 isSaving = fav.id in savingOffline,
+                                isEnriching = fav.id in enrichingIds,
                                 onSaveOffline = { viewModel.saveDriveOffline(favItem) },
                                 onRemoveOffline = { viewModel.removeDriveOffline(fav.id) },
                                 onCancelOffline = { viewModel.cancelDownload(fav.id) },
@@ -1050,6 +1055,7 @@ fun CloudBrowserScreen(
                             isOffline = isDriveTrack && offlineIds.containsKey(item.id),
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
+                            isEnriching = item.id in enrichingIds,
                             onSaveOffline = { viewModel.saveDriveOffline(item) },
                             onRemoveOffline = { viewModel.removeDriveOffline(item.id) },
                             onCancelOffline = { viewModel.cancelDownload(item.id) },
@@ -1579,6 +1585,7 @@ private fun CloudItemRow(
     isOffline: Boolean = false,
     canManageOffline: Boolean = false,
     isSavingOffline: Boolean = false,
+    isEnriching: Boolean = false,
     onSaveOffline: () -> Unit = {},
     onRemoveOffline: () -> Unit = {},
     onCancelOffline: () -> Unit = {},
@@ -1632,6 +1639,7 @@ private fun CloudItemRow(
                 )
             }
         }
+        if (isEnriching) EnrichingHint()
         if (isOffline) {
             Surface(
                 color = TealAccent.copy(alpha = 0.18f),
@@ -1752,6 +1760,31 @@ private fun SpotifyFavRow(
     }
 }
 
+/**
+ * #16 D6 — tiny non-blocking "Updating…" indicator shown on a favourited Drive
+ * row while its tags/cover are enriched in the background. Informational only:
+ * no clickable, no intrinsic min-size that could intercept the row's gestures.
+ */
+@Composable
+private fun EnrichingHint() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(end = 6.dp)
+    ) {
+        CircularProgressIndicator(
+            color = TealAccent,
+            strokeWidth = 2.dp,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            "Updating…",
+            color = TextSecondary,
+            style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
 @Composable
 private fun FavouriteTrackRow(
     fav: com.powermediaplayer.data.preferences.DriveFavouriteFolder,
@@ -1759,6 +1792,7 @@ private fun FavouriteTrackRow(
     onUnstar: () -> Unit,
     isOffline: Boolean = false,
     isSaving: Boolean = false,
+    isEnriching: Boolean = false,
     onSaveOffline: () -> Unit = {},
     onRemoveOffline: () -> Unit = {},
     onCancelOffline: () -> Unit = {}
@@ -1793,6 +1827,7 @@ private fun FavouriteTrackRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (isEnriching) EnrichingHint()
         // Visible download / remove-offline (favourite Drive tracks had none).
         when {
             isSaving -> com.powermediaplayer.ui.components.DownloadProgressMini(

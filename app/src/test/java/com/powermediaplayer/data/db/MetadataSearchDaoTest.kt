@@ -7,6 +7,7 @@ import com.powermediaplayer.data.db.entity.PlaybackHistoryEntity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,5 +69,25 @@ class MetadataSearchDaoTest {
         )
         assertEquals(1, db.enrichmentCacheDao().searchEnriched("%matt%").size)   // artist
         assertEquals(1, db.enrichmentCacheDao().searchEnriched("%crawler%").size) // album/series
+    }
+
+    /**
+     * #16 B4 — the entity-declared covering indices must materialise with the
+     * exact names MIGRATION_20_21 creates (Room's index_<table>_<column>
+     * convention). exportSchema=false means Room validates the migrated DB's
+     * schema against the entity-derived schema at runtime; matching names here
+     * is what keeps a real on-device v20→v21 upgrade from throwing.
+     */
+    @Test fun coveringIndicesExist_forMetadataSearch() {
+        val names = HashSet<String>()
+        db.openHelper.readableDatabase
+            .query("SELECT name FROM sqlite_master WHERE type='index'").use { c ->
+                val i = c.getColumnIndexOrThrow("name")
+                while (c.moveToNext()) names.add(c.getString(i))
+            }
+        assertTrue("index_playback_history_title", names.contains("index_playback_history_title"))
+        assertTrue("index_playback_history_subtitle", names.contains("index_playback_history_subtitle"))
+        assertTrue("index_offline_copy_displayName", names.contains("index_offline_copy_displayName"))
+        assertTrue("index_enrichment_cache_title", names.contains("index_enrichment_cache_title"))
     }
 }

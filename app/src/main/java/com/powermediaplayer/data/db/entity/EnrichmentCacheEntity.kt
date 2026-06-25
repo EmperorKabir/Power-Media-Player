@@ -1,6 +1,7 @@
 package com.powermediaplayer.data.db.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -8,7 +9,8 @@ import androidx.room.PrimaryKey
  * on the lower-cased "artist|album|title" tuple. Subsequent lookups
  * for the same key skip the network entirely.
  */
-@Entity(tableName = "enrichment_cache")
+// #16 — title indexed to back the enriched-metadata Drive search.
+@Entity(tableName = "enrichment_cache", indices = [Index("title")])
 data class EnrichmentCacheEntity(
     @PrimaryKey val cacheKey: String,
     val provider: String,

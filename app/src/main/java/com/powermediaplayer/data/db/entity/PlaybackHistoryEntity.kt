@@ -15,7 +15,8 @@ import androidx.room.PrimaryKey
  */
 @Entity(
     tableName = "playback_history",
-    indices = [Index("mediaUri"), Index("lastPlayedAt")]
+    // #16 — title/subtitle indexed to back the enriched-metadata Drive search.
+    indices = [Index("mediaUri"), Index("lastPlayedAt"), Index("title"), Index("subtitle")]
 )
 data class PlaybackHistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
