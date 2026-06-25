@@ -31,7 +31,7 @@ fun ReplayGainModeRow(
     val mode by ds.replayGainMode.collectAsState(initial = "track")
     val scope = rememberCoroutineScope()
     Text(
-        "ReplayGain mode (locked target -14 LUFS):",
+        "How to even out volume:",
         color = TextSecondary,
         style = MaterialTheme.typography.labelMedium,
         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)

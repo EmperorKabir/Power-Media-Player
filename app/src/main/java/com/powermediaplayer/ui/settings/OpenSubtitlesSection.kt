@@ -85,9 +85,11 @@ fun OpenSubtitlesSection(
                     style = MaterialTheme.typography.titleSmall, color = TextPrimary
                 )
                 Text(
-                    "Free dev API key required (opensubtitles.com → Profile " +
-                        "→ Consumers). Plays a video without an SRT? We " +
-                        "look up + cache one for you.",
+                    "Get free subtitles automatically. Make a free account at " +
+                        "opensubtitles.com, then paste your personal key below (on " +
+                        "their site it's under Profile → Consumers → 'New consumer'). " +
+                        "When you play a video that has no subtitle file, the player " +
+                        "finds and saves matching subtitles for you.",
                     style = MaterialTheme.typography.bodySmall, color = TextTertiary
                 )
             }

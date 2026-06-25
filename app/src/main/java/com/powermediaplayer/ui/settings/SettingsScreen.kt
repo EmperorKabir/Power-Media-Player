@@ -273,12 +273,11 @@ fun SettingsScreen(
             ) {
                 SettingsToggleItem(
                     title = "Deep Scan",
-                    description = "Reads the full file header (via MediaMetadataRetriever) " +
-                            "when you tap 'Refresh metadata' on individual tracks — finds " +
-                            "tags like artist / album / artwork that MediaStore's faster " +
-                            "index missed. The main library scan always uses the fast " +
-                            "MediaStore path regardless of this setting, so toggling " +
-                            "here doesn't change scan time.",
+                    description = "When you tap 'Refresh metadata' on a single track, read " +
+                            "deeper inside the file to recover details — artist, album, " +
+                            "cover art — that the quick library scan can miss. The normal " +
+                            "library scan always uses the fast method, so this setting " +
+                            "doesn't slow scanning down.",
                     icon = Icons.Filled.DocumentScanner,
                     checked = uiState.useDeepScan,
                     onCheckedChange = { viewModel.setDeepScan(it) }
@@ -320,8 +319,9 @@ fun SettingsScreen(
                 SettingsToggleItem(
                     title = "Online metadata enrichment",
                     description = "When a track has missing info (artist, album, year, genre, " +
-                        "cover art), look it up on MusicBrainz / Discogs and fill in the blanks. " +
-                        "Off by default to avoid network requests on poorly-tagged libraries.",
+                        "cover art), look them up in the free online music databases " +
+                        "MusicBrainz and Discogs and fill in the blanks. Off by default, so " +
+                        "the player doesn't use the internet unless you ask it to.",
                     icon = Icons.Filled.CloudDownload,
                     checked = uiState.metadataEnrichmentEnabled,
                     onCheckedChange = { viewModel.setMetadataEnrichmentEnabled(it) }
@@ -338,8 +338,8 @@ fun SettingsScreen(
                     checked = uiState.replayGainAutoScan,
                     onCheckedChange = { viewModel.setReplayGainAutoScan(it) }
                 )
-                SettingsToggleItem("ReplayGain normalisation",
-                    "Even out loudness across tracks using their REPLAYGAIN tags.",
+                SettingsToggleItem("Even out track volumes",
+                    "Play every track at a similar volume so you're not reaching for the volume between songs. Uses each file's own loudness measurement (known as ReplayGain).",
                     Icons.Filled.GraphicEq, uiState.replayGainEnabled) { viewModel.setReplayGain(it) }
             },
             SettingsItem(
@@ -518,22 +518,22 @@ fun SettingsScreen(
                 val formats = listOf(
                     SubtitleFormatInfo(
                         code = "SRT",
-                        name = "SRT — SubRip Text",
+                        name = "SRT — simple subtitles",
                         description = "Simple text subtitles. Just words on screen with basic timing. " +
                                 "Works everywhere — the most universally supported format."
                     ),
                     SubtitleFormatInfo(
                         code = "VTT",
-                        name = "VTT — Web Video Text Tracks",
-                        description = "Web-standard subtitles. Supports basic styling like bold and colors. " +
-                                "Used by most streaming services including YouTube and Netflix."
+                        name = "VTT — web subtitles",
+                        description = "The kind used by most streaming sites such as YouTube and Netflix. " +
+                                "Can show simple styling like bold text and colours."
                     ),
                     SubtitleFormatInfo(
                         code = "ASS",
-                        name = "ASS/SSA — Advanced SubStation Alpha",
-                        description = "Advanced subtitles with full typographic control — custom fonts, " +
-                                "positioned text, karaoke effects, and animated styling. " +
-                                "Common in anime fansubs and professional subtitle work."
+                        name = "ASS — fancy subtitles",
+                        description = "Subtitles that can use custom fonts, place text anywhere on screen, " +
+                                "and add effects such as sing-along (karaoke) highlighting. Often " +
+                                "seen on anime and professionally subtitled films."
                     )
                 )
                 formats.forEach { format ->
@@ -1874,11 +1874,11 @@ private fun WebhooksSection(
         horizontalArrangement = Arrangement.End
     ) {
         TextButton(onClick = onTest) {
-            Text("Test", color = TealAccent)
+            Text("Send a test", color = TealAccent)
         }
         Spacer(Modifier.width(8.dp))
         TextButton(onClick = { onUrlChange(draft) }) {
-            Text("Save URL", color = TealAccent)
+            Text("Save", color = TealAccent)
         }
     }
     if (testStatus.isNotBlank()) {
@@ -2243,23 +2243,16 @@ private fun HueSection(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Drive white-only (dimmable) lights",
+                    text = "Pulse plain white bulbs too",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextPrimary
                 )
                 Text(
-                    text = "Pulse brightness of white-only bulbs (no colour) " +
-                        "in time with the music. For rooms and zones the " +
-                        "engine sends one group brightness command per " +
-                        "cycle. The rate is set automatically by the slowest " +
-                        "bulb in the group: all-Hue groups run at 2 Hz, any-" +
-                        "IKEA at 1 Hz (their Zigbee firmware queues commands " +
-                        "instead of aborting), other brands 1.5 Hz. Commands " +
-                        "are sent as instant snaps (no transition smoothing) " +
-                        "so they can't pile up. If the bridge ever returns " +
-                        "5xx/429 we pause for 2.5 s, and we stop pulsing the " +
-                        "moment the colour stream drops. Smart plugs are " +
-                        "never touched.",
+                    text = "Make plain white bulbs (ones that can't change colour) " +
+                        "brighten and dim with the beat as well. The player flashes " +
+                        "them at a steady rate that it picks automatically to suit the " +
+                        "bulbs in the room, and eases off if the Hue bridge gets busy. " +
+                        "Smart plugs are left alone.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
