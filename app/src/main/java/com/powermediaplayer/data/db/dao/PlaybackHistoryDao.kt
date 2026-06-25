@@ -47,26 +47,26 @@ interface PlaybackHistoryDao {
     )
     suspend fun updatePositionByUri(uri: String, pos: Long)
 
-    /** Update the display title/subtitle of the most-recent row for a uri.
-     *  Used when embedded tags are extracted AFTER the row was first written
-     *  with the filename — so auto-resume shows the proper title/author. */
+    /** Update the display title/subtitle of EVERY session row for a uri. Title/
+     *  author are properties of the MEDIA, not the play session, so all rows of
+     *  the same item should agree — updating only the most-recent left older Last
+     *  Played rows showing the stale filename. */
     @Query(
         // Keep the existing subtitle (e.g. the 'DRIVE' source label) when the
         // extracted artist is blank, rather than wiping it to ''.
         "UPDATE playback_history SET title = :title, " +
             "subtitle = CASE WHEN :subtitle = '' THEN subtitle ELSE :subtitle END " +
-            "WHERE id = (SELECT id FROM playback_history WHERE mediaUri = :uri " +
-            "ORDER BY lastPlayedAt DESC LIMIT 1)"
+            "WHERE mediaUri = :uri"
     )
     suspend fun updateDisplayByUri(uri: String, title: String, subtitle: String)
 
-    /** Persist the cover-art URI (a durable cache-file path for embedded art)
-     *  onto the most-recent row for a uri, so Last Played thumbnails + resume
-     *  show the real cover, not the (often null) Drive thumbnail. */
+    /** Persist the cover-art URI (a durable filesDir path for embedded art) onto
+     *  EVERY session row for a uri, so ALL its Last Played rows show the real
+     *  cover. Updating only the most-recent row left older sessions of the same
+     *  media (and rows whose old cache cover was evicted) showing a placeholder;
+     *  re-enriching on play now heals them all + writes a durable path. */
     @Query(
-        "UPDATE playback_history SET artworkUri = :artworkUri " +
-            "WHERE id = (SELECT id FROM playback_history WHERE mediaUri = :uri " +
-            "ORDER BY lastPlayedAt DESC LIMIT 1)"
+        "UPDATE playback_history SET artworkUri = :artworkUri WHERE mediaUri = :uri"
     )
     suspend fun updateArtworkByUri(uri: String, artworkUri: String)
 

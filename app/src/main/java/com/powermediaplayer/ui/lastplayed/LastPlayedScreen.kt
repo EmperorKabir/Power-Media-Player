@@ -799,7 +799,10 @@ private fun HistoryRowWithBookmarks(
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
+)
 @Composable
 private fun HistoryHeaderRow(
     item: HistoryItem,
@@ -836,18 +839,27 @@ private fun HistoryHeaderRow(
             // paints transparent so the MusicNote shows through.
             Icon(Icons.Filled.MusicNote, contentDescription = null,
                 tint = TealAccent, modifier = Modifier.size(20.dp))
+            // Prefer the DURABLE cover (filesDir, keyed by the media uri) over the
+            // stored artworkUri, which on older session rows may be a dangling
+            // cache path from before the cacheDir→filesDir durability fix. Since
+            // the enricher writes the cover to filesDir keyed by mediaUri, EVERY
+            // session row of the same media finds it — no re-download/re-enrich.
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val durableCover = remember(item.mediaUri) {
+                com.powermediaplayer.util.ArtworkCache.uriFor(ctx, item.mediaUri)
+            }
             val artModel: Any? = when {
                 // Podcasts store source=LOCAL but with a REMOTE audio uri + a
                 // remote show-cover url; the local-file art fetcher can't read
                 // those, so load the cover url directly (like cloud rows). Drive/
                 // Spotify (else) and real local-file rows are byte-identical.
                 item.source == Source.LOCAL && item.mediaUri.startsWith("http") ->
-                    item.artworkUri
+                    durableCover ?: item.artworkUri
                 item.source == Source.LOCAL ->
                     item.mediaUri.takeIf { it.isNotBlank() }?.let {
                         com.powermediaplayer.util.LocalTrackArt(it, item.artworkUri)
                     }
-                else -> item.artworkUri
+                else -> durableCover ?: item.artworkUri
             }
             if (artModel != null) {
                 coil3.compose.AsyncImage(
@@ -872,7 +884,14 @@ private fun HistoryHeaderRow(
             Text(item.title,
                 style = MaterialTheme.typography.labelLarge,
                 color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // FlowRow (not Row): under high font scaling the source pill + tags +
+            // Offline badge + @time overflowed a single line and CLIPPED the time.
+            // Flowing wraps the overflow onto a second line instead — robust at any
+            // font scale / screen width; identical single line at normal scale.
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 // A podcast is stored as source=LOCAL with a remote (http) audio
                 // uri — show "Podcast", not the misleading "Local" provider tag.
                 val isPodcast = item.source == Source.LOCAL && item.mediaUri.startsWith("http")
@@ -880,7 +899,6 @@ private fun HistoryHeaderRow(
                 // #19 — pinned rows show whether this favourite resumes live or
                 // holds the position it was starred at (clear, concise tag).
                 pinResumeTag?.let { live ->
-                    Spacer(Modifier.width(6.dp))
                     Text(
                         if (live) "Resume live" else "Hold position",
                         style = MaterialTheme.typography.labelSmall,
@@ -895,40 +913,36 @@ private fun HistoryHeaderRow(
                     )
                 }
                 if (isOffline) {
-                    Spacer(Modifier.width(6.dp))
                     OfflineBadge()
                 }
                 if (item.subtitle.isNotBlank() && item.subtitle != item.source.name) {
-                    Spacer(Modifier.width(6.dp))
-                    // weight(fill=false) so a long publisher name (e.g. a podcast
-                    // show) ELLIPSISES and yields width to the fixed-size siblings
-                    // (badges, the @position time) instead of squeezing the time
-                    // text to a sliver where it wrapped character-by-character
-                    // (vertical "@3/7/:4/9"). The time + bookmark keep their room.
+                    // Capped width so a long publisher name ellipsises instead of
+                    // pushing everything else off; the time + badges keep their room
+                    // and overflow wraps to the next line.
                     Text(item.subtitle,
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier.widthIn(max = 220.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (item.lastPositionMs > 0L) {
-                    Spacer(Modifier.width(6.dp))
-                    // maxLines=1 + softWrap=false → the time can never wrap to one
-                    // character per line, regardless of remaining width.
+                    // maxLines=1 + softWrap=false → the time never wraps to one
+                    // character per line; FlowRow moves it to the next line if needed.
                     Text("@${TimeFormatter.formatDuration(item.lastPositionMs)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary, maxLines = 1, softWrap = false)
                 }
                 if (bookmarkCount > 0) {
-                    Spacer(Modifier.width(6.dp))
-                    Icon(
-                        Icons.Filled.Bookmark,
-                        contentDescription = null,
-                        tint = TealAccent,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Text(" $bookmarkCount",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TealAccent)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Bookmark,
+                            contentDescription = null,
+                            tint = TealAccent,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(" $bookmarkCount",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TealAccent)
+                    }
                 }
             }
         }
