@@ -304,6 +304,7 @@ fun LastPlayedScreen(
                             items = pinned,
                             offlineUrls = offlineDownloadedKeys,
                             downloadingIds = downloadingIds,
+                            livePositionProvider = { viewModel.livePosition(it) },
                             onMove = { from, to ->
                                 val movedFavId = pinned[from].id
                                 viewModel.reorderPinned(movedFavId, to)
@@ -642,7 +643,8 @@ private fun ReorderablePinnedList(
     bookmarkProvider: (Long) -> Flow<List<LastPlayedViewModel.BookmarkRow>>,
     onLongClick: (HistoryItem) -> Unit = {},
     offlineUrls: Set<String> = emptySet(),
-    downloadingIds: Map<String, String> = emptyMap()
+    downloadingIds: Map<String, String> = emptyMap(),
+    livePositionProvider: ((String) -> Flow<Long?>)? = null
 ) {
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -661,6 +663,7 @@ private fun ReorderablePinnedList(
                     bookmarkCap = Int.MAX_VALUE, // pinned: unlimited
                     isOffline = offlineUrls.contains(item.mediaUri),
                     pinResumeTag = item.followLive, // #19 — show Resume-live/Hold-position tag
+                    livePositionProvider = livePositionProvider, // #19 — live timer for Resume-live
                     swipeBookmark = false,
                     bookmarkProvider = { bookmarkProvider(item.id) },
                     onTap = { onTap(item) },
@@ -734,7 +737,8 @@ private fun HistoryRowWithBookmarks(
     swipeBookmark: Boolean = false,
     // #19 — non-null on PINNED rows only: true = "Resume live", false = "Hold
     // position". Recents pass null (no tag).
-    pinResumeTag: Boolean? = null
+    pinResumeTag: Boolean? = null,
+    livePositionProvider: ((String) -> Flow<Long?>)? = null
 ) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     val bookmarksFlow = remember(item.id) { bookmarkProvider() }
@@ -758,7 +762,8 @@ private fun HistoryRowWithBookmarks(
                 onLongClick = onLongClick,
                 trailing = trailing,
                 isOffline = isOffline,
-                pinResumeTag = pinResumeTag
+                pinResumeTag = pinResumeTag,
+                livePositionProvider = livePositionProvider
             )
             AnimatedVisibility(visible = expanded && bookmarks.isNotEmpty()) {
                 Column(modifier = Modifier
@@ -814,8 +819,17 @@ private fun HistoryHeaderRow(
     onLongClick: () -> Unit = {},
     trailing: @Composable RowScope.() -> Unit,
     isOffline: Boolean = false,
-    pinResumeTag: Boolean? = null
+    pinResumeTag: Boolean? = null,
+    livePositionProvider: ((String) -> Flow<Long?>)? = null
 ) {
+    // #19 — a "Resume live" pin DISPLAYS the live position it would resume from
+    // (updates as you play), not the snapshot frozen at pin time. Hold-position
+    // pins + Recents show the stored position.
+    val displayPosMs: Long = if (pinResumeTag == true && livePositionProvider != null) {
+        val live by remember(item.mediaUri) { livePositionProvider(item.mediaUri) }
+            .collectAsStateWithLifecycle(initialValue = item.lastPositionMs)
+        live ?: item.lastPositionMs
+    } else item.lastPositionMs
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -924,10 +938,11 @@ private fun HistoryHeaderRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (item.lastPositionMs > 0L) {
+                if (displayPosMs > 0L) {
                     // maxLines=1 + softWrap=false → the time never wraps to one
                     // character per line; FlowRow moves it to the next line if needed.
-                    Text("@${TimeFormatter.formatDuration(item.lastPositionMs)}",
+                    // For a Resume-live pin this is the LIVE position (updates).
+                    Text("@${TimeFormatter.formatDuration(displayPosMs)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary, maxLines = 1, softWrap = false)
                 }

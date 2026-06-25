@@ -211,6 +211,11 @@ class LastPlayedViewModel @Inject constructor(
     suspend fun pinSession(historyId: Long, followLive: Boolean = false): Boolean =
         repo.pinSession(historyId, followLive).isSuccess
 
+    /** #19 — live resume position for a uri, used by a "Resume live" pinned row
+     *  to DISPLAY the position it would resume from (updates as you play). */
+    fun livePosition(uri: String): kotlinx.coroutines.flow.Flow<Long?> =
+        repo.observePositionFor(uri)
+
     fun unpin(favouriteId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             // §C7 — auto-clear per-file overrides when unpinning. Look
