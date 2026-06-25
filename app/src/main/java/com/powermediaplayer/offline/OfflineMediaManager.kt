@@ -151,15 +151,25 @@ class OfflineMediaManager @Inject constructor(
             deleteOfflinePath(drive.localPath)
             offlineCopyDao.delete(driveId)
             settingsDataStore.removeOfflineDrive(driveId)
+            evictOrphanCaches(uri)
             return@withContext Result.success(Unit)
         }
         val pod = podcastDao.downloadedByAudioUrl(uri)
         if (pod != null) {
             pod.localPath?.takeIf { it.isNotBlank() }?.let { SafStorage.delete(context, Uri.parse(it)) }
             podcastDao.clearLocalPath(pod.guid)
+            evictOrphanCaches(uri)
             return@withContext Result.success(Unit)
         }
         Result.failure(IllegalStateException("Nothing to delete — not downloaded"))
+    }
+
+    /** #3 — the durable file + DB row are gone; also evict the cover-art (600 KB-
+     *  1 MB, uncapped) + chapter-cache entries keyed by this uri, which deleteLocal
+     *  previously orphaned in cacheDir until OS eviction. Best-effort. */
+    private fun evictOrphanCaches(uri: String) {
+        com.powermediaplayer.util.ArtworkCache.evict(context, uri)
+        com.powermediaplayer.util.ChapterCache.shared.evict(context.cacheDir, uri)
     }
 
     private suspend fun downloadDrive(uri: String, title: String): Result<Unit> {

@@ -48,6 +48,7 @@ object ArtworkCache {
                 runCatching { if (tmp.exists()) tmp.delete() }
             }
         }
+        trimToCap(context)
         Uri.fromFile(f)
     }.getOrNull()
 
@@ -55,5 +56,30 @@ object ArtworkCache {
     fun uriFor(context: Context, key: String): Uri? {
         val f = fileFor(context, key)
         return if (f.exists() && f.length() > 0) Uri.fromFile(f) else null
+    }
+
+    /** #3 — cover art was unbounded (600 KB-1 MB each, no cap). LRU-trim to this
+     *  budget on every write so the cacheDir footprint can't grow without limit. */
+    const val CAP_BYTES: Long = 32L * 1024 * 1024 // 32 MB ≈ 32-50 covers
+
+    /** #3 — delete the cached cover for [key] (called on offline-remove so the
+     *  600 KB-1 MB file doesn't orphan in cacheDir until the OS evicts it). */
+    fun evict(context: Context, key: String) {
+        runCatching { fileFor(context, key).delete() }
+    }
+
+    /** Keep coverart/ under [CAP_BYTES]; delete oldest-by-lastModified first
+     *  (mirrors ChapterCache's disk sweep). Best-effort; never fails a write. */
+    fun trimToCap(context: Context) {
+        runCatching {
+            val files = dir(context).listFiles() ?: return
+            var total = files.sumOf { it.length() }
+            if (total <= CAP_BYTES) return
+            for (f in files.sortedBy { it.lastModified() }) {
+                if (total <= CAP_BYTES) break
+                total -= f.length()
+                runCatching { f.delete() }
+            }
+        }
     }
 }

@@ -133,6 +133,18 @@ class ChapterCache(private val maxEntries: Int = 16) {
 
     fun unmarkFilling(uri: String) { fillsInFlight.remove(uri) }
 
+    /** #3 — drop [uri]'s entry from memory + disk (called on offline-remove). The
+     *  disk file name is "<sha(uri).take(24)>-<sha(token).take(16)>.json"; deleting
+     *  by the uri-hash prefix removes whatever token the entry was stored under.
+     *  [baseDir] is the same dir passed to attachDiskStore (context.cacheDir). */
+    fun evict(baseDir: java.io.File, uri: String) {
+        synchronized(mapLock) { map.remove(uri) }
+        val store = java.io.File(baseDir, "chapter-cache")
+        val prefix = sha(uri).take(24) + "-"
+        store.listFiles { f -> f.name.startsWith(prefix) }
+            ?.forEach { runCatching { it.delete() } }
+    }
+
     companion object {
         val shared = ChapterCache()
         /** Disk-tier budget. Entries are tiny JSON files; 5MB is years
