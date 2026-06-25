@@ -112,7 +112,21 @@ fun LastPlayedScreen(
     // #19 — when starring an unpinned Recents row, choose Fixed vs Follow-live.
     var pinChoiceFor by remember { mutableStateOf<HistoryItem?>(null) }
     pinChoiceFor?.let { item ->
-        var followLive by remember(item.id) { mutableStateOf(false) }
+        // 0 = Fixed (hold position), 1 = Follow live (resume), 2 = Both (adds two).
+        var pinChoice by remember(item.id) { mutableStateOf(0) }
+        @Composable
+        fun choiceRow(value: Int, title: String, sub: String) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clickable { pinChoice = value }.padding(vertical = 6.dp)
+            ) {
+                androidx.compose.material3.RadioButton(selected = pinChoice == value, onClick = { pinChoice = value })
+                Column(Modifier.padding(start = 4.dp)) {
+                    Text(title, color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+                    Text(sub, color = com.powermediaplayer.ui.theme.TextTertiary, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { pinChoiceFor = null },
             containerColor = com.powermediaplayer.ui.theme.SurfaceElevated,
@@ -124,34 +138,25 @@ fun LastPlayedScreen(
                         color = TextSecondary, style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable { followLive = false }.padding(vertical = 6.dp)
-                    ) {
-                        androidx.compose.material3.RadioButton(selected = !followLive, onClick = { followLive = false })
-                        Column(Modifier.padding(start = 4.dp)) {
-                            Text("Fixed position", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
-                            Text("Always resume from where you starred it.", color = com.powermediaplayer.ui.theme.TextTertiary, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().clickable { followLive = true }.padding(vertical = 6.dp)
-                    ) {
-                        androidx.compose.material3.RadioButton(selected = followLive, onClick = { followLive = true })
-                        Column(Modifier.padding(start = 4.dp)) {
-                            Text("Follow live", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
-                            Text("Resume from wherever you last left off.", color = com.powermediaplayer.ui.theme.TextTertiary, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
+                    choiceRow(0, "Hold position", "Always resume from where you starred it.")
+                    choiceRow(1, "Resume live", "Resume from wherever you last left off.")
+                    choiceRow(2, "Both", "Saves it twice — one 'Hold position' and one 'Resume live' favourite (uses two of your favourite slots).")
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    val id = item.id; val fl = followLive; pinChoiceFor = null
+                    val id = item.id; val choice = pinChoice; pinChoiceFor = null
                     scope.launch {
-                        val ok = viewModel.pinSession(id, fl)
-                        if (!ok) snackbar.showSnackbar("Favourites full (10/10) — unpin one first")
+                        if (choice == 2) {
+                            val okFixed = viewModel.pinSession(id, followLive = false)
+                            val okLive = viewModel.pinSession(id, followLive = true)
+                            if (!okFixed || !okLive) snackbar.showSnackbar(
+                                "Favourites full (10/10) — couldn't add both; unpin some first"
+                            )
+                        } else {
+                            val ok = viewModel.pinSession(id, followLive = choice == 1)
+                            if (!ok) snackbar.showSnackbar("Favourites full (10/10) — unpin one first")
+                        }
                     }
                 }) { Text("Save", color = TealAccent) }
             },
@@ -655,6 +660,8 @@ private fun ReorderablePinnedList(
                     item = item,
                     bookmarkCap = Int.MAX_VALUE, // pinned: unlimited
                     isOffline = offlineUrls.contains(item.mediaUri),
+                    pinResumeTag = item.followLive, // #19 — show Resume-live/Hold-position tag
+                    swipeBookmark = false,
                     bookmarkProvider = { bookmarkProvider(item.id) },
                     onTap = { onTap(item) },
                     onTapBookmark = { bookmark -> onTapBookmark(item, bookmark) },
@@ -724,7 +731,10 @@ private fun HistoryRowWithBookmarks(
      * Pinned rows leave it false because the swipe gesture conflicts
      * with the drag-to-reorder handle.
      */
-    swipeBookmark: Boolean = false
+    swipeBookmark: Boolean = false,
+    // #19 — non-null on PINNED rows only: true = "Resume live", false = "Hold
+    // position". Recents pass null (no tag).
+    pinResumeTag: Boolean? = null
 ) {
     var expanded by rememberSaveable(item.id) { mutableStateOf(false) }
     val bookmarksFlow = remember(item.id) { bookmarkProvider() }
@@ -747,7 +757,8 @@ private fun HistoryRowWithBookmarks(
                 onClick = onTap,
                 onLongClick = onLongClick,
                 trailing = trailing,
-                isOffline = isOffline
+                isOffline = isOffline,
+                pinResumeTag = pinResumeTag
             )
             AnimatedVisibility(visible = expanded && bookmarks.isNotEmpty()) {
                 Column(modifier = Modifier
@@ -799,7 +810,8 @@ private fun HistoryHeaderRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit = {},
     trailing: @Composable RowScope.() -> Unit,
-    isOffline: Boolean = false
+    isOffline: Boolean = false,
+    pinResumeTag: Boolean? = null
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -865,21 +877,46 @@ private fun HistoryHeaderRow(
                 // uri — show "Podcast", not the misleading "Local" provider tag.
                 val isPodcast = item.source == Source.LOCAL && item.mediaUri.startsWith("http")
                 SourcePill(item.source, isPodcast)
+                // #19 — pinned rows show whether this favourite resumes live or
+                // holds the position it was starred at (clear, concise tag).
+                pinResumeTag?.let { live ->
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (live) "Resume live" else "Hold position",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (live) TealAccent else TextSecondary,
+                        maxLines = 1, softWrap = false,
+                        modifier = Modifier
+                            .background(
+                                (if (live) TealAccent else TextSecondary).copy(alpha = 0.18f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                    )
+                }
                 if (isOffline) {
                     Spacer(Modifier.width(6.dp))
                     OfflineBadge()
                 }
                 if (item.subtitle.isNotBlank() && item.subtitle != item.source.name) {
                     Spacer(Modifier.width(6.dp))
+                    // weight(fill=false) so a long publisher name (e.g. a podcast
+                    // show) ELLIPSISES and yields width to the fixed-size siblings
+                    // (badges, the @position time) instead of squeezing the time
+                    // text to a sliver where it wrapped character-by-character
+                    // (vertical "@3/7/:4/9"). The time + bookmark keep their room.
                     Text(item.subtitle,
+                        modifier = Modifier.weight(1f, fill = false),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (item.lastPositionMs > 0L) {
                     Spacer(Modifier.width(6.dp))
+                    // maxLines=1 + softWrap=false → the time can never wrap to one
+                    // character per line, regardless of remaining width.
                     Text("@${TimeFormatter.formatDuration(item.lastPositionMs)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary)
+                        color = TextSecondary, maxLines = 1, softWrap = false)
                 }
                 if (bookmarkCount > 0) {
                     Spacer(Modifier.width(6.dp))

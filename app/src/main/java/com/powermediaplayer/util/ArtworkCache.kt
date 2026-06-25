@@ -11,12 +11,18 @@ import java.io.File
  * the bytes to a stable file keyed by the media uri lets the player, cold-start
  * restore, AND the Last Played list all point at the same persistent image.
  *
- * Stored under cacheDir/coverart/<sha256>.img. Audit hardening: a full SHA-256
- * key (not the 32-bit String.hashCode, which collides) and an atomic temp-then-
- * rename write (no torn file if two enrichers race the same key).
+ * Stored under filesDir/coverart/<sha256>.img — DURABLE on purpose. The DB
+ * (playback_history.artworkUri) bakes in the absolute path, so the file MUST
+ * outlive an OS cache-eviction, a user "Clear cache", and an app reinstall
+ * (filesDir is in auto-backup; cacheDir is not). It previously lived in cacheDir,
+ * so a Drive audiobook's cover vanished while the DB still pointed at it →
+ * MusicNote placeholder. This mirrors the offline-audio durability fix
+ * (OfflineStorage.toDurable → filesDir). The 32 MB LRU cap (trimToCap) bounds the
+ * footprint. Audit hardening: a full SHA-256 key (not the 32-bit String.hashCode,
+ * which collides) and an atomic temp-then-rename write (no torn file on a race).
  */
 object ArtworkCache {
-    private fun dir(context: Context) = File(context.cacheDir, "coverart").apply { mkdirs() }
+    private fun dir(context: Context) = File(context.filesDir, "coverart").apply { mkdirs() }
 
     private fun keyHash(key: String): String =
         runCatching {
