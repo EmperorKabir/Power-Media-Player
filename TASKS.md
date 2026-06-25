@@ -347,6 +347,24 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | 17 | background when closed | swipe-away fired; PlaybackService still BOUND (not playing, startForegroundCount=0) — Media3 bound-service lifecycle OR incomplete teardown, INCONCLUSIVE without diag-trace (logging off) | — | DiagLog.bg 5-vector instrumentation + transparency note (d6b4179) | **NEEDS DIAG-TRACE** (enable diag logging + re-swipe) |
 | 2 | Spotify metadata slow | — | — | SpotifyLyricsDecoupleTest 2/2 + fetchLyricsAsync off-loop | **BLOCKED(needs active Spotify Premium playback; not headlessly scriptable)** |
 
+### UNFOLDED — REAL physical inner display (user physically unfolded; device_state=3 genuine 1968x2184, NOT an override)
+| Item | Inner-display evidence | Verdict |
+|------|------------------------|---------|
+| #F2 nav bar→rail | vertical RAIL on left (u1.png) | **PASS** |
+| #F3 + #12 Library grid | 2-col grid + real video frame thumbnails (u2/u5.png) | **PASS** |
+| #F4 + #11 Settings two-pane | group index left + detail pane right, layman text (u3.png) | **PASS** |
+| #F6 two-pane Player | cover left + transport right (u4.png) | **PASS** |
+| #8 sub-kind (podcast) | "Show/Episode" transport labels for podcast vs HP "Book/Chapter" (u4.png) | **PASS** |
+| #15 keyboard band | grid fills + mini-player snug above keyboard, no void (u6.png) | **PASS** |
+- Content clears the rail (start inset); mini-player full-width above system nav, no band. Adaptive redesign (Batch F) verified on the genuine inner display.
+
+### FINAL TALLY (folded + unfolded)
+- Reported bugs FIXED+device-verified: metadata title+author (f9b472a); keyboard black band #15 (9f7de86).
+- 17/19 items device-verified (folded and/or unfolded as relevant). #3+#18 device+objective. #13 device-adjacent+code.
+- #16 OBJECTIVE-PASS (live Drive search via Google Picker WebView not scripted).
+- #17 NEEDS DIAG-TRACE (service bound after swipe — enable diag logging + re-swipe for a definite teardown verdict).
+- #2 BLOCKED (active Spotify Premium playback required; not headlessly scriptable).
+
 ### HOLISTIC METADATA ASSESSMENT (user 2026-06-25: "assess metadata speed + visibility on Player tab AND Last Played tab, for ALL file types, as a WHOLE — many fixes over many sessions have accreted")
 - Scope = the metadata SUBSYSTEM, not one bug. Matrix to fill (speed + visibility/correctness) × surfaces {Player tab, Last Played tab} × file types {local audio, local video, Drive audio/audiobook(m4b moov-at-end), Drive video, podcast, Spotify}.
 - Architecture map (read so far): sources = ExoPlayer embedded tags (local, fast) / DriveTagEnricher download+MMR (Drive, slow first play) / RSS (podcast) / Connect poll (Spotify). Stores = senderMetadataByMediaId (IN-MEMORY, volatile, lost on process death) + playback_history rows (MULTIPLE per uri, can hold raw filename) + enrichment_cache (DURABLE, keyed by uri, holds clean title/artist/album/artworkUrl — but NOT consulted at display time) + ArtworkCache (cover only). Display = Player via PlaybackConnection.updatePlayerState:1109 precedence; Last Played via the row directly.
