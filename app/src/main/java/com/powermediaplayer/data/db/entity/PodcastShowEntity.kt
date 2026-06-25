@@ -18,7 +18,11 @@ data class PodcastShowEntity(
     val notifyOnNewEpisode: Boolean = false,
     // User-chosen download folder for THIS show (a persisted SAF tree uri);
     // null → the global default folder (per-show storage override).
-    val downloadTreeUri: String? = null
+    val downloadTreeUri: String? = null,
+    // #5 — user-reorderable position in the subscribed-shows list. Lower = higher
+    // up. New subscriptions append (PodcastDao.nextShowOrder). Default 0 so
+    // pre-migration + new rows are legal; observeShows breaks ties by title.
+    val displayOrder: Int = 0
 )
 
 @Entity(tableName = "podcast_episodes")

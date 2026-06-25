@@ -1,6 +1,8 @@
 package com.powermediaplayer.ui.podcast
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -88,7 +90,10 @@ class PodcastsViewModel @Inject constructor(
     private val podcastDao: PodcastDao,
     private val playbackConnection: PlaybackConnection,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
-    private val settings: com.powermediaplayer.data.preferences.SettingsDataStore
+    private val settings: com.powermediaplayer.data.preferences.SettingsDataStore,
+    // #6 — per-episode effects via the shared override system (val so the
+    // section can pass it to MediaOverridesPopup). Hilt-provided already.
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
 ) : ViewModel() {
     private val parser = RssFeedParser()
     private val downloader = com.powermediaplayer.podcast.PodcastDownloader(appContext)
@@ -317,12 +322,16 @@ class PodcastsViewModel @Inject constructor(
                     // per-show settings (auto-download / retention / notify / folder)
                     // — a REPLACE upsert with the freshly-parsed defaults would.
                     val existing = podcastDao.getShow(r.show.feedUrl)
-                    val merged = if (existing == null) r.show else r.show.copy(
+                    val merged = if (existing == null) {
+                        // #5 — a brand-new subscription appends to the bottom.
+                        r.show.copy(displayOrder = podcastDao.nextShowOrder())
+                    } else r.show.copy(
                         subscribedAt = existing.subscribedAt,
                         autoDownload = existing.autoDownload,
                         retentionLastN = existing.retentionLastN,
                         notifyOnNewEpisode = existing.notifyOnNewEpisode,
-                        downloadTreeUri = existing.downloadTreeUri
+                        downloadTreeUri = existing.downloadTreeUri,
+                        displayOrder = existing.displayOrder
                     )
                     podcastDao.upsertShow(merged)
                     podcastDao.syncEpisodes(r.episodes)
@@ -340,8 +349,32 @@ class PodcastsViewModel @Inject constructor(
 
     fun unsubscribe(feedUrl: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            // #6 auto-clear — podcasts have no unpin hook, so unsubscribe is the
+            // lifecycle event that removes per-episode override rows (keyed on
+            // audioUrl). Clear them BEFORE the episodes are deleted.
+            runCatching {
+                podcastDao.audioUrlsForFeed(feedUrl).forEach { mediaOverrideDao.clear(it) }
+            }
             podcastDao.deleteEpisodesForFeed(feedUrl)
             podcastDao.unsubscribe(feedUrl)
+        }
+    }
+
+    /**
+     * #5 — move the show at [from] to [to] and persist a contiguous 0..n-1
+     * displayOrder (mirrors reorderPinned compaction). Writes only changed rows.
+     */
+    fun reorderShow(from: Int, to: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val list = podcastDao.showsSnapshot().toMutableList()
+            if (from !in list.indices) return@launch
+            val target = to.coerceIn(0, list.size - 1)
+            if (target == from) return@launch
+            val moved = list.removeAt(from)
+            list.add(target, moved)
+            list.forEachIndexed { idx, s ->
+                if (s.displayOrder != idx) podcastDao.setShowOrder(s.feedUrl, idx)
+            }
         }
     }
 
@@ -490,62 +523,37 @@ fun PodcastsSection(
         } else {
             val counts by vm.feedCounts.collectAsStateWithLifecycle()
             var expandedFeed by remember { mutableStateOf<String?>(null) }
-            // Content-wrapping Column (NOT a fixed-height nested LazyColumn): the
-            // host's outer scroll list provides scrolling, so the section sizes to
-            // its content with no dead gap (fixes #6). The mini-player area is a
-            // layout sibling above which content already reflows (AppNavigation
-            // NonPlayerRoute), so no manual bottom inset is needed here.
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                shows.forEach { show ->
-                    val c = counts[show.feedUrl]
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                expandedFeed = if (expandedFeed == show.feedUrl) null
-                                else show.feedUrl
-                            }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        PodcastArtwork(show.artworkUrl, 56.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                show.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = TextPrimary,
-                                maxLines = 2
-                            )
-                            val total = c?.total ?: 0
-                            val newCount = c?.unopened ?: 0
-                            Text(
-                                "$total episode${if (total == 1) "" else "s"}" +
-                                    if (newCount > 0) " · $newCount new" else "",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextTertiary,
-                                maxLines = 1
-                            )
-                        }
-                        IconButton(onClick = { vm.unsubscribe(show.feedUrl) }) {
-                            Icon(
-                                Icons.Filled.Close,
-                                contentDescription = "Unsubscribe",
-                                tint = ErrorRed
-                            )
-                        }
-                    }
-                    if (expandedFeed == show.feedUrl) {
-                        ShowSettingsRow(show = show, vm = vm)
-                        EpisodeList(
-                            feedUrl = show.feedUrl,
-                            vm = vm
-                        )
-                    }
+            var overrideEpisode by remember { mutableStateOf<PodcastEpisodeEntity?>(null) }
+            // #5 — reorderable subscribed shows (bounded list; the nested scroll
+            // is height-capped so it never traps in the outer scroll). The
+            // expanded body renders BELOW the bounded list so a tall
+            // settings+episodes panel is not clipped by the 360dp cap.
+            ReorderableShowList(
+                shows = shows,
+                counts = counts,
+                expandedFeed = expandedFeed,
+                onToggleExpand = { feed -> expandedFeed = if (expandedFeed == feed) null else feed },
+                onUnsubscribe = { vm.unsubscribe(it) },
+                onMove = { from, to -> vm.reorderShow(from, to) }
+            )
+            expandedFeed?.let { feed ->
+                shows.firstOrNull { it.feedUrl == feed }?.let { show ->
+                    ShowSettingsRow(show = show, vm = vm)
+                    EpisodeList(
+                        feedUrl = show.feedUrl,
+                        vm = vm,
+                        onOverride = { overrideEpisode = it }
+                    )
                 }
+            }
+            // #6 — per-episode playback effects via the shared override popup.
+            overrideEpisode?.let { ep ->
+                com.powermediaplayer.ui.overrides.MediaOverridesPopup(
+                    mediaUri = ep.audioUrl,   // == setMediaId(audioUrl) → currentMediaIdFlow
+                    title = ep.title,
+                    dao = vm.mediaOverrideDao,
+                    onDismiss = { overrideEpisode = null }
+                )
             }
         }
     }
@@ -671,7 +679,8 @@ private fun ShowSettingsRow(
 @Composable
 private fun EpisodeList(
     feedUrl: String,
-    vm: PodcastsViewModel
+    vm: PodcastsViewModel,
+    onOverride: (PodcastEpisodeEntity) -> Unit
 ) {
     val episodes by vm.episodesFor(feedUrl).collectAsStateWithLifecycle(initialValue = emptyList())
     Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
@@ -682,7 +691,7 @@ private fun EpisodeList(
                 color = TextTertiary
             )
         } else {
-            episodes.take(15).forEach { e -> EpisodeRow(e, vm) }
+            episodes.take(15).forEach { e -> EpisodeRow(e, vm, onOverride) }
         }
     }
 }
@@ -690,8 +699,13 @@ private fun EpisodeList(
 /** One episode row. The listened marker is DERIVED from the saved resume
  *  position (history row keyed by audioUrl), not the open-on-tap flag:
  *  New (accent dot) / In-progress (bar + "min left") / Played (check). */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
+private fun EpisodeRow(
+    e: PodcastEpisodeEntity,
+    vm: PodcastsViewModel,
+    onOverride: (PodcastEpisodeEntity) -> Unit
+) {
     val posMs by vm.episodePosition(e.audioUrl).collectAsStateWithLifecycle(initialValue = null)
     val durMs = e.durationS * 1000L
     val pos = posMs ?: 0L
@@ -706,7 +720,11 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { vm.playEpisode(e) }
+            // #6 — long-press OR the 3-dot opens per-episode playback effects.
+            .combinedClickable(
+                onClick = { vm.playEpisode(e) },
+                onLongClick = { onOverride(e) }
+            )
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -792,6 +810,16 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
                 }
             }
         }
+        // #6 — visible 3-dot for per-episode playback effects (parity with the
+        // favourites override entry; long-press on the row also works).
+        IconButton(onClick = { onOverride(e) }) {
+            Icon(
+                Icons.Filled.MoreVert,
+                contentDescription = "Playback effects for ${e.title}",
+                tint = TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
         if (confirmDelete) {
             AlertDialog(
                 onDismissRequest = { confirmDelete = false },
@@ -813,7 +841,7 @@ private fun EpisodeRow(e: PodcastEpisodeEntity, vm: PodcastsViewModel) {
 /** Rounded show/episode thumbnail via Coil (the app's network image loader is
  *  already configured); falls back to a podcast glyph when there's no artwork. */
 @Composable
-private fun PodcastArtwork(url: String?, size: Dp, modifier: Modifier = Modifier) {
+internal fun PodcastArtwork(url: String?, size: Dp, modifier: Modifier = Modifier) {
     Box(
         modifier
             .size(size)

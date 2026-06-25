@@ -11,11 +11,27 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PodcastDao {
-    @Query("SELECT * FROM podcast_shows ORDER BY title ASC")
+    @Query("SELECT * FROM podcast_shows ORDER BY displayOrder ASC, title ASC")
     fun observeShows(): Flow<List<PodcastShowEntity>>
 
     @Query("SELECT * FROM podcast_shows WHERE feedUrl = :url LIMIT 1")
     suspend fun getShow(url: String): PodcastShowEntity?
+
+    // ── #5 reorder ──────────────────────────────────────────────────
+    @Query("UPDATE podcast_shows SET displayOrder = :order WHERE feedUrl = :feedUrl")
+    suspend fun setShowOrder(feedUrl: String, order: Int)
+
+    @Query("SELECT * FROM podcast_shows ORDER BY displayOrder ASC, title ASC")
+    suspend fun showsSnapshot(): List<PodcastShowEntity>
+
+    /** Lowest free order slot so a new subscription appends to the bottom. */
+    @Query("SELECT IFNULL(MAX(displayOrder), -1) + 1 FROM podcast_shows")
+    suspend fun nextShowOrder(): Int
+
+    /** Episode stream urls for a feed — clears per-episode overrides on
+     *  unsubscribe (#6 auto-clear). */
+    @Query("SELECT audioUrl FROM podcast_episodes WHERE feedUrl = :url")
+    suspend fun audioUrlsForFeed(url: String): List<String>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertShow(show: PodcastShowEntity)

@@ -92,7 +92,10 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     //      per-show downloadTreeUri (user-chosen storage). Additive.
     // v18: §C28 — offline_copy gains displayName so the Downloads list shows
     //      the real Drive file name, not the cache filename. Additive.
-    version = 18,
+    // v19: #5 podcast reorder — podcast_shows gains displayOrder (Int) so
+    //      subscribed shows are user-reorderable. Additive ALTER; existing rows
+    //      back-filled by title so the first drag has a stable sequence.
+    version = 19,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -215,6 +218,30 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_17_18: Migration = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE offline_copy ADD COLUMN displayName TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        // v18 → v19 (#5): user-reorderable subscribed shows. Additive column;
+        // existing rows ordered by title so the initial sequence is stable.
+        val MIGRATION_18_19: Migration = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE podcast_shows ADD COLUMN displayOrder INTEGER NOT NULL DEFAULT 0"
+                )
+                // Back-fill a contiguous 0..n-1 order by title (matches the old
+                // ORDER BY title ASC so nothing visibly jumps on upgrade).
+                val cur = db.query("SELECT feedUrl FROM podcast_shows ORDER BY title ASC")
+                var i = 0
+                cur.use {
+                    val idx = it.getColumnIndexOrThrow("feedUrl")
+                    while (it.moveToNext()) {
+                        db.execSQL(
+                            "UPDATE podcast_shows SET displayOrder = ? WHERE feedUrl = ?",
+                            arrayOf<Any>(i, it.getString(idx))
+                        )
+                        i++
+                    }
+                }
             }
         }
 
