@@ -329,3 +329,18 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 | metadata | HP title | filename (p2_small 15:07) | DB id=14 raw; cacheHit filename | PlaybackConnection:1109 + Coordinator:728 | FAIL → fixing |
 | 15 | mini-player black bar | bar present (lib_bottom crop) | bounds flush | AppNavigation:348-360 | FAIL → fixing |
 | 1-14,16-19 | (the rest) | PENDING rigorous re-check after the 2 fixes land | | | PENDING |
+
+### HOLISTIC METADATA ASSESSMENT (user 2026-06-25: "assess metadata speed + visibility on Player tab AND Last Played tab, for ALL file types, as a WHOLE — many fixes over many sessions have accreted")
+- Scope = the metadata SUBSYSTEM, not one bug. Matrix to fill (speed + visibility/correctness) × surfaces {Player tab, Last Played tab} × file types {local audio, local video, Drive audio/audiobook(m4b moov-at-end), Drive video, podcast, Spotify}.
+- Architecture map (read so far): sources = ExoPlayer embedded tags (local, fast) / DriveTagEnricher download+MMR (Drive, slow first play) / RSS (podcast) / Connect poll (Spotify). Stores = senderMetadataByMediaId (IN-MEMORY, volatile, lost on process death) + playback_history rows (MULTIPLE per uri, can hold raw filename) + enrichment_cache (DURABLE, keyed by uri, holds clean title/artist/album/artworkUrl — but NOT consulted at display time) + ArtworkCache (cover only). Display = Player via PlaybackConnection.updatePlayerState:1109 precedence; Last Played via the row directly.
+- ROOT (whole): NO single durable source of truth for display metadata; resolution differs Player-vs-LastPlayed and across file types → filename bug + dup rows + mojibake + cold-start slowness.
+- UNIFIED FIX direction (not per-symptom): make enrichment_cache the source of truth for enriched/remote items; both Player(cold-start + updatePlayerState) and Last Played + record-play consult it when the title looksLikeRawMediaFilename; local fast path unchanged; fix mojibake (TextNormalizer) at enrich source; de-dup/upsert playback_history by mediaUri OR heal-all-rows (already heals all) + never store raw when clean known; heal-gate loop-guard on enrichment_cache presence not cover.
+
+### RESUME CHECKLIST (next session — phone reconnect required for device legs)
+1. Reconnect phone; confirm device_state follows physical hinge (print-state changes when folding/unfolding).
+2. Build holistic metadata assessment matrix on device (speed+visibility, both tabs, all file types) — triangulated screenshot+DB/logcat+code, INLINE, no subagents.
+3. Implement the UNIFIED metadata fix (single source of truth) — TDD, then device-verify all file types on BOTH tabs.
+4. Fix black bar #15 (seat mini-player flush to nav / merge bottom surface).
+5. Replace the INVALIDATED false-pass evidence doc (committed 6db075c, docs/superpowers/specs/2026-06-25-19-item-device-evidence.md) with a genuine triangulated re-verification of ALL 19 in FOLDED.
+6. Only when all 19 + sub-parts genuinely pass folded → prompt user to physically UNFOLD, then re-verify the layout-divergent items (#12 grid, #15 rail, nav bar↔rail, Settings two-pane) on the real inner display.
+- Current: HEAD 031e1f5 origin/main; debug vc38 installed on RFCY70BARDJ; all 7 plans' CODE on main but verification was FALSE (redo). 2 bugs root-caused (above), NOT yet fixed.
