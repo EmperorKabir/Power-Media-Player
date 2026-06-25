@@ -61,6 +61,9 @@ class PodcastSyncWorker @AssistedInject constructor(
             "Podcast sync: ${shows.size} feed(s), $totalNew episode(s) upserted, " +
                 "$totalDownloaded audio downloaded"
         )
+        com.powermediaplayer.diag.DiagLog.bg(
+            "podcast-sync finished reason=workComplete feeds=${shows.size}"
+        )
         Result.success()
     }
 

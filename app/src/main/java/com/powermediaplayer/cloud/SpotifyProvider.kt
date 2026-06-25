@@ -1507,6 +1507,7 @@ class SpotifyProvider @Inject constructor(
         provisionalActive = false
         _spotifyMetadataFetching.value = false
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
+        com.powermediaplayer.diag.DiagLog.bg("spotify-poll stopped reason=stop gen=$pollGen")
     }
 
     private fun fetchCurrentState(token: String): SpotifyPlaybackState? {

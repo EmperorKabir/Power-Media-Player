@@ -509,6 +509,7 @@ class HueEntertainment @Inject constructor(
         // config was deactivated — the colour-light drift regression.
         streamJob?.cancel()
         streamJob = null
+        DiagLog.bg("hue stopped reason=stop")
     }
 
     // ── DTLS-PSK handshake ─────────────────────────────────────────

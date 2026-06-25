@@ -2792,12 +2792,14 @@ class PlaybackService : MediaSessionService() {
                 )
             }
             player?.let { runCatching { it.stop(); it.clearMediaItems() } }
+            com.powermediaplayer.diag.DiagLog.bg("FGS stopped reason=onTaskRemoved")
             stopSelf()
             return
         }
         // Opted out → keep music playing across the swipe; only tear down
         // when nothing is actually playing.
         if (player != null && (!player.playWhenReady || player.mediaItemCount == 0)) {
+            com.powermediaplayer.diag.DiagLog.bg("FGS stopped reason=onTaskRemoved-idle")
             stopSelf()
         }
     }

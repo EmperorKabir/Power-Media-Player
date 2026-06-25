@@ -236,6 +236,15 @@ object DiagLog {
     fun dec(branch: String, reason: String) = event("DEC", "branch=$branch reason=$reason")
 
     /**
+     * Background-vector lifecycle (#17). One uniform line at each bounded
+     * background vector's teardown (FGS stop, Spotify poll cancel, Hue
+     * disconnect, podcast-sync end, alarm cancel) so a swipe-away/close
+     * trace proves every vector terminates — no leaked unbounded loop. A
+     * live `setAlarmClock` is the only thing that legitimately persists.
+     */
+    fun bg(msg: String) = event("BG", msg)
+
+    /**
      * Resume-from-last-played path timing. vc31 investigation — the
      * testers reported multi-minute resume hangs + "keeps loading over
      * and over" on repeated taps. These events carry per-phase

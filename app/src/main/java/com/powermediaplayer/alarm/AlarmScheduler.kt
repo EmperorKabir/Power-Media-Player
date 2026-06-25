@@ -89,6 +89,7 @@ object AlarmScheduler {
             ?: return
         am.cancel(pi)
         pi.cancel()
+        com.powermediaplayer.diag.DiagLog.bg("alarm cancelled reason=cancel id=$alarmId")
     }
 
     /** First future time matching the alarm's weekday mask + time-of-day. */
