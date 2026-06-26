@@ -1215,7 +1215,20 @@ class SpotifyProvider @Inject constructor(
                             )
                             arr ?: return@withContext Result.success(items)
                             val childType = if (type == "show") "episode" else "track"
-                            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer iterating arr.size=${arr.size()}")
+                            // The container (album/playlist/show) carries its own
+                            // cover in root.images, but its SIMPLIFIED child items
+                            // do NOT repeat album.images — so an opened album's
+                            // tracks had no thumbnail. Extract the container art
+                            // once and apply it as a per-item FALLBACK (a track
+                            // that does carry its own art keeps it; playlist items
+                            // from different albums keep theirs).
+                            val containerArt: android.net.Uri? = runCatching {
+                                root.arrOrNull("images")?.takeIf { it.size() > 0 }
+                                    ?.get(0)?.takeIf { it.isJsonObject }?.asJsonObject
+                                    ?.get("url")?.takeIf { !it.isJsonNull }?.asString
+                                    ?.let { android.net.Uri.parse(it) }
+                            }.getOrNull()
+                            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer iterating arr.size=${arr.size()} containerArt=${containerArt != null}")
                             if (arr.size() > 0) {
                                 val first = arr[0]
                                 com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer firstElem=${first.toString().take(800)}")
@@ -1239,7 +1252,10 @@ class SpotifyProvider @Inject constructor(
                                     it.has("id") && !it.get("id").isJsonNull
                                 } ?: continue
                                 val item = jsonToCloudItem(core, childType)
-                                items.add(item.copy(contextUri = containerUri))
+                                items.add(item.copy(
+                                    contextUri = containerUri,
+                                    thumbnailUri = item.thumbnailUri ?: containerArt
+                                ))
                             }
                             com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer items=${items.size}")
                         }
