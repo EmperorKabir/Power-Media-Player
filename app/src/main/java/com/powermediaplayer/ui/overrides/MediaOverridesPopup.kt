@@ -64,9 +64,10 @@ fun MediaOverridesPopup(
     // Scope-specific copy. Defaults to the per-file case; the podcast-wide
     // (per-show) entry passes its own header/note so the dialog reads correctly.
     headerText: String = "Custom settings for this file",
-    applyNote: String = "Each switch makes that setting fall back to the " +
-        "global default. Saved values apply automatically the " +
-        "next time this file plays."
+    applyNote: String = "The left switch turns on a custom value for that " +
+        "setting; the switch or slider beside it sets the value. Leave the " +
+        "left switch off to use your global default. Saved values apply " +
+        "automatically the next time this file plays."
 ) {
     val current by dao.getByUri(mediaUri).collectAsState(initial = null)
     val scope = rememberCoroutineScope()

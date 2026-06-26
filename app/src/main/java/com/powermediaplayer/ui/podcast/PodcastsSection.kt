@@ -568,9 +568,11 @@ fun PodcastsSection(
                     title = show.title,
                     dao = vm.mediaOverrideDao,
                     headerText = "Settings for this whole podcast",
-                    applyNote = "These apply to every episode of this podcast. " +
-                        "A per-episode override (3-dot on an episode) takes " +
-                        "precedence. Each switch falls back to the global default.",
+                    applyNote = "These apply to EVERY episode of this podcast. " +
+                        "A per-episode override (the 3-dot on an episode) wins " +
+                        "where set. On each row: the left switch turns on a " +
+                        "custom value; the control beside it sets it; left off " +
+                        "= global default.",
                     onDismiss = { overrideShow = null }
                 )
             }

@@ -1618,11 +1618,13 @@ private fun CloudItemRow(
                     .isVideoByName(item.name, item.mimeType) -> Icons.Filled.VideoFile to "Video"
                 else -> Icons.Filled.AudioFile to "Audio"
             }
-            // Show real album art when the item carries a thumbnail (Spotify
-            // search parses album.images[0] into thumbnailUri; Drive items may
-            // too). Folders always keep the folder icon; the icon is the
-            // fallback while the image loads / on error.
-            if (!item.isFolder && item.thumbnailUri != null) {
+            // Show real album art whenever the item carries a thumbnail. NB:
+            // Spotify albums/playlists/shows are isFolder=true (browsable
+            // containers) yet DO have a cover in thumbnailUri — so the gate is
+            // on thumbnailUri alone, NOT !isFolder (the earlier bug: albums fell
+            // through to the folder icon). Real Drive folders have no thumbnail,
+            // so they still get the folder icon via the fallback below.
+            if (item.thumbnailUri != null) {
                 coil3.compose.AsyncImage(
                     model = item.thumbnailUri,
                     contentDescription = label,
