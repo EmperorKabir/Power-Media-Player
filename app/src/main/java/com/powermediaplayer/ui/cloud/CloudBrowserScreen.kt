@@ -875,6 +875,9 @@ fun CloudBrowserScreen(
                             val playLabel = when (type) {
                                 "show" -> "Play series"
                                 "playlist" -> "Play playlist"
+                                // An artist container lists the artist's TOP
+                                // tracks (/artists/{id}/top-tracks), not an album.
+                                "artist" -> "Play top tracks"
                                 else -> "Play album"
                             }
                             val containerName = uiState.folderStack.lastOrNull()?.second ?: "this"
