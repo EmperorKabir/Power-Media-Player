@@ -1618,7 +1618,20 @@ private fun CloudItemRow(
                     .isVideoByName(item.name, item.mimeType) -> Icons.Filled.VideoFile to "Video"
                 else -> Icons.Filled.AudioFile to "Audio"
             }
-            Icon(icon, contentDescription = label, tint = TealAccent, modifier = Modifier.size(22.dp))
+            // Show real album art when the item carries a thumbnail (Spotify
+            // search parses album.images[0] into thumbnailUri; Drive items may
+            // too). Folders always keep the folder icon; the icon is the
+            // fallback while the image loads / on error.
+            if (!item.isFolder && item.thumbnailUri != null) {
+                coil3.compose.AsyncImage(
+                    model = item.thumbnailUri,
+                    contentDescription = label,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            } else {
+                Icon(icon, contentDescription = label, tint = TealAccent, modifier = Modifier.size(22.dp))
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
