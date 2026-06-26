@@ -43,6 +43,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val autoplay by viewModel.autoplaySettings.collectAsStateWithLifecycle()
     val subtitleTextSize by viewModel.subtitleTextSizeFlow.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
@@ -192,14 +193,16 @@ fun SettingsScreen(
                     checked = uiState.audioBufferLowLatency,
                     onCheckedChange = { viewModel.setAudioBufferLowLatency(it) }
                 )
-                SettingsToggleItem("Resume on Bluetooth connect",
-                    "Auto-resume the last track when a BT audio device reconnects. " +
-                        "Also decides auto-play when the app launches WHILE a " +
-                        "Bluetooth audio device is connected. When you're NOT on " +
-                        "Bluetooth, 'Auto-play on launch' applies instead — the two " +
-                        "are independent and only one acts at a time (casting counts " +
-                        "as not-on-Bluetooth).",
+                SettingsToggleItem("Auto-play on Bluetooth connect",
+                    "Start playing when a Bluetooth audio device connects, and when " +
+                        "the app launches with one already connected. Independent of " +
+                        "the other triggers below — any enabled trigger can start " +
+                        "playback (all share the conditions further down).",
                     Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
+                SettingsToggleItem("Auto-play on Cast connect",
+                    "Start playing when you connect to a Cast device (TV / speaker), " +
+                        "and when the app launches with a Cast session already active.",
+                    Icons.Filled.Cast, autoplay.resumeOnCast) { viewModel.setResumeOnCast(it) }
                 SliderRow("Bookmark replay context", "${uiState.bookmarkReplayContextSec} s",
                     uiState.bookmarkReplayContextSec.toFloat(), 0f..30f,
                     default = 5f) { viewModel.setBookmarkReplayContextSec(it.toInt()) }
@@ -224,13 +227,10 @@ fun SettingsScreen(
                 if (uiState.restoreLastOnLaunch) {
                     SettingsToggleItem(
                         title = "Auto-play on launch",
-                        description = "Start playing the moment the app opens, " +
-                            "from where you left off — whether the app was " +
-                            "fully closed or still paused in the status bar. " +
-                            "Applies when NOT connected to a Bluetooth audio " +
-                            "device (casting included); when you ARE on Bluetooth, " +
-                            "'Resume on Bluetooth connect' decides instead. " +
-                            "Off by default so opening the app never makes " +
+                        description = "Start playing the moment the app opens, from " +
+                            "where you left off. Independent of the Bluetooth / Cast / " +
+                            "headphone triggers — any enabled trigger can start " +
+                            "playback. Off by default so opening the app never makes " +
                             "unexpected sound.",
                         icon = Icons.Filled.PlayArrow,
                         checked = uiState.autoplayOnLaunch,
@@ -245,6 +245,58 @@ fun SettingsScreen(
                         color = TextTertiary,
                         modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
                     )
+                }
+                // ── Auto-play CONDITIONS (gate every trigger above) ──────────
+                Text(
+                    text = "Auto-play conditions",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TealAccent,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                )
+                SettingsToggleItem(
+                    title = "Only if it was playing when you closed",
+                    description = "Auto-play only when something was actually playing " +
+                        "as you left the app. If you'd paused, it stays paused on resume.",
+                    icon = Icons.Filled.PlayArrow,
+                    checked = autoplay.onlyIfWasPlaying,
+                    onCheckedChange = { viewModel.setAutoplayOnlyIfWasPlaying(it) }
+                )
+                SettingsToggleItem(
+                    title = "Auto-play podcasts & audiobooks",
+                    description = "Allow auto-play for spoken-word items.",
+                    icon = Icons.Filled.Headphones,
+                    checked = autoplay.kindSpoken,
+                    onCheckedChange = { viewModel.setAutoplayKindSpoken(it) }
+                )
+                SettingsToggleItem(
+                    title = "Auto-play music",
+                    description = "Allow auto-play for music tracks. Off by default so " +
+                        "music never auto-blasts on connect/launch.",
+                    icon = Icons.Filled.MusicNote,
+                    checked = autoplay.kindMusic,
+                    onCheckedChange = { viewModel.setAutoplayKindMusic(it) }
+                )
+                SettingsToggleItem(
+                    title = "Auto-play video",
+                    description = "Allow auto-play for video. Off by default.",
+                    icon = Icons.Filled.Movie,
+                    checked = autoplay.kindVideo,
+                    onCheckedChange = { viewModel.setAutoplayKindVideo(it) }
+                )
+                // ── Auto-play FEEL ───────────────────────────────────────────
+                SettingsToggleItem(
+                    title = "Volume ease-in on auto-play",
+                    description = "Fade up from silence when auto-play starts, so a " +
+                        "resume on launch / connect isn't jarring. Manual play is " +
+                        "unaffected.",
+                    icon = Icons.Filled.VolumeUp,
+                    checked = autoplay.fadeIn,
+                    onCheckedChange = { viewModel.setAutoplayFadeIn(it) }
+                )
+                if (autoplay.fadeIn) {
+                    SliderRow("Ease-in length", "%.1f s".format(autoplay.fadeInMs / 1000f),
+                        autoplay.fadeInMs.toFloat(), 0f..5000f,
+                        default = 1500f) { viewModel.setAutoplayFadeInMs(it.toInt()) }
                 }
             },
             SettingsItem(

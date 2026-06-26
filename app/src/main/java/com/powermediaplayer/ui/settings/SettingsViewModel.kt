@@ -94,6 +94,20 @@ data class SettingsUiState(
 )
 
 /**
+ * Granular Resume & auto-play state (2026-06-26). Kept SEPARATE from
+ * [SettingsUiState] so the new toggles don't extend the large indexed combine.
+ */
+data class AutoplaySettingsUi(
+    val resumeOnCast: Boolean = false,
+    val onlyIfWasPlaying: Boolean = true,
+    val kindSpoken: Boolean = true,
+    val kindMusic: Boolean = false,
+    val kindVideo: Boolean = false,
+    val fadeIn: Boolean = true,
+    val fadeInMs: Int = 1500
+)
+
+/**
  * ViewModel for the Settings screen.
  * Reads and writes user preferences via SettingsDataStore.
  */
@@ -301,6 +315,40 @@ class SettingsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = SettingsUiState()
         )
+
+    /** Granular Resume & auto-play settings (separate from the big combine). */
+    val autoplaySettings: kotlinx.coroutines.flow.StateFlow<AutoplaySettingsUi> =
+        kotlinx.coroutines.flow.combine(
+            settingsDataStore.resumeOnCast,
+            settingsDataStore.autoplayOnlyIfWasPlaying,
+            settingsDataStore.autoplayKindSpoken,
+            settingsDataStore.autoplayKindMusic,
+            settingsDataStore.autoplayKindVideo,
+            settingsDataStore.autoplayFadeIn,
+            settingsDataStore.autoplayFadeInMs
+        ) { v ->
+            AutoplaySettingsUi(
+                resumeOnCast = v[0] as Boolean,
+                onlyIfWasPlaying = v[1] as Boolean,
+                kindSpoken = v[2] as Boolean,
+                kindMusic = v[3] as Boolean,
+                kindVideo = v[4] as Boolean,
+                fadeIn = v[5] as Boolean,
+                fadeInMs = v[6] as Int
+            )
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = AutoplaySettingsUi()
+        )
+
+    fun setResumeOnCast(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnCast(v) }.let {}
+    fun setAutoplayOnlyIfWasPlaying(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayOnlyIfWasPlaying(v) }.let {}
+    fun setAutoplayKindSpoken(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayKindSpoken(v) }.let {}
+    fun setAutoplayKindMusic(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayKindMusic(v) }.let {}
+    fun setAutoplayKindVideo(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayKindVideo(v) }.let {}
+    fun setAutoplayFadeIn(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayFadeIn(v) }.let {}
+    fun setAutoplayFadeInMs(ms: Int) = viewModelScope.launch { settingsDataStore.setAutoplayFadeInMs(ms) }.let {}
 
     fun setDeepScan(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setDeepScan(enabled) }

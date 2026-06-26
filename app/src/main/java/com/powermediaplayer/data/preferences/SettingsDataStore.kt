@@ -178,7 +178,8 @@ class SettingsDataStore @Inject constructor(
         // Granular "Resume & auto-play" (2026-06-26): extra triggers + condition
         // gates + ease-in. Defaults preserve out-of-box behaviour (all triggers
         // off → nothing auto-plays).
-        val RESUME_ON_WIRED = booleanPreferencesKey("resume_on_wired")
+        // NB: the WIRED-headphone trigger reuses the existing
+        // HEADPHONE_PLUG_AUTOPLAY (§C22) — no separate key.
         val RESUME_ON_CAST = booleanPreferencesKey("resume_on_cast")
         val AUTOPLAY_ONLY_IF_WAS_PLAYING = booleanPreferencesKey("autoplay_only_if_was_playing")
         val AUTOPLAY_KIND_SPOKEN = booleanPreferencesKey("autoplay_kind_spoken")
@@ -693,12 +694,7 @@ class SettingsDataStore @Inject constructor(
     }
 
     // ── Granular Resume & auto-play (2026-06-26) ───────────────────────────
-    val resumeOnWired: Flow<Boolean> = context.dataStore.data.map {
-        it[Keys.RESUME_ON_WIRED] ?: false
-    }
-    suspend fun setResumeOnWired(v: Boolean) {
-        context.dataStore.edit { it[Keys.RESUME_ON_WIRED] = v }
-    }
+    // (wired-headphone trigger = existing `headphonePlugAutoplay`)
     val resumeOnCast: Flow<Boolean> = context.dataStore.data.map {
         it[Keys.RESUME_ON_CAST] ?: false
     }

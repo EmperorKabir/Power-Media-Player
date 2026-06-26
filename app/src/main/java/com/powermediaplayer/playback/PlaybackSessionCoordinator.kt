@@ -478,7 +478,8 @@ class PlaybackSessionCoordinator @Inject constructor(
     private suspend fun readAutoplayPrefs(): AutoplayPrefs = AutoplayPrefs(
         onLaunch = runCatching { settingsDataStore.autoplayOnLaunch.first() }.getOrDefault(false),
         onBt = runCatching { settingsDataStore.resumeOnBt.first() }.getOrDefault(false),
-        onWired = runCatching { settingsDataStore.resumeOnWired.first() }.getOrDefault(false),
+        // wired trigger reuses the existing §C22 headphone-plug toggle
+        onWired = runCatching { settingsDataStore.headphonePlugAutoplay.first() }.getOrDefault(false),
         onCast = runCatching { settingsDataStore.resumeOnCast.first() }.getOrDefault(false),
         onlyIfWasPlaying = runCatching { settingsDataStore.autoplayOnlyIfWasPlaying.first() }.getOrDefault(true),
         kindSpoken = runCatching { settingsDataStore.autoplayKindSpoken.first() }.getOrDefault(true),
