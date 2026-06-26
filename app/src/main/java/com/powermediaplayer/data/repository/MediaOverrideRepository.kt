@@ -149,6 +149,8 @@ internal fun mergeEpisodeOverShow(
         eqPresetId = ep?.eqPresetId ?: show?.eqPresetId,
         replayGainMode = ep?.replayGainMode ?: show?.replayGainMode,
         volumeBoostMb = ep?.volumeBoostMb ?: show?.volumeBoostMb,
+        skipSilence = ep?.skipSilence ?: show?.skipSilence,
+        voiceBoost = ep?.voiceBoost ?: show?.voiceBoost,
         videoFlipH = ep?.videoFlipH ?: show?.videoFlipH,
         videoFlipV = ep?.videoFlipV ?: show?.videoFlipV,
         videoBw = ep?.videoBw ?: show?.videoBw,

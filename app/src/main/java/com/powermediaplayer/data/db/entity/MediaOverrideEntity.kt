@@ -30,6 +30,10 @@ data class MediaOverrideEntity(
     val eqPresetId: Long? = null,
     val replayGainMode: String? = null,
     val volumeBoostMb: Int? = null,
+    // 2026-06-26: per-file skip-silence + voice-boost (speech clarity). Null =
+    // fall through to the global setting, like every other axis.
+    val skipSilence: Boolean? = null,
+    val voiceBoost: Boolean? = null,
 
     // Video
     val videoFlipH: Boolean? = null,
@@ -47,7 +51,7 @@ data class MediaOverrideEntity(
 ) {
     fun hasAnyAudio(): Boolean = reverbPreset != null || stereoFlip != null ||
         monoMix != null || eqPresetId != null || replayGainMode != null ||
-        volumeBoostMb != null
+        volumeBoostMb != null || skipSilence != null || voiceBoost != null
 
     fun hasAnyVideo(): Boolean = videoFlipH != null || videoFlipV != null ||
         videoBw != null || videoSepia != null || videoInvert != null ||

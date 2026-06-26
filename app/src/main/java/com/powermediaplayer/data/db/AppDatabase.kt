@@ -100,7 +100,8 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     // v21: #16 enriched-metadata Drive search — covering indices on the searched
     //      text columns (playback_history.title/subtitle, offline_copy.displayName,
     //      enrichment_cache.title). Additive CREATE INDEX only.
-    version = 21,
+    // v21 → v22 (2026-06-26): media_overrides per-file skipSilence + voiceBoost.
+    version = 22,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -239,6 +240,15 @@ abstract class AppDatabase : RoomDatabase() {
         // v20 → v21 (#16): covering indices backing the enriched-metadata Drive
         // search LIKE queries. Names match Room's index_<table>_<column>
         // convention so the entity-declared indices and the DB agree at runtime.
+        // v21 → v22: per-file skip-silence + voice-boost override axes
+        // (nullable INTEGER = Boolean?; null → fall through to global).
+        val MIGRATION_21_22: Migration = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_overrides ADD COLUMN skipSilence INTEGER")
+                db.execSQL("ALTER TABLE media_overrides ADD COLUMN voiceBoost INTEGER")
+            }
+        }
+
         val MIGRATION_20_21: Migration = object : Migration(20, 21) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_playback_history_title ON playback_history(title)")

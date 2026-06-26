@@ -996,7 +996,12 @@ class PlaybackService : MediaSessionService() {
         // segments. The +250 ms trigger shift in applyCrossfadeTick
         // remains as belt-and-braces for the crossfade ramp's start.
         serviceScope.launch {
-            settingsDataStore.crossfadeSkipSilence
+            // Per-file skipSilence override wins over the global setting (so a
+            // podcast/audiobook can default it on independently). Null → global.
+            mediaOverrideRepo.withOverrideBool(
+                settingsDataStore.crossfadeSkipSilence,
+                pick = { it.skipSilence }
+            )
                 .collect { v ->
                     crossfadeSkipSilenceFlag = v
                     runCatching { player?.skipSilenceEnabled = v }

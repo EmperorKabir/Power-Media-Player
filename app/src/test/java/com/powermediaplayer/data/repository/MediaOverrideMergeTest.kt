@@ -53,6 +53,17 @@ class MediaOverrideMergeTest {
     }
 
     @Test
+    fun skipSilenceAndVoiceBoost_mergePerAxis() {
+        // show sets both; episode overrides skipSilence only → episode wins on
+        // skipSilence, inherits voiceBoost from the show.
+        val show = MediaOverrideEntity(mediaUri = "feed", skipSilence = true, voiceBoost = true)
+        val ep = MediaOverrideEntity(mediaUri = uri, skipSilence = false)
+        val merged = mergeEpisodeOverShow(uri, ep, show)
+        assertEquals(false, merged?.skipSilence)
+        assertEquals(true, merged?.voiceBoost)
+    }
+
+    @Test
     fun episodeNullAxis_fallsThroughToShow() {
         // episode overrides only speed; show's monoMix must still apply
         val ep = MediaOverrideEntity(mediaUri = uri, playbackSpeed = 1.2f)

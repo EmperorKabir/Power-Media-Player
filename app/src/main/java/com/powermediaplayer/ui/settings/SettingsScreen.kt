@@ -185,6 +185,15 @@ fun SettingsScreen(
                 SettingsToggleItem("Gapless playback", "Seamless transitions between tracks.",
                     Icons.Filled.SkipNext, uiState.gaplessPlayback) { viewModel.setGapless(it) }
                 SettingsToggleItem(
+                    title = "Skip silence",
+                    description = "Automatically shorten silent gaps in the audio — handy " +
+                        "for podcasts and audiobooks. Per-file overrides can turn it on " +
+                        "for one item. Local/Drive only (not Spotify or Cast).",
+                    icon = Icons.Filled.FastForward,
+                    checked = uiState.crossfadeSkipSilence,
+                    onCheckedChange = { viewModel.setCrossfadeSkipSilence(it) }
+                )
+                SettingsToggleItem(
                     title = "Faster effect response",
                     description = "Makes pitch, speed and effect changes take hold a touch " +
                         "faster. On a busy phone it can cause occasional brief glitches. " +
