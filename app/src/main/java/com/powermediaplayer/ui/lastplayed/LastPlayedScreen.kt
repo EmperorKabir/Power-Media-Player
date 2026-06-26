@@ -166,9 +166,13 @@ fun LastPlayedScreen(
         )
     }
     overrideTarget?.let { item ->
+        // A Resume-live favourite edits its OWN override (scoped key) so its
+        // effects are independent of the Hold-position copy of the same file.
         com.powermediaplayer.ui.overrides.MediaOverridesPopup(
-            mediaUri = item.mediaUri,
-            title = item.title,
+            mediaUri = com.powermediaplayer.data.repository.overrideKeyFor(
+                item.mediaUri, item.isPinned, item.followLive
+            ),
+            title = item.title + if (item.followLive) " — Resume live" else "",
             dao = viewModel.mediaOverrideDao,
             onDismiss = { overrideTarget = null }
         )

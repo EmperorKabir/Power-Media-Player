@@ -388,6 +388,16 @@ class PlaybackService : MediaSessionService() {
             kotlinx.coroutines.flow.MutableStateFlow("")
 
         /**
+         * Like [currentMediaIdFlow] but carries the per-favourite override
+         * SCOPE. A Resume-live favourite plays with a "pmpOverrideKey" extra so
+         * its audio effects are INDEPENDENT of the Hold-position copy of the same
+         * file. Defaults to the plain mediaId, so non-favourite playback is
+         * unchanged. Consumed by MediaOverrideRepository.
+         */
+        val currentOverrideKeyFlow: kotlinx.coroutines.flow.MutableStateFlow<String> =
+            kotlinx.coroutines.flow.MutableStateFlow("")
+
+        /**
          * Cast bug fix (user-reported "album art gone when I cast"):
          * CastPlayer.currentMediaItem is RECONSTRUCTED from receiver
          * state via DefaultMediaItemConverter, so the original
@@ -2105,6 +2115,12 @@ class PlaybackService : MediaSessionService() {
                 // D10 fix — publish the new mediaId so
                 // MediaOverrideRepository can replace its 750ms poll.
                 currentMediaIdFlow.value = mediaItem?.mediaId.orEmpty()
+                // Per-favourite override scope: a Resume-live favourite carries a
+                // "pmpOverrideKey" extra so its effects are independent of the
+                // Hold copy. Absent → fall back to the plain mediaId (unchanged).
+                currentOverrideKeyFlow.value =
+                    mediaItem?.mediaMetadata?.extras?.getString("pmpOverrideKey")
+                        ?: mediaItem?.mediaId.orEmpty()
                 // Phase 8 — refresh home-screen widget on track change.
                 scheduleWidgetRefresh()
                 // Union of both timelines: during cast the live queue sits

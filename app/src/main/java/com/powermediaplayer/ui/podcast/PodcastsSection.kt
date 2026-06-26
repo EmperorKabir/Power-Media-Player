@@ -556,6 +556,8 @@ fun PodcastsSection(
                     mediaUri = ep.audioUrl,   // == setMediaId(audioUrl) → currentMediaIdFlow
                     title = ep.title,
                     dao = vm.mediaOverrideDao,
+                    // show the podcast-wide (per-show) effects as a read-only hint
+                    inheritedFromUri = ep.feedUrl,
                     onDismiss = { overrideEpisode = null }
                 )
             }

@@ -52,28 +52,33 @@ class MediaOverrideRepository @Inject constructor(
      * 750 ms. Zero work when no track is playing and zero work when
      * the user is idle on a track.
      */
+    // Carries the per-favourite override SCOPE (a Resume-live pin plays with a
+    // distinct key so its effects are independent of the Hold-position copy).
+    // Defaults to the plain mediaId, so non-favourite playback is unchanged.
     private val currentUri: Flow<String> =
-        PlaybackService.currentMediaIdFlow
+        PlaybackService.currentOverrideKeyFlow
 
     val activeOverride: StateFlow<MediaOverrideEntity?> = currentUri
-        .flatMapLatest { uri ->
-            if (uri.isBlank()) {
+        .flatMapLatest { key ->
+            if (key.isBlank()) {
                 flowOf(null)
             } else {
-                // When the current media is a podcast episode, merge its
-                // per-episode override OVER the per-show override (episode wins
-                // per-axis; a NULL axis falls through to the show, then to the
-                // global setting downstream). Non-podcast media keeps the plain
-                // per-uri lookup. The map miss (non-podcast / unknown) costs one
+                // The key may be a scoped favourite key (uri␁live); strip the
+                // scope to map a podcast episode → its show. When the current
+                // media is a podcast episode, merge its per-episode override OVER
+                // the per-show override (episode wins per-axis; a NULL axis falls
+                // through to the show, then to the global setting). Non-podcast
+                // media keeps the plain per-key lookup. The miss costs one
                 // indexed suspend query per track change only.
+                val baseUri = baseUriOf(key)
                 val feedUrl = runCatching {
-                    podcastDao.episodeByAudioUrl(uri)?.feedUrl
+                    podcastDao.episodeByAudioUrl(baseUri)?.feedUrl
                 }.getOrNull()
                 if (feedUrl.isNullOrBlank()) {
-                    dao.getByUri(uri)
+                    dao.getByUri(key)
                 } else {
-                    combine(dao.getByUri(uri), dao.getByUri(feedUrl)) { ep, show ->
-                        mergeEpisodeOverShow(uri, ep, show)
+                    combine(dao.getByUri(key), dao.getByUri(feedUrl)) { ep, show ->
+                        mergeEpisodeOverShow(key, ep, show)
                     }
                 }
             }
@@ -103,6 +108,25 @@ class MediaOverrideRepository @Inject constructor(
     }.distinctUntilChanged()
 
 }
+
+// ─── Per-favourite override scoping ───────────────────────────────────────
+// A "Both" favourite saves the same file twice (Hold-position + Resume-live).
+// To give each INDEPENDENT audio effects, the Resume-live copy plays under a
+// distinct key (uri␁live); the Hold-position copy AND all non-favourite
+// playback keep the plain uri — so existing behaviour is unchanged and only the
+// live copy diverges.
+const val OVERRIDE_SCOPE_SEP: Char = '\u0001'
+
+/** The override key for the Resume-live copy of [uri]. */
+fun liveOverrideKey(uri: String): String = uri + OVERRIDE_SCOPE_SEP + "live"
+
+/** Resolve the override key for a played item. Pinned + followLive → the live
+ *  key; everything else → the plain uri (backward-compatible). */
+fun overrideKeyFor(uri: String, isPinned: Boolean, followLive: Boolean): String =
+    if (isPinned && followLive) liveOverrideKey(uri) else uri
+
+/** Strip any scope suffix back to the underlying media uri (for podcast lookups). */
+fun baseUriOf(key: String): String = key.substringBefore(OVERRIDE_SCOPE_SEP)
 
 /**
  * Per-axis merge for the podcast episode → show → global chain. The episode

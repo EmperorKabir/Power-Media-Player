@@ -1181,7 +1181,11 @@ class SpotifyProvider @Inject constructor(
                 "album" -> "https://api.spotify.com/v1/albums/$id?market=from_token"
                 "playlist" -> "https://api.spotify.com/v1/playlists/$id?market=from_token"
                 "show" -> "https://api.spotify.com/v1/shows/$id?market=from_token"
-                "artist" -> "https://api.spotify.com/v1/artists/$id/top-tracks?market=from_token"
+                // Selecting an artist now lists their ALBUMS/SINGLES (+ a synthetic
+                // "Top tracks" entry); the top-tracks list itself is the separate
+                // "artisttracks" container reached by tapping that entry.
+                "artist" -> "https://api.spotify.com/v1/artists/$id/albums?market=from_token&include_groups=album,single,compilation&limit=50"
+                "artisttracks" -> "https://api.spotify.com/v1/artists/$id/top-tracks?market=from_token"
                 else -> return@withContext Result.success(emptyList())
             }
             val req = Request.Builder()
@@ -1273,6 +1277,30 @@ class SpotifyProvider @Inject constructor(
                             com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.listContainer items=${items.size}")
                         }
                         "artist" -> {
+                            // Artist → albums/singles/EPs + a leading "Top tracks"
+                            // entry that drills into the artist's popular tracks.
+                            items.add(
+                                CloudMediaItem(
+                                    id = id,
+                                    name = "Top tracks",
+                                    mimeType = "application/spotify-artisttracks",
+                                    size = 0L,
+                                    downloadUrl = "spotify:artisttracks:$id",
+                                    sourceProvider = CloudProviderType.SPOTIFY,
+                                    isFolder = true,
+                                    // play context is the artist (Spotify plays the
+                                    // artist's popular tracks for a spotify:artist URI)
+                                    contextUri = "spotify:artist:$id",
+                                    spotifyType = "artisttracks"
+                                )
+                            )
+                            val arr = root.arrOrNull("items")
+                            if (arr != null) for (el in arr) {
+                                val core = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+                                items.add(jsonToCloudItem(core, "album").copy(contextUri = core.get("uri")?.takeIf { !it.isJsonNull }?.asString))
+                            }
+                        }
+                        "artisttracks" -> {
                             val arr = root.arrOrNull("tracks") ?: return@withContext Result.success(items)
                             for (el in arr) {
                                 val core = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue

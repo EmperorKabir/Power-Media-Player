@@ -866,21 +866,29 @@ fun CloudBrowserScreen(
                     // the Connect device + loops it (repeat=context). The ▶ on
                     // the list ROW only appears one level up, in search/section.
                     val spotifyContainerUri = uiState.folderStack.lastOrNull()?.first
+                    val containerType = spotifyContainerUri?.split(":")?.getOrNull(1)
                     val insideSpotifyContainer = uiState.activeProvider == CloudProviderType.SPOTIFY &&
                         uiState.folderStack.size > 1 &&
-                        spotifyContainerUri?.startsWith("spotify:") == true
+                        spotifyContainerUri?.startsWith("spotify:") == true &&
+                        // The artist ALBUMS view is a list of albums — no single
+                        // "play" target; the "Top tracks" row handles playback.
+                        containerType != "artist"
                     if (insideSpotifyContainer && spotifyContainerUri != null) {
                         item(key = "play_spotify_container", span = { GridItemSpan(maxLineSpan) }) {
-                            val type = spotifyContainerUri.split(":").getOrNull(1) ?: "album"
+                            val type = containerType ?: "album"
                             val playLabel = when (type) {
                                 "show" -> "Play series"
                                 "playlist" -> "Play playlist"
-                                // An artist container lists the artist's TOP
-                                // tracks (/artists/{id}/top-tracks), not an album.
-                                "artist" -> "Play top tracks"
+                                "artisttracks" -> "Play top tracks"
                                 else -> "Play album"
                             }
                             val containerName = uiState.folderStack.lastOrNull()?.second ?: "this"
+                            // Top-tracks plays via the ARTIST context uri (Spotify
+                            // has no "artisttracks" context).
+                            val idPart = spotifyContainerUri.substringAfterLast(':')
+                            val isArtistTracks = type == "artisttracks"
+                            val playUri = if (isArtistTracks) "spotify:artist:$idPart" else spotifyContainerUri
+                            val playMime = "application/spotify-" + (if (isArtistTracks) "artist" else type)
                             Surface(
                                 color = SurfaceElevated,
                                 modifier = Modifier
@@ -889,11 +897,11 @@ fun CloudBrowserScreen(
                                     .clickable {
                                         viewModel.playSpotifyAlbum(
                                             com.powermediaplayer.cloud.CloudMediaItem(
-                                                id = spotifyContainerUri.substringAfterLast(':'),
+                                                id = idPart,
                                                 name = containerName,
-                                                mimeType = "application/spotify-$type",
+                                                mimeType = playMime,
                                                 size = 0L,
-                                                downloadUrl = spotifyContainerUri,
+                                                downloadUrl = playUri,
                                                 sourceProvider = CloudProviderType.SPOTIFY,
                                                 isFolder = true
                                             ),

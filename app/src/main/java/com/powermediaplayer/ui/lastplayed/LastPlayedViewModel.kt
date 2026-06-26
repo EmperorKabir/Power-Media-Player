@@ -219,12 +219,18 @@ class LastPlayedViewModel @Inject constructor(
     fun unpin(favouriteId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             // §C7 — auto-clear per-file overrides when unpinning. Look
-            // up the row's mediaUri before delete so the override row
-            // can be cleared too.
-            val mediaUri = repo.snapshotFavourites()
-                .firstOrNull { it.id == favouriteId }?.mediaUri
+            // up the row's mediaUri + followLive before delete so the
+            // CORRECT override row is cleared: a Resume-live favourite owns the
+            // scoped key (uri␁live); a Hold favourite owns the plain uri.
+            val fav = repo.snapshotFavourites().firstOrNull { it.id == favouriteId }
             repo.unpin(favouriteId)
-            if (!mediaUri.isNullOrBlank()) mediaOverrideDao.clear(mediaUri)
+            fav?.mediaUri?.takeIf { it.isNotBlank() }?.let { uri ->
+                mediaOverrideDao.clear(
+                    com.powermediaplayer.data.repository.overrideKeyFor(
+                        uri, isPinned = true, followLive = fav.followLive
+                    )
+                )
+            }
         }
     }
 
@@ -559,6 +565,15 @@ class LastPlayedViewModel @Inject constructor(
                     com.powermediaplayer.diag.DiagLog.perf(
                         "resume.chapterExtract", com.powermediaplayer.diag.DiagLog.now() - tParse,
                         "token=$token remote=$isRemote chapterCount=${chapterExtras.getInt("chapter_count", -1)}"
+                    )
+                    // Per-favourite override scope: a Resume-live favourite gets
+                    // its own override key so its effects are independent of the
+                    // Hold copy. Hold/non-favourite → plain uri (unchanged).
+                    chapterExtras.putString(
+                        "pmpOverrideKey",
+                        com.powermediaplayer.data.repository.overrideKeyFor(
+                            item.mediaUri, item.isPinned, item.followLive
+                        )
                     )
                     androidx.media3.common.MediaItem.Builder()
                         .setMediaId(item.mediaUri)
