@@ -1,7 +1,7 @@
 # Resume & Auto-play — finer-grained controls + override-on-resume guarantee
 
 Date: 2026-06-26
-Status: APPROVED (user said "proceed" after Context7 + Superpowers assessment)
+Status: DONE + DEVICE-VERIFIED 2026-06-26 (commits 1c8643e/7c61d0b/5bb4f72)
 
 ## Goal
 1. Replace the current 3-flag launch-autoplay logic with a granular, power-user
