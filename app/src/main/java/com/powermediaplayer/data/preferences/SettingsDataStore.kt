@@ -175,6 +175,20 @@ class SettingsDataStore @Inject constructor(
         val HEADPHONE_PLUG_AUTOPLAY = booleanPreferencesKey("headphone_plug_autoplay")
         val RESTORE_LAST_ON_LAUNCH = booleanPreferencesKey("restore_last_on_launch")
         val AUTOPLAY_ON_LAUNCH = booleanPreferencesKey("autoplay_on_launch")
+        // Granular "Resume & auto-play" (2026-06-26): extra triggers + condition
+        // gates + ease-in. Defaults preserve out-of-box behaviour (all triggers
+        // off → nothing auto-plays).
+        val RESUME_ON_WIRED = booleanPreferencesKey("resume_on_wired")
+        val RESUME_ON_CAST = booleanPreferencesKey("resume_on_cast")
+        val AUTOPLAY_ONLY_IF_WAS_PLAYING = booleanPreferencesKey("autoplay_only_if_was_playing")
+        val AUTOPLAY_KIND_SPOKEN = booleanPreferencesKey("autoplay_kind_spoken")
+        val AUTOPLAY_KIND_MUSIC = booleanPreferencesKey("autoplay_kind_music")
+        val AUTOPLAY_KIND_VIDEO = booleanPreferencesKey("autoplay_kind_video")
+        val AUTOPLAY_FADE_IN = booleanPreferencesKey("autoplay_fade_in")
+        val AUTOPLAY_FADE_IN_MS = intPreferencesKey("autoplay_fade_in_ms")
+        // Runtime state (not a user setting): was playback running at app-stop —
+        // gates the "only if it was playing when closed" condition.
+        val LAST_WAS_PLAYING = booleanPreferencesKey("last_was_playing")
 
         // §C11 — fade volume over the last 30 s of a sleep timer instead
         // of an abrupt pause. Off by default so existing behaviour is
@@ -676,6 +690,63 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setAutoplayOnLaunch(v: Boolean) {
         context.dataStore.edit { it[Keys.AUTOPLAY_ON_LAUNCH] = v }
+    }
+
+    // ── Granular Resume & auto-play (2026-06-26) ───────────────────────────
+    val resumeOnWired: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.RESUME_ON_WIRED] ?: false
+    }
+    suspend fun setResumeOnWired(v: Boolean) {
+        context.dataStore.edit { it[Keys.RESUME_ON_WIRED] = v }
+    }
+    val resumeOnCast: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.RESUME_ON_CAST] ?: false
+    }
+    suspend fun setResumeOnCast(v: Boolean) {
+        context.dataStore.edit { it[Keys.RESUME_ON_CAST] = v }
+    }
+    val autoplayOnlyIfWasPlaying: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUTOPLAY_ONLY_IF_WAS_PLAYING] ?: true
+    }
+    suspend fun setAutoplayOnlyIfWasPlaying(v: Boolean) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_ONLY_IF_WAS_PLAYING] = v }
+    }
+    val autoplayKindSpoken: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUTOPLAY_KIND_SPOKEN] ?: true
+    }
+    suspend fun setAutoplayKindSpoken(v: Boolean) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_KIND_SPOKEN] = v }
+    }
+    val autoplayKindMusic: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUTOPLAY_KIND_MUSIC] ?: false
+    }
+    suspend fun setAutoplayKindMusic(v: Boolean) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_KIND_MUSIC] = v }
+    }
+    val autoplayKindVideo: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUTOPLAY_KIND_VIDEO] ?: false
+    }
+    suspend fun setAutoplayKindVideo(v: Boolean) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_KIND_VIDEO] = v }
+    }
+    val autoplayFadeIn: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.AUTOPLAY_FADE_IN] ?: true
+    }
+    suspend fun setAutoplayFadeIn(v: Boolean) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_FADE_IN] = v }
+    }
+    val autoplayFadeInMs: Flow<Int> = context.dataStore.data.map {
+        it[Keys.AUTOPLAY_FADE_IN_MS] ?: 1500
+    }
+    suspend fun setAutoplayFadeInMs(ms: Int) {
+        context.dataStore.edit { it[Keys.AUTOPLAY_FADE_IN_MS] = ms.coerceIn(0, 10000) }
+    }
+    /** Runtime state — was playback running at app-stop. Not user-facing. */
+    val lastWasPlaying: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.LAST_WAS_PLAYING] ?: false
+    }
+    suspend fun setLastWasPlaying(v: Boolean) {
+        context.dataStore.edit { it[Keys.LAST_WAS_PLAYING] = v }
     }
 
     val audioBufferLowLatency: Flow<Boolean> = context.dataStore.data.map {

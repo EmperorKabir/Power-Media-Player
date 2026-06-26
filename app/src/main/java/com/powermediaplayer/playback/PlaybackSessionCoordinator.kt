@@ -78,10 +78,19 @@ class PlaybackSessionCoordinator @Inject constructor(
         androidx.lifecycle.ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : androidx.lifecycle.DefaultLifecycleObserver {
                 override fun onStop(owner: androidx.lifecycle.LifecycleOwner) {
+                    // Persist wasPlaying for the "only auto-play if it was playing
+                    // when closed" gate (covers the local player + Spotify mirror).
+                    // onStop precedes most swipe-aways / system kills.
+                    val spot = spotifyProvider.spotifyState.value
+                    val wasPlaying = if (spot != null) spot.isPlaying
+                        else playbackConnection.getPlayer()?.isPlaying == true
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { settingsDataStore.setLastWasPlaying(wasPlaying) }
+                    }
                     // Spotify mirror keeps a stale local item loaded — the 5s
                     // tick persists the Spotify row by its own trackUri; don't
                     // overwrite it with the stale player position here.
-                    if (spotifyProvider.spotifyState.value != null) return
+                    if (spot != null) return
                     val player = playbackConnection.getPlayer() ?: return
                     val item = player.currentMediaItem ?: return
                     val mediaUri = item.mediaId.takeIf { it.isNotBlank() } ?: return
@@ -438,33 +447,101 @@ class PlaybackSessionCoordinator @Inject constructor(
      * branch; if (rarely) both BT and cast are present, the BT branch wins
      * because the decision keys off BT presence alone.
      */
-    private suspend fun resolveLaunchAutoplay(): Boolean {
-        val btConnected = runCatching {
-            val am = context.getSystemService(android.media.AudioManager::class.java)
-            // Classic A2DP + LE-Audio sinks (newer BT headphones report BLE_*,
-            // not A2DP) so the resumeOnBt gate fires for those too. The BLE
-            // constants are int-valued (API 31+); harmless on older devices
-            // since those types never appear in getDevices there.
-            val btTypes = setOf(
-                android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-                android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
-                android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER
-            )
-            am?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)?.any {
-                it.type in btTypes
-            } == true
-        }.getOrDefault(false)
-        val flag = if (btConnected) {
-            runCatching { settingsDataStore.resumeOnBt.first() }.getOrDefault(false)
-        } else {
-            runCatching { settingsDataStore.autoplayOnLaunch.first() }.getOrDefault(false)
-        }
+    private fun audioSinkPresent(types: Set<Int>): Boolean = runCatching {
+        val am = context.getSystemService(android.media.AudioManager::class.java)
+        am?.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+            ?.any { it.isSink && it.type in types } == true
+    }.getOrDefault(false)
+
+    private fun isBtConnected(): Boolean = audioSinkPresent(
+        setOf(
+            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            android.media.AudioDeviceInfo.TYPE_BLE_HEADSET,
+            android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER
+        )
+    )
+
+    private fun isWiredConnected(): Boolean = audioSinkPresent(
+        setOf(
+            android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            android.media.AudioDeviceInfo.TYPE_USB_HEADSET
+        )
+    )
+
+    private fun isCastConnected(): Boolean = runCatching {
+        com.google.android.gms.cast.framework.CastContext
+            .getSharedInstance(context)
+            .sessionManager.currentCastSession?.isConnected == true
+    }.getOrDefault(false)
+
+    private suspend fun readAutoplayPrefs(): AutoplayPrefs = AutoplayPrefs(
+        onLaunch = runCatching { settingsDataStore.autoplayOnLaunch.first() }.getOrDefault(false),
+        onBt = runCatching { settingsDataStore.resumeOnBt.first() }.getOrDefault(false),
+        onWired = runCatching { settingsDataStore.resumeOnWired.first() }.getOrDefault(false),
+        onCast = runCatching { settingsDataStore.resumeOnCast.first() }.getOrDefault(false),
+        onlyIfWasPlaying = runCatching { settingsDataStore.autoplayOnlyIfWasPlaying.first() }.getOrDefault(true),
+        kindSpoken = runCatching { settingsDataStore.autoplayKindSpoken.first() }.getOrDefault(true),
+        kindMusic = runCatching { settingsDataStore.autoplayKindMusic.first() }.getOrDefault(false),
+        kindVideo = runCatching { settingsDataStore.autoplayKindVideo.first() }.getOrDefault(false)
+    )
+
+    /** Classify a restored item into the per-type play-kind gate. */
+    private fun classifyKind(recent: com.powermediaplayer.data.db.entity.PlaybackHistoryEntity): MediaPlayKind {
+        val uri = recent.mediaUri
+        if (uri.startsWith("spotify:episode")) return MediaPlayKind.SPOKEN
+        if (uri.startsWith("spotify:track")) return MediaPlayKind.MUSIC
+        val nameForExt = uri.substringAfterLast('/').ifBlank { recent.title }
+        val isVideo = com.powermediaplayer.util.MediaClassifier.isVideoByName(nameForExt, "") ||
+            com.powermediaplayer.util.MediaClassifier.isVideoByName(recent.title, "")
+        val isPodcast = recent.source == "LOCAL" && uri.startsWith("http")
+        val sub = com.powermediaplayer.util.MediaClassifier.classifyAudioSubKind(
+            nameForExt, hasChapters = false, isPodcast = isPodcast
+        )
+        val spoken = sub != com.powermediaplayer.util.AudioSubKind.SONG
+        return AutoplayDecision.classify(isVideo, spoken)
+    }
+
+    /**
+     * Granular launch-autoplay (2026-06-26): auto-play if ANY enabled trigger's
+     * condition holds at cold-start — "on launch" (always), or a device/Cast sink
+     * connected now — AND the gating conditions (was-playing, per-media-type)
+     * pass. Replaces the old "BT branch wins" rule. The connect triggers ALSO fire
+     * event-driven later (PlaybackService.onAudioDevicesAdded / castSessionListener).
+     */
+    private suspend fun resolveLaunchAutoplay(
+        recent: com.powermediaplayer.data.db.entity.PlaybackHistoryEntity
+    ): Boolean {
+        val prefs = readAutoplayPrefs()
+        val kind = classifyKind(recent)
+        val wasPlaying = runCatching { settingsDataStore.lastWasPlaying.first() }.getOrDefault(false)
+        val launch = AutoplayDecision.shouldAutoPlay(AutoplayTrigger.LAUNCH, prefs, wasPlaying, kind)
+        val bt = isBtConnected() && AutoplayDecision.shouldAutoPlay(AutoplayTrigger.BLUETOOTH, prefs, wasPlaying, kind)
+        val wired = isWiredConnected() && AutoplayDecision.shouldAutoPlay(AutoplayTrigger.WIRED, prefs, wasPlaying, kind)
+        val cast = isCastConnected() && AutoplayDecision.shouldAutoPlay(AutoplayTrigger.CAST, prefs, wasPlaying, kind)
+        val result = launch || bt || wired || cast
         com.powermediaplayer.diag.DiagLog.dec(
             branch = "cold-start",
-            reason = "launch-autoplay gate: btConnected=$btConnected → " +
-                (if (btConnected) "resumeOnBt" else "autoplayOnLaunch") + "=$flag"
+            reason = "autoplay gate: kind=$kind wasPlaying=$wasPlaying " +
+                "launch=$launch bt=$bt wired=$wired cast=$cast → $result"
         )
-        return flag
+        return result
+    }
+
+    /** Volume ease-in on auto-start: ramp the crossfade volume factor 0→1 over
+     *  [durationMs] (reuses the mixer's crossfade factor — never a direct
+     *  player.volume write). No-op when the player isn't the local ExoPlayer. */
+    private fun easeInVolume(durationMs: Int) {
+        if (durationMs <= 0) return
+        scope.launch(Dispatchers.Main) {
+            val steps = 20
+            val stepMs = (durationMs / steps).toLong().coerceAtLeast(15L)
+            for (i in 0..steps) {
+                com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(i / steps.toFloat())
+                kotlinx.coroutines.delay(stepMs)
+            }
+            com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
+        }
     }
 
     private fun startColdStartRestore() {
@@ -692,7 +769,12 @@ class PlaybackSessionCoordinator @Inject constructor(
                         // whether to start playing — "Resume on Bluetooth
                         // connect" when a BT sink is connected, else "Auto-play
                         // on launch". The two toggles are independent.
-                        val autoplay = resolveLaunchAutoplay()
+                        val autoplay = resolveLaunchAutoplay(recent)
+                        // Volume ease-in: drop the mixer factor to 0 BEFORE play
+                        // so an auto-start isn't jarring; ramped back to 1 after.
+                        val fadeIn = autoplay &&
+                            runCatching { settingsDataStore.autoplayFadeIn.first() }.getOrDefault(true)
+                        if (fadeIn) com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(0f)
                         // Apply user-configured backoff so the user lands
                         // a bit BEFORE the saved position for context.
                         val backoffSec = runCatching {
@@ -712,10 +794,15 @@ class PlaybackSessionCoordinator @Inject constructor(
                             listOf(item), 0, playWhenReady = autoplay,
                             startPositionMs = target
                         )
+                        if (fadeIn) {
+                            val fadeMs = runCatching { settingsDataStore.autoplayFadeInMs.first() }
+                                .getOrDefault(1500)
+                            easeInVolume(fadeMs)
+                        }
                         lastPlayedRepo.adoptSession(recent.id)
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
-                            "Cold-start restored '${recent.title}' [src=${recent.source}] @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id})"
+                            "Cold-start restored '${recent.title}' [src=${recent.source}] @ ${target}ms (saved=${recent.lastPositionMs}ms, backoff=${backoffSec}s, session ${recent.id}, autoplay=$autoplay)"
                         )
                         // Seamless metadata on auto-resume: a streamed Drive item
                         // that was never enriched (no durable chapter-cache entry)
@@ -789,7 +876,7 @@ class PlaybackSessionCoordinator @Inject constructor(
                             branch = "cold-start", reason = "spotify superseded by user play → skip"
                         )
                     } else {
-                    val autoplay = resolveLaunchAutoplay()
+                    val autoplay = resolveLaunchAutoplay(recent)
                     // Provisional mirror UP-FRONT: without it the Connect
                     // playback started but the Player tab stayed blank
                     // (isSpotifyActive=false → empty state) because the
