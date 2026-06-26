@@ -296,17 +296,6 @@ fun EqualizerScreen(
             }
         }
 
-        // Clarify what the Hz labels mean (user query 2026-06-26): each is the
-        // band's CENTRE frequency, not a range.
-        Text(
-            text = "Each label is that band's centre frequency. A slider boosts or " +
-                "cuts a range of frequencies around it; together the bands cover the " +
-                "whole spectrum — bass on the left, treble on the right.",
-            style = MaterialTheme.typography.labelSmall,
-            color = TextTertiary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-
         // §C13 — "Headphone presets" section at bottom of EQ tab.
         // Per locked spec: per-paired-device preset dropdown driven by
         // BluetoothAdapter.bondedDevices.
@@ -385,7 +374,8 @@ private fun BandInputCell(
                 style = MaterialTheme.typography.labelSmall,
                 color = TealAccent,
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(4.dp))
             IconButton(

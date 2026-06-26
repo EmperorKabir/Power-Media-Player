@@ -13,14 +13,37 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
+ * 10-band graphic-EQ band geometry. Centres match EqualizerAudioProcessor.CENTERS;
+ * Q=1.41 → ~1-octave bands, so each band's inclusive range is centre/√2 … centre×√2
+ * (the −3dB edges), contiguous across bands. Labels show the RANGE, not the centre.
+ */
+object EqBands {
+    val CENTERS = doubleArrayOf(
+        31.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0
+    )
+    private val ROOT2 = Math.sqrt(2.0)
+    private fun fmt(hz: Double, kHz: Boolean): String =
+        if (kHz) {
+            val k = hz / 1000.0
+            if (k >= 10) Math.round(k).toString() else "%.1f".format(k)
+        } else Math.round(hz).toString()
+
+    /** "22-44 Hz", "354-707 Hz", "0.7-1.4 kHz", "11-23 kHz", … */
+    val RANGE_LABELS: List<String> = CENTERS.map { c ->
+        val lo = c / ROOT2
+        val hi = c * ROOT2
+        val kHz = c >= 1000.0
+        "${fmt(lo, kHz)}-${fmt(hi, kHz)} ${if (kHz) "kHz" else "Hz"}"
+    }
+}
+
+/**
  * UI state for the 10-band equalizer screen.
  */
 data class EqualizerUiState(
     val bandLevels: List<Int> = List(10) { 0 }, // Each band in millibels
-    val bandFrequencies: List<String> = listOf(
-        "31Hz", "63Hz", "125Hz", "250Hz", "500Hz",
-        "1kHz", "2kHz", "4kHz", "8kHz", "16kHz"
-    ),
+    // Labels show each band's inclusive frequency RANGE (−3dB edges), not the centre.
+    val bandFrequencies: List<String> = EqBands.RANGE_LABELS,
     val minLevel: Int = -1500, // -15dB in millibels
     val maxLevel: Int = 1500,  // +15dB in millibels
     val presets: List<EqualizerPresetEntity> = emptyList(),
