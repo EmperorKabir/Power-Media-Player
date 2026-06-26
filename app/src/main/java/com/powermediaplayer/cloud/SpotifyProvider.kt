@@ -1184,7 +1184,10 @@ class SpotifyProvider @Inject constructor(
                 // Selecting an artist now lists their ALBUMS/SINGLES (+ a synthetic
                 // "Top tracks" entry); the top-tracks list itself is the separate
                 // "artisttracks" container reached by tapping that entry.
-                "artist" -> "https://api.spotify.com/v1/artists/$id/albums?market=from_token&include_groups=album,single,compilation&limit=50"
+                // NB: no market=from_token here — that returns HTTP 400 on this
+                // endpoint (verified on-device); a user token already scopes to
+                // the user's market automatically.
+                "artist" -> "https://api.spotify.com/v1/artists/$id/albums?include_groups=album,single,compilation"
                 "artisttracks" -> "https://api.spotify.com/v1/artists/$id/top-tracks?market=from_token"
                 else -> return@withContext Result.success(emptyList())
             }
