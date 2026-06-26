@@ -436,7 +436,7 @@ Spec: docs/superpowers/specs/2026-06-26-resume-autoplay-design.md. Context7+Supe
 ### OUTSTANDING-BACKLOG FINAL STATUS (2026-06-26, user: "do absolutely everything outstanding")
 | Item | Status | Evidence |
 |------|--------|----------|
-| EQ Hz-label query | DONE + `[DEVICE-VERIFIED]` | caption under bands: "Each label is that band's centre frequency…" screenshotted (eq) |
+| EQ Hz-label query | DONE + `[DEVICE-VERIFIED]` (final: RANGES, not caption — user changed mind) | 5afabd7: bands show inclusive range (centre/√2…centre×√2): "22-44 Hz"…"11-23 kHz"; caption removed; screenshotted (eqr) |
 | Granular Resume & auto-play | DONE + `[DEVICE-VERIFIED]` | end-to-end: gate `kind=SPOKEN wasPlaying=true launch=true→true`, `autoplay=true`, media_session `PLAYING(3) speed=1.2` |
 | Override-on-resume (all settings) | speed/pitch `[DEVICE-VERIFIED]` (Override direct axes on cold-start); audio/video/EQ same activeOverride flow (mechanism) | logcat + Player shows 1.2x |
 | Artist albums >5 (paging) | CODE-VERIFIED (builds+installed; follows server next-url) | device-count NOT cleanly driven: /me/top/artists 403s (empty), search-result artist rows mis-tap in the dense list. Artist browse itself device-verified earlier (5 albums) |
