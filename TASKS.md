@@ -447,6 +447,16 @@ Spec: docs/superpowers/specs/2026-06-26-resume-autoplay-design.md. Context7+Supe
 - HONEST NOTE (anti-false-pass): the 3 CODE-VERIFIED items build + install + have unit coverage of their core logic; their on-device UI render could not be reached by adb automation this session (dense Spotify search mis-taps, Spotify top-artists 403, podcast list pinned behind the mini-player). Not claimed as device-verified.
 - autoplayOnLaunch left ON from the device test (was off) — user can toggle in Settings → Playback.
 
+### AUDIO-FEATURES BUILD CYCLE (2026-06-26, android-build-and-device-test, inline)
+Plan: docs/superpowers/specs/2026-06-26-audio-features-implementation-plan.md. Full unit suite green.
+- F1 Podcast auto-play-next: DONE (e705c63) — playEpisode queues the show from the tapped episode forward (pure episodeQueueSlice, cap 50) + Settings toggle (default on). PodcastQueueSliceTest 5/5. Device-render of in-player queue NAV-BLOCKED (podcast list pinned behind mini-player).
+- F2 Skip silence: DONE (d4be627) — per-file override axis (MIGRATION_21_22 adds skipSilence+voiceBoost cols, @Database v22) + drive skipSilenceEnabled from withOverrideBool + first-class Settings toggle + popup axis. Merge test green. MIGRATION_21_22 `[DEVICE-VERIFIED]` (v21→v22 launch, no FATAL).
+- F3 Voice boost: DONE (dd07f39) — VoiceBoostAudioProcessor (presence biquad 2.7kHz +5dB, BaseAudioProcessor media3 1.6.0) + test; inserted after EQ before gain; per-file override axis + global VOICE_BOOST setting + Settings toggle. EqualizerThdTest still green (chain unaffected).
+- F4 Cloud backup: FLAGGED — blocker: Drive is READ-ONLY today (no files.create); needs Drive write + serialize/restore of 5+ stores + UI + tests; data-correctness-critical → own cycle. Plan ready.
+- F5 Sleep-timer remote fade: FLAGGED — needs Spotify Connect (PUT /me/player/volume) + cast volume APIs (don't exist); end-of-track fade can't use Spotify's stale local position. Own small cycle.
+- Volume normalisation = ReplayGain (already complete, pre-existing). Sleep timer core = exists + device-verified earlier.
+- `.build_cycle_checklist.md` KEPT (gate partial: F1-F3 done, F4-F5 flagged).
+
 ### HOLISTIC METADATA ASSESSMENT (user 2026-06-25: "assess metadata speed + visibility on Player tab AND Last Played tab, for ALL file types, as a WHOLE — many fixes over many sessions have accreted")
 - Scope = the metadata SUBSYSTEM, not one bug. Matrix to fill (speed + visibility/correctness) × surfaces {Player tab, Last Played tab} × file types {local audio, local video, Drive audio/audiobook(m4b moov-at-end), Drive video, podcast, Spotify}.
 - Architecture map (read so far): sources = ExoPlayer embedded tags (local, fast) / DriveTagEnricher download+MMR (Drive, slow first play) / RSS (podcast) / Connect poll (Spotify). Stores = senderMetadataByMediaId (IN-MEMORY, volatile, lost on process death) + playback_history rows (MULTIPLE per uri, can hold raw filename) + enrichment_cache (DURABLE, keyed by uri, holds clean title/artist/album/artworkUrl — but NOT consulted at display time) + ArtworkCache (cover only). Display = Player via PlaybackConnection.updatePlayerState:1109 precedence; Last Played via the row directly.
