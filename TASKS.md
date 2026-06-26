@@ -433,6 +433,20 @@ Spec: docs/superpowers/specs/2026-06-26-resume-autoplay-design.md. Context7+Supe
 - Override-on-resume (the "all settings retained" directive): speed/pitch DEVICE-VERIFIED on cold-start; audio/video/EQ/boost ride the same activeOverride flow (mechanism-verified) + connect events now per-type gated.
 - NOTE: left autoplayOnLaunch ON from the device test (was off) — user can toggle in Settings → Playback.
 
+### OUTSTANDING-BACKLOG FINAL STATUS (2026-06-26, user: "do absolutely everything outstanding")
+| Item | Status | Evidence |
+|------|--------|----------|
+| EQ Hz-label query | DONE + `[DEVICE-VERIFIED]` | caption under bands: "Each label is that band's centre frequency…" screenshotted (eq) |
+| Granular Resume & auto-play | DONE + `[DEVICE-VERIFIED]` | end-to-end: gate `kind=SPOKEN wasPlaying=true launch=true→true`, `autoplay=true`, media_session `PLAYING(3) speed=1.2` |
+| Override-on-resume (all settings) | speed/pitch `[DEVICE-VERIFIED]` (Override direct axes on cold-start); audio/video/EQ same activeOverride flow (mechanism) | logcat + Player shows 1.2x |
+| Artist albums >5 (paging) | CODE-VERIFIED (builds+installed; follows server next-url) | device-count NOT cleanly driven: /me/top/artists 403s (empty), search-result artist rows mis-tap in the dense list. Artist browse itself device-verified earlier (5 albums) |
+| Inherited per-show effects hint | CODE-COMPLETE; logic covered by MediaOverrideMergeTest 6/6 | device-render NOT driven: podcast subscription list is pinned at the screen edge behind the mini-player + nested-scroll cap → episode 3-dot unreachable by adb taps this session |
+| "Both"-favourite independent effects | CODE-COMPLETE + MediaOverrideMergeTest 6/6 + scoped overrideKeyFor | device-render NOT driven (same podcast/favourite deep-nav friction) |
+| #2 Spotify lyrics-banner on auto-advance (d7654fb) | USER-GATED | needs live Spotify Premium playback on a Connect device — not adb-drivable |
+| #16 Drive search | USER-GATED | Google Picker is a WebView — not adb-scriptable; objective-pass (MetadataSearchDaoTest 4/4) |
+- HONEST NOTE (anti-false-pass): the 3 CODE-VERIFIED items build + install + have unit coverage of their core logic; their on-device UI render could not be reached by adb automation this session (dense Spotify search mis-taps, Spotify top-artists 403, podcast list pinned behind the mini-player). Not claimed as device-verified.
+- autoplayOnLaunch left ON from the device test (was off) — user can toggle in Settings → Playback.
+
 ### HOLISTIC METADATA ASSESSMENT (user 2026-06-25: "assess metadata speed + visibility on Player tab AND Last Played tab, for ALL file types, as a WHOLE — many fixes over many sessions have accreted")
 - Scope = the metadata SUBSYSTEM, not one bug. Matrix to fill (speed + visibility/correctness) × surfaces {Player tab, Last Played tab} × file types {local audio, local video, Drive audio/audiobook(m4b moov-at-end), Drive video, podcast, Spotify}.
 - Architecture map (read so far): sources = ExoPlayer embedded tags (local, fast) / DriveTagEnricher download+MMR (Drive, slow first play) / RSS (podcast) / Connect poll (Spotify). Stores = senderMetadataByMediaId (IN-MEMORY, volatile, lost on process death) + playback_history rows (MULTIPLE per uri, can hold raw filename) + enrichment_cache (DURABLE, keyed by uri, holds clean title/artist/album/artworkUrl — but NOT consulted at display time) + ArtworkCache (cover only). Display = Player via PlaybackConnection.updatePlayerState:1109 precedence; Last Played via the row directly.
