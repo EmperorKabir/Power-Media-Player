@@ -1382,6 +1382,17 @@ class SpotifyProvider @Inject constructor(
                                 lastLyrics = null
                                 lastSynced = emptyList()
                                 lastLyricsLoading = true
+                                // RAISE the single banner for the async lyrics load.
+                                // A track can become current WITHOUT a fresh
+                                // startPlaybackPolling (album auto-advance, skip
+                                // next/prev, or a change on the Connect device) — in
+                                // those paths nothing else re-raises it, so lyrics
+                                // would load with the banner stuck off.
+                                _spotifyMetadataFetching.value = true
+                                com.powermediaplayer.util.Diag.i(
+                                    "PMP_DIAG",
+                                    "Spotify lyrics fetch START (banner ON) track=${snap.title}"
+                                )
                                 fetchLyricsAsync(gen, snap)
                             }
                         }
@@ -1466,6 +1477,10 @@ class SpotifyProvider @Inject constructor(
                 // Lyrics are metadata → clear the SINGLE loading banner now that
                 // the async fetch has resolved (the metadata emit deferred it).
                 _spotifyMetadataFetching.value = false
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Spotify lyrics fetch DONE (banner OFF) found=${res != null} synced=${res?.synced?.size ?: 0} track=${snap.title}"
+                )
             }
         }
     }
