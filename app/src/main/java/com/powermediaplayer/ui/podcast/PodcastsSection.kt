@@ -570,9 +570,8 @@ fun PodcastsSection(
                     headerText = "Settings for this whole podcast",
                     applyNote = "These apply to EVERY episode of this podcast. " +
                         "A per-episode override (the 3-dot on an episode) wins " +
-                        "where set. On each row: the left switch turns on a " +
-                        "custom value; the control beside it sets it; left off " +
-                        "= global default.",
+                        "where set. Default = your global setting; pick On/Off " +
+                        "for effects, or set the slider for amounts.",
                     onDismiss = { overrideShow = null }
                 )
             }

@@ -1644,15 +1644,41 @@ private fun CloudItemRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            // Part 5.1 — secondary line: track/album artist, show publisher, etc.
-            if (item.subtitle.isNotBlank()) {
-                Text(
-                    text = item.subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            // Part 5.1 — secondary line: a Spotify type tag (Album/Single/
+            // Podcast/…) + the artist/publisher line. The tag matches the
+            // Last Played SourcePill style so the surfaces feel consistent.
+            val typeTag = spotifyTypeLabel(item.spotifyType)
+            if (typeTag != null || item.subtitle.isNotBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (typeTag != null) {
+                        val tagColor = spotifyTypeColor(item.spotifyType)
+                        Surface(
+                            color = tagColor.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                typeTag,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                ),
+                                color = tagColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    if (item.subtitle.isNotBlank()) {
+                        Text(
+                            text = item.subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
         if (isEnriching) EnrichingHint()
@@ -1774,6 +1800,30 @@ private fun SpotifyFavRow(
             )
         }
     }
+}
+
+/** Human-readable tag for a Spotify result kind (null = no tag, e.g. Drive
+ *  items). "single"/"compilation" come from the album's album_type so a single
+ *  release reads "Single" not "Album", matching Spotify's own labelling. */
+private fun spotifyTypeLabel(kind: String?): String? = when (kind) {
+    "track" -> "Song"
+    "single" -> "Single"
+    "album" -> "Album"
+    "compilation" -> "Compilation"
+    "artist" -> "Artist"
+    "playlist" -> "Playlist"
+    "show" -> "Podcast"
+    "episode" -> "Episode"
+    else -> null
+}
+
+/** Tag colour by kind: podcasts violet (matches Last Played), playlists blue,
+ *  artists amber, everything else Spotify green. */
+private fun spotifyTypeColor(kind: String?): androidx.compose.ui.graphics.Color = when (kind) {
+    "show", "episode" -> androidx.compose.ui.graphics.Color(0xFFB388FF)
+    "playlist" -> androidx.compose.ui.graphics.Color(0xFF4FC3F7)
+    "artist" -> androidx.compose.ui.graphics.Color(0xFFFFB74D)
+    else -> SpotifyGreen
 }
 
 /**

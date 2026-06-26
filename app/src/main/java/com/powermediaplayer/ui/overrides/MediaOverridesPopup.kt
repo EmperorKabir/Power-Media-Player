@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -64,10 +66,10 @@ fun MediaOverridesPopup(
     // Scope-specific copy. Defaults to the per-file case; the podcast-wide
     // (per-show) entry passes its own header/note so the dialog reads correctly.
     headerText: String = "Custom settings for this file",
-    applyNote: String = "The left switch turns on a custom value for that " +
-        "setting; the switch or slider beside it sets the value. Leave the " +
-        "left switch off to use your global default. Saved values apply " +
-        "automatically the next time this file plays."
+    applyNote: String = "Default = use your global setting. For on/off effects " +
+        "pick On or Off; for amounts (boost, speed, rotation) turn the switch " +
+        "on and set the slider. Saved values apply automatically the next time " +
+        "this file plays."
 ) {
     val current by dao.getByUri(mediaUri).collectAsState(initial = null)
     val scope = rememberCoroutineScope()
@@ -157,23 +159,15 @@ private fun AudioTab(
     onSave: (MediaOverrideEntity) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AxisSwitch(
+        AxisTriState(
             label = "Stereo flip",
-            active = draft.stereoFlip != null,
-            value = draft.stereoFlip == true,
-            onActiveChange = {
-                onSave(draft.copy(stereoFlip = if (it) false else null))
-            },
-            onValueChange = { onSave(draft.copy(stereoFlip = it)) }
+            value = draft.stereoFlip,
+            onChange = { onSave(draft.copy(stereoFlip = it)) }
         )
-        AxisSwitch(
+        AxisTriState(
             label = "Mono mix",
-            active = draft.monoMix != null,
-            value = draft.monoMix == true,
-            onActiveChange = {
-                onSave(draft.copy(monoMix = if (it) false else null))
-            },
-            onValueChange = { onSave(draft.copy(monoMix = it)) }
+            value = draft.monoMix,
+            onChange = { onSave(draft.copy(monoMix = it)) }
         )
         AxisChips(
             label = "Reverb preset",
@@ -210,50 +204,30 @@ private fun VideoTab(
     onSave: (MediaOverrideEntity) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        AxisSwitch(
+        AxisTriState(
             label = "Mirror horizontal",
-            active = draft.videoFlipH != null,
-            value = draft.videoFlipH == true,
-            onActiveChange = {
-                onSave(draft.copy(videoFlipH = if (it) false else null))
-            },
-            onValueChange = { onSave(draft.copy(videoFlipH = it)) }
+            value = draft.videoFlipH,
+            onChange = { onSave(draft.copy(videoFlipH = it)) }
         )
-        AxisSwitch(
+        AxisTriState(
             label = "Mirror vertical",
-            active = draft.videoFlipV != null,
-            value = draft.videoFlipV == true,
-            onActiveChange = {
-                onSave(draft.copy(videoFlipV = if (it) false else null))
-            },
-            onValueChange = { onSave(draft.copy(videoFlipV = it)) }
+            value = draft.videoFlipV,
+            onChange = { onSave(draft.copy(videoFlipV = it)) }
         )
-        AxisSwitch(
+        AxisTriState(
             label = "Black & white",
-            active = draft.videoBw != null,
-            value = draft.videoBw == true,
-            onActiveChange = {
-                onSave(draft.copy(videoBw = if (it) false else null))
-            },
-            onValueChange = { onSave(draft.copy(videoBw = it)) }
+            value = draft.videoBw,
+            onChange = { onSave(draft.copy(videoBw = it)) }
         )
-        AxisSwitch(
+        AxisTriState(
             label = "Sepia",
-            active = draft.videoSepia != null,
-            value = draft.videoSepia == true,
-            onActiveChange = {
-                onSave(draft.copy(videoSepia = if (it) false else null))
-            },
-            onValueChange = { onSave(draft.copy(videoSepia = it)) }
+            value = draft.videoSepia,
+            onChange = { onSave(draft.copy(videoSepia = it)) }
         )
-        AxisSwitch(
+        AxisTriState(
             label = "Invert",
-            active = draft.videoInvert != null,
-            value = draft.videoInvert == true,
-            onActiveChange = {
-                onSave(draft.copy(videoInvert = if (it) false else null))
-            },
-            onValueChange = { onSave(draft.copy(videoInvert = it)) }
+            value = draft.videoInvert,
+            onChange = { onSave(draft.copy(videoInvert = it)) }
         )
         AxisSlider(
             label = "Rotation (degrees)",
@@ -307,26 +281,43 @@ private fun SpeedTab(
     }
 }
 
+/**
+ * Tri-state on/off override: Default (null → use the global setting), On
+ * (true), Off (false). Replaces the old two-switch row (an "enable" switch +
+ * a separate value switch) that read as two confusing identical toggles.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AxisSwitch(
+private fun AxisTriState(
     label: String,
-    active: Boolean,
-    value: Boolean,
-    onActiveChange: (Boolean) -> Unit,
-    onValueChange: (Boolean) -> Unit
+    value: Boolean?,
+    onChange: (Boolean?) -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Switch(checked = active, onCheckedChange = onActiveChange)
         Text(
             label,
-            color = if (active) TextPrimary else TextTertiary,
+            color = if (value != null) TextPrimary else TextTertiary,
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp)
+                .padding(end = 8.dp)
         )
-        if (active) {
-            Switch(checked = value, onCheckedChange = onValueChange)
-        }
+        FilterChip(
+            selected = value == null,
+            onClick = { onChange(null) },
+            label = { Text("Default") }
+        )
+        Spacer(Modifier.width(4.dp))
+        FilterChip(
+            selected = value == true,
+            onClick = { onChange(true) },
+            label = { Text("On") }
+        )
+        Spacer(Modifier.width(4.dp))
+        FilterChip(
+            selected = value == false,
+            onClick = { onChange(false) },
+            label = { Text("Off") }
+        )
     }
 }
 

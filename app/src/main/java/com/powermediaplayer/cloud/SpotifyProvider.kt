@@ -664,12 +664,25 @@ class SpotifyProvider @Inject constructor(
             // Artist rows: the name IS the artist — a "· Artist" suffix is noise.
             else -> ""
         }
+        // Result kind for the type tag. Albums carry album_type so a 1-2 track
+        // single release shows "Single" not "Album" (matches Spotify's own UI);
+        // every other type maps straight through.
+        val kind = when (type) {
+            "album" -> when (obj.get("album_type")
+                ?.takeIf { !it.isJsonNull }?.asString?.lowercase()) {
+                "single" -> "single"
+                "compilation" -> "compilation"
+                else -> "album"
+            }
+            else -> type
+        }
         return CloudMediaItem(
             id = id,
             name = name,
             mimeType = if (type == "track" || type == "episode") "audio/mpeg"
                 else "application/spotify-$type",
             size = 0L,
+            spotifyType = kind,
             // Episodes play the FULL show via Connect (uris:[spotify:episode:…]),
             // not the 30 s preview — keep the spotify URI as the play target so
             // openItem routes it correctly and never coerces it to a track URI.

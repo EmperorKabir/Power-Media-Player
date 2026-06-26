@@ -26,5 +26,9 @@ data class CloudMediaItem(
     // the track was discovered in. Passed as context_uri to
     // /me/player/play so /next and /previous work within the album
     // or playlist instead of stopping after this single track.
-    val contextUri: String? = null
+    val contextUri: String? = null,
+    // Spotify-only result kind for the type tag in search/browse rows:
+    // "track" | "single" | "album" | "compilation" | "artist" |
+    // "playlist" | "show" | "episode". Null for non-Spotify items.
+    val spotifyType: String? = null
 )
