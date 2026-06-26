@@ -79,6 +79,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 
 /**
+ * Pure auto-advance queue slice: the show's episodes from the tapped one forward
+ * (same newest-first order), capped. Falls back to just the tapped episode when
+ * it isn't in the ordered list. Pure → unit-tested (PodcastQueueSliceTest).
+ */
+internal fun episodeQueueSlice(
+    ordered: List<PodcastEpisodeEntity>,
+    tappedGuid: String,
+    fallback: PodcastEpisodeEntity,
+    cap: Int = 50
+): List<PodcastEpisodeEntity> {
+    val idx = ordered.indexOfFirst { it.guid == tappedGuid }
+    return if (idx >= 0) ordered.drop(idx).take(cap) else listOf(fallback)
+}
+
+/**
  * §C10 — minimal podcast subscription manager: add by RSS URL, list
  * subscriptions, unsubscribe. Episode browser + auto-sync are the
  * next iteration. Schema, parser, and DAO are already wired so the
@@ -141,8 +156,7 @@ class PodcastsViewModel @Inject constructor(
                 val ordered = runCatching {
                     podcastDao.episodesForFeedOrdered(episode.feedUrl)
                 }.getOrDefault(emptyList())
-                val startIdx = ordered.indexOfFirst { it.guid == episode.guid }
-                val slice = if (startIdx >= 0) ordered.drop(startIdx).take(50) else listOf(episode)
+                val slice = episodeQueueSlice(ordered, episode.guid, episode)
                 slice.map { buildEpisodeItem(it, show?.title, artUri) }
             } else {
                 listOf(buildEpisodeItem(episode, show?.title, artUri))
