@@ -192,6 +192,9 @@ class SettingsDataStore @Inject constructor(
         val LAST_WAS_PLAYING = booleanPreferencesKey("last_was_playing")
         // Auto-advance to the next podcast episode when one ends (queue the show).
         val PODCAST_AUTOPLAY_NEXT = booleanPreferencesKey("podcast_autoplay_next")
+        // Voice boost (speech-clarity presence lift). Global default; per-file
+        // override wins. Local pipeline only.
+        val VOICE_BOOST = booleanPreferencesKey("voice_boost")
 
         // §C11 — fade volume over the last 30 s of a sleep timer instead
         // of an abrupt pause. Off by default so existing behaviour is
@@ -752,6 +755,13 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setPodcastAutoplayNext(v: Boolean) {
         context.dataStore.edit { it[Keys.PODCAST_AUTOPLAY_NEXT] = v }
+    }
+    /** Voice boost (speech clarity). Global default; per-file override wins. */
+    val voiceBoost: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.VOICE_BOOST] ?: false
+    }
+    suspend fun setVoiceBoost(v: Boolean) {
+        context.dataStore.edit { it[Keys.VOICE_BOOST] = v }
     }
 
     val audioBufferLowLatency: Flow<Boolean> = context.dataStore.data.map {

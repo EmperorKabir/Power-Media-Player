@@ -347,6 +347,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setResumeOnCast(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnCast(v) }.let {}
     fun setPodcastAutoplayNext(v: Boolean) = viewModelScope.launch { settingsDataStore.setPodcastAutoplayNext(v) }.let {}
+
+    /** Global voice-boost toggle (per-file override wins). Separate flow to avoid
+     *  the large indexed combine. */
+    val voiceBoost: kotlinx.coroutines.flow.StateFlow<Boolean> =
+        settingsDataStore.voiceBoost.stateIn(
+            viewModelScope, SharingStarted.WhileSubscribed(5000), false
+        )
+    fun setVoiceBoost(v: Boolean) = viewModelScope.launch { settingsDataStore.setVoiceBoost(v) }.let {}
     fun setAutoplayOnlyIfWasPlaying(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayOnlyIfWasPlaying(v) }.let {}
     fun setAutoplayKindSpoken(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayKindSpoken(v) }.let {}
     fun setAutoplayKindMusic(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayKindMusic(v) }.let {}

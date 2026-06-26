@@ -44,6 +44,7 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val autoplay by viewModel.autoplaySettings.collectAsStateWithLifecycle()
+    val voiceBoost by viewModel.voiceBoost.collectAsStateWithLifecycle()
     val subtitleTextSize by viewModel.subtitleTextSizeFlow.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
@@ -192,6 +193,15 @@ fun SettingsScreen(
                     icon = Icons.Filled.FastForward,
                     checked = uiState.crossfadeSkipSilence,
                     onCheckedChange = { viewModel.setCrossfadeSkipSilence(it) }
+                )
+                SettingsToggleItem(
+                    title = "Voice boost (speech clarity)",
+                    description = "Lift the presence band (~2.7 kHz) so speech in podcasts, " +
+                        "audiobooks and dialogue is clearer. Per-file overrides can set it " +
+                        "per item. Local/Drive only (not Spotify or Cast).",
+                    icon = Icons.Filled.RecordVoiceOver,
+                    checked = voiceBoost,
+                    onCheckedChange = { viewModel.setVoiceBoost(it) }
                 )
                 SettingsToggleItem(
                     title = "Faster effect response",

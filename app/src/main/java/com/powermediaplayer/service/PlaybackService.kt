@@ -135,6 +135,14 @@ class PlaybackService : MediaSessionService() {
         )
     }
 
+    // Voice boost (speech clarity) — presence-band lift, after EQ before gain.
+    @Volatile private var voiceBoostFlag: Boolean = false
+    private val voiceBoostProcessor by lazy {
+        com.powermediaplayer.audio.VoiceBoostAudioProcessor(
+            enabledSupplier = { voiceBoostFlag }
+        )
+    }
+
     @Volatile
     private var audioDelayFlag: Int = 0
     // BT video offset in µs (positive = delay the picture). Read live per frame
@@ -708,6 +716,9 @@ class PlaybackService : MediaSessionService() {
                                 // unchanged so its behaviour is untouched; the
                                 // EQ shapes the final tone. Flat = pass-through.
                                 equalizerProcessor,
+                                // Voice boost (speech clarity) after EQ, before
+                                // delay/gain. Pass-through when off.
+                                voiceBoostProcessor,
                                 audioDelayProcessor,
                                 gainProcessor,
                                 // §Hue PCM tap — passes audio through;
@@ -817,6 +828,13 @@ class PlaybackService : MediaSessionService() {
                 settingsDataStore.monoMix,
                 pick = { it.monoMix }
             ).collect { monoMixFlag = it }
+        }
+        // Voice boost (speech clarity): per-file override wins over the global.
+        serviceScope.launch {
+            mediaOverrideRepo.withOverrideBool(
+                settingsDataStore.voiceBoost,
+                pick = { it.voiceBoost }
+            ).collect { voiceBoostFlag = it }
         }
         // Audio delay slider — lives in the AudioDelayProcessor's
         // ring buffer; the supplier reads this @Volatile per buffer.
