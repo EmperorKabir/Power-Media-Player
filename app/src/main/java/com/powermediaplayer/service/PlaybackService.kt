@@ -545,6 +545,64 @@ class PlaybackService : MediaSessionService() {
      */
     private var audioDeviceCallback: android.media.AudioDeviceCallback? = null
 
+    // ── Granular auto-play: per-type gate + volume ease-in for connect events ──
+    /** Per-media-type gate for the loaded item (the connect-event equivalent of
+     *  the launch-time gate). True when auto-play is allowed for this kind. */
+    private suspend fun autoplayTypeAllowedForLoaded(): Boolean {
+        val item = exoPlayerRef?.get()?.currentMediaItem
+            ?: mediaSession?.player?.currentMediaItem ?: return true
+        val uri = item.mediaId
+        val nameForExt = uri.substringAfterLast('/')
+        val isVideo = com.powermediaplayer.util.MediaClassifier.isVideoByName(nameForExt, "")
+        val isPodcast = uri.startsWith("http")
+        val sub = com.powermediaplayer.util.MediaClassifier.classifyAudioSubKind(
+            nameForExt, hasChapters = false, isPodcast = isPodcast
+        )
+        val kind = com.powermediaplayer.playback.AutoplayDecision.classify(
+            isVideo, sub != com.powermediaplayer.util.AudioSubKind.SONG
+        )
+        return when (kind) {
+            com.powermediaplayer.playback.MediaPlayKind.SPOKEN -> settingsDataStore.autoplayKindSpoken.first()
+            com.powermediaplayer.playback.MediaPlayKind.MUSIC -> settingsDataStore.autoplayKindMusic.first()
+            com.powermediaplayer.playback.MediaPlayKind.VIDEO -> settingsDataStore.autoplayKindVideo.first()
+        }
+    }
+
+    private suspend fun rampCrossfadeFactorUp(ms: Int) {
+        val steps = 20
+        val stepMs = (ms / steps).toLong().coerceAtLeast(15L)
+        for (i in 0..steps) {
+            setCrossfadeFactor(i / steps.toFloat())
+            kotlinx.coroutines.delay(stepMs)
+        }
+        setCrossfadeFactor(1.0f)
+    }
+
+    /** Play [p], applying the auto-play volume ease-in (factor 0 → 1) when the
+     *  setting is on. Must be called from a coroutine on the main thread. */
+    private suspend fun playWithEaseIn(p: androidx.media3.common.Player) {
+        val fadeMs = if (settingsDataStore.autoplayFadeIn.first())
+            settingsDataStore.autoplayFadeInMs.first() else 0
+        if (fadeMs > 0) setCrossfadeFactor(0f)
+        runCatching { p.play() }
+        if (fadeMs > 0) rampCrossfadeFactorUp(fadeMs)
+    }
+
+    /** Cast-connect auto-play trigger: when a Cast session starts/resumes and the
+     *  toggle + per-type gate pass, play the active (Cast) player. Delayed so the
+     *  switchPlayer hand-off to CastPlayer + queue transfer has completed. */
+    private fun maybeAutoplayOnCastConnect() {
+        serviceScope.launch {
+            if (!settingsDataStore.resumeOnCast.first()) return@launch
+            kotlinx.coroutines.delay(1200)
+            if (!autoplayTypeAllowedForLoaded()) return@launch
+            val p = mediaSession?.player ?: return@launch
+            if (p.isPlaying || p.currentMediaItem == null) return@launch
+            playWithEaseIn(p)
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cast-connect auto-resume fired")
+        }
+    }
+
     /** Friendly name for an AudioDeviceInfo.TYPE_* int. */
     private fun audioDeviceTypeName(t: Int): String = when (t) {
         android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "SPEAKER"
@@ -965,16 +1023,14 @@ class PlaybackService : MediaSessionService() {
                 serviceScope.launch {
                     val enabled = settingsDataStore.headphonePlugAutoplay.first()
                     if (!enabled) return@launch
+                    if (!autoplayTypeAllowedForLoaded()) return@launch
                     val p = exoPlayerRef?.get() ?: return@launch
                     if (p.isPlaying) return@launch
                     if (p.currentMediaItem == null) return@launch
-                    runCatching {
-                        p.play()
-                        com.powermediaplayer.util.Diag.i(
-                            "PMP_DIAG",
-                            "Headphone-plug auto-resume fired"
-                        )
-                    }
+                    playWithEaseIn(p)
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG", "Headphone-plug auto-resume fired"
+                    )
                 }
             }
         }
@@ -1371,14 +1427,13 @@ class PlaybackService : MediaSessionService() {
                                     )
                                     return@launch
                                 }
+                                if (!autoplayTypeAllowedForLoaded()) return@launch
                                 val p = exoPlayerRef?.get() ?: return@launch
                                 if (p.isPlaying || p.currentMediaItem == null) return@launch
-                                runCatching {
-                                    p.play()
-                                    com.powermediaplayer.util.Diag.i(
-                                        "PMP_DIAG", "BT resume-on-connect fired (local player)"
-                                    )
-                                }
+                                playWithEaseIn(p)
+                                com.powermediaplayer.util.Diag.i(
+                                    "PMP_DIAG", "BT resume-on-connect fired (local player)"
+                                )
                             }
                         }
                     }
@@ -1852,9 +1907,13 @@ class PlaybackService : MediaSessionService() {
                     }
                 }
                 override fun onSessionEnded(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
-                override fun onSessionStarted(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
+                override fun onSessionStarted(s: com.google.android.gms.cast.framework.CastSession, sid: String) {
+                    maybeAutoplayOnCastConnect()
+                }
                 override fun onSessionStarting(s: com.google.android.gms.cast.framework.CastSession) {}
-                override fun onSessionResumed(s: com.google.android.gms.cast.framework.CastSession, w: Boolean) {}
+                override fun onSessionResumed(s: com.google.android.gms.cast.framework.CastSession, w: Boolean) {
+                    maybeAutoplayOnCastConnect()
+                }
                 override fun onSessionResuming(s: com.google.android.gms.cast.framework.CastSession, sid: String) {}
                 override fun onSessionResumeFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
                 override fun onSessionStartFailed(s: com.google.android.gms.cast.framework.CastSession, code: Int) {}
