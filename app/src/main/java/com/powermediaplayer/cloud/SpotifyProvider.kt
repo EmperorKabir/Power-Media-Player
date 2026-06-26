@@ -1297,11 +1297,46 @@ class SpotifyProvider @Inject constructor(
                                     spotifyType = "artisttracks"
                                 )
                             )
-                            val arr = root.arrOrNull("items")
-                            if (arr != null) for (el in arr) {
-                                val core = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
-                                items.add(jsonToCloudItem(core, "album").copy(contextUri = core.get("uri")?.takeIf { !it.isJsonNull }?.asString))
+                            // Parse one page of albums into `items`; return its
+                            // `next` page URL (or null). Paging is the ONLY way to
+                            // exceed Spotify's tiny default page here — passing an
+                            // explicit `limit` 400s ("Invalid limit"), but the
+                            // server-issued `next` URL works.
+                            fun parseAlbumPage(pageRoot: com.google.gson.JsonObject): String? {
+                                pageRoot.arrOrNull("items")?.forEach { el ->
+                                    val core = el.takeIf { it.isJsonObject }?.asJsonObject
+                                        ?: return@forEach
+                                    items.add(
+                                        jsonToCloudItem(core, "album").copy(
+                                            contextUri = core.get("uri")
+                                                ?.takeIf { !it.isJsonNull }?.asString
+                                        )
+                                    )
+                                }
+                                return pageRoot.get("next")
+                                    ?.takeIf { !it.isJsonNull }?.asString
                             }
+                            var nextUrl = parseAlbumPage(root)
+                            var pages = 1
+                            while (nextUrl != null && items.size < 60 && pages < 10) {
+                                val pageBody = runCatching {
+                                    http.newCall(
+                                        Request.Builder().url(nextUrl)
+                                            .addHeader("Authorization", "Bearer $token").build()
+                                    ).execute().use { r ->
+                                        if (r.isSuccessful) r.body?.string().orEmpty() else ""
+                                    }
+                                }.getOrDefault("")
+                                if (pageBody.isBlank()) break
+                                nextUrl = runCatching {
+                                    parseAlbumPage(JsonParser.parseString(pageBody).asJsonObject)
+                                }.getOrNull()
+                                pages++
+                            }
+                            com.powermediaplayer.util.Diag.i(
+                                "PMP_DIAG",
+                                "Spotify artist albums paged: pages=$pages total=${items.size - 1}"
+                            )
                         }
                         "artisttracks" -> {
                             val arr = root.arrOrNull("tracks") ?: return@withContext Result.success(items)
