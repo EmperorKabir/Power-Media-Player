@@ -1756,6 +1756,18 @@ private fun TrackInfoSection(
                     )
                 }
             }
+        } else if (uiState.isSpotifyActive && !uiState.lyricsLoading) {
+            // Loading finished with no lyrics for this track (the single
+            // metadata banner covers the in-flight case; this is the settled
+            // empty result, so the panel isn't left silently blank).
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "No lyrics for this track",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

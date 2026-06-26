@@ -65,7 +65,11 @@ data class SpotifyPlaybackState(
     // The playback context the current track is part of — "spotify:album:…"
     // or "spotify:playlist:…" (null for a single-track play). Lets the player
     // fetch + show the album/playlist track list (chapters-equivalent).
-    val contextUri: String? = null
+    val contextUri: String? = null,
+    // True while LRCLib lyrics are being fetched for this track (async). Drives a
+    // "Loading lyrics…" status so a slow fetch / a no-lyrics track isn't a blank
+    // panel. Independent of the metadata banner (decoupled from lyrics in #2).
+    val lyricsLoading: Boolean = false
 )
 
 /** A single time-tagged line from a LRC-format lyric file. */
@@ -153,6 +157,9 @@ class SpotifyProvider @Inject constructor(
     // (user: "lyrics came up then disappeared" / "aren't loading at all").
     @Volatile private var lastLyrics: String? = null
     @Volatile private var lastSynced: List<LyricLine> = emptyList()
+    // True while an async LRCLib fetch is in flight for the current track →
+    // drives the "Loading lyrics…" status (set on a cache miss, cleared on resolve).
+    @Volatile private var lastLyricsLoading: Boolean = false
 
     /** Last track URI logged by the SP_ORDER order-trace, so it logs only on an
      *  actual track change instead of every ~1 s poll. */
@@ -1358,9 +1365,10 @@ class SpotifyProvider @Inject constructor(
                         val step = trackResolveStep(isNewTrack = snap.trackUri != lastTrackUri)
                         if (step.fetchLyrics) {
                             lastTrackUri = snap.trackUri
-                            // #2 — lyrics no longer block the banner. Cached
-                            // (incl. negative) lyrics attach immediately; a miss
-                            // fires an async fetch that paints later, off the loop.
+                            // Lyrics fetch stays ASYNC (never blocks the loop). A
+                            // cache hit attaches immediately; a miss fires the async
+                            // fetch AND keeps the single loading banner up (lyrics
+                            // are metadata) until it resolves.
                             val key = lyricsKey(snap.title, snap.artist, snap.album, snap.durationMs)
                             val cached = synchronized(lyricsCache) {
                                 if (lyricsCache.containsKey(key)) lyricsCache[key] else MISS_SENTINEL
@@ -1369,20 +1377,29 @@ class SpotifyProvider @Inject constructor(
                                 val lr = cached as LyricsResult?
                                 lastLyrics = lr?.plain
                                 lastSynced = lr?.synced.orEmpty()
+                                lastLyricsLoading = false
                             } else {
                                 lastLyrics = null
                                 lastSynced = emptyList()
+                                lastLyricsLoading = true
                                 fetchLyricsAsync(gen, snap)
                             }
                         }
                         if (step.emitState) {
-                            _spotifyState.value = snap.copy(lyrics = lastLyrics, syncedLyrics = lastSynced)
+                            _spotifyState.value = snap.copy(
+                                lyrics = lastLyrics, syncedLyrics = lastSynced,
+                                lyricsLoading = lastLyricsLoading
+                            )
                         }
-                        // #2 — metadata (title/artist/art) is resolved NOW; clear
-                        // the banner immediately, independent of the lyrics fetch.
                         provisionalActive = false // real data now
                         bannerGraceUntilMs = 0L // handoff resolved
-                        if (step.clearBanner) _spotifyMetadataFetching.value = false
+                        // Lyrics are metadata → keep the SINGLE loading banner up
+                        // while an async lyric fetch is still in flight (cleared by
+                        // fetchLyricsAsync on resolve). Cache hit / no fetch →
+                        // lastLyricsLoading=false → clears now WITH the metadata.
+                        if (step.clearBanner && !lastLyricsLoading) {
+                            _spotifyMetadataFetching.value = false
+                        }
                         }
                     } else {
                         // vc32: during a handoff Spotify
@@ -1441,9 +1458,14 @@ class SpotifyProvider @Inject constructor(
                 // the fix for lyrics appearing then vanishing / not loading.
                 lastLyrics = res?.plain
                 lastSynced = res?.synced.orEmpty()
+                lastLyricsLoading = false
                 _spotifyState.value = _spotifyState.value?.copy(
-                    lyrics = res?.plain, syncedLyrics = res?.synced.orEmpty()
+                    lyrics = res?.plain, syncedLyrics = res?.synced.orEmpty(),
+                    lyricsLoading = false
                 )
+                // Lyrics are metadata → clear the SINGLE loading banner now that
+                // the async fetch has resolved (the metadata emit deferred it).
+                _spotifyMetadataFetching.value = false
             }
         }
     }

@@ -1714,6 +1714,7 @@ class PlayerViewModel @Inject constructor(
             hasCoverArt = s.artworkUrl != null,
             lyrics = s.lyrics.orEmpty(),
             syncedLyrics = s.syncedLyrics,
+            lyricsLoading = s.lyricsLoading,
             currentPosition = pos,
             duration = dur,
             currentPositionFormatted = TimeFormatter.formatDuration(pos),

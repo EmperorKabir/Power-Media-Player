@@ -41,6 +41,10 @@ data class PlayerUiState(
     // is a (timeMs, text) pair from a parsed LRC file. Empty when only
     // plain lyrics are available.
     val syncedLyrics: List<com.powermediaplayer.cloud.LyricLine> = emptyList(),
+    // True while an async lyric fetch is still in flight (Spotify). Drives the
+    // single loading banner (lyrics are metadata) and the "No lyrics" panel
+    // message, which shows only once loading has finished with an empty result.
+    val lyricsLoading: Boolean = false,
 
     // Progress - current track
     val currentPosition: Long = 0L,
