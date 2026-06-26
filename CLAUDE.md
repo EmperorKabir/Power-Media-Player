@@ -1,5 +1,14 @@
 # Power Media Player — project notes
 
+## Fresh-context primer — read FIRST, every session
+
+- **`PROJECT_RULES.md` (repo root) is the canonical primer.** Read it in full at
+  session start: app purpose + feature map, current build coordinates, architecture
+  spine, the delicate do-NOT-break contingencies, and the binding build/app
+  preferences. It is auto-loaded as binding rules via the user's global `CLAUDE.md`.
+- This file (`CLAUDE.md`) holds only the task-ledger mandate + logging runbooks.
+  Historical detail lives under `docs/archive/` (index: `docs/archive/INDEX.md`).
+
 ## MANDATORY task ledger — read FIRST, every turn
 
 - **`TASKS.md` (repo root) is the binding task ledger.** Read it at the start
