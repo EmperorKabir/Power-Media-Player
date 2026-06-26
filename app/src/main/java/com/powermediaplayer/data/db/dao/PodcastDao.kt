@@ -48,6 +48,14 @@ interface PodcastDao {
     )
     fun observeEpisodes(url: String, limit: Int = 200): Flow<List<PodcastEpisodeEntity>>
 
+    /** One-shot ordered snapshot (same order as [observeEpisodes]) for building
+     *  the auto-advance queue from the tapped episode forward. */
+    @Query(
+        "SELECT * FROM podcast_episodes WHERE feedUrl = :url " +
+            "ORDER BY publishedAt DESC LIMIT :limit"
+    )
+    suspend fun episodesForFeedOrdered(url: String, limit: Int = 200): List<PodcastEpisodeEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertEpisodes(episodes: List<PodcastEpisodeEntity>)
 

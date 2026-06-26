@@ -104,7 +104,8 @@ data class AutoplaySettingsUi(
     val kindMusic: Boolean = false,
     val kindVideo: Boolean = false,
     val fadeIn: Boolean = true,
-    val fadeInMs: Int = 1500
+    val fadeInMs: Int = 1500,
+    val podcastAutoplayNext: Boolean = true
 )
 
 /**
@@ -325,7 +326,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.autoplayKindMusic,
             settingsDataStore.autoplayKindVideo,
             settingsDataStore.autoplayFadeIn,
-            settingsDataStore.autoplayFadeInMs
+            settingsDataStore.autoplayFadeInMs,
+            settingsDataStore.podcastAutoplayNext
         ) { v ->
             AutoplaySettingsUi(
                 resumeOnCast = v[0] as Boolean,
@@ -334,7 +336,8 @@ class SettingsViewModel @Inject constructor(
                 kindMusic = v[3] as Boolean,
                 kindVideo = v[4] as Boolean,
                 fadeIn = v[5] as Boolean,
-                fadeInMs = v[6] as Int
+                fadeInMs = v[6] as Int,
+                podcastAutoplayNext = v[7] as Boolean
             )
         }.stateIn(
             scope = viewModelScope,
@@ -343,6 +346,7 @@ class SettingsViewModel @Inject constructor(
         )
 
     fun setResumeOnCast(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnCast(v) }.let {}
+    fun setPodcastAutoplayNext(v: Boolean) = viewModelScope.launch { settingsDataStore.setPodcastAutoplayNext(v) }.let {}
     fun setAutoplayOnlyIfWasPlaying(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayOnlyIfWasPlaying(v) }.let {}
     fun setAutoplayKindSpoken(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayKindSpoken(v) }.let {}
     fun setAutoplayKindMusic(v: Boolean) = viewModelScope.launch { settingsDataStore.setAutoplayKindMusic(v) }.let {}

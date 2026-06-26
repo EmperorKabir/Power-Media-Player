@@ -190,6 +190,8 @@ class SettingsDataStore @Inject constructor(
         // Runtime state (not a user setting): was playback running at app-stop —
         // gates the "only if it was playing when closed" condition.
         val LAST_WAS_PLAYING = booleanPreferencesKey("last_was_playing")
+        // Auto-advance to the next podcast episode when one ends (queue the show).
+        val PODCAST_AUTOPLAY_NEXT = booleanPreferencesKey("podcast_autoplay_next")
 
         // §C11 — fade volume over the last 30 s of a sleep timer instead
         // of an abrupt pause. Off by default so existing behaviour is
@@ -743,6 +745,13 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setLastWasPlaying(v: Boolean) {
         context.dataStore.edit { it[Keys.LAST_WAS_PLAYING] = v }
+    }
+    /** Auto-advance to the next podcast episode at end (queue the show). */
+    val podcastAutoplayNext: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.PODCAST_AUTOPLAY_NEXT] ?: true
+    }
+    suspend fun setPodcastAutoplayNext(v: Boolean) {
+        context.dataStore.edit { it[Keys.PODCAST_AUTOPLAY_NEXT] = v }
     }
 
     val audioBufferLowLatency: Flow<Boolean> = context.dataStore.data.map {

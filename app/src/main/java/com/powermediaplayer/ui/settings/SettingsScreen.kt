@@ -283,6 +283,15 @@ fun SettingsScreen(
                     checked = autoplay.kindVideo,
                     onCheckedChange = { viewModel.setAutoplayKindVideo(it) }
                 )
+                SettingsToggleItem(
+                    title = "Auto-play next podcast episode",
+                    description = "When a podcast episode ends, automatically continue " +
+                        "to the next episode in the show (queues the show from the one " +
+                        "you tapped). Off = play one episode then stop.",
+                    icon = Icons.Filled.Podcasts,
+                    checked = autoplay.podcastAutoplayNext,
+                    onCheckedChange = { viewModel.setPodcastAutoplayNext(it) }
+                )
                 // ── Auto-play FEEL ───────────────────────────────────────────
                 SettingsToggleItem(
                     title = "Volume ease-in on auto-play",

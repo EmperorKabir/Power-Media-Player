@@ -133,32 +133,23 @@ class PodcastsViewModel @Inject constructor(
             // player AND the Recents row both get a cover (fixes #3).
             val show = podcastDao.getShow(episode.feedUrl)
             val artUri = show?.artworkUrl
-            // §C10 — play the downloaded file when present + readable; the
-            // playback source (localConfiguration.uri set via setUri) overrides
-            // the stream in the service's resolver. Keep audioUrl as mediaId +
-            // requestMetadata.mediaUri so the resume position + Recents row stay
-            // keyed to the episode, not the on-disk path (so download/delete
-            // never loses progress and the Recents dedup is stable).
-            val keyUri = android.net.Uri.parse(episode.audioUrl)
-            val playUri = resolvePlayableLocal(episode)
-                ?.let { android.net.Uri.parse(it) } ?: keyUri
-            val item = androidx.media3.common.MediaItem.Builder()
-                .setMediaId(episode.audioUrl)
-                .setUri(playUri)
-                .setRequestMetadata(
-                    androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                        .setMediaUri(keyUri).build()
-                )
-                .setMediaMetadata(
-                    androidx.media3.common.MediaMetadata.Builder()
-                        .setTitle(episode.title)
-                        .setArtist(show?.title ?: "")
-                        .apply { if (!artUri.isNullOrBlank()) setArtworkUri(android.net.Uri.parse(artUri)) }
-                        .build()
-                )
-                .build()
-            // MediaController must be touched on the main thread.
-            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(listOf(item), 0) }
+            // Auto-advance: when on (default), QUEUE the show's episodes from the
+            // tapped one forward (same newest-first display order) so playback
+            // auto-advances to the next episode at end. When off, a single item.
+            val autoNext = runCatching { settings.podcastAutoplayNext.first() }.getOrDefault(true)
+            val items: List<androidx.media3.common.MediaItem> = if (autoNext) {
+                val ordered = runCatching {
+                    podcastDao.episodesForFeedOrdered(episode.feedUrl)
+                }.getOrDefault(emptyList())
+                val startIdx = ordered.indexOfFirst { it.guid == episode.guid }
+                val slice = if (startIdx >= 0) ordered.drop(startIdx).take(50) else listOf(episode)
+                slice.map { buildEpisodeItem(it, show?.title, artUri) }
+            } else {
+                listOf(buildEpisodeItem(episode, show?.title, artUri))
+            }
+            // MediaController must be touched on the main thread. The tapped
+            // episode is item 0; per-episode resume/override resolve by mediaId.
+            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(items, 0) }
             // Record DIRECTLY into Recents (not the gated 5s-tick fallback) so a
             // mid-session switch becomes the most-recent row and cold-start resumes
             // IT (fixes #4/#5). source="LOCAL" + a remote URL is proven to resume.
@@ -181,6 +172,35 @@ class PodcastsViewModel @Inject constructor(
             // in-progress vs played from the saved resume position).
             podcastDao.setPlayed(episode.guid, true)
         }
+    }
+
+    /** Build a MediaItem for one episode: downloaded file when present + readable,
+     *  else the stream; mediaId/requestMetadata kept as audioUrl so resume +
+     *  per-episode/show override + Recents dedup stay keyed to the episode. All
+     *  episodes of a show share its artwork (episode rows carry none). */
+    private suspend fun buildEpisodeItem(
+        episode: PodcastEpisodeEntity,
+        showTitle: String?,
+        artUri: String?
+    ): androidx.media3.common.MediaItem {
+        val keyUri = android.net.Uri.parse(episode.audioUrl)
+        val playUri = resolvePlayableLocal(episode)
+            ?.let { android.net.Uri.parse(it) } ?: keyUri
+        return androidx.media3.common.MediaItem.Builder()
+            .setMediaId(episode.audioUrl)
+            .setUri(playUri)
+            .setRequestMetadata(
+                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(keyUri).build()
+            )
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(episode.title)
+                    .setArtist(showTitle ?: "")
+                    .apply { if (!artUri.isNullOrBlank()) setArtworkUri(android.net.Uri.parse(artUri)) }
+                    .build()
+            )
+            .build()
     }
 
     /**
