@@ -354,6 +354,8 @@ class PodcastsViewModel @Inject constructor(
             // audioUrl). Clear them BEFORE the episodes are deleted.
             runCatching {
                 podcastDao.audioUrlsForFeed(feedUrl).forEach { mediaOverrideDao.clear(it) }
+                // also drop the per-show (podcast-wide) override row (keyed by feedUrl)
+                mediaOverrideDao.clear(feedUrl)
             }
             podcastDao.deleteEpisodesForFeed(feedUrl)
             podcastDao.unsubscribe(feedUrl)
@@ -524,6 +526,7 @@ fun PodcastsSection(
             val counts by vm.feedCounts.collectAsStateWithLifecycle()
             var expandedFeed by remember { mutableStateOf<String?>(null) }
             var overrideEpisode by remember { mutableStateOf<PodcastEpisodeEntity?>(null) }
+            var overrideShow by remember { mutableStateOf<PodcastShowEntity?>(null) }
             // #5 — reorderable subscribed shows (bounded list; the nested scroll
             // is height-capped so it never traps in the outer scroll). The
             // expanded body renders BELOW the bounded list so a tall
@@ -534,6 +537,7 @@ fun PodcastsSection(
                 expandedFeed = expandedFeed,
                 onToggleExpand = { feed -> expandedFeed = if (expandedFeed == feed) null else feed },
                 onUnsubscribe = { vm.unsubscribe(it) },
+                onOverrideShow = { overrideShow = it },
                 onMove = { from, to -> vm.reorderShow(from, to) }
             )
             expandedFeed?.let { feed ->
@@ -553,6 +557,21 @@ fun PodcastsSection(
                     title = ep.title,
                     dao = vm.mediaOverrideDao,
                     onDismiss = { overrideEpisode = null }
+                )
+            }
+            // Per-show (podcast-wide) playback effects — keyed by feedUrl in the
+            // same media_overrides table; merged UNDER any per-episode override
+            // (episode → show → global) by MediaOverrideRepository.
+            overrideShow?.let { show ->
+                com.powermediaplayer.ui.overrides.MediaOverridesPopup(
+                    mediaUri = show.feedUrl,
+                    title = show.title,
+                    dao = vm.mediaOverrideDao,
+                    headerText = "Settings for this whole podcast",
+                    applyNote = "These apply to every episode of this podcast. " +
+                        "A per-episode override (3-dot on an episode) takes " +
+                        "precedence. Each switch falls back to the global default.",
+                    onDismiss = { overrideShow = null }
                 )
             }
         }

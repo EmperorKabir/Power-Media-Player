@@ -60,7 +60,13 @@ fun MediaOverridesPopup(
     mediaUri: String,
     title: String,
     dao: MediaOverrideDao,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // Scope-specific copy. Defaults to the per-file case; the podcast-wide
+    // (per-show) entry passes its own header/note so the dialog reads correctly.
+    headerText: String = "Custom settings for this file",
+    applyNote: String = "Each switch makes that setting fall back to the " +
+        "global default. Saved values apply automatically the " +
+        "next time this file plays."
 ) {
     val current by dao.getByUri(mediaUri).collectAsState(initial = null)
     val scope = rememberCoroutineScope()
@@ -91,7 +97,7 @@ fun MediaOverridesPopup(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(
-                text = "Custom settings for this file",
+                text = headerText,
                 style = MaterialTheme.typography.titleMedium,
                 color = TealAccent,
                 maxLines = 1,
@@ -105,9 +111,7 @@ fun MediaOverridesPopup(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "Each switch makes that setting fall back to the " +
-                    "global default. Saved values apply automatically the " +
-                    "next time this file plays.",
+                text = applyNote,
                 style = MaterialTheme.typography.labelSmall,
                 color = TextTertiary
             )

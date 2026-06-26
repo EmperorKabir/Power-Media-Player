@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,7 @@ fun ReorderableShowList(
     expandedFeed: String?,
     onToggleExpand: (String) -> Unit,
     onUnsubscribe: (String) -> Unit,
+    onOverrideShow: (PodcastShowEntity) -> Unit,
     onMove: (Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -88,6 +90,15 @@ fun ReorderableShowList(
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,
                             maxLines = 1
+                        )
+                    }
+                    // Per-show (podcast-wide) audio override — applies to every
+                    // episode; a per-episode override (3-dot on an episode) wins.
+                    IconButton(onClick = { onOverrideShow(show) }) {
+                        Icon(
+                            Icons.Filled.Tune,
+                            contentDescription = "Playback effects for all episodes of ${show.title}",
+                            tint = TextSecondary
                         )
                     }
                     IconButton(onClick = { onUnsubscribe(show.feedUrl) }) {

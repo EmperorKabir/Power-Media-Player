@@ -1,6 +1,7 @@
 package com.powermediaplayer.data.repository
 
 import com.powermediaplayer.data.db.dao.MediaOverrideDao
+import com.powermediaplayer.data.db.dao.PodcastDao
 import com.powermediaplayer.data.db.entity.MediaOverrideEntity
 import com.powermediaplayer.service.PlaybackService
 import kotlinx.coroutines.CoroutineScope
@@ -32,7 +33,12 @@ import javax.inject.Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class MediaOverrideRepository @Inject constructor(
-    private val dao: MediaOverrideDao
+    private val dao: MediaOverrideDao,
+    // Podcasts resolve episode → show → global. The repo maps the current
+    // episode (mediaId == audioUrl) to its feedUrl so it can merge the
+    // per-episode row over the per-show row (both live in media_overrides,
+    // the show row keyed by feedUrl).
+    private val podcastDao: PodcastDao
 ) {
     // ExoPlayer enforces "Main thread only" — polling currentMediaItem
     // on Dispatchers.Default raised IllegalStateException at cold start.
@@ -51,7 +57,26 @@ class MediaOverrideRepository @Inject constructor(
 
     val activeOverride: StateFlow<MediaOverrideEntity?> = currentUri
         .flatMapLatest { uri ->
-            if (uri.isBlank()) flowOf(null) else dao.getByUri(uri)
+            if (uri.isBlank()) {
+                flowOf(null)
+            } else {
+                // When the current media is a podcast episode, merge its
+                // per-episode override OVER the per-show override (episode wins
+                // per-axis; a NULL axis falls through to the show, then to the
+                // global setting downstream). Non-podcast media keeps the plain
+                // per-uri lookup. The map miss (non-podcast / unknown) costs one
+                // indexed suspend query per track change only.
+                val feedUrl = runCatching {
+                    podcastDao.episodeByAudioUrl(uri)?.feedUrl
+                }.getOrNull()
+                if (feedUrl.isNullOrBlank()) {
+                    dao.getByUri(uri)
+                } else {
+                    combine(dao.getByUri(uri), dao.getByUri(feedUrl)) { ep, show ->
+                        mergeEpisodeOverShow(uri, ep, show)
+                    }
+                }
+            }
         }
         .stateIn(scope, SharingStarted.Eagerly, null)
 
@@ -77,4 +102,37 @@ class MediaOverrideRepository @Inject constructor(
         o?.let(pick) ?: g
     }.distinctUntilChanged()
 
+}
+
+/**
+ * Per-axis merge for the podcast episode → show → global chain. The episode
+ * value wins; otherwise the show value; otherwise NULL so the downstream
+ * `withOverride*` combine falls through to the user's global setting. Returns
+ * null when neither row sets anything (no override at all). Pure → unit-tested
+ * (MediaOverrideMergeTest) and load-bearing in [MediaOverrideRepository].
+ */
+internal fun mergeEpisodeOverShow(
+    uri: String,
+    ep: MediaOverrideEntity?,
+    show: MediaOverrideEntity?
+): MediaOverrideEntity? {
+    if (ep == null && show == null) return null
+    val merged = MediaOverrideEntity(
+        mediaUri = uri,
+        reverbPreset = ep?.reverbPreset ?: show?.reverbPreset,
+        stereoFlip = ep?.stereoFlip ?: show?.stereoFlip,
+        monoMix = ep?.monoMix ?: show?.monoMix,
+        eqPresetId = ep?.eqPresetId ?: show?.eqPresetId,
+        replayGainMode = ep?.replayGainMode ?: show?.replayGainMode,
+        volumeBoostMb = ep?.volumeBoostMb ?: show?.volumeBoostMb,
+        videoFlipH = ep?.videoFlipH ?: show?.videoFlipH,
+        videoFlipV = ep?.videoFlipV ?: show?.videoFlipV,
+        videoBw = ep?.videoBw ?: show?.videoBw,
+        videoSepia = ep?.videoSepia ?: show?.videoSepia,
+        videoInvert = ep?.videoInvert ?: show?.videoInvert,
+        videoRotation = ep?.videoRotation ?: show?.videoRotation,
+        playbackSpeed = ep?.playbackSpeed ?: show?.playbackSpeed,
+        pitch = ep?.pitch ?: show?.pitch
+    )
+    return if (merged.isEmpty()) null else merged
 }

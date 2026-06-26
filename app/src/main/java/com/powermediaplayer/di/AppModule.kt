@@ -140,9 +140,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideMediaOverrideRepository(
-        dao: com.powermediaplayer.data.db.dao.MediaOverrideDao
+        dao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
+        podcastDao: com.powermediaplayer.data.db.dao.PodcastDao
     ): com.powermediaplayer.data.repository.MediaOverrideRepository =
-        com.powermediaplayer.data.repository.MediaOverrideRepository(dao)
+        com.powermediaplayer.data.repository.MediaOverrideRepository(dao, podcastDao)
 
     @Provides
     @Singleton
