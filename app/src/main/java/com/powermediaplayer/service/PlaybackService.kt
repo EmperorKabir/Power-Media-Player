@@ -292,6 +292,12 @@ class PlaybackService : MediaSessionService() {
         // ── M4: cast device-volume control for the sleep-timer remote fade ──
         // Set in switchPlayer when the active player is the CastPlayer.
         private var castPlayerRef: java.lang.ref.WeakReference<Player>? = null
+        // M-c: dedup cast device-volume writes on the integer target + reuse one
+        // main-thread Handler (the fade ticks ~600× over a 5-min window).
+        private var lastCastDeviceTarget = -1
+        private val castMainHandler by lazy(LazyThreadSafetyMode.NONE) {
+            android.os.Handler(android.os.Looper.getMainLooper())
+        }
 
         /** True when a CastPlayer is the active player (audio on a cast device). */
         internal fun isCasting(): Boolean = castPlayerRef?.get() != null
@@ -301,6 +307,7 @@ class PlaybackService : MediaSessionService() {
          *  the level can be RESTORED after the fade (device volume is sticky). */
         internal fun captureCastDeviceVolume(): Float? {
             val p = castPlayerRef?.get() ?: return null
+            lastCastDeviceTarget = -1 // fresh fade session
             return runCatching {
                 if (!p.isCommandAvailable(Player.COMMAND_GET_DEVICE_VOLUME)) return null
                 val info = p.deviceInfo
@@ -321,11 +328,15 @@ class PlaybackService : MediaSessionService() {
                     val info = p.deviceInfo
                     val target = (info.minVolume + f * (info.maxVolume - info.minVolume))
                         .toInt().coerceIn(info.minVolume, info.maxVolume)
+                    // Skip no-op writes: cast device ranges are coarse, so most
+                    // 500 ms fade ticks recompute the same integer target.
+                    if (target == lastCastDeviceTarget) return@runCatching
+                    lastCastDeviceTarget = target
                     p.setDeviceVolume(target, 0)
                 }
             }
             if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) apply.run()
-            else android.os.Handler(android.os.Looper.getMainLooper()).post(apply)
+            else castMainHandler.post(apply)
         }
 
         // True while the local player is kept alive ONLY to show the picture
@@ -3068,23 +3079,21 @@ class PlaybackService : MediaSessionService() {
             // (same package, signed identity) bypass the remap so the
             // on-screen prev/next behave as labelled.
             val isExternal = controller.packageName != packageName
-            // Log every external (BT / car / headset) command we receive
-            // BEFORE filtering. Captures the raw opcode + caller package
-            // so testers can see exactly what their car emits.
-            if (isExternal) {
-                val k = currentBtKind(session.player)
-                val m = btMappingSet.forKind(k)
-                com.powermediaplayer.diag.DiagLog.event(
-                    "BT_CMD",
-                    "cmd=$playerCommand pkg=${controller.packageName} kind=$k " +
-                        "prevAct=${m.prevAction} nextAct=${m.nextAction} " +
-                        "skipBack=${m.skipBackSeconds}s skipFwd=${m.skipForwardSeconds}s"
-                )
-            }
+            // Only re-route external (BT/car/headset) commands; in-app commands
+            // behave as labelled.
             if (!isExternal) return super.onPlayerCommandRequest(session, controller, playerCommand)
 
             val player = session.player
-            val mapping = btMappingSet.forKind(currentBtKind(player))
+            val btKind = currentBtKind(player)            // resolve once
+            val mapping = btMappingSet.forKind(btKind)
+            // Log the raw opcode + caller + resolved per-kind mapping so testers
+            // see exactly what their car emits.
+            com.powermediaplayer.diag.DiagLog.event(
+                "BT_CMD",
+                "cmd=$playerCommand pkg=${controller.packageName} kind=$btKind " +
+                    "prevAct=${mapping.prevAction} nextAct=${mapping.nextAction} " +
+                    "skipBack=${mapping.skipBackSeconds}s skipFwd=${mapping.skipForwardSeconds}s"
+            )
             return when (playerCommand) {
                 Player.COMMAND_SEEK_TO_PREVIOUS,
                 Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
@@ -3453,18 +3462,12 @@ class PlaybackService : MediaSessionService() {
         val name = uri.substringAfterLast('/')
         val isVideo = com.powermediaplayer.util.MediaClassifier.isVideoByName(name, "") ||
             player.videoSize.width > 0
-        if (isVideo) return BtMediaKind.VIDEO
-        val isPodcast = uri.startsWith("http")
+        // Chapter markers (chapter_count from the M4B parser) mean AUDIOBOOK —
+        // this MUST win over the http heuristic so a Drive-streamed .m4b (http
+        // URI) still gets chapter nav, not the podcast skip mapping (audit F2).
         val hasChapters = (player.mediaMetadata.extras?.getInt("chapter_count", 0) ?: 0) > 0
-        return when (
-            com.powermediaplayer.util.MediaClassifier.classifyAudioSubKind(
-                name, hasChapters = hasChapters, isPodcast = isPodcast
-            )
-        ) {
-            com.powermediaplayer.util.AudioSubKind.PODCAST -> BtMediaKind.PODCAST
-            com.powermediaplayer.util.AudioSubKind.AUDIOBOOK -> BtMediaKind.AUDIOBOOK
-            com.powermediaplayer.util.AudioSubKind.SONG -> BtMediaKind.MUSIC
-        }
+        val isPodcast = uri.startsWith("http")
+        return com.powermediaplayer.playback.BtKindResolver.resolve(isVideo, hasChapters, isPodcast)
     }
 
     /**

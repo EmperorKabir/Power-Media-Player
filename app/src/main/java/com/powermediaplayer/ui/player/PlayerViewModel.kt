@@ -1097,18 +1097,59 @@ class PlayerViewModel @Inject constructor(
     private var fadeCapturedSpotifyVol: Int? = null
     private var fadeCapturedCastVol: Float? = null
     private var fadeLastSpotifyPctSent = -1
+    // Spotify volume writes are async network PUTs; route them through ONE
+    // conflated channel + single consumer so they apply IN ORDER and the
+    // restore value is always the last one applied (fire-and-forget launches
+    // could reorder and leave the device muted). Conflation also coalesces
+    // rapid fade steps under a slow link.
+    private val spotifyVolumeChannel =
+        kotlinx.coroutines.channels.Channel<Int>(kotlinx.coroutines.channels.Channel.CONFLATED)
+    private val spotifyVolumeConsumer = viewModelScope.launch {
+        for (pct in spotifyVolumeChannel) runCatching { spotifyProvider.setVolume(pct) }
+    }
+    // F6: a long fade (up to 5 min) can outlive the process. Persist the
+    // captured base + route at fade start so a kill mid-fade can be undone on
+    // the next player open, rather than leaving the device quiet forever.
+    private val pfRoute = androidx.datastore.preferences.core.stringPreferencesKey("pending_fade_route")
+    private val pfSpotify = androidx.datastore.preferences.core.intPreferencesKey("pending_fade_spotify_vol")
+    private val pfCast = androidx.datastore.preferences.core.floatPreferencesKey("pending_fade_cast_vol")
+    private val pendingFadeRestore = viewModelScope.launch {
+        runCatching {
+            val p = settingsDataStore.dataStoreData().first()
+            when (p[pfRoute]) {
+                "spotify" -> if (spotifyProvider.spotifyState.value != null)
+                    p[pfSpotify]?.let { spotifyVolumeChannel.trySend(it) }
+                "cast" -> if (com.powermediaplayer.service.PlaybackService.isCasting())
+                    p[pfCast]?.let { com.powermediaplayer.service.PlaybackService.setCastDeviceVolumeFraction(it) }
+            }
+            clearPendingFade()
+        }
+    }
+
+    private suspend fun persistPendingFade() {
+        settingsDataStore.editPreferences { p ->
+            p[pfRoute] = if (fadeCapturedSpotifyVol != null) "spotify"
+                else if (fadeCapturedCastVol != null) "cast" else ""
+            fadeCapturedSpotifyVol?.let { p[pfSpotify] = it }
+            fadeCapturedCastVol?.let { p[pfCast] = it }
+        }
+    }
+    private suspend fun clearPendingFade() {
+        settingsDataStore.editPreferences { it[pfRoute] = "" }
+    }
 
     private suspend fun beginRemoteFadeCaptureIfNeeded() {
         if (fadeRemoteActive) return
         when {
             spotifyProvider.spotifyState.value != null -> {
-                fadeRemoteActive = true
-                fadeCapturedSpotifyVol = spotifyProvider.currentVolumePercent() ?: 100
+                // Only fade if we actually READ the volume — fabricating 100
+                // would over-restore a user who had it lower.
+                val v = spotifyProvider.currentVolumePercent()
+                if (v != null) { fadeRemoteActive = true; fadeCapturedSpotifyVol = v; persistPendingFade() }
             }
             com.powermediaplayer.service.PlaybackService.isCasting() -> {
-                fadeRemoteActive = true
-                fadeCapturedCastVol =
-                    com.powermediaplayer.service.PlaybackService.captureCastDeviceVolume()
+                val v = com.powermediaplayer.service.PlaybackService.captureCastDeviceVolume()
+                if (v != null) { fadeRemoteActive = true; fadeCapturedCastVol = v; persistPendingFade() }
             }
         }
     }
@@ -1117,27 +1158,26 @@ class PlayerViewModel @Inject constructor(
     private fun applyFadeFactor(factor: Float) {
         // Local pipeline (audibly inert on remote routes, but harmless).
         com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
-        // Spotify Connect — ramp the device volume; throttle to integer-percent
-        // changes so the long fade stays well under Spotify's rate limit.
-        if (spotifyProvider.spotifyState.value != null) {
-            val base = fadeCapturedSpotifyVol ?: 100
+        // Spotify Connect — ramp device volume, throttled to integer-percent
+        // changes; serialised via the conflated channel (see field comment).
+        fadeCapturedSpotifyVol?.let { base ->
             val pct = (factor * base).toInt().coerceIn(0, 100)
             if (pct != fadeLastSpotifyPctSent) {
                 fadeLastSpotifyPctSent = pct
-                viewModelScope.launch { spotifyProvider.setVolume(pct) }
+                spotifyVolumeChannel.trySend(pct)
             }
         }
-        // Cast — ramp the receiver device volume.
+        // Cast — ramp the receiver device volume (dedup'd service-side).
         fadeCapturedCastVol?.let { base ->
             com.powermediaplayer.service.PlaybackService.setCastDeviceVolumeFraction(factor * base)
         }
     }
 
-    /** Restore the captured remote volume after the fade/pause so the device
-     *  isn't left muted for next time. */
+    /** Restore the captured remote volume after the fade so the device isn't
+     *  left muted for next time. Does NOT pause (cancel keeps playing). */
     private fun endRemoteFadeRestore() {
         if (!fadeRemoteActive) return
-        fadeCapturedSpotifyVol?.let { v -> viewModelScope.launch { spotifyProvider.setVolume(v) } }
+        fadeCapturedSpotifyVol?.let { v -> spotifyVolumeChannel.trySend(v) }
         fadeCapturedCastVol?.let { v ->
             com.powermediaplayer.service.PlaybackService.setCastDeviceVolumeFraction(v)
         }
@@ -1145,10 +1185,21 @@ class PlayerViewModel @Inject constructor(
         fadeCapturedSpotifyVol = null
         fadeCapturedCastVol = null
         fadeLastSpotifyPctSent = -1
+        viewModelScope.launch { clearPendingFade() }
+    }
+
+    /** Pause the active REMOTE route at sleep-timer EXPIRY (Spotify Connect is
+     *  not a Media3 player, so playbackConnection.pause() — which pauses the
+     *  silent local mirror — never stops it). Cast is paused by the controller. */
+    private fun pauseRemoteRouteForExpiry() {
+        if (spotifyProvider.spotifyState.value != null) {
+            viewModelScope.launch { runCatching { spotifyProvider.pause() } }
+        }
     }
 
     private fun firePauseAndExpire(label: String) {
         playbackConnection.pause()
+        pauseRemoteRouteForExpiry()
         com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
         endRemoteFadeRestore()
         _sleepTimerRemainingMs.value = 0
@@ -1191,6 +1242,8 @@ class PlayerViewModel @Inject constructor(
             // Timer expired — pause playback (no alarm sound) and raise
             // a dismissible "Sleep timer finished" flag the UI shows.
             playbackConnection.pause()
+            // M4/F1: Spotify Connect is not a Media3 player — pause it explicitly.
+            pauseRemoteRouteForExpiry()
             // Reset the crossfade factor so the next play resumes at
             // full volume. ReplayGain attenuator stays as-is.
             com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)

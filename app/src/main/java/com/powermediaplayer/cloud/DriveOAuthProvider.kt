@@ -422,6 +422,30 @@ class DriveOAuthProvider @Inject constructor(
         }
     }
 
+    /** M3 backup — overwrite an existing backup file's content (PATCH media),
+     *  so repeated "Back up to Drive" reuses one file instead of piling up
+     *  duplicates that consume the user's Drive quota. */
+    suspend fun updateTextFile(
+        fileId: String,
+        content: String,
+        mimeType: String = "application/json"
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val token = fetchAccessTokenBlocking()
+            ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
+        runCatching {
+            val req = Request.Builder()
+                .url("https://www.googleapis.com/upload/drive/v3/files/$fileId?uploadType=media&fields=id")
+                .addHeader("Authorization", "Bearer $token")
+                .patch(content.toRequestBody(mimeType.toMediaType()))
+                .build()
+            http.newCall(req).execute().use { resp ->
+                val s = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) error("Drive update HTTP ${resp.code}: $s")
+                JSONObject(s).optString("id").ifBlank { fileId }
+            }
+        }
+    }
+
     /** M3 restore — newest app-created file with this exact name, or null. */
     suspend fun findNewestFileByName(name: String): String? = withContext(Dispatchers.IO) {
         val token = fetchAccessTokenBlocking() ?: return@withContext null

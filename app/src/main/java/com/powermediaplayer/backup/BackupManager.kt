@@ -55,28 +55,35 @@ class BackupManager @Inject constructor(
         runCatching {
             val root = JSONObject(json)
             require(root.optString("format") == FORMAT) { "Not a Power Media Player backup" }
-            // Settings first (cheap, no transaction needed).
-            root.optJSONObject("settings")?.let { restoreSettings(it) }
-            // Tables in one transaction so a failure rolls back cleanly.
             var rows = 0
             val tables = root.optJSONObject("tables")
             if (tables != null) {
                 val existing = currentTables()
+                // Tables present in BOTH the backup and the current schema.
+                val targets = ArrayList<String>()
+                val names = tables.keys()
+                while (names.hasNext()) { val t = names.next(); if (t in existing) targets.add(t) }
                 appDatabase.runInTransaction {
                     val db = appDatabase.openHelper.writableDatabase
-                    val names = tables.keys()
-                    while (names.hasNext()) {
-                        val table = names.next()
-                        if (table !in existing) continue
+                    // Defer FK checks to COMMIT so insert order is irrelevant
+                    // (valid inside a transaction; auto-resets at txn end).
+                    db.execSQL("PRAGMA defer_foreign_keys = TRUE")
+                    // Pass 1 — clear every target first, so a parent DELETE only
+                    // cascades away OLD rows, never rows we just restored.
+                    for (table in targets) db.execSQL("DELETE FROM `$table`")
+                    // Pass 2 — insert every table (order-independent under deferred FK).
+                    for (table in targets) {
                         val cols = tableColumns(table)
                         val arr = tables.optJSONArray(table) ?: continue
-                        db.execSQL("DELETE FROM `$table`")
                         for (i in 0 until arr.length()) {
                             if (insertRow(table, cols, arr.getJSONObject(i))) rows++
                         }
                     }
                 }
             }
+            // Settings AFTER the DB transaction commits — a DB failure then
+            // leaves BOTH stores untouched and the "failed" report is truthful.
+            root.optJSONObject("settings")?.let { restoreSettings(it) }
             rows
         }
     }
@@ -156,6 +163,13 @@ class BackupManager @Inject constructor(
 
     private fun dumpTables(): JSONObject {
         val out = JSONObject()
+        // Read all tables inside one transaction for a cross-table-consistent
+        // snapshot (a concurrent write mid-dump can't split a parent/child).
+        appDatabase.runInTransaction { dumpTablesInto(out) }
+        return out
+    }
+
+    private fun dumpTablesInto(out: JSONObject) {
         val db = appDatabase.openHelper.readableDatabase
         for (table in currentTables()) {
             val arr = JSONArray()
@@ -182,7 +196,6 @@ class BackupManager @Inject constructor(
             }
             out.put(table, arr)
         }
-        return out
     }
 
     /** Insert one row, binding only columns that still exist in the schema. */

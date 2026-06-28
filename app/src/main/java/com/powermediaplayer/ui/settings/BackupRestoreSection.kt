@@ -26,6 +26,8 @@ import com.powermediaplayer.cloud.DriveOAuthProvider
 import com.powermediaplayer.ui.theme.TextTertiary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,20 +56,28 @@ class BackupViewModel @Inject constructor(
 
     fun exportToLocal(uri: Uri) = launchBusy("Backup saved.", "Backup failed") {
         val json = backupManager.buildBackupJson(stampIso())
-        context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
-            ?: error("Could not open the chosen file")
+        withContext(Dispatchers.IO) {
+            context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
+                ?: error("Could not open the chosen file")
+        }
         0
     }
 
     fun importFromLocal(uri: Uri) = launchBusy("Restored", "Restore failed", restore = true) {
-        val json = context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
-            ?: error("Could not read the chosen file")
+        val json = withContext(Dispatchers.IO) {
+            context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+                ?: error("Could not read the chosen file")
+        }
         backupManager.restoreFromJson(json).getOrThrow()
     }
 
     fun backupToDrive() = launchBusy("Backed up to Drive.", "Drive backup failed") {
         val json = backupManager.buildBackupJson(stampIso())
-        drive.uploadTextFile(DRIVE_BACKUP_NAME, json).getOrThrow()
+        // Overwrite the existing backup file if present, else create one — keeps
+        // a single restorable copy instead of accumulating duplicates.
+        val existing = drive.findNewestFileByName(DRIVE_BACKUP_NAME)
+        if (existing != null) drive.updateTextFile(existing, json).getOrThrow()
+        else drive.uploadTextFile(DRIVE_BACKUP_NAME, json).getOrThrow()
         0
     }
 

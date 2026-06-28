@@ -1,5 +1,25 @@
 package com.powermediaplayer.playback
 
+import com.powermediaplayer.data.preferences.BtMediaKind
+
+/**
+ * Pure resolver for the playing item's Bluetooth media kind (M1/M2). Chapter
+ * markers win over the http-podcast heuristic so a cloud-streamed .m4b
+ * audiobook (http URI WITH chapters) is treated as AUDIOBOOK (chapter nav),
+ * not PODCAST (skip). Extracted + unit-tested (the http/chapter conflation is
+ * exactly the branch a test catches). Note: cloud-STREAMED music (http, no
+ * chapters) still resolves to PODCAST under the bare-http heuristic — a minor
+ * skip-vs-track difference, acceptable until a podcast-DB lookup cache lands.
+ */
+object BtKindResolver {
+    fun resolve(isVideo: Boolean, hasChapters: Boolean, isPodcast: Boolean): BtMediaKind = when {
+        isVideo -> BtMediaKind.VIDEO
+        hasChapters -> BtMediaKind.AUDIOBOOK
+        isPodcast -> BtMediaKind.PODCAST
+        else -> BtMediaKind.MUSIC
+    }
+}
+
 /**
  * Pure chapter-navigation maths for the Bluetooth/car path (M2). Single-file
  * M4B audiobooks carry chapter start offsets on the MediaItem metadata; the
