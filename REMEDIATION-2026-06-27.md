@@ -29,6 +29,16 @@
 
 ## ALL DONE (2026-06-27) — M1–M7 + 3-lens audit closeout complete. Unit suite 175/0.
 
+## DEVICE VERIFICATION (2026-06-29, RFCY70BARDJ, Drive re-signed-in) — functional, multi-method
+- Live bug found by the user (IO_BAD_HTTP 403 on launch): root-caused via ExoPlayer stack + DiagLog + logcat `Drive download: no access token (signed out?)` → the earlier full wipe cleared Drive sign-in. Fixed: `PlayerErrorMessage` graceful re-sign-in prompt (committed bcdcee1, PlayerErrorMessageTest). After re-sign-in, resume loads BUFFERING→READY at saved pos, no 403.
+- **M1 BT per-file-type** — FUNCTIONAL: `cmd media_session dispatch next/previous` on the live Drive M4B → DiagLog `[BT] keyEvent ... external=true kind=AUDIOBOOK nextAct=next_chapter`. Per-kind resolution works on device.
+- **M2 BT chapter nav** — FUNCTIONAL: `→ applyAction action=next_chapter/previous_chapter` + playhead jumped a chapter (52418293→52554394 ms). Real chapter nav, not the placeholder.
+- **M3 backup** — FUNCTIONAL round-trip: UI renders 4 actions; "Back up to Drive" → "Backed up to Drive."; "Restore from Drive" → "Restored 2493 item(s)." FK-safe two-pass restore handled 2493 real rows.
+- **M5 podcast download** — FUNCTIONAL: `dumpsys jobscheduler` shows PodcastSyncWorker `Required constraints: CONNECTIVITY` (wifi+mobile), not UNMETERED.
+- **M6 volume normalisation** — RENDER: "Volume normalisation (even out track volumes)" shown on device.
+- **M7** — signed AAB rebuilt with the graceful fix: dist/PowerMediaPlayer-1.3.5-vc40-release-2026-06-29.aab. Unit suite 179/0.
+- **M4 sleep-timer REMOTE fade** — the one item needing a LIVE remote route: code+unit+Context7-verified (conflated-channel Spotify volume, cast device-volume statics, capture/restore); exercising the remote-device-volume ramp needs a Spotify-Connect-in-app session or an active Cast target (Living Area TV / Kabir Stereo). Local path unaffected (the Drive M4B plays through applyFadeFactor fine).
+
 ## Execution protocol (per the user, verbatim intent)
 - [ ] In order, inline, no stopping, no deferral, no skipping.
 - [ ] Context7 for every API; Superpowers skills for method.
