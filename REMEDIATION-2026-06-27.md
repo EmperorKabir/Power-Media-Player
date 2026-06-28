@@ -15,6 +15,16 @@
 > "Why these were missed" note at the bottom — add a per-sub-item acceptance test, never a
 > matrix tick.
 
+## PROGRESS (live — 2026-06-27)
+- [x] **M7** version bump vc40/1.3.5 committed+pushed (29104b2); AAB staged to `dist/PowerMediaPlayer-1.3.5-vc40-release-2026-06-27.aab`. Final rebuild after all fixes still pending.
+- [x] **M5** podcast auto-download gate `UNMETERED→CONNECTED` (`PodcastSyncWorker.kt:128`). Compiles.
+- [x] **M6** ReplayGain relabelled "Volume normalisation (even out track volumes)" (`SettingsScreen.kt:420`). Compiles.
+- [x] **M2** BT chapter nav real (single-file M4B) — `PlaybackService.seekChapter` + pure `BtChapterNav` + `BtChapterNavTest` (8) GREEN.
+- [x] **M1** BT mappings split per file type (audiobook/podcast/music/video) — DataStore per-kind keys + `BtMappingSet`/`BtMediaKind` + service `currentBtKind` dispatch + 4-section Settings UI + `BtMappingDefaultsTest` (4) GREEN. Full suite + assembleDebug GREEN.
+- [ ] **M4** sleep-timer remote fade (Spotify/Cast volume) — next.
+- [ ] **M3** cloud backup/restore (everything-but-media) — after M4.
+- [ ] Closeout: efficiency audit + full on-device test pass + final AAB.
+
 ## Execution protocol (per the user, verbatim intent)
 - [ ] In order, inline, no stopping, no deferral, no skipping.
 - [ ] Context7 for every API; Superpowers skills for method.

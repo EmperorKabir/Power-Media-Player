@@ -77,13 +77,10 @@ class SettingsDataStore @Inject constructor(
         val TAG_OVERRIDES = stringSetPreferencesKey("tag_overrides")
         val BRIGHTNESS_OVERRIDE = floatPreferencesKey("brightness_override")
 
-        // Bluetooth media-button remapping. Stored as the action token
-        // strings declared in BluetoothMediaActions to keep the schema
-        // free of magic ints.
-        val BT_PREV_ACTION = stringPreferencesKey("bt_prev_action")
-        val BT_NEXT_ACTION = stringPreferencesKey("bt_next_action")
-        val BT_SKIP_BACK_SECONDS = intPreferencesKey("bt_skip_back_seconds")
-        val BT_SKIP_FORWARD_SECONDS = intPreferencesKey("bt_skip_forward_seconds")
+        // Bluetooth media-button remapping is now PER FILE TYPE
+        // (audiobook / podcast / music / video). Keys are built by kind
+        // tag: bt_<tag>_prev_action / _next_action / _skip_back / _skip_fwd
+        // (see btKey() in the BT section + BluetoothMediaActions tokens).
 
         // Drive favourite folders. Each entry is "id|displayName" so we
         // preserve the human label without an extra round-trip to the
@@ -1299,46 +1296,59 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
-    // ── Bluetooth Media-Button Mapping ───────────────────────────
-    val btPrevAction: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.BT_PREV_ACTION] ?: BluetoothMediaActions.PREV_TRACK
+    // ── Bluetooth Media-Button Mapping (PER FILE TYPE) ───────────
+    // One independent next/prev/skip mapping per media kind so a car / BT
+    // remote does kind-appropriate things (chapters for audiobooks, skip
+    // for podcasts, track for music/video). Keys: bt_<tag>_*.
+    private fun btKey(kind: BtMediaKind, field: String) =
+        stringPreferencesKey("bt_${kind.tag}_$field")
+    private fun btIntKey(kind: BtMediaKind, field: String) =
+        intPreferencesKey("bt_${kind.tag}_$field")
+
+    private fun Preferences.readKindMapping(kind: BtMediaKind): BtMappingSnapshot {
+        val d = DEFAULT_BT_MAPPINGS.getValue(kind)
+        return BtMappingSnapshot(
+            prevAction = this[btKey(kind, "prev_action")] ?: d.prevAction,
+            nextAction = this[btKey(kind, "next_action")] ?: d.nextAction,
+            skipBackSeconds = this[btIntKey(kind, "skip_back")] ?: d.skipBackSeconds,
+            skipForwardSeconds = this[btIntKey(kind, "skip_fwd")] ?: d.skipForwardSeconds
+        )
+    }
+    private fun Preferences.readBtMappingSet(): BtMappingSet = BtMappingSet(
+        audiobook = readKindMapping(BtMediaKind.AUDIOBOOK),
+        podcast = readKindMapping(BtMediaKind.PODCAST),
+        music = readKindMapping(BtMediaKind.MUSIC),
+        video = readKindMapping(BtMediaKind.VIDEO)
+    )
+
+    suspend fun setBtPrevAction(kind: BtMediaKind, action: String) {
+        context.dataStore.edit { it[btKey(kind, "prev_action")] = action }
+    }
+    suspend fun setBtNextAction(kind: BtMediaKind, action: String) {
+        context.dataStore.edit { it[btKey(kind, "next_action")] = action }
+    }
+    suspend fun setBtSkipBackSeconds(kind: BtMediaKind, seconds: Int) {
+        context.dataStore.edit { it[btIntKey(kind, "skip_back")] = seconds.coerceIn(1, 600) }
+    }
+    suspend fun setBtSkipForwardSeconds(kind: BtMediaKind, seconds: Int) {
+        context.dataStore.edit { it[btIntKey(kind, "skip_fwd")] = seconds.coerceIn(1, 600) }
     }
 
-    suspend fun setBtPrevAction(action: String) {
-        context.dataStore.edit { prefs ->
-            prefs[Keys.BT_PREV_ACTION] = action
-        }
-    }
+    /** Per-kind mapping set, reactive (single flow over the prefs object). */
+    val btMappingSetFlow: Flow<BtMappingSet> =
+        context.dataStore.data.map { it.readBtMappingSet() }
 
-    val btNextAction: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.BT_NEXT_ACTION] ?: BluetoothMediaActions.NEXT_TRACK
-    }
-
-    suspend fun setBtNextAction(action: String) {
-        context.dataStore.edit { prefs ->
-            prefs[Keys.BT_NEXT_ACTION] = action
-        }
-    }
-
-    val btSkipBackSeconds: Flow<Int> = context.dataStore.data.map { prefs ->
-        prefs[Keys.BT_SKIP_BACK_SECONDS] ?: 30
-    }
-
-    suspend fun setBtSkipBackSeconds(seconds: Int) {
-        context.dataStore.edit { prefs ->
-            prefs[Keys.BT_SKIP_BACK_SECONDS] = seconds.coerceIn(1, 600)
-        }
-    }
-
-    val btSkipForwardSeconds: Flow<Int> = context.dataStore.data.map { prefs ->
-        prefs[Keys.BT_SKIP_FORWARD_SECONDS] ?: 30
-    }
-
-    suspend fun setBtSkipForwardSeconds(seconds: Int) {
-        context.dataStore.edit { prefs ->
-            prefs[Keys.BT_SKIP_FORWARD_SECONDS] = seconds.coerceIn(1, 600)
-        }
-    }
+    // Legacy single-mapping flows retained ONLY so the large uiState combine
+    // stays index-stable; they mirror the MUSIC kind. The per-file-type
+    // Settings UI uses [btMappingSetFlow]; BT dispatch uses [btMappingSet].
+    val btPrevAction: Flow<String> =
+        context.dataStore.data.map { it.readKindMapping(BtMediaKind.MUSIC).prevAction }
+    val btNextAction: Flow<String> =
+        context.dataStore.data.map { it.readKindMapping(BtMediaKind.MUSIC).nextAction }
+    val btSkipBackSeconds: Flow<Int> =
+        context.dataStore.data.map { it.readKindMapping(BtMediaKind.MUSIC).skipBackSeconds }
+    val btSkipForwardSeconds: Flow<Int> =
+        context.dataStore.data.map { it.readKindMapping(BtMediaKind.MUSIC).skipForwardSeconds }
 
     // ── Drive favourite folders ──────────────────────────────────
     val driveFavouriteFolders: Flow<List<DriveFavouriteFolder>> =
@@ -1519,19 +1529,13 @@ class SettingsDataStore @Inject constructor(
     }
 
     /**
-     * Synchronous snapshot of the Bluetooth mapping — used by
-     * PlaybackService.MediaSession.Callback which is invoked on the
-     * binder thread and cannot block on a Flow.collect.
+     * Synchronous snapshot of the per-kind Bluetooth mapping set — used by
+     * PlaybackService.MediaSession.Callback which is invoked on the binder
+     * thread and cannot block on a Flow.collect. Resolve the kind at dispatch
+     * via [BtMappingSet.forKind].
      */
-    suspend fun btMappingSnapshot(): BtMappingSnapshot {
-        val prefs = context.dataStore.data.first()
-        return BtMappingSnapshot(
-            prevAction = prefs[Keys.BT_PREV_ACTION] ?: BluetoothMediaActions.PREV_TRACK,
-            nextAction = prefs[Keys.BT_NEXT_ACTION] ?: BluetoothMediaActions.NEXT_TRACK,
-            skipBackSeconds = prefs[Keys.BT_SKIP_BACK_SECONDS] ?: 30,
-            skipForwardSeconds = prefs[Keys.BT_SKIP_FORWARD_SECONDS] ?: 30
-        )
-    }
+    suspend fun btMappingSet(): BtMappingSet =
+        context.dataStore.data.first().readBtMappingSet()
 }
 
 /**
@@ -1568,11 +1572,65 @@ data class DrivePickedRoot(val treeUri: String, val name: String)
 data class SpotifyFavourite(val id: String, val name: String)
 
 /**
- * Immutable snapshot for the binder-thread MediaSession.Callback.
+ * Per-kind Bluetooth media-button mapping unit (one next/prev/skip set).
  */
 data class BtMappingSnapshot(
     val prevAction: String,
     val nextAction: String,
     val skipBackSeconds: Int,
     val skipForwardSeconds: Int
+)
+
+/**
+ * Media kinds that each get their OWN Bluetooth/car next-prev mapping.
+ * `tag` is the DataStore key segment (bt_<tag>_prev_action, …).
+ */
+enum class BtMediaKind(val tag: String) {
+    AUDIOBOOK("audiobook"), PODCAST("podcast"), MUSIC("music"), VIDEO("video")
+}
+
+/**
+ * The four per-kind mappings, snapshotted for the binder-thread
+ * MediaSession.Callback. Resolve the playing item's kind at dispatch via
+ * [forKind].
+ */
+data class BtMappingSet(
+    val audiobook: BtMappingSnapshot,
+    val podcast: BtMappingSnapshot,
+    val music: BtMappingSnapshot,
+    val video: BtMappingSnapshot
+) {
+    fun forKind(kind: BtMediaKind): BtMappingSnapshot = when (kind) {
+        BtMediaKind.AUDIOBOOK -> audiobook
+        BtMediaKind.PODCAST -> podcast
+        BtMediaKind.MUSIC -> music
+        BtMediaKind.VIDEO -> video
+    }
+    companion object {
+        val DEFAULT = BtMappingSet(
+            audiobook = DEFAULT_BT_MAPPINGS.getValue(BtMediaKind.AUDIOBOOK),
+            podcast = DEFAULT_BT_MAPPINGS.getValue(BtMediaKind.PODCAST),
+            music = DEFAULT_BT_MAPPINGS.getValue(BtMediaKind.MUSIC),
+            video = DEFAULT_BT_MAPPINGS.getValue(BtMediaKind.VIDEO)
+        )
+    }
+}
+
+/**
+ * Sensible kind-appropriate defaults. Audiobooks → chapter nav; podcasts →
+ * skip (15 s back / 30 s forward); music & video → track nav.
+ */
+val DEFAULT_BT_MAPPINGS: Map<BtMediaKind, BtMappingSnapshot> = mapOf(
+    BtMediaKind.AUDIOBOOK to BtMappingSnapshot(
+        BluetoothMediaActions.PREV_CHAPTER, BluetoothMediaActions.NEXT_CHAPTER, 30, 30
+    ),
+    BtMediaKind.PODCAST to BtMappingSnapshot(
+        BluetoothMediaActions.SKIP_BACK, BluetoothMediaActions.SKIP_FORWARD, 15, 30
+    ),
+    BtMediaKind.MUSIC to BtMappingSnapshot(
+        BluetoothMediaActions.PREV_TRACK, BluetoothMediaActions.NEXT_TRACK, 30, 30
+    ),
+    BtMediaKind.VIDEO to BtMappingSnapshot(
+        BluetoothMediaActions.PREV_TRACK, BluetoothMediaActions.NEXT_TRACK, 30, 30
+    )
 )

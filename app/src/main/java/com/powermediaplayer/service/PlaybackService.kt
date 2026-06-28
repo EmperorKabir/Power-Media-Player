@@ -24,7 +24,8 @@ import androidx.media3.extractor.mp4.Mp4Extractor
 import com.google.android.gms.cast.framework.CastContext
 import com.powermediaplayer.cloud.GoogleDriveProvider
 import com.powermediaplayer.data.preferences.BluetoothMediaActions
-import com.powermediaplayer.data.preferences.BtMappingSnapshot
+import com.powermediaplayer.data.preferences.BtMappingSet
+import com.powermediaplayer.data.preferences.BtMediaKind
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaSession
@@ -244,12 +245,7 @@ class PlaybackService : MediaSessionService() {
     // this snapshot whenever DataStore emits and the callback reads it
     // lock-free via @Volatile.
     @Volatile
-    private var btMapping: BtMappingSnapshot = BtMappingSnapshot(
-        prevAction = BluetoothMediaActions.PREV_TRACK,
-        nextAction = BluetoothMediaActions.NEXT_TRACK,
-        skipBackSeconds = 30,
-        skipForwardSeconds = 30
-    )
+    private var btMappingSet: BtMappingSet = BtMappingSet.DEFAULT
 
     private val serviceScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
@@ -1135,18 +1131,20 @@ class PlaybackService : MediaSessionService() {
         // these as Builder setters (no runtime mutation), so live changes
         // to the BT seconds don't update the increments — but the live
         // BT path is already covered by the callback in Tasks 1 & 2.
-        val initialBtMapping = runCatching {
+        val initialBtSet = runCatching {
             kotlinx.coroutines.runBlocking {
                 kotlinx.coroutines.withTimeoutOrNull(200) {
-                    settingsDataStore.btMappingSnapshot()
+                    settingsDataStore.btMappingSet()
                 }
             }
-        }.getOrNull() ?: BtMappingSnapshot(
-            prevAction = BluetoothMediaActions.PREV_TRACK,
-            nextAction = BluetoothMediaActions.NEXT_TRACK,
-            skipBackSeconds = 30,
-            skipForwardSeconds = 30
-        )
+        }.getOrNull() ?: BtMappingSet.DEFAULT
+        // Seed the cached snapshot so the very first BT button (before the
+        // reactive collector starts) resolves real per-kind mappings.
+        btMappingSet = initialBtSet
+        // The player's GLOBAL seek increments are only a fallback for paths
+        // we don't intercept; seed them from the music-kind skip seconds
+        // (per-kind skip is applied in applyAction via cumulativeSkip).
+        val initialBtMapping = initialBtSet.music
 
         // Build ExoPlayer with audio focus and wake lock.
         // Audio offload is left at the default (DISABLED) so AudioSink can
@@ -1796,21 +1794,14 @@ class PlaybackService : MediaSessionService() {
             .setCustomLayout(customLayout)
             .build()
 
-        // Keep the Bluetooth mapping snapshot fresh. Combine into a
-        // single Flow so we set the @Volatile field atomically. The
+        // Keep the per-kind Bluetooth mapping set fresh in the @Volatile
+        // field. A single Flow over the prefs object → atomic set. The
         // Player's seek increments are set once at Builder time above
-        // (Media3 1.6.0 has no runtime setters); btMapping itself feeds
-        // applyAction on every BT press so live changes still take
-        // effect on the primary code path.
+        // (Media3 1.6.0 has no runtime setters); btMappingSet feeds
+        // applyAction on every BT press (kind resolved at dispatch) so live
+        // changes still take effect on the primary code path.
         serviceScope.launch {
-            kotlinx.coroutines.flow.combine(
-                settingsDataStore.btPrevAction,
-                settingsDataStore.btNextAction,
-                settingsDataStore.btSkipBackSeconds,
-                settingsDataStore.btSkipForwardSeconds
-            ) { prev, next, back, fwd ->
-                BtMappingSnapshot(prev, next, back, fwd)
-            }.collect { btMapping = it }
+            settingsDataStore.btMappingSetFlow.collect { btMappingSet = it }
         }
 
         // Cast: initialize lazily; if Google Play Services is missing the
@@ -3039,17 +3030,19 @@ class PlaybackService : MediaSessionService() {
             // BEFORE filtering. Captures the raw opcode + caller package
             // so testers can see exactly what their car emits.
             if (isExternal) {
+                val k = currentBtKind(session.player)
+                val m = btMappingSet.forKind(k)
                 com.powermediaplayer.diag.DiagLog.event(
                     "BT_CMD",
-                    "cmd=$playerCommand pkg=${controller.packageName} " +
-                        "prevAct=${btMapping.prevAction} nextAct=${btMapping.nextAction} " +
-                        "skipBack=${btMapping.skipBackSeconds}s skipFwd=${btMapping.skipForwardSeconds}s"
+                    "cmd=$playerCommand pkg=${controller.packageName} kind=$k " +
+                        "prevAct=${m.prevAction} nextAct=${m.nextAction} " +
+                        "skipBack=${m.skipBackSeconds}s skipFwd=${m.skipForwardSeconds}s"
                 )
             }
             if (!isExternal) return super.onPlayerCommandRequest(session, controller, playerCommand)
 
             val player = session.player
-            val mapping = btMapping
+            val mapping = btMappingSet.forKind(currentBtKind(player))
             return when (playerCommand) {
                 Player.COMMAND_SEEK_TO_PREVIOUS,
                 Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
@@ -3145,10 +3138,11 @@ class PlaybackService : MediaSessionService() {
             if (keyEvent.action != android.view.KeyEvent.ACTION_DOWN) return false
             val pkg = controllerInfo.packageName
             val isExternal = pkg != packageName
-            val mapping = btMapping
+            val btKind = currentBtKind(session.player)
+            val mapping = btMappingSet.forKind(btKind)
             com.powermediaplayer.diag.DiagLog.bt(
                 "keyEvent code=${keyEvent.keyCode} keyName=${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} " +
-                    "pkg=$pkg external=$isExternal repeat=${keyEvent.repeatCount} " +
+                    "pkg=$pkg external=$isExternal repeat=${keyEvent.repeatCount} kind=$btKind " +
                     "prevAct=${mapping.prevAction} nextAct=${mapping.nextAction} " +
                     "skipBack=${mapping.skipBackSeconds}s skipFwd=${mapping.skipForwardSeconds}s"
             )
@@ -3405,6 +3399,33 @@ class PlaybackService : MediaSessionService() {
     }
 
     /**
+     * Resolve the playing item's BT media kind so the per-file-type mapping
+     * applies (audiobook / podcast / music / video). Mirrors the autoplay
+     * gate's classification (isVideoByName / http-podcast heuristic / chapter
+     * markers) so behaviour is consistent across the app. Works with no UI
+     * attached (the car case) — reads only the service-side Player.
+     */
+    private fun currentBtKind(player: Player): BtMediaKind {
+        val item = player.currentMediaItem ?: return BtMediaKind.MUSIC
+        val uri = item.mediaId
+        val name = uri.substringAfterLast('/')
+        val isVideo = com.powermediaplayer.util.MediaClassifier.isVideoByName(name, "") ||
+            player.videoSize.width > 0
+        if (isVideo) return BtMediaKind.VIDEO
+        val isPodcast = uri.startsWith("http")
+        val hasChapters = (player.mediaMetadata.extras?.getInt("chapter_count", 0) ?: 0) > 0
+        return when (
+            com.powermediaplayer.util.MediaClassifier.classifyAudioSubKind(
+                name, hasChapters = hasChapters, isPodcast = isPodcast
+            )
+        ) {
+            com.powermediaplayer.util.AudioSubKind.PODCAST -> BtMediaKind.PODCAST
+            com.powermediaplayer.util.AudioSubKind.AUDIOBOOK -> BtMediaKind.AUDIOBOOK
+            com.powermediaplayer.util.AudioSubKind.SONG -> BtMediaKind.MUSIC
+        }
+    }
+
+    /**
      * Apply a remapped Bluetooth media-button action against the player.
      * Runs on the binder thread but every Player call below is dispatched
      * to the application looper internally, so no extra wrapping needed.
@@ -3486,14 +3507,58 @@ class PlaybackService : MediaSessionService() {
                 cumulativeSkip(player, seconds * 1000L)
             }
             BluetoothMediaActions.RESTART_TRACK -> player.seekTo(0L)
-            BluetoothMediaActions.PREV_CHAPTER,
-            BluetoothMediaActions.NEXT_CHAPTER -> {
-                // Chapter navigation lives in PlaybackConnection, not the
-                // service. Fall back to media-item navigation for now —
-                // a future pass can add a custom command roundtrip.
-                if (isPrev) player.seekToPreviousMediaItem() else player.seekToNextMediaItem()
-            }
+            BluetoothMediaActions.PREV_CHAPTER -> seekChapter(player, forward = false)
+            BluetoothMediaActions.NEXT_CHAPTER -> seekChapter(player, forward = true)
             else -> if (isPrev) player.seekToPreviousMediaItem() else player.seekToNextMediaItem()
+        }
+    }
+
+    /**
+     * Service-side chapter navigation for the BT/car path. Single-file M4B
+     * audiobooks carry chapter markers on the MediaItem metadata extras
+     * (`chapter_count` / `chapter_start_<i>`, written by the M4B parser and
+     * read identically by PlaybackConnection.extractChapters) — so the service
+     * can navigate chapters by seeking WITHIN the current item, with no UI /
+     * MediaController attached (the car case where the Activity is often dead).
+     *
+     * When the current item carries NO per-file chapters (e.g. a folder
+     * audiobook where each file IS a chapter, or non-chaptered media) we fall
+     * back to media-item navigation — which is the correct chapter step for the
+     * file-per-chapter folder case. Mirrors PlaybackConnection's
+     * next/previousChapterOrTrack semantics (3 s grace on previous).
+     */
+    private fun seekChapter(player: Player, forward: Boolean) {
+        val extras = player.mediaMetadata.extras
+        val count = extras?.getInt("chapter_count", 0) ?: 0
+        if (count <= 0) {
+            // No intra-file chapters → file boundary IS the chapter boundary.
+            if (forward) player.seekToNextMediaItem() else player.seekToPreviousMediaItem()
+            return
+        }
+        val starts = ArrayList<Long>(count)
+        for (i in 0 until count) {
+            val s = extras!!.getLong("chapter_start_$i", -1L)
+            if (s >= 0L) starts.add(s)
+        }
+        if (starts.isEmpty()) {
+            if (forward) player.seekToNextMediaItem() else player.seekToPreviousMediaItem()
+            return
+        }
+        val pos = player.currentPosition
+        if (forward) {
+            val next = com.powermediaplayer.playback.BtChapterNav.nextStart(starts, pos)
+            when {
+                next != null -> player.seekTo(next)
+                player.hasNextMediaItem() -> player.seekToNextMediaItem()
+                else -> { /* last chapter of last item — stay put */ }
+            }
+        } else {
+            val target = com.powermediaplayer.playback.BtChapterNav.prevTarget(starts, pos)
+            when {
+                target != null -> player.seekTo(target)
+                player.hasPreviousMediaItem() -> player.seekToPreviousMediaItem()
+                else -> player.seekTo(0L)
+            }
         }
     }
 }

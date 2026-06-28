@@ -3,6 +3,8 @@ package com.powermediaplayer.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.powermediaplayer.data.preferences.BluetoothMediaActions
+import com.powermediaplayer.data.preferences.BtMappingSet
+import com.powermediaplayer.data.preferences.BtMediaKind
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -142,6 +144,12 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
     val subtitleTextSizeFlow: StateFlow<Float> = settingsDataStore.subtitleTextSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1f)
+
+    /** Per-file-type Bluetooth/car mappings (audiobook/podcast/music/video).
+     *  Kept as a SEPARATE flow (not in the big indexed uiState combine) to
+     *  avoid index churn — the per-file-type Settings UI reads this. */
+    val btMappingSet: StateFlow<BtMappingSet> = settingsDataStore.btMappingSetFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BtMappingSet.DEFAULT)
 
     val uiState: StateFlow<SettingsUiState> = combine(
         listOf<Flow<Any>>(
@@ -830,20 +838,20 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setSoftwareDecoding(enabled) }
     }
 
-    fun setBtPrevAction(action: String) {
-        viewModelScope.launch { settingsDataStore.setBtPrevAction(action) }
+    fun setBtPrevAction(kind: BtMediaKind, action: String) {
+        viewModelScope.launch { settingsDataStore.setBtPrevAction(kind, action) }
     }
 
-    fun setBtNextAction(action: String) {
-        viewModelScope.launch { settingsDataStore.setBtNextAction(action) }
+    fun setBtNextAction(kind: BtMediaKind, action: String) {
+        viewModelScope.launch { settingsDataStore.setBtNextAction(kind, action) }
     }
 
-    fun setBtSkipBackSeconds(seconds: Int) {
-        viewModelScope.launch { settingsDataStore.setBtSkipBackSeconds(seconds) }
+    fun setBtSkipBackSeconds(kind: BtMediaKind, seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setBtSkipBackSeconds(kind, seconds) }
     }
 
-    fun setBtSkipForwardSeconds(seconds: Int) {
-        viewModelScope.launch { settingsDataStore.setBtSkipForwardSeconds(seconds) }
+    fun setBtSkipForwardSeconds(kind: BtMediaKind, seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setBtSkipForwardSeconds(kind, seconds) }
     }
 
     // Video effects: applied per-frame in the GL surface (~16 ms floor

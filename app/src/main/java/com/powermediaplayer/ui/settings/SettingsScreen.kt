@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.data.preferences.BluetoothMediaActions
+import com.powermediaplayer.data.preferences.BtMediaKind
 import kotlinx.coroutines.launch
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.BuildConfig
@@ -45,6 +46,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val autoplay by viewModel.autoplaySettings.collectAsStateWithLifecycle()
     val voiceBoost by viewModel.voiceBoost.collectAsStateWithLifecycle()
+    val btMappingSet by viewModel.btMappingSet.collectAsStateWithLifecycle()
     val subtitleTextSize by viewModel.subtitleTextSizeFlow.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
@@ -417,8 +419,8 @@ fun SettingsScreen(
                     checked = uiState.replayGainAutoScan,
                     onCheckedChange = { viewModel.setReplayGainAutoScan(it) }
                 )
-                SettingsToggleItem("Even out track volumes",
-                    "Play every track at a similar volume so you're not reaching for the volume between songs. Uses each file's own loudness measurement (known as ReplayGain).",
+                SettingsToggleItem("Volume normalisation (even out track volumes)",
+                    "Automatic loudness normalisation — plays every track at a similar volume so you're not reaching for the volume between songs. Uses each file's own loudness measurement (known as ReplayGain), targeting a consistent level.",
                     Icons.Filled.GraphicEq, uiState.replayGainEnabled) { viewModel.setReplayGain(it) }
             },
             SettingsItem(
@@ -437,34 +439,49 @@ fun SettingsScreen(
         // 4 — Connectivity
         SettingsGroup("Connectivity", listOf(
             SettingsItem(
-                "bluetooth-car", "Bluetooth car controls",
-                listOf("bluetooth", "car", "stereo", "remote", "button", "prev", "next", "skip")
+                "bluetooth-car", "Bluetooth car controls (per file type)",
+                listOf("bluetooth", "car", "stereo", "remote", "button", "prev", "next",
+                    "skip", "audiobook", "podcast", "music", "video", "chapter", "episode")
             ) {
                 Text(
                     text = "Remap the Previous and Next buttons on your car stereo " +
-                        "(or any Bluetooth remote) when playing through this app. " +
-                        "Works with any car that already controls media over Bluetooth — " +
-                        "no setup needed in the car.",
+                        "(or any Bluetooth remote), independently for each kind of media. " +
+                        "Audiobooks default to chapter navigation, podcasts to skip, and " +
+                        "music and video to track. Works with any car that already " +
+                        "controls media over Bluetooth — no setup needed in the car.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
                 )
-                BluetoothActionPicker(
-                    label = "Previous button does",
-                    currentAction = uiState.btPrevAction,
-                    seconds = uiState.btSkipBackSeconds,
-                    options = PREV_OPTIONS,
-                    onActionChange = { viewModel.setBtPrevAction(it) },
-                    onSecondsChange = { viewModel.setBtSkipBackSeconds(it) }
-                )
-                BluetoothActionPicker(
-                    label = "Next button does",
-                    currentAction = uiState.btNextAction,
-                    seconds = uiState.btSkipForwardSeconds,
-                    options = NEXT_OPTIONS,
-                    onActionChange = { viewModel.setBtNextAction(it) },
-                    onSecondsChange = { viewModel.setBtSkipForwardSeconds(it) }
-                )
+                listOf(
+                    Triple(BtMediaKind.AUDIOBOOK, "Audiobooks", btMappingSet.audiobook),
+                    Triple(BtMediaKind.PODCAST, "Podcasts", btMappingSet.podcast),
+                    Triple(BtMediaKind.MUSIC, "Music", btMappingSet.music),
+                    Triple(BtMediaKind.VIDEO, "Video", btMappingSet.video)
+                ).forEach { (kind, title, m) ->
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TealAccent,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                    )
+                    BluetoothActionPicker(
+                        label = "Previous button does",
+                        currentAction = m.prevAction,
+                        seconds = m.skipBackSeconds,
+                        options = PREV_OPTIONS,
+                        onActionChange = { viewModel.setBtPrevAction(kind, it) },
+                        onSecondsChange = { viewModel.setBtSkipBackSeconds(kind, it) }
+                    )
+                    BluetoothActionPicker(
+                        label = "Next button does",
+                        currentAction = m.nextAction,
+                        seconds = m.skipForwardSeconds,
+                        options = NEXT_OPTIONS,
+                        onActionChange = { viewModel.setBtNextAction(kind, it) },
+                        onSecondsChange = { viewModel.setBtSkipForwardSeconds(kind, it) }
+                    )
+                }
             },
             SettingsItem(
                 "bt-av-offset", "Bluetooth A/V sync offset",

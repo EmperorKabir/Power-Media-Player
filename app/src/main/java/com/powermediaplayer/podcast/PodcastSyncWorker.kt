@@ -122,10 +122,11 @@ class PodcastSyncWorker @AssistedInject constructor(
                 6, TimeUnit.HOURS
             ).setConstraints(
                 Constraints.Builder()
-                    // UNMETERED, matching the documented "on Wi-Fi"
-                    // behaviour — auto-download was pulling full episode
-                    // audio over mobile data every 6h (audit 5.5).
-                    .setRequiredNetworkType(NetworkType.UNMETERED)
+                    // CONNECTED (Wi-Fi OR mobile data) per explicit user
+                    // directive (2026-06-26): "no need to condition it …
+                    // wifi and mobile data … most seamless experience".
+                    // Only requirement is that a network is present.
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build()
             ).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
