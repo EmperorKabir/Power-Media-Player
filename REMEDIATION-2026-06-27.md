@@ -22,7 +22,7 @@
 - [x] **M2** BT chapter nav real (single-file M4B) — `PlaybackService.seekChapter` + pure `BtChapterNav` + `BtChapterNavTest` (8) GREEN.
 - [x] **M1** BT mappings split per file type (audiobook/podcast/music/video) — DataStore per-kind keys + `BtMappingSet`/`BtMediaKind` + service `currentBtKind` dispatch + 4-section Settings UI + `BtMappingDefaultsTest` (4) GREEN. Full suite + assembleDebug GREEN.
 - [x] **M4** sleep-timer remote fade — Spotify `setVolume`+`currentVolumePercent`, Cast device-volume statics (`setCastDeviceVolumeFraction`/`captureCastDeviceVolume`), PlayerViewModel `applyFadeFactor` capture→ramp→restore across all 4 fade loops + cancel. Context7-verified Cast volume API. Compiles. (device A/B at closeout)
-- [ ] **M3** cloud backup/restore (everything-but-media) — in progress.
+- [x] **M3** cloud backup/restore — generic `BackupManager` (all DataStore settings via asMap + every Room table via raw SQL dump/restore, schema-drift-safe) + Drive write (`uploadTextFile`/`findNewestFileByName`/`downloadTextFile`) + local SAF + Drive UI (`BackupRestoreSection`) in Settings → Library & cloud. `BackupManagerTest` (3, Robolectric) GREEN. Full suite + assembleDebug GREEN.
 - [ ] Closeout: efficiency audit + full on-device test pass + final AAB.
 
 ## Execution protocol (per the user, verbatim intent)

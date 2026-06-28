@@ -1536,6 +1536,16 @@ class SettingsDataStore @Inject constructor(
      */
     suspend fun btMappingSet(): BtMappingSet =
         context.dataStore.data.first().readBtMappingSet()
+
+    // ── M3 backup/restore generic accessors ──────────────────────────────
+    /** Raw preferences flow — used by BackupManager to serialise every setting
+     *  generically via [Preferences.asMap] (no per-key enumeration). */
+    fun dataStoreData(): kotlinx.coroutines.flow.Flow<Preferences> = context.dataStore.data
+
+    /** Generic edit — used by BackupManager to restore every setting. */
+    suspend fun editPreferences(block: (MutablePreferences) -> Unit) {
+        context.dataStore.edit(block)
+    }
 }
 
 /**

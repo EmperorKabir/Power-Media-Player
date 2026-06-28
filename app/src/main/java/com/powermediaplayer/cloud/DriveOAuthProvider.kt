@@ -27,6 +27,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -381,6 +384,77 @@ class DriveOAuthProvider @Inject constructor(
      * Range download to local cache. Used by the M4B chapter parser /
      * MediaMetadataRetriever / FFmpeg path that need a seekable file.
      */
+    /**
+     * M3 backup — upload a small text file (the backup JSON) to Drive via a
+     * multipart create. Uses the drive.file scope (the app can always read
+     * back files it created), so no extra Google verification. Returns the id.
+     */
+    suspend fun uploadTextFile(
+        fileName: String,
+        content: String,
+        mimeType: String = "application/json"
+    ): Result<String> = withContext(Dispatchers.IO) {
+        val token = fetchAccessTokenBlocking()
+            ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
+        runCatching {
+            val boundary = "pmp" + java.util.UUID.randomUUID().toString().replace("-", "")
+            val meta = JSONObject().put("name", fileName).put("mimeType", mimeType).toString()
+            val payload = buildString {
+                append("--").append(boundary).append("\r\n")
+                append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+                append(meta).append("\r\n")
+                append("--").append(boundary).append("\r\n")
+                append("Content-Type: ").append(mimeType).append("\r\n\r\n")
+                append(content).append("\r\n")
+                append("--").append(boundary).append("--")
+            }
+            val reqBody = payload.toRequestBody("multipart/related; boundary=$boundary".toMediaType())
+            val req = Request.Builder()
+                .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id")
+                .addHeader("Authorization", "Bearer $token")
+                .post(reqBody)
+                .build()
+            http.newCall(req).execute().use { resp ->
+                val bodyStr = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) error("Drive upload HTTP ${resp.code}: $bodyStr")
+                JSONObject(bodyStr).optString("id").ifBlank { error("Drive upload returned no id") }
+            }
+        }
+    }
+
+    /** M3 restore — newest app-created file with this exact name, or null. */
+    suspend fun findNewestFileByName(name: String): String? = withContext(Dispatchers.IO) {
+        val token = fetchAccessTokenBlocking() ?: return@withContext null
+        runCatching {
+            val q = java.net.URLEncoder.encode("name = '$name' and trashed = false", "UTF-8")
+            val url = "https://www.googleapis.com/drive/v3/files?q=$q" +
+                "&orderBy=modifiedTime%20desc&pageSize=1&fields=files(id,name)"
+            val req = Request.Builder().url(url).addHeader("Authorization", "Bearer $token").build()
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                val files = JSONObject(resp.body?.string().orEmpty()).optJSONArray("files")
+                if (files != null && files.length() > 0) files.getJSONObject(0).optString("id") else null
+            }
+        }.getOrNull()
+    }
+
+    /** M3 restore — full text content of a (small) Drive file by id. */
+    suspend fun downloadTextFile(fileId: String): Result<String> = withContext(Dispatchers.IO) {
+        val token = fetchAccessTokenBlocking()
+            ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
+        runCatching {
+            val req = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/files/$fileId?alt=media")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            http.newCall(req).execute().use { resp ->
+                val s = resp.body?.string().orEmpty()
+                if (!resp.isSuccessful) error("Drive download HTTP ${resp.code}")
+                s
+            }
+        }
+    }
+
     suspend fun downloadRangeToCache(
         item: CloudMediaItem,
         rangeStart: Long?,

@@ -434,6 +434,13 @@ fun SettingsScreen(
                 SettingsToggleItem("Pre-fetch next cloud track",
                     "Buffer the next item in a cloud queue for seamless transition.",
                     Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }
+            },
+            SettingsItem(
+                "backup-restore", "Back up & restore",
+                listOf("backup", "back up", "restore", "export", "import", "settings",
+                    "migrate", "transfer", "drive", "save", "metadata", "favourites", "history")
+            ) {
+                com.powermediaplayer.ui.settings.BackupRestoreSection()
             }
         )),
         // 4 — Connectivity
