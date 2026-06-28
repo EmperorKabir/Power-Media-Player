@@ -24,7 +24,10 @@
 - [x] **M4** sleep-timer remote fade — Spotify `setVolume`+`currentVolumePercent`, Cast device-volume statics (`setCastDeviceVolumeFraction`/`captureCastDeviceVolume`), PlayerViewModel `applyFadeFactor` capture→ramp→restore across all 4 fade loops + cancel. Context7-verified Cast volume API. Compiles. (device A/B at closeout)
 - [x] **M3** cloud backup/restore — generic `BackupManager` (all DataStore settings via asMap + every Room table via raw SQL dump/restore, schema-drift-safe) + Drive write (`uploadTextFile`/`findNewestFileByName`/`downloadTextFile`) + local SAF + Drive UI (`BackupRestoreSection`) in Settings → Library & cloud. `BackupManagerTest` (3, Robolectric) GREEN. Full suite + assembleDebug GREEN.
 - [x] Closeout — efficiency audit (3-lens) DONE: found + fixed 1 HIGH (Spotify sleep-timer expiry never paused Connect + fire-and-forget volume reorder → now pauses Spotify at expiry + serialises volume via conflated channel), 1 MED-HIGH (cloud audiobook misclassified podcast → chapters-first `BtKindResolver` + test), 5 MED (FK-safe restore via defer-FK + two-pass; DB-before-settings; SAF I/O off main; cast fade dedup+cached Handler; consistent-snapshot dump), + LOWs (capture-null skip, Drive overwrite-not-duplicate, fade process-death persistence, resolve-kind-once). Unit suite 175/0. assembleDebug green.
-- [ ] Final on-device pass + final AAB rebuild/stage.
+- [x] Final on-device pass — fully-integrated debug build installs + launches clean (no FATAL/Room/crash, MainActivity alive) on RFCY70BARDJ.
+- [x] Final AAB — `dist/PowerMediaPlayer-1.3.5-vc40-release-2026-06-27.aab` (vc40/1.3.5, signed POWERMED.RSA, 14.76 MB) with all M1–M7 + audit fixes.
+
+## ALL DONE (2026-06-27) — M1–M7 + 3-lens audit closeout complete. Unit suite 175/0.
 
 ## Execution protocol (per the user, verbatim intent)
 - [ ] In order, inline, no stopping, no deferral, no skipping.

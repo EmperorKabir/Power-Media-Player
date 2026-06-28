@@ -1,11 +1,12 @@
 # TASKS.md — binding task ledger (compaction-proof)
 
-> **▶ RESUME 2026-06-27: see `REMEDIATION-2026-06-27.md` (repo root).** User-committed
-> instruction to fix all 7 audit misses (M1–M7) in order, inline, no stopping, using
-> Context7 + Superpowers + the `android-build-and-device-test` skill with tickbox discipline,
-> then the `android-efficiency-audit` skill, then a full on-device test pass — one run, no
-> deferral. Scope decisions captured there (BT split = all 4 file types; cloud backup =
-> everything except the media files, metadata included).
+> **✓ DONE 2026-06-27 — all 7 audit misses (M1–M7) fixed + 3-lens efficiency audit
+> closeout applied.** See `REMEDIATION-2026-06-27.md` for the full record. M1 BT
+> per-file-type mappings (4 kinds), M2 BT chapter nav, M3 cloud backup/restore (local +
+> Drive), M4 sleep-timer remote fade (Spotify+Cast, pauses+restores correctly), M5 podcast
+> download wifi+mobile, M6 volume-normalisation label, M7 vc40/1.3.5 released. Unit suite
+> 175/0; device-clean; signed AAB staged to dist/. Audit fixed 1 HIGH (Spotify sleep-timer
+> expiry) + 1 MED-HIGH (cloud-audiobook BT kind) + 5 MED + LOWs.
 
 > Closed/verified history archived to docs/archive/TASKS-history.md (read on demand).
 
