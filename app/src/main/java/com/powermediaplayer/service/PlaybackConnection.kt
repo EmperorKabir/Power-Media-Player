@@ -778,8 +778,21 @@ class PlaybackConnection @Inject constructor(
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
+                // Turn a raw Drive 403 (lost sign-in after a reinstall/wipe) into
+                // an actionable "re-sign-in" prompt instead of "Source error".
+                val item = controller?.currentMediaItem
+                val uri = item?.localConfiguration?.uri?.toString() ?: item?.mediaId ?: ""
+                val isBadHttp = error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                val isNetwork = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                val raw = error.errorCodeName + ": " + (error.message ?: "Playback failed")
                 _playerState.value = _playerState.value.copy(
-                    playerError = error.errorCodeName + ": " + (error.message ?: "Playback failed")
+                    playerError = com.powermediaplayer.playback.PlayerErrorMessage.resolve(
+                        isDriveBadHttp = isBadHttp &&
+                            com.powermediaplayer.playback.PlayerErrorMessage.isDriveUri(uri),
+                        isNetwork = isNetwork,
+                        rawFallback = raw
+                    )
                 )
             }
             override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
