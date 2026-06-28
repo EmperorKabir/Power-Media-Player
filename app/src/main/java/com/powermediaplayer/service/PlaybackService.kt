@@ -289,6 +289,45 @@ class PlaybackService : MediaSessionService() {
 
         fun getExoPlayer(): ExoPlayer? = exoPlayerRef?.get()
 
+        // ── M4: cast device-volume control for the sleep-timer remote fade ──
+        // Set in switchPlayer when the active player is the CastPlayer.
+        private var castPlayerRef: java.lang.ref.WeakReference<Player>? = null
+
+        /** True when a CastPlayer is the active player (audio on a cast device). */
+        internal fun isCasting(): Boolean = castPlayerRef?.get() != null
+
+        /** Capture the cast device volume as a 0..1 fraction of its range, or
+         *  null if not casting / volume unreadable. Read once at fade start so
+         *  the level can be RESTORED after the fade (device volume is sticky). */
+        internal fun captureCastDeviceVolume(): Float? {
+            val p = castPlayerRef?.get() ?: return null
+            return runCatching {
+                if (!p.isCommandAvailable(Player.COMMAND_GET_DEVICE_VOLUME)) return null
+                val info = p.deviceInfo
+                val range = info.maxVolume - info.minVolume
+                if (range <= 0) null
+                else (p.deviceVolume - info.minVolume).toFloat() / range
+            }.getOrNull()
+        }
+
+        /** Set the cast device volume from a 0..1 fraction of its range.
+         *  No-op when not casting or the command is unavailable. */
+        internal fun setCastDeviceVolumeFraction(fraction: Float) {
+            val p = castPlayerRef?.get() ?: return
+            val f = fraction.coerceIn(0f, 1f)
+            val apply = Runnable {
+                runCatching {
+                    if (!p.isCommandAvailable(Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS)) return@runCatching
+                    val info = p.deviceInfo
+                    val target = (info.minVolume + f * (info.maxVolume - info.minVolume))
+                        .toInt().coerceIn(info.minVolume, info.maxVolume)
+                    p.setDeviceVolume(target, 0)
+                }
+            }
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) apply.run()
+            else android.os.Handler(android.os.Looper.getMainLooper()).post(apply)
+        }
+
         // True while the local player is kept alive ONLY to show the picture
         // during an audio-only cast. The Player UI reads this to suppress the
         // "nothing's playing yet" empty state (the picture IS playing locally,
@@ -2599,6 +2638,9 @@ class PlaybackService : MediaSessionService() {
         } else {
             exoPlayerRef = null
         }
+        // M4: track the cast player (non-ExoPlayer target) for remote-fade
+        // device-volume control; clear it when we revert to the local player.
+        castPlayerRef = if (target !is ExoPlayer) java.lang.ref.WeakReference(target) else null
     }
 
     /** True when the active cast session targets an AUDIO-ONLY device (no

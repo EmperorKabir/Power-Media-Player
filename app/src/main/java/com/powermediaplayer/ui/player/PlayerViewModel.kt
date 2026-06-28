@@ -995,8 +995,9 @@ class PlayerViewModel @Inject constructor(
                 rem = (newDur - newPos).coerceAtLeast(0L)
                 _sleepTimerRemainingMs.value = rem
                 if (fadeOutEnabled && rem in 1..fadeWindowMs) {
+                    beginRemoteFadeCaptureIfNeeded()
                     val factor = (rem.toFloat() / fadeWindowMs).coerceIn(0f, 1f)
-                    com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+                    applyFadeFactor(factor)
                 }
             }
             firePauseAndExpire("END_OF_TRACK")
@@ -1049,8 +1050,9 @@ class PlayerViewModel @Inject constructor(
                 val rem = (nextBoundary - cur).coerceAtLeast(0L)
                 _sleepTimerRemainingMs.value = rem
                 if (fadeOutEnabled && rem in 1..fadeWindowMs) {
+                    beginRemoteFadeCaptureIfNeeded()
                     val factor = (rem.toFloat() / fadeWindowMs).coerceIn(0f, 1f)
-                    com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+                    applyFadeFactor(factor)
                 }
                 if (cur >= nextBoundary) break
             }
@@ -1076,8 +1078,9 @@ class PlayerViewModel @Inject constructor(
                     .coerceAtLeast(0L)
                 _sleepTimerRemainingMs.value = rem
                 if (fadeOutEnabled && rem in 1..fadeWindowMs) {
+                    beginRemoteFadeCaptureIfNeeded()
                     val factor = (rem.toFloat() / fadeWindowMs).coerceIn(0f, 1f)
-                    com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+                    applyFadeFactor(factor)
                 }
                 if (rem == 0L) break
             }
@@ -1085,9 +1088,69 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    // ── M4: sleep-timer REMOTE fade (Spotify Connect / Cast) ─────────────
+    // The local crossfade factor is inert on remote routes (the Spotify mirror
+    // is silent; Cast audio plays on the receiver, not the local player). So on
+    // a remote route we ramp the REMOTE device volume instead. Device volume is
+    // sticky, so capture it once at fade start and restore it after pause.
+    private var fadeRemoteActive = false
+    private var fadeCapturedSpotifyVol: Int? = null
+    private var fadeCapturedCastVol: Float? = null
+    private var fadeLastSpotifyPctSent = -1
+
+    private suspend fun beginRemoteFadeCaptureIfNeeded() {
+        if (fadeRemoteActive) return
+        when {
+            spotifyProvider.spotifyState.value != null -> {
+                fadeRemoteActive = true
+                fadeCapturedSpotifyVol = spotifyProvider.currentVolumePercent() ?: 100
+            }
+            com.powermediaplayer.service.PlaybackService.isCasting() -> {
+                fadeRemoteActive = true
+                fadeCapturedCastVol =
+                    com.powermediaplayer.service.PlaybackService.captureCastDeviceVolume()
+            }
+        }
+    }
+
+    /** Apply the fade [factor] (1→0) to whichever route is active. */
+    private fun applyFadeFactor(factor: Float) {
+        // Local pipeline (audibly inert on remote routes, but harmless).
+        com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(factor)
+        // Spotify Connect — ramp the device volume; throttle to integer-percent
+        // changes so the long fade stays well under Spotify's rate limit.
+        if (spotifyProvider.spotifyState.value != null) {
+            val base = fadeCapturedSpotifyVol ?: 100
+            val pct = (factor * base).toInt().coerceIn(0, 100)
+            if (pct != fadeLastSpotifyPctSent) {
+                fadeLastSpotifyPctSent = pct
+                viewModelScope.launch { spotifyProvider.setVolume(pct) }
+            }
+        }
+        // Cast — ramp the receiver device volume.
+        fadeCapturedCastVol?.let { base ->
+            com.powermediaplayer.service.PlaybackService.setCastDeviceVolumeFraction(factor * base)
+        }
+    }
+
+    /** Restore the captured remote volume after the fade/pause so the device
+     *  isn't left muted for next time. */
+    private fun endRemoteFadeRestore() {
+        if (!fadeRemoteActive) return
+        fadeCapturedSpotifyVol?.let { v -> viewModelScope.launch { spotifyProvider.setVolume(v) } }
+        fadeCapturedCastVol?.let { v ->
+            com.powermediaplayer.service.PlaybackService.setCastDeviceVolumeFraction(v)
+        }
+        fadeRemoteActive = false
+        fadeCapturedSpotifyVol = null
+        fadeCapturedCastVol = null
+        fadeLastSpotifyPctSent = -1
+    }
+
     private fun firePauseAndExpire(label: String) {
         playbackConnection.pause()
         com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
+        endRemoteFadeRestore()
         _sleepTimerRemainingMs.value = 0
         _sleepTimerExpired.value = true
         com.powermediaplayer.util.Diag.i(
@@ -1115,15 +1178,14 @@ class PlayerViewModel @Inject constructor(
                 remaining -= 1000
                 _sleepTimerRemainingMs.value = remaining.coerceAtLeast(0)
                 if (fadeOutEnabled && remaining in 1..fadeWindowMs) {
-                    // Linear ramp from 1.0 at remaining=fadeWindowMs to
-                    // 0.0 at remaining=0. Routed through the same
-                    // crossfade-factor channel so it composes with the
-                    // existing ReplayGain attenuator without fighting
-                    // for volume control.
+                    // Linear ramp from 1.0 at remaining=fadeWindowMs to 0.0 at
+                    // remaining=0. On a remote route (Spotify/Cast) this ramps
+                    // the remote device volume; locally it routes through the
+                    // crossfade-factor channel (composes with ReplayGain).
+                    beginRemoteFadeCaptureIfNeeded()
                     val factor = (remaining.toFloat() / fadeWindowMs)
                         .coerceIn(0.0f, 1.0f)
-                    com.powermediaplayer.service.PlaybackService
-                        .setCrossfadeFactor(factor)
+                    applyFadeFactor(factor)
                 }
             }
             // Timer expired — pause playback (no alarm sound) and raise
@@ -1132,6 +1194,8 @@ class PlayerViewModel @Inject constructor(
             // Reset the crossfade factor so the next play resumes at
             // full volume. ReplayGain attenuator stays as-is.
             com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
+            // M4: restore the remote device volume (Spotify/Cast) we faded.
+            endRemoteFadeRestore()
             _sleepTimerRemainingMs.value = 0
             _sleepTimerExpired.value = true
             com.powermediaplayer.util.Diag.i(
@@ -1143,6 +1207,10 @@ class PlayerViewModel @Inject constructor(
 
     fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
+        // Undo any in-progress fade so cancelling mid-fade doesn't leave the
+        // local or remote volume turned down.
+        com.powermediaplayer.service.PlaybackService.setCrossfadeFactor(1.0f)
+        endRemoteFadeRestore()
         _sleepTimerRemainingMs.value = 0
     }
 

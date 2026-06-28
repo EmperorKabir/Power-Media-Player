@@ -1762,6 +1762,45 @@ class SpotifyProvider @Inject constructor(
     }
 
     /**
+     * Set the active Connect device volume (0..100). Used by the sleep-timer
+     * remote fade. The device volume is PERSISTENT, so the caller captures
+     * the prior level via [currentVolumePercent] and restores it after the
+     * fade/pause — otherwise the device is left muted for next time.
+     */
+    suspend fun setVolume(percent: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext Result.failure(
+            IllegalStateException("Spotify session expired")
+        )
+        simplePut(
+            token,
+            "https://api.spotify.com/v1/me/player/volume?volume_percent=${percent.coerceIn(0, 100)}"
+        )
+    }
+
+    /**
+     * One-shot read of the active Connect device's current volume percent
+     * (0..100), or null if unavailable. Read once at fade start — NOT added
+     * to the 1 Hz poll, to avoid touching that hot path.
+     */
+    suspend fun currentVolumePercent(): Int? = withContext(Dispatchers.IO) {
+        val token = currentAccessToken() ?: return@withContext null
+        runCatching {
+            val req = Request.Builder()
+                .url("https://api.spotify.com/v1/me/player")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            http.newCall(req).execute().use { resp ->
+                if (resp.code == 204 || !resp.isSuccessful) return@use null
+                val body = resp.body?.string().orEmpty()
+                if (body.isBlank()) return@use null
+                JsonParser.parseString(body).asJsonObject
+                    .getAsJsonObject("device")
+                    ?.get("volume_percent")?.takeIf { !it.isJsonNull }?.asInt
+            }
+        }.getOrNull()
+    }
+
+    /**
      * Resume the current track on the active Connect device without
      * changing what's queued. Used by the BT-PLAY-key route in
      * PlaybackService so the car PLAY/RESUME button revives a paused

@@ -21,8 +21,8 @@
 - [x] **M6** ReplayGain relabelled "Volume normalisation (even out track volumes)" (`SettingsScreen.kt:420`). Compiles.
 - [x] **M2** BT chapter nav real (single-file M4B) — `PlaybackService.seekChapter` + pure `BtChapterNav` + `BtChapterNavTest` (8) GREEN.
 - [x] **M1** BT mappings split per file type (audiobook/podcast/music/video) — DataStore per-kind keys + `BtMappingSet`/`BtMediaKind` + service `currentBtKind` dispatch + 4-section Settings UI + `BtMappingDefaultsTest` (4) GREEN. Full suite + assembleDebug GREEN.
-- [ ] **M4** sleep-timer remote fade (Spotify/Cast volume) — next.
-- [ ] **M3** cloud backup/restore (everything-but-media) — after M4.
+- [x] **M4** sleep-timer remote fade — Spotify `setVolume`+`currentVolumePercent`, Cast device-volume statics (`setCastDeviceVolumeFraction`/`captureCastDeviceVolume`), PlayerViewModel `applyFadeFactor` capture→ramp→restore across all 4 fade loops + cancel. Context7-verified Cast volume API. Compiles. (device A/B at closeout)
+- [ ] **M3** cloud backup/restore (everything-but-media) — in progress.
 - [ ] Closeout: efficiency audit + full on-device test pass + final AAB.
 
 ## Execution protocol (per the user, verbatim intent)
