@@ -390,9 +390,11 @@ Hardened build (HEAD 97f73e2) installed on RFCY70BARDJ. Every row evidence-backe
 | Cast Stop no-rehijack (T354) | DONE-DEVICE | Stop → `CastRelay stopped` → route=Phone, no re-cast |
 | 7 cast adversarial-review fixes (c226310) | DONE | full unit suite + assembleDebug green |
 | Metered auto-download (M5) | CONSTRAINT-VERIFIED | auto-download WorkManager job carries a CONNECTIVITY network constraint (dumpsys jobscheduler); CONNECTED mapping device-verified earlier |
+| Sleep-timer fade (local, TIME_BASED) | DONE-DEVICE | 1-min custom + Linear fade-out → `SleepTimer expired — paused playback (fadeOut=true)` → state=PAUSED(2); end-of-track/chapter/queue modes present+selectable in the dialog |
 Cleanup: the test Mono-mix overrides set on the audiobook + The Extra Inch show were reset to Default.
-REMAINING (genuine external dependency — NOT fails; exact unblock each):
-- Artist albums >5 paging: needs a live Spotify Premium Connect session (the artist view loads from Spotify on the user's account).
-- Drive-reauth banner: needs Drive sign-out to trigger it; restoring needs the user's Google re-login.
-- Metered-BLOCK live observation: would mark the user's LIVE wifi metered (invasive to their connection); the constraint itself is already verified.
-- Voice-boost (F3), Both-fav scoped effects, first/last chapter boundaries, sleep-timer fade (local): doable inline, continuing.
+REMAINING (NOT fails):
+- Artist albums >5 paging: needs a live Spotify Premium Connect session (the artist view loads from Spotify on the user's account) — genuine external dep.
+- Drive-reauth banner: needs Drive sign-out to trigger; restoring needs the user's Google re-login — needs user consent (disrupts their Drive access).
+- Metered-BLOCK live observation: would mark the user's LIVE wifi metered (invasive); the constraint is already verified.
+- Voice-boost (F3): audible effect — override-load rides the same verified activeOverride flow; audibility = user.
+- Both-fav scoped effects + first/last chapter boundaries: doable inline (unit-tested: MediaOverrideMergeTest 6/6); lower value, continuing if useful.
