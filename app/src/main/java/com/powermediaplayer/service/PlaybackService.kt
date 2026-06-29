@@ -1916,10 +1916,14 @@ class PlaybackService : MediaSessionService() {
             val cp = CastPlayer(castContext)
             cp.setSessionAvailabilityListener(object : SessionAvailabilityListener {
                 override fun onCastSessionAvailable() {
-                    // Don't auto-cast to a route the framework re-armed right after the
-                    // user stopped casting (the TV→speaker hijack). A deliberate device
-                    // pick clears the window, so legitimate casting/switching is unaffected.
-                    if (android.os.SystemClock.elapsedRealtime() < suppressAutoCastUntilMs) {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    // A recent DELIBERATE device pick always wins — even if the old session's
+                    // teardown armed the suppression window late (slow switch on a big file),
+                    // the new device must still receive playback.
+                    if (now - userCastRequestedAtMs < 8000L) { switchPlayer(cp); return }
+                    // Otherwise don't auto-cast to a route the framework re-armed right after
+                    // the user stopped casting (the TV→speaker hijack).
+                    if (now < suppressAutoCastUntilMs) {
                         com.powermediaplayer.diag.DiagLog.event(
                             "CAST", "auto-cast suppressed (cast was just stopped) — ignoring re-armed route"
                         )
@@ -2865,7 +2869,7 @@ class PlaybackService : MediaSessionService() {
         faststartJob = serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val cacheDir = java.io.File(filesDir, "faststart").apply { mkdirs() }
-                val cacheFile = java.io.File(cacheDir, "${fileId.hashCode()}.m4b")
+                val cacheFile = faststartCacheFile(fileId)
                 if (cacheFile.exists() && cacheFile.length() > 0) {
                     // Already cached → rebuildForCast cast it DIRECTLY (full metadata +
                     // chapters preserved, no re-point/blank). Nothing to swap.
@@ -3025,7 +3029,7 @@ class PlaybackService : MediaSessionService() {
                 // the front → reads fast). The in-memory chapter cache can miss after a
                 // restart or under a different key, so don't depend on it for cast.
                 val fid = Regex("/files/([^?]+)").find(mediaUri.toString())?.groupValues?.getOrNull(1)
-                val fastFile = fid?.let { java.io.File(java.io.File(filesDir, "faststart"), "${it.hashCode()}.m4b") }
+                val fastFile = fid?.let { faststartCacheFile(it) }
                     ?.takeIf { it.exists() && it.length() > 0 }
                 if (fastFile != null) ch = runCatching {
                     com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(applicationContext, android.net.Uri.fromFile(fastFile))
@@ -3071,6 +3075,15 @@ class PlaybackService : MediaSessionService() {
         java.io.File(dir, "${mediaId.hashCode()}.jpg").also { if (!it.exists() || it.length().toInt() != data.size) it.writeBytes(data) }
     }.getOrNull()
 
+    /** Faststart cache file for a Drive fileId, named by SHA-256 (a 32-bit hashCode could
+     *  collide → serve the wrong book; same fix class as ArtworkCache, T312). */
+    private fun faststartCacheFile(fileId: String): java.io.File {
+        val dir = java.io.File(filesDir, "faststart").apply { mkdirs() }
+        val name = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(fileId.toByteArray()).joinToString("") { "%02x".format(it) }
+        return java.io.File(dir, "$name.m4b")
+    }
+
     /**
      * True for a Drive AUDIO item that should use the streaming faststart proxy: an audio
      * mime, or chapters present (the audiobook signal — same resolution [buildCastMetadata]
@@ -3080,12 +3093,18 @@ class PlaybackService : MediaSessionService() {
      */
     private fun driveItemIsAudiobook(item: MediaItem, mime: String): Boolean {
         if (mime.startsWith("audio")) return true
-        if (item.mediaMetadata.extras?.containsKey("chapter_count") == true) return true
         val uri = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri
             ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull() ?: return false
-        return runCatching {
+        // The M4B chapter cache is audiobook-specific (a real video's chapters don't live
+        // here), so trust it even though Drive often mislabels an .m4b as video/mp4.
+        val cachedChapters = runCatching {
             com.powermediaplayer.util.M4bChapterParser.cachedOnly(applicationContext, uri)
         }.getOrNull()?.containsKey("chapter_count") == true
+        if (cachedChapters) return true
+        // Item-extras chapters: trust only when NOT a real video — a video/* item with a
+        // chapter track must stay a video cast (forcing audio/mp4 would drop the picture).
+        return !mime.startsWith("video") &&
+            item.mediaMetadata.extras?.containsKey("chapter_count") == true
     }
 
     private fun rebuildForCast(item: MediaItem, server: CastRelayServer): MediaItem {
@@ -3101,7 +3120,7 @@ class PlaybackService : MediaSessionService() {
                 val fileId = originalUri.pathSegments?.getOrNull(
                     originalUri.pathSegments.indexOf("files") + 1
                 ) ?: return item
-                val fastFile = java.io.File(java.io.File(filesDir, "faststart"), "${fileId.hashCode()}.m4b")
+                val fastFile = faststartCacheFile(fileId)
                 when {
                     // A previously-remuxed faststart copy exists → cast it directly (instant).
                     fastFile.exists() && fastFile.length() > 0 -> {

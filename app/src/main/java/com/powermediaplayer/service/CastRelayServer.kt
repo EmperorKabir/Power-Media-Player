@@ -280,6 +280,11 @@ open class CastRelayServer(
         val total = head.layout.total
         val (start, endRaw) = parseRange(rangeHeader, total)
         val end = if (endRaw >= 0) endRaw else total - 1
+        if (start >= total || start > end) {
+            val r = newFixedLengthResponse(Response.Status.RANGE_NOT_SATISFIABLE, "text/plain", "range not satisfiable")
+            r.addHeader("Content-Range", "bytes */$total")
+            return r
+        }
         val status = if (rangeHeader != null) Response.Status.PARTIAL_CONTENT else Response.Status.OK
         val body = com.powermediaplayer.util.FaststartStream.open(
             head.bytes, head.layout, start, end
@@ -332,6 +337,14 @@ open class CastRelayServer(
                 Diag.i("PMP_DIAG", "Faststart prep: passthrough (moovOffset=$moovOffset sawMdat=$sawMdat) fileId=$fileId")
                 item.ready.countDown(); return
             }
+            // The streaming synth model shifts EVERYTHING after ftyp by a uniform +moovSize,
+            // which is only valid if moov is the FINAL atom. A trailing atom after moov
+            // ([ftyp][mdat][moov][free/udta/…]) would make the drive region overlap real moov
+            // bytes → corrupt. Fall back to passthrough (the download+remux path handles it).
+            if (moovOffset + moovSize != total) {
+                Diag.i("PMP_DIAG", "Faststart prep: moov not last (end=${moovOffset + moovSize} total=$total) → passthrough fileId=$fileId")
+                item.ready.countDown(); return
+            }
             if (moovSize > MAX_FASTSTART_MOOV) {
                 Diag.w("PMP_DIAG", "Faststart prep: moov $moovSize > cap → passthrough+fallback fileId=$fileId")
                 runCatching { item.onOversize?.invoke() }
@@ -371,7 +384,9 @@ open class CastRelayServer(
             .build()
         http.newCall(req).execute().use { resp ->
             val body = resp.body ?: return null
-            if (!resp.isSuccessful) return null
+            // Require 206: a 200 means the server ignored Range and is sending the WHOLE
+            // (multi-GB) file → body.bytes() would OOM the prep thread. Treat as failure → passthrough.
+            if (resp.code != 206) return null
             val bytes = body.bytes()
             val total = resp.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1L
             return bytes to total
@@ -415,8 +430,17 @@ open class CastRelayServer(
         if (header == null || !header.startsWith("bytes=")) return 0L to -1L
         val spec = header.removePrefix("bytes=")
         val parts = spec.split("-")
-        val start = parts.getOrNull(0)?.toLongOrNull() ?: 0L
-        val end = parts.getOrNull(1)?.toLongOrNull()
+        val startStr = parts.getOrNull(0)
+        val endStr = parts.getOrNull(1)
+        // Suffix range "bytes=-N" (RFC 7233 = the final N bytes). split → ["","N"].
+        if (startStr.isNullOrBlank()) {
+            val suffix = endStr?.toLongOrNull()
+            return if (suffix != null && totalLength > 0)
+                (totalLength - suffix).coerceAtLeast(0L) to (totalLength - 1)
+            else 0L to -1L
+        }
+        val start = startStr.toLongOrNull() ?: 0L
+        val end = endStr?.toLongOrNull()
             ?: (if (totalLength > 0) totalLength - 1 else -1L)
         return start to end
     }
