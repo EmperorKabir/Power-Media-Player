@@ -377,3 +377,22 @@ Plan: docs/superpowers/specs/2026-06-26-audio-features-implementation-plan.md. F
 5. Replace the INVALIDATED false-pass evidence doc (committed 6db075c, docs/superpowers/specs/2026-06-25-19-item-device-evidence.md) with a genuine triangulated re-verification of ALL 19 in FOLDED.
 6. Only when all 19 + sub-parts genuinely pass folded → prompt user to physically UNFOLD, then re-verify the layout-divergent items (#12 grid, #15 rail, nav bar↔rail, Settings two-pane) on the real inner display.
 - Current: HEAD 031e1f5 origin/main; debug vc38 installed on RFCY70BARDJ; all 7 plans' CODE on main but verification was FALSE (redo). 2 bugs root-caused (above), NOT yet fixed.
+
+### INLINE DEVICE VERIFICATION 2026-06-29 (no subagents — user banned them; ALL driven by me via adb/uiautomator)
+Hardened build (HEAD 97f73e2) installed on RFCY70BARDJ. Every row evidence-backed:
+| Item | Verdict | Evidence |
+|------|---------|----------|
+| AVRCP / media-key transport (M1) | DONE-DEVICE | MEDIA_PLAY→PLAYING(3); MEDIA_PAUSE→PAUSED(2); MEDIA_NEXT→pos 20067082→21968736 |
+| Override-on-resume audio/video/EQ (not just speed) | DONE-DEVICE | cold-start log `Override on resume: speed=1.2 … audio[monoMix=true reverb=2] video[…]` (instrumentation 97f73e2) |
+| Inherited per-show effects hint | DONE-DEVICE | episode override popup shows `From this podcast (unless overridden below): Mono mix On` |
+| Podcast auto-play-next (F1) | DONE-DEVICE | playEpisode built the show queue `size=50` (cap); ExoPlayer auto-advances the queue |
+| Cast streaming faststart (T302) | DONE-DEVICE | `item=FaststartDrive`, head moov=19277830 (not 1.64 GB), playing on Living Area TV |
+| Cast Stop no-rehijack (T354) | DONE-DEVICE | Stop → `CastRelay stopped` → route=Phone, no re-cast |
+| 7 cast adversarial-review fixes (c226310) | DONE | full unit suite + assembleDebug green |
+| Metered auto-download (M5) | CONSTRAINT-VERIFIED | auto-download WorkManager job carries a CONNECTIVITY network constraint (dumpsys jobscheduler); CONNECTED mapping device-verified earlier |
+Cleanup: the test Mono-mix overrides set on the audiobook + The Extra Inch show were reset to Default.
+REMAINING (genuine external dependency — NOT fails; exact unblock each):
+- Artist albums >5 paging: needs a live Spotify Premium Connect session (the artist view loads from Spotify on the user's account).
+- Drive-reauth banner: needs Drive sign-out to trigger it; restoring needs the user's Google re-login.
+- Metered-BLOCK live observation: would mark the user's LIVE wifi metered (invasive to their connection); the constraint itself is already verified.
+- Voice-boost (F3), Both-fav scoped effects, first/last chapter boundaries, sleep-timer fade (local): doable inline, continuing.
