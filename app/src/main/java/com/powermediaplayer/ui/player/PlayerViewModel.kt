@@ -282,8 +282,12 @@ class PlayerViewModel @Inject constructor(
         row.volumeBoostMb?.let { setVolumeBoost(it) }
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
-            "Override direct axes: speed=${row.playbackSpeed} " +
-                "pitch=${row.pitch} volumeBoost=${row.volumeBoostMb}"
+            "Override on resume: speed=${row.playbackSpeed} pitch=${row.pitch} " +
+                "volumeBoost=${row.volumeBoostMb} | audio[monoMix=${row.monoMix} " +
+                "stereoFlip=${row.stereoFlip} reverb=${row.reverbPreset} eq=${row.eqPresetId} " +
+                "skipSilence=${row.skipSilence} voiceBoost=${row.voiceBoost}] | " +
+                "video[flipH=${row.videoFlipH} flipV=${row.videoFlipV} bw=${row.videoBw} " +
+                "sepia=${row.videoSepia} invert=${row.videoInvert} rot=${row.videoRotation}]"
         )
     }
 
