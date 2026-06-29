@@ -1145,7 +1145,8 @@ class PlayerViewModel @Inject constructor(
                 // Only fade if we actually READ the volume — fabricating 100
                 // would over-restore a user who had it lower.
                 val v = spotifyProvider.currentVolumePercent()
-                if (v != null) { fadeRemoteActive = true; fadeCapturedSpotifyVol = v; persistPendingFade() }
+                if (v != null) { fadeRemoteActive = true; fadeCapturedSpotifyVol = v; persistPendingFade(); com.powermediaplayer.diag.DiagLog.event("SPOTFADE", "capture vol=$v") }
+                else com.powermediaplayer.diag.DiagLog.event("SPOTFADE", "capture SKIPPED (currentVolumePercent=null)")
             }
             com.powermediaplayer.service.PlaybackService.isCasting() -> {
                 val v = com.powermediaplayer.service.PlaybackService.captureCastDeviceVolume()
@@ -1165,6 +1166,7 @@ class PlayerViewModel @Inject constructor(
             if (pct != fadeLastSpotifyPctSent) {
                 fadeLastSpotifyPctSent = pct
                 spotifyVolumeChannel.trySend(pct)
+                com.powermediaplayer.diag.DiagLog.event("SPOTFADE", "set pct=$pct")
             }
         }
         // Cast — ramp the receiver device volume (dedup'd service-side).
@@ -1177,7 +1179,7 @@ class PlayerViewModel @Inject constructor(
      *  left muted for next time. Does NOT pause (cancel keeps playing). */
     private fun endRemoteFadeRestore() {
         if (!fadeRemoteActive) return
-        fadeCapturedSpotifyVol?.let { v -> spotifyVolumeChannel.trySend(v) }
+        fadeCapturedSpotifyVol?.let { v -> spotifyVolumeChannel.trySend(v); com.powermediaplayer.diag.DiagLog.event("SPOTFADE", "restore vol=$v") }
         fadeCapturedCastVol?.let { v ->
             com.powermediaplayer.service.PlaybackService.setCastDeviceVolumeFraction(v)
         }
