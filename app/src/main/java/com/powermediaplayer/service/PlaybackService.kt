@@ -289,50 +289,81 @@ class PlaybackService : MediaSessionService() {
 
         fun getExoPlayer(): ExoPlayer? = exoPlayerRef?.get()
 
-        // ── M4: cast device-volume control for the sleep-timer remote fade ──
-        // Set in switchPlayer when the active player is the CastPlayer.
+        // ── M4: cast receiver-volume control for the sleep-timer remote fade ──
+        // Driven via the Cast SDK CastSession (the SAME path the hardware volume
+        // keys use — proven on device to move the receiver volume), NOT CastPlayer
+        // device-volume Player-commands: device test 2026-06-29 showed a Living
+        // Area TV cast does not report COMMAND_*_DEVICE_VOLUME, so the old guard
+        // silently skipped the ramp (timer fired + paused, but volume held). The
+        // CastPlayer path is kept as a fallback for receivers that do report it.
         private var castPlayerRef: java.lang.ref.WeakReference<Player>? = null
-        // M-c: dedup cast device-volume writes on the integer target + reuse one
-        // main-thread Handler (the fade ticks ~600× over a 5-min window).
-        private var lastCastDeviceTarget = -1
+        private var appCtxRef: java.lang.ref.WeakReference<android.content.Context>? = null
+        private var lastCastVolStep = -1   // 0..100 dedup for receiver volume
         private val castMainHandler by lazy(LazyThreadSafetyMode.NONE) {
             android.os.Handler(android.os.Looper.getMainLooper())
         }
 
-        /** True when a CastPlayer is the active player (audio on a cast device). */
-        internal fun isCasting(): Boolean = castPlayerRef?.get() != null
+        private fun currentCastSession(): com.google.android.gms.cast.framework.CastSession? =
+            runCatching {
+                val ctx = appCtxRef?.get() ?: return null
+                CastContext.getSharedInstance(ctx).sessionManager.currentCastSession
+                    ?.takeIf { it.isConnected }
+            }.getOrNull()
 
-        /** Capture the cast device volume as a 0..1 fraction of its range, or
-         *  null if not casting / volume unreadable. Read once at fade start so
-         *  the level can be RESTORED after the fade (device volume is sticky). */
+        /** True when audio is on a cast device (live CastSession or CastPlayer). */
+        internal fun isCasting(): Boolean =
+            currentCastSession() != null || castPlayerRef?.get() != null
+
+        /** Capture the cast receiver volume (0..1) at fade start so it can be
+         *  restored afterwards (cast volume is sticky). CastSession first; falls
+         *  back to the CastPlayer device-volume fraction. */
         internal fun captureCastDeviceVolume(): Float? {
+            lastCastVolStep = -1 // fresh fade session
+            currentCastSession()?.let { s ->
+                val v = runCatching { s.volume.toFloat() }.getOrNull()
+                if (v != null) {
+                    com.powermediaplayer.diag.DiagLog.event("CASTFADE", "capture via CastSession vol=$v")
+                    return v.coerceIn(0f, 1f)
+                }
+            }
             val p = castPlayerRef?.get() ?: return null
-            lastCastDeviceTarget = -1 // fresh fade session
             return runCatching {
                 if (!p.isCommandAvailable(Player.COMMAND_GET_DEVICE_VOLUME)) return null
                 val info = p.deviceInfo
                 val range = info.maxVolume - info.minVolume
-                if (range <= 0) null
-                else (p.deviceVolume - info.minVolume).toFloat() / range
+                val frac = if (range <= 0) null else (p.deviceVolume - info.minVolume).toFloat() / range
+                com.powermediaplayer.diag.DiagLog.event("CASTFADE", "capture via CastPlayer frac=$frac")
+                frac
             }.getOrNull()
         }
 
-        /** Set the cast device volume from a 0..1 fraction of its range.
-         *  No-op when not casting or the command is unavailable. */
+        /** Set the cast receiver volume to a 0..1 fraction. CastSession first;
+         *  falls back to CastPlayer device volume. No-op when not casting. */
         internal fun setCastDeviceVolumeFraction(fraction: Float) {
-            val p = castPlayerRef?.get() ?: return
             val f = fraction.coerceIn(0f, 1f)
+            val step = (f * 100).toInt()
+            if (step == lastCastVolStep) return   // skip no-op repeats
+            lastCastVolStep = step
             val apply = Runnable {
+                val s = currentCastSession()
+                if (s != null) {
+                    runCatching { s.setVolume(f.toDouble()) }
+                        .onSuccess { com.powermediaplayer.diag.DiagLog.event("CASTFADE", "set via CastSession f=$f") }
+                        .onFailure { com.powermediaplayer.diag.DiagLog.event("CASTFADE", "CastSession.setVolume FAIL ${it.javaClass.simpleName}") }
+                    return@Runnable
+                }
+                val p = castPlayerRef?.get() ?: return@Runnable
                 runCatching {
-                    if (!p.isCommandAvailable(Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS)) return@runCatching
+                    if (!p.isCommandAvailable(Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS) &&
+                        !p.isCommandAvailable(Player.COMMAND_SET_DEVICE_VOLUME)) {
+                        com.powermediaplayer.diag.DiagLog.event("CASTFADE", "no device-volume command on CastPlayer")
+                        return@runCatching
+                    }
                     val info = p.deviceInfo
                     val target = (info.minVolume + f * (info.maxVolume - info.minVolume))
                         .toInt().coerceIn(info.minVolume, info.maxVolume)
-                    // Skip no-op writes: cast device ranges are coarse, so most
-                    // 500 ms fade ticks recompute the same integer target.
-                    if (target == lastCastDeviceTarget) return@runCatching
-                    lastCastDeviceTarget = target
                     p.setDeviceVolume(target, 0)
+                    com.powermediaplayer.diag.DiagLog.event("CASTFADE", "set via CastPlayer target=$target")
                 }
             }
             if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) apply.run()
@@ -681,6 +712,8 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackService.onCreate START")
+        // M4: publish app context for the companion's cast-receiver-volume path.
+        appCtxRef = java.lang.ref.WeakReference(applicationContext)
 
         // Audit 2.1 — warm the DataStore with ONE read. The four seed
         // reads below each paid a sequential cold file read on the main
