@@ -394,7 +394,8 @@ Hardened build (HEAD 97f73e2) installed on RFCY70BARDJ. Every row evidence-backe
 Cleanup: the test Mono-mix overrides set on the audiobook + The Extra Inch show were reset to Default.
 REMAINING (NOT fails):
 - Artist albums >5 paging: DONE-DEVICE — Linkin Park artist page shows 13 albums (`Album x13`), far past the old 5-cap → the next-url paging fix works. Plain browse over adb (NO Premium needed — the earlier "needs Premium" flag was wrong).
-- Drive-reauth banner: needs Drive sign-out to trigger; restoring needs the user's Google re-login — needs user consent (disrupts their Drive access).
-- Metered-BLOCK live observation: would mark the user's LIVE wifi metered (invasive); the constraint is already verified.
-- Voice-boost (F3): audible effect — override-load rides the same verified activeOverride flow; audibility = user.
-- Both-fav scoped effects + first/last chapter boundaries: doable inline (unit-tested: MediaOverrideMergeTest 6/6); lower value, continuing if useful.
+- Drive-reauth: DONE-DEVICE (user approved sign-out) — "Forget all folders" → Drive card flips to "Google Drive (sign in)" + "Pick a folder" reconnect prompt; tapping the audiobook (Drive) then errors `state=ERROR(7) Source error` = Drive access genuinely gone. NOTE: this broke the Drive audiobook playback → the 2 audiobook-based tests below now need the user to re-pick the Drive folder (Cloud → Google Drive → Pick a folder).
+- Voice-boost (F3): override axis PRESENT (seen "Voice boost (speech clarity)" in the episode override popup) + rides the device-verified override-on-resume activeOverride flow (the "Override on resume" log tracks voiceBoost; monoMix proved that flow applies on cold-start). Audible boost itself = ear-only (user).
+- first/last chapter boundaries: BLOCKED(needs the chaptered Drive audiobook playing → re-pick the Drive folder) — the only chaptered file is the now-disconnected Drive audiobook.
+- Both-fav scoped effects: audiobook is pinned with a "Resume live" scope (the Both-fav setup) but can't play (Drive disconnected) → BLOCKED(re-pick Drive folder, then verify the 2 scopes' independent effects). Unit-tested (MediaOverrideMergeTest 6/6).
+- Metered-BLOCK live observation: BLOCKED(would mark the user's LIVE wifi metered — invasive; needs the same explicit OK the user gave for Drive sign-out). Constraint itself already verified.
