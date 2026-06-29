@@ -37,7 +37,11 @@
 - **M5 podcast download** — FUNCTIONAL: `dumpsys jobscheduler` shows PodcastSyncWorker `Required constraints: CONNECTIVITY` (wifi+mobile), not UNMETERED.
 - **M6 volume normalisation** — RENDER: "Volume normalisation (even out track volumes)" shown on device.
 - **M7** — signed AAB rebuilt with the graceful fix: dist/PowerMediaPlayer-1.3.5-vc40-release-2026-06-29.aab. Unit suite 179/0.
-- **M4 sleep-timer REMOTE fade** — the one item needing a LIVE remote route: code+unit+Context7-verified (conflated-channel Spotify volume, cast device-volume statics, capture/restore); exercising the remote-device-volume ramp needs a Spotify-Connect-in-app session or an active Cast target (Living Area TV / Kabir Stereo). Local path unaffected (the Drive M4B plays through applyFadeFactor fine).
+- **M4 sleep-timer REMOTE fade (CAST)** — DEVICE-VERIFIED 2026-06-29 on Living Area TV after a real bug was found + fixed:
+  - BUG (first cast test): the fade did NOT ramp the receiver volume — it sat flat through the whole window. ROOT: `CastPlayer` does not advertise `COMMAND_*_DEVICE_VOLUME` on the TV, so the device-volume guard skipped `setDeviceVolume` (no-op). The hardware volume keys worked because they use the Cast SDK *session* volume, a different path.
+  - FIX (commit `9ac153a`): cast fade now drives the receiver volume via `CastSession.setVolume()/getVolume()` (the same path the working volume keys use), with `CastPlayer` device-volume kept as a fallback. `CASTFADE` DiagLog added; `appCtxRef` set in `onCreate`.
+  - VERIFICATION (3 methods, dense 4 s sampler + diag): cast volume sampled **1 → 0** during the last-30 s ramp, state flipped **PLAYING → PAUSED** at expiry, then restored to **1**; `CASTFADE` diag shows `capture via CastSession vol=0.03` then `set via CastSession f=0.03 → 0.029 → 0.019 → 0.009 → 0.03(restore)`; `SleepTimer expired — paused playback (fadeOut=true)`. The `set via CastSession` lines prove the fixed path executed (not the old no-op).
+  - SPOTIFY remote fade — still code+unit+Context7-verified only (needs a live Spotify-Connect-in-app session to exercise; conflated-channel volume path unchanged). Local path unaffected.
 
 ## Execution protocol (per the user, verbatim intent)
 - [ ] In order, inline, no stopping, no deferral, no skipping.
