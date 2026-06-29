@@ -61,6 +61,9 @@ class PlaybackService : MediaSessionService() {
     @javax.inject.Inject
     lateinit var driveOAuthProvider: com.powermediaplayer.cloud.DriveOAuthProvider
 
+    @javax.inject.Inject
+    lateinit var driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver
+
     /**
      * Custom AudioProcessor that powers the Stereo flip / Mono mix
      * effects in Settings. Lives here (singleton-per-service) so it
@@ -2611,6 +2614,7 @@ class PlaybackService : MediaSessionService() {
             }
             items.map { rebuildForCast(it, server) }
         } else {
+            faststartJob?.cancel()
             stopCastRelay()
             // Cleartext-fix (user-reported "ERROR_CODE_IO_CLEARTEXT
             // _NOT_PERMITTED on stop casting"): the items currently in
@@ -2685,6 +2689,17 @@ class PlaybackService : MediaSessionService() {
         // M4: track the cast player (non-ExoPlayer target) for remote-fade
         // device-volume control; clear it when we revert to the local player.
         castPlayerRef = if (target !is ExoPlayer) java.lang.ref.WeakReference(target) else null
+
+        // T302: after the normal cast setup, async-faststart a Drive audiobook so the
+        // receiver reads moov-at-front instead of fetching a ~1.4 GB tail. No-op unless
+        // Drive + audio + a local copy is obtainable; never blocks the switch.
+        if (target is CastPlayer && !keepLocalVideo) {
+            val relay = castRelayServer
+            val cur = items.getOrNull(currentIndex)
+            if (relay != null && cur != null) {
+                maybeFaststartDriveAudioForCast(cur, target, relay, currentPosition, playWhenReady)
+            }
+        }
     }
 
     /** True when the active cast session targets an AUDIO-ONLY device (no
@@ -2791,6 +2806,112 @@ class PlaybackService : MediaSessionService() {
             .setMediaId(sourceUri.toString())
             .setMediaMetadata(metadata)
             .build()
+    }
+
+    /** T302 — async faststart-for-cast job (cancelled on re-cast / switch-to-local). */
+    private var faststartJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * T302: casting a Drive AUDIO item (audiobook/`.m4b`) freezes because the file is
+     * moov-at-end — the receiver fetches a ~1.4 GB tail to seek. Asynchronously make a
+     * faststart copy (moov→front) of a LOCAL copy (offline copy if present, else a
+     * one-time Wi-Fi download) and re-point the cast at it via the relay. PURELY
+     * ADDITIVE: kicked off AFTER switchPlayer's normal cast setup; any miss returns and
+     * the existing Drive relay stands. No edits to serveDrive/rebuildForCast/extract.
+     */
+    private fun maybeFaststartDriveAudioForCast(
+        original: MediaItem,
+        target: CastPlayer,
+        server: CastRelayServer,
+        positionMs: Long,
+        playWhenReady: Boolean
+    ) {
+        faststartJob?.cancel()
+        val uri = original.localConfiguration?.uri ?: original.requestMetadata.mediaUri ?: return
+        if (uri.host?.contains("googleapis.com") != true) return            // Drive only
+        val uriStr = uri.toString()
+        val mime = original.localConfiguration?.mimeType ?: guessMimeFromUri(uri)
+        val isAudio = mime.startsWith("audio/") ||
+            Regex("\\.(m4b|m4a)(\\?|\$)", RegexOption.IGNORE_CASE).containsMatchIn(uriStr)
+        if (!isAudio) return                                               // audio only
+        val fileId = Regex("/files/([^?]+)").find(uriStr)?.groupValues?.getOrNull(1) ?: return
+        val meta = original.mediaMetadata
+        faststartJob = serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val cacheDir = java.io.File(filesDir, "faststart").apply { mkdirs() }
+                val cacheFile = java.io.File(cacheDir, "${fileId.hashCode()}.m4b")
+                val serveFile: java.io.File = if (cacheFile.exists() && cacheFile.length() > 0) {
+                    runCatching { cacheFile.setLastModified(System.currentTimeMillis()) }
+                    cacheFile
+                } else {
+                    val src = resolveFaststartSource(uriStr, fileId) ?: run {
+                        com.powermediaplayer.diag.DiagLog.event("T302", "no local source — faststart skipped, Drive relay stands")
+                        return@launch
+                    }
+                    val r = com.powermediaplayer.util.Mp4Faststart.faststart(src.first, cacheFile)
+                    com.powermediaplayer.diag.DiagLog.event("T302", "faststart ${src.first.length()}B → $r")
+                    when (r) {
+                        com.powermediaplayer.util.Mp4Faststart.Result.REMUXED -> { if (src.second) runCatching { src.first.delete() }; cacheFile }
+                        com.powermediaplayer.util.Mp4Faststart.Result.ALREADY_FASTSTART ->
+                            if (src.second) { if (src.first.renameTo(cacheFile)) cacheFile else src.first } else src.first
+                        else -> { if (src.second) runCatching { src.first.delete() }; return@launch }
+                    }
+                }
+                if (!isActive) return@launch
+                evictFaststartCache(cacheDir)
+                val token = server.register(
+                    CastRelayServer.RelayItem.Local(android.net.Uri.fromFile(serveFile), "audio/mp4")
+                )
+                val castItem = MediaItem.Builder()
+                    .setUri("http://$castRelayLanIp:${server.listeningPort}/$token")
+                    .setMimeType("audio/mp4")
+                    .setMediaId(uriStr)                    // preserve mediaId → stop-cast restore intact
+                    .setMediaMetadata(meta)
+                    .build()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (!isActive) return@withContext
+                    if (castPlayerRef?.get() !== target) return@withContext   // user switched away meanwhile
+                    runCatching {
+                        target.setMediaItems(listOf(castItem), 0, positionMs)
+                        target.playWhenReady = playWhenReady
+                        target.prepare()
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "T302", "cast swapped to faststart ${serveFile.name} (${serveFile.length()}B) @${positionMs}ms"
+                        )
+                    }
+                }
+            } catch (t: Throwable) {
+                com.powermediaplayer.diag.DiagLog.event("T302", "faststart orchestrator error ${t.javaClass.simpleName}")
+            }
+        }
+    }
+
+    /** (localFile, isDeletableTemp): the durable offline copy (file://), or a fresh
+     *  full Wi-Fi download (temp in cacheDir), or null if neither is obtainable. */
+    private suspend fun resolveFaststartSource(uriStr: String, fileId: String): Pair<java.io.File, Boolean>? {
+        driveOfflineResolver.localUriFor(uriStr)?.let { off ->
+            if (off.scheme == "file") off.path?.let { return java.io.File(it) to false }
+            // content:// SAF offline copy is not random-access faststart-able → fall through to download
+        }
+        val item = com.powermediaplayer.cloud.CloudMediaItem(
+            id = fileId, name = "cast", mimeType = "audio/mp4", size = 0L,
+            downloadUrl = uriStr, sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
+        )
+        com.powermediaplayer.diag.DiagLog.event("T302", "no offline copy — downloading full file for faststart cast (Wi-Fi)")
+        val dl = driveOAuthProvider.downloadFullToCache(item) ?: return null
+        return dl to true
+    }
+
+    /** Bound the faststart cache (a 2nd copy of cast audiobooks) by LRU. */
+    private fun evictFaststartCache(dir: java.io.File) {
+        val cap = 4L * 1024 * 1024 * 1024
+        val files = dir.listFiles()?.filter { it.isFile } ?: return
+        var total = files.sumOf { it.length() }
+        if (total <= cap) return
+        for (f in files.sortedBy { it.lastModified() }) {
+            if (total <= cap) break
+            val len = f.length(); if (f.delete()) total -= len
+        }
     }
 
     /**
