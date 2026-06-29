@@ -119,4 +119,57 @@ class Mp4FaststartTest {
         val noFtyp = writeFile(box("moov", ByteArray(8)), box("mdat", SAMPLE))
         assertEquals(Mp4Faststart.Result.NOT_MP4, Mp4Faststart.faststart(noFtyp, out()))
     }
+
+    // ---- in-memory moov patch (streaming faststart proxy, T302) ----
+
+    @Test fun patchMoovBoxAdjustsStcoInMemory() {
+        val moov = box("moov", stbl(box("stco", stcoBody(longArrayOf(1000L)))))
+        val patched = Mp4Faststart.patchMoovBox(moov, 500L)!!
+        val idx = allIndicesOf(patched, "stco").first()
+        assertEquals(1500L, rU32(patched, idx + 12))   // 1000 + delta
+        assertEquals(moov.size, patched.size)          // faststart keeps total size
+    }
+
+    @Test fun patchMoovBoxAdjustsCo64InMemory() {
+        val moov = box("moov", stbl(box("co64", co64Body(longArrayOf(1000L)))))
+        val patched = Mp4Faststart.patchMoovBox(moov, 500L)!!
+        val idx = allIndicesOf(patched, "co64").first()
+        assertEquals(1500L, rU64(patched, idx + 12))
+    }
+
+    @Test fun patchMoovBoxOverflowReturnsNull() {
+        // 0xFFFFFFF0 + 0x20 = 0x100000010 > 0xFFFFFFFF → would need co64 → null (fail-safe)
+        val moov = box("moov", stbl(box("stco", stcoBody(longArrayOf(0xFFFFFFF0L)))))
+        assertEquals(null, Mp4Faststart.patchMoovBox(moov, 0x20L))
+    }
+
+    @Test fun patchMoovBoxDoesNotMutateInput() {
+        val moov = box("moov", stbl(box("stco", stcoBody(longArrayOf(1000L)))))
+        val before = moov.copyOf()
+        Mp4Faststart.patchMoovBox(moov, 500L)
+        assertArrayEquals(before, moov)                // returns a copy; input untouched
+    }
+
+    @Test fun patchMoovBoxRejectsNonMoov() {
+        assertEquals(null, Mp4Faststart.patchMoovBox(box("mdat", SAMPLE), 10L))
+    }
+
+    @Test fun parseBoxHeader32Bit() {
+        val b = box("moov", ByteArray(20))
+        val h = Mp4Faststart.parseBoxHeader(b, 0)!!
+        assertEquals("moov", h.type)
+        assertEquals(28L, h.size)
+        assertEquals(8, h.headerLen)
+    }
+
+    @Test fun parseBoxHeader64BitLargesize() {
+        val b = ByteArray(16)
+        u32(b, 0, 1L)
+        for (i in 0..3) b[4 + i] = "mdat"[i].code.toByte()
+        u64(b, 8, 5_000_000_000L)                      // > 4 GB
+        val h = Mp4Faststart.parseBoxHeader(b, 0)!!
+        assertEquals("mdat", h.type)
+        assertEquals(5_000_000_000L, h.size)
+        assertEquals(16, h.headerLen)
+    }
 }

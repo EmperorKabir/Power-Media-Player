@@ -35,6 +35,40 @@ object Mp4Faststart {
 
     private data class Atom(val type: String, val offset: Long, val size: Long, val headerLen: Long)
 
+    /** A parsed ISO-BMFF box header. [size] is 0 for a size-0 (to-EOF) box; the caller
+     *  resolves that against the known file total. */
+    data class BoxHeader(val type: String, val size: Long, val headerLen: Int)
+
+    /**
+     * Parse a box header at [off] in [b]. Returns null if there aren't enough bytes
+     * for the header. Used by the streaming faststart proxy to walk a moov-at-end
+     * Drive file's top-level atoms via tiny Range reads (T302).
+     */
+    fun parseBoxHeader(b: ByteArray, off: Int): BoxHeader? {
+        if (off + 8 > b.size) return null
+        val size32 = readU32(b, off)
+        val type = String(b, off + 4, 4, Charsets.US_ASCII)
+        return when (size32) {
+            1L -> { if (off + 16 > b.size) return null; BoxHeader(type, readU64(b, off + 8), 16) }
+            0L -> BoxHeader(type, 0L, 8)
+            else -> BoxHeader(type, size32, 8)
+        }
+    }
+
+    /**
+     * Patch a complete in-memory `moov` box (header + children): add [delta] to every
+     * `stco`/`co64` chunk offset. Returns a PATCHED COPY ([moovBytes] is never mutated),
+     * or null on any anomaly (not a moov box, malformed child, or a 32-bit `stco` offset
+     * that would exceed `0xFFFFFFFF` after `+delta`). Used by the streaming faststart
+     * proxy and (refactored out of) [faststart].
+     */
+    fun patchMoovBox(moovBytes: ByteArray, delta: Long): ByteArray? {
+        val h = parseBoxHeader(moovBytes, 0) ?: return null
+        if (h.type != "moov") return null
+        val copy = moovBytes.copyOf()
+        return if (patchChildren(copy, h.headerLen, copy.size, delta)) copy else null
+    }
+
     /**
      * Relocate moov→front of [input] into [output]. Returns [Result.REMUXED] on success,
      * [Result.ALREADY_FASTSTART] if moov already precedes mdat (no output written),
@@ -54,12 +88,9 @@ object Mp4Faststart {
                 raf.seek(moov.offset)
                 raf.readFully(moovBytes)
 
-                // children start after the moov box header (8 or 16 bytes)
-                val moovHeader = moov.headerLen.toInt()
-                if (!patchChildren(moovBytes, moovHeader, moovBytes.size, moov.size)) {
-                    return Result.UNSUPPORTED
-                }
-                writeOutput(input, output, atoms, moov, moovBytes)
+                // shift every stco/co64 by +moovSize (moov inserted after ftyp)
+                val patched = patchMoovBox(moovBytes, moov.size) ?: return Result.UNSUPPORTED
+                writeOutput(input, output, atoms, moov, patched)
                 Result.REMUXED
             }
         } catch (_: Throwable) {

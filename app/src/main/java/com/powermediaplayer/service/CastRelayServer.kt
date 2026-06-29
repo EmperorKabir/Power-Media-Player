@@ -56,10 +56,40 @@ open class CastRelayServer(
         .cache(null)                       // ranged media must not enter the HTTP cache
         .build()
 
+    // moov larger than this → fall back (the head must fit comfortably in RAM)
+    private val MAX_FASTSTART_MOOV = 48L * 1024 * 1024
+
+    // head-prep (ftyp + moov fetch + patch) runs off the NanoHTTPD worker threads
+    private val prepExecutor = java.util.concurrent.Executors.newCachedThreadPool()
+
     sealed class RelayItem(val mimeType: String) {
         class Local(val uri: Uri, mimeType: String) : RelayItem(mimeType)
         class DriveOAuth(val fileId: String, mimeType: String) : RelayItem(mimeType)
+
+        /**
+         * Streaming faststart proxy for a moov-at-end Drive audiobook (T302). On
+         * [register] the server fetches only the `ftyp` head + the `moov` tail (~19 MB)
+         * once, patches the chunk offsets in memory, and thereafter serves a synthesised
+         * `[ftyp][moov'][mdat]` stream (mdat proxied live from Drive). The receiver reads
+         * the sample tables at the FRONT, seeks, and streams from the seek point — no full
+         * download, and the cast item never has to be swapped.
+         *
+         * [head] is null until [ready] counts down; null AFTER ready means head-prep
+         * decided to fall back (already-faststart / oversize / parse anomaly / fetch fail)
+         * → serve as a plain Drive passthrough (no regression).
+         */
+        class FaststartDrive(
+            val fileId: String,
+            mimeType: String,
+            val onOversize: (() -> Unit)? = null
+        ) : RelayItem(mimeType) {
+            val ready = java.util.concurrent.CountDownLatch(1)
+            @Volatile var head: FaststartHead? = null
+        }
     }
+
+    /** The in-memory `ftyp + patched moov'` plus the synth layout for one FaststartDrive. */
+    class FaststartHead(val bytes: ByteArray, val layout: com.powermediaplayer.util.FaststartStream.Layout)
 
     /**
      * Register an item for relay. Returns an opaque token; build the URL
@@ -70,12 +100,20 @@ open class CastRelayServer(
     fun register(item: RelayItem): String {
         val token = tokenCounter.incrementAndGet().toString(16)
         items[token] = item
+        if (item is RelayItem.FaststartDrive) {
+            runCatching { prepExecutor.submit { prepareFaststart(item) } }
+        }
         return token
     }
 
     @Synchronized
     fun clear() {
         items.clear()
+    }
+
+    override fun stop() {
+        super.stop()
+        runCatching { prepExecutor.shutdownNow() }
     }
 
     override fun serve(session: IHTTPSession): Response {
@@ -91,6 +129,7 @@ open class CastRelayServer(
             when (item) {
                 is RelayItem.Local -> serveLocal(item, rangeHeader)
                 is RelayItem.DriveOAuth -> serveDrive(item, rangeHeader)
+                is RelayItem.FaststartDrive -> serveFaststart(item, rangeHeader)
             }
         } catch (t: Throwable) {
             Diag.w("PMP_DIAG", "CastRelay serve failed token=$token", t)
@@ -221,6 +260,146 @@ open class CastRelayServer(
                 "range=${resp.header("Content-Range")} fileId=${item.fileId}"
         )
         return out
+    }
+
+    /**
+     * Serve the synthesised faststart stream `[ftyp][moov'][mdat]` (T302). Waits for
+     * head-prep, then maps the receiver's Range to head bytes (memory) + mdat bytes
+     * (proxied live from Drive) via [com.powermediaplayer.util.FaststartStream]. If
+     * head-prep fell back (head still null after ready) it serves a plain Drive
+     * passthrough — never worse than before.
+     */
+    private fun serveFaststart(item: RelayItem.FaststartDrive, rangeHeader: String?): Response {
+        // Only the FIRST request waits (~moov fetch); later seeks hit the cached head.
+        val ready = runCatching { item.ready.await(25, TimeUnit.SECONDS) }.getOrDefault(false)
+        val head = item.head
+        if (!ready || head == null) {
+            Diag.w("PMP_DIAG", "CastRelay faststart → passthrough (ready=$ready head=${head != null}) fileId=${item.fileId}")
+            return serveDrive(RelayItem.DriveOAuth(item.fileId, item.mimeType), rangeHeader)
+        }
+        val total = head.layout.total
+        val (start, endRaw) = parseRange(rangeHeader, total)
+        val end = if (endRaw >= 0) endRaw else total - 1
+        val status = if (rangeHeader != null) Response.Status.PARTIAL_CONTENT else Response.Status.OK
+        val body = com.powermediaplayer.util.FaststartStream.open(
+            head.bytes, head.layout, start, end
+        ) { origStart, len -> driveRangeStream(item.fileId, origStart, origStart + len - 1) }
+        val resp = newFixedLengthResponse(status, item.mimeType, body, end - start + 1)
+        resp.addHeader("Content-Range", "bytes $start-$end/$total")
+        resp.addHeader("Accept-Ranges", "bytes")
+        Diag.d(
+            "PMP_DIAG",
+            "CastRelay faststart status=$status range=$start-$end/$total " +
+                "ftyp=${head.layout.ftypSize} moov=${head.layout.moovSize} fileId=${item.fileId}"
+        )
+        return resp
+    }
+
+    /**
+     * Walk the moov-at-end file's top-level atoms via tiny Drive Range reads, fetch the
+     * ftyp + moov, patch the chunk offsets in memory, and publish [RelayItem.FaststartDrive.head].
+     * Any anomaly / oversize / already-faststart leaves head null (→ serveDrive passthrough).
+     */
+    private fun prepareFaststart(item: RelayItem.FaststartDrive) {
+        val fileId = item.fileId
+        try {
+            val (h0, total) = driveRangeBytes(fileId, 0, 15) ?: run { item.ready.countDown(); return }
+            val ftypHdr = com.powermediaplayer.util.Mp4Faststart.parseBoxHeader(h0, 0)
+            if (ftypHdr == null || ftypHdr.type != "ftyp" || total <= 0) {
+                Diag.w("PMP_DIAG", "Faststart prep: not ftyp / no total fileId=$fileId")
+                item.ready.countDown(); return
+            }
+            val ftypSize = ftypHdr.size
+            var pos = ftypSize
+            var moovOffset = -1L
+            var moovSize = -1L
+            var sawMdat = false
+            var guard = 0
+            while (pos + 16 <= total && guard++ < 16) {
+                val hb = driveRangeBytes(fileId, pos, pos + 15)?.first ?: break
+                val bh = com.powermediaplayer.util.Mp4Faststart.parseBoxHeader(hb, 0) ?: break
+                val size = if (bh.size == 0L) total - pos else bh.size
+                if (size < bh.headerLen) break
+                when (bh.type) {
+                    "moov" -> { moovOffset = pos; moovSize = size }
+                    "mdat" -> sawMdat = true
+                }
+                if (bh.type == "moov") break
+                pos += size
+            }
+            // no moov, or moov already BEFORE mdat (already faststart) → passthrough
+            if (moovOffset < 0 || moovSize <= 0 || !sawMdat) {
+                Diag.i("PMP_DIAG", "Faststart prep: passthrough (moovOffset=$moovOffset sawMdat=$sawMdat) fileId=$fileId")
+                item.ready.countDown(); return
+            }
+            if (moovSize > MAX_FASTSTART_MOOV) {
+                Diag.w("PMP_DIAG", "Faststart prep: moov $moovSize > cap → passthrough+fallback fileId=$fileId")
+                runCatching { item.onOversize?.invoke() }
+                item.ready.countDown(); return
+            }
+            val ftyp = driveRangeBytes(fileId, 0, ftypSize - 1)?.first ?: run { item.ready.countDown(); return }
+            val moov = driveRangeBytes(fileId, moovOffset, moovOffset + moovSize - 1)?.first
+                ?: run { item.ready.countDown(); return }
+            val patched = com.powermediaplayer.util.Mp4Faststart.patchMoovBox(moov, moovSize)
+                ?: run {
+                    Diag.w("PMP_DIAG", "Faststart prep: patchMoovBox null → passthrough fileId=$fileId")
+                    item.ready.countDown(); return
+                }
+            item.head = FaststartHead(
+                ftyp + patched,
+                com.powermediaplayer.util.FaststartStream.Layout(ftypSize, moovSize, total)
+            )
+            item.ready.countDown()
+            Diag.i(
+                "PMP_DIAG",
+                "Faststart head ready fileId=$fileId ftyp=$ftypSize moov=$moovSize total=$total"
+            )
+        } catch (t: Throwable) {
+            Diag.w("PMP_DIAG", "Faststart prep failed fileId=$fileId", t)
+            item.ready.countDown()
+        }
+    }
+
+    /** Blocking Drive Range GET fully into memory; returns the bytes + the file total
+     *  (parsed from Content-Range). For the small head-prep reads only. */
+    private fun driveRangeBytes(fileId: String, start: Long, end: Long): Pair<ByteArray, Long>? {
+        val token = driveOAuthProvider.fetchAccessTokenBlocking() ?: return null
+        val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
+        val req = Request.Builder().url(url)
+            .header("Authorization", "Bearer $token")
+            .header("Range", "bytes=$start-$end")
+            .build()
+        http.newCall(req).execute().use { resp ->
+            val body = resp.body ?: return null
+            if (!resp.isSuccessful) return null
+            val bytes = body.bytes()
+            val total = resp.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1L
+            return bytes to total
+        }
+    }
+
+    /** Blocking Drive Range GET returning the live stream; closing it closes the upstream
+     *  OkHttp response. Used to proxy the mdat segment of the faststart stream. */
+    private fun driveRangeStream(fileId: String, start: Long, end: Long): InputStream {
+        val token = driveOAuthProvider.fetchAccessTokenBlocking()
+            ?: throw java.io.IOException("drive token unavailable")
+        val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
+        val req = Request.Builder().url(url)
+            .header("Authorization", "Bearer $token")
+            .header("Range", "bytes=$start-$end")
+            .build()
+        val resp = http.newCall(req).execute()
+        val body = resp.body
+        if (!resp.isSuccessful || body == null) {
+            resp.close()
+            throw java.io.IOException("drive upstream ${resp.code}")
+        }
+        return object : java.io.FilterInputStream(body.byteStream()) {
+            override fun close() {
+                runCatching { super.close() }
+                runCatching { resp.close() }
+            }
+        }
     }
 
     private fun InputStream.skipFully(n: Long) {

@@ -2690,18 +2690,12 @@ class PlaybackService : MediaSessionService() {
         // device-volume control; clear it when we revert to the local player.
         castPlayerRef = if (target !is ExoPlayer) java.lang.ref.WeakReference(target) else null
 
-        // T302: after the normal cast setup, async-faststart a Drive audiobook so the
-        // receiver reads moov-at-front instead of fetching a ~1.4 GB tail. No-op unless
-        // Drive + audio + a local copy is obtainable; never blocks the switch.
-        if (target is CastPlayer && !keepLocalVideo) {
-            val relay = castRelayServer
-            val cur = items.getOrNull(currentIndex)
-            // Orchestrator self-gates: Drive host + the file name is .m4b/.m4a (fetched at
-            // cast time — reliable, unlike chapter_count which parses async and can be missed).
-            if (relay != null && cur != null) {
-                maybeFaststartDriveAudioForCast(cur, target, relay, currentPosition, playWhenReady)
-            }
-        }
+        // T302: a Drive audiobook is now cast via the STREAMING faststart proxy
+        // (rebuildForCast → RelayItem.FaststartDrive) — the relay fetches only the moov
+        // (~19 MB) and proxies the mdat live, so the receiver reads moov-at-front with NO
+        // full download and NO source swap (the cast item is the faststart URL from this
+        // one setMediaItems). The download+remux orchestrator is now only the rare
+        // oversize-moov fallback, triggered from FaststartDrive.onOversize.
     }
 
     /** True when the active cast session targets an AUDIO-ONLY device (no
@@ -3042,27 +3036,64 @@ class PlaybackService : MediaSessionService() {
         java.io.File(dir, "${mediaId.hashCode()}.jpg").also { if (!it.exists() || it.length().toInt() != data.size) it.writeBytes(data) }
     }.getOrNull()
 
+    /**
+     * True for a Drive AUDIO item that should use the streaming faststart proxy: an audio
+     * mime, or chapters present (the audiobook signal — same resolution [buildCastMetadata]
+     * uses). Video / non-chaptered Drive items stay on the plain Drive relay. The relay
+     * head-prep self-corrects a false positive (moov-at-front → passthrough), so this can
+     * be permissive without risking video.
+     */
+    private fun driveItemIsAudiobook(item: MediaItem, mime: String): Boolean {
+        if (mime.startsWith("audio")) return true
+        if (item.mediaMetadata.extras?.containsKey("chapter_count") == true) return true
+        val uri = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri
+            ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull() ?: return false
+        return runCatching {
+            com.powermediaplayer.util.M4bChapterParser.cachedOnly(applicationContext, uri)
+        }.getOrNull()?.containsKey("chapter_count") == true
+    }
+
     private fun rebuildForCast(item: MediaItem, server: CastRelayServer): MediaItem {
         val originalUri = item.localConfiguration?.uri
             ?: item.requestMetadata.mediaUri
             ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull()
             ?: return item
         val mime = item.localConfiguration?.mimeType ?: guessMimeFromUri(originalUri)
+        var castMime = mime
         val relayItem: CastRelayServer.RelayItem = when {
             originalUri.host?.contains("googleapis.com") == true -> {
                 // Drive OAuth: extract file id from /drive/v3/files/{id}
                 val fileId = originalUri.pathSegments?.getOrNull(
                     originalUri.pathSegments.indexOf("files") + 1
                 ) ?: return item
-                // T302: if a faststart copy of this audiobook is already cached, cast it
-                // DIRECTLY here — the surrounding buildUpon preserves the item's full
-                // metadata (title/cover/CHAPTERS), and there's no download+swap re-point
-                // (which blanks/stops the receiver). Only audiobooks ever get a cache file.
                 val fastFile = java.io.File(java.io.File(filesDir, "faststart"), "${fileId.hashCode()}.m4b")
-                if (fastFile.exists() && fastFile.length() > 0)
-                    CastRelayServer.RelayItem.Local(android.net.Uri.fromFile(fastFile), "audio/mp4")
-                else
-                    CastRelayServer.RelayItem.DriveOAuth(fileId, mime)
+                when {
+                    // A previously-remuxed faststart copy exists → cast it directly (instant).
+                    fastFile.exists() && fastFile.length() > 0 -> {
+                        castMime = "audio/mp4"
+                        CastRelayServer.RelayItem.Local(android.net.Uri.fromFile(fastFile), "audio/mp4")
+                    }
+                    // T302: a moov-at-end Drive AUDIOBOOK → STREAMING faststart proxy. The relay
+                    // fetches only the moov head (~19 MB) once and proxies the mdat live, so the
+                    // receiver reads moov-at-front with NO full download and NO source swap (this
+                    // is the cast item on the single setMediaItems → no black/metadata flash).
+                    driveItemIsAudiobook(item, mime) -> {
+                        castMime = "audio/mp4"
+                        CastRelayServer.RelayItem.FaststartDrive(fileId, "audio/mp4", onOversize = {
+                            // Rare: moov > 48 MB can't be held in RAM → fall back to the
+                            // download+remux orchestrator (the only path that may swap).
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                val tgt = castPlayerRef?.get()
+                                if (tgt is CastPlayer) runCatching {
+                                    maybeFaststartDriveAudioForCast(
+                                        item, tgt, server, tgt.currentPosition, tgt.playWhenReady
+                                    )
+                                }
+                            }
+                        })
+                    }
+                    else -> CastRelayServer.RelayItem.DriveOAuth(fileId, mime)
+                }
             }
             else -> CastRelayServer.RelayItem.Local(originalUri, mime)
         }
@@ -3073,7 +3104,7 @@ class PlaybackService : MediaSessionService() {
         )
         return item.buildUpon()
             .setUri(relayUrl)
-            .setMimeType(mime)
+            .setMimeType(castMime)
             .setMediaMetadata(buildCastMetadata(item, server))
             .setRequestMetadata(
                 MediaItem.RequestMetadata.Builder()
