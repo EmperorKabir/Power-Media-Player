@@ -2985,12 +2985,25 @@ class PlaybackService : MediaSessionService() {
         val mediaUri = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri
         // Chapters: keep the item's own extras; else read the disk chapter cache by media uri.
         val itemExtras = item.mediaMetadata.extras
+        com.powermediaplayer.diag.DiagLog.event("T302", "chapDecide itemHas=${itemExtras?.containsKey("chapter_count")} baseHas=${base.extras?.containsKey("chapter_count")} uriScheme=${mediaUri?.scheme}")
         if (itemExtras?.containsKey("chapter_count") == true) {
             if (base.extras?.containsKey("chapter_count") != true) b.setExtras(itemExtras)
         } else if (base.extras?.containsKey("chapter_count") != true && mediaUri != null) {
-            runCatching { com.powermediaplayer.util.M4bChapterParser.cachedOnly(applicationContext, mediaUri) }
+            var ch = runCatching { com.powermediaplayer.util.M4bChapterParser.cachedOnly(applicationContext, mediaUri) }
                 .getOrNull()?.takeIf { it.containsKey("chapter_count") }
-                ?.let { b.setExtras(it); com.powermediaplayer.diag.DiagLog.event("T302", "cast chapters from cache count=${it.getInt("chapter_count")}") }
+            if (ch == null) {
+                // Reliable fallback: parse chapters from the LOCAL faststart copy (moov is at
+                // the front → reads fast). The in-memory chapter cache can miss after a
+                // restart or under a different key, so don't depend on it for cast.
+                val fid = Regex("/files/([^?]+)").find(mediaUri.toString())?.groupValues?.getOrNull(1)
+                val fastFile = fid?.let { java.io.File(java.io.File(filesDir, "faststart"), "${it.hashCode()}.m4b") }
+                    ?.takeIf { it.exists() && it.length() > 0 }
+                if (fastFile != null) ch = runCatching {
+                    com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(applicationContext, android.net.Uri.fromFile(fastFile))
+                }.getOrNull()?.takeIf { it.containsKey("chapter_count") }
+                com.powermediaplayer.diag.DiagLog.event("T302", "chapParse fid=$fid fastExists=${fastFile != null} parsed=${ch?.getInt("chapter_count", -1) ?: "null"}")
+            }
+            ch?.let { b.setExtras(it); com.powermediaplayer.diag.DiagLog.event("T302", "cast chapters count=${it.getInt("chapter_count")}") }
         }
         runCatching {
             val ip = castRelayLanIp

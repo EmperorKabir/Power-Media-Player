@@ -1178,19 +1178,29 @@ class PlaybackConnection @Inject constructor(
     private fun extractChapters(controller: MediaController): List<ChapterInfo> {
         folderChapters?.let { return it }
         localChapters?.let { return it }
-        val metadata = controller.mediaMetadata
-        val extras = metadata.extras ?: return emptyList()
+        val fromExtras = controller.mediaMetadata.extras?.let { chaptersFromBundle(it) }.orEmpty()
+        if (fromExtras.isNotEmpty()) return fromExtras
+        // CAST strips custom metadata extras in the MediaItem round-trip, so chapter_count
+        // never reaches controller.mediaMetadata when casting. Fall back to the chapter
+        // cache keyed by the (preserved) mediaId — the download URL — so the chapter list
+        // survives on cast just as it does locally.
+        val mediaId = controller.currentMediaItem?.mediaId
+        if (!mediaId.isNullOrBlank()) {
+            runCatching {
+                com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, android.net.Uri.parse(mediaId))
+            }.getOrNull()?.let { val c = chaptersFromBundle(it); if (c.isNotEmpty()) return c }
+        }
+        return emptyList()
+    }
 
+    private fun chaptersFromBundle(extras: android.os.Bundle): List<ChapterInfo> {
         val chapterCount = extras.getInt("chapter_count", 0)
         if (chapterCount == 0) return emptyList()
-
         return (0 until chapterCount).mapNotNull { i ->
             val title = extras.getString("chapter_title_$i") ?: "Chapter ${i + 1}"
             val start = extras.getLong("chapter_start_$i", -1)
             val end = extras.getLong("chapter_end_$i", -1)
-            if (start >= 0) {
-                ChapterInfo(title = title, startTimeMs = start, endTimeMs = end, index = i)
-            } else null
+            if (start >= 0) ChapterInfo(title = title, startTimeMs = start, endTimeMs = end, index = i) else null
         }
     }
 
