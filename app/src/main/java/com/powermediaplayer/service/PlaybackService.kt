@@ -306,6 +306,25 @@ class PlaybackService : MediaSessionService() {
             android.os.Handler(android.os.Looper.getMainLooper())
         }
 
+        // After the user STOPS casting (in-app Stop row, or any cast-end that isn't a
+        // deliberate device switch), the Cast framework can immediately re-arm a remembered
+        // "persistent" route (device logcat: onRouteSelected reason=3 …CastMediaRoute2
+        // ProviderService_Persistent) and onCastSessionAvailable would blindly auto-cast the
+        // current item to that stray device — the book jumped TV→speaker. These two fields
+        // gate that: a cast-end arms a short suppression window; a deliberate user device
+        // pick (notifyUserRequestedCast) records the intent so switching still works.
+        @Volatile private var suppressAutoCastUntilMs = 0L
+        @Volatile private var userCastRequestedAtMs = 0L
+        /** Called from the CastSwitcher when the user deliberately picks a device. */
+        internal fun notifyUserRequestedCast() {
+            userCastRequestedAtMs = android.os.SystemClock.elapsedRealtime()
+            suppressAutoCastUntilMs = 0L
+        }
+        /** Called from the CastSwitcher "Stop casting" row. */
+        internal fun notifyUserStoppedCast() {
+            suppressAutoCastUntilMs = android.os.SystemClock.elapsedRealtime() + 8000L
+        }
+
         private fun currentCastSession(): com.google.android.gms.cast.framework.CastSession? =
             runCatching {
                 val ctx = appCtxRef?.get() ?: return null
@@ -1896,8 +1915,24 @@ class PlaybackService : MediaSessionService() {
             val castContext = CastContext.getSharedInstance(this)
             val cp = CastPlayer(castContext)
             cp.setSessionAvailabilityListener(object : SessionAvailabilityListener {
-                override fun onCastSessionAvailable() = switchPlayer(cp)
+                override fun onCastSessionAvailable() {
+                    // Don't auto-cast to a route the framework re-armed right after the
+                    // user stopped casting (the TV→speaker hijack). A deliberate device
+                    // pick clears the window, so legitimate casting/switching is unaffected.
+                    if (android.os.SystemClock.elapsedRealtime() < suppressAutoCastUntilMs) {
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "CAST", "auto-cast suppressed (cast was just stopped) — ignoring re-armed route"
+                        )
+                        return
+                    }
+                    switchPlayer(cp)
+                }
                 override fun onCastSessionUnavailable() {
+                    // A cast ended. If it wasn't a deliberate device switch (no recent user
+                    // cast request), arm the suppression window so a framework-re-armed
+                    // persistent route can't auto-cast the item onto a stray device.
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (now - userCastRequestedAtMs > 3000L) suppressAutoCastUntilMs = now + 8000L
                     // Guard against NPE if cast session ends after the
                     // service has already torn down (player = null).
                     player?.let { switchPlayer(it) }

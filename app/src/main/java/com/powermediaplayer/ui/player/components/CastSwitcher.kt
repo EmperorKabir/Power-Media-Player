@@ -188,6 +188,9 @@ fun CastSwitcherButton(
                             description = route.description.orEmpty(),
                             isSelected = route.id == selectedRouteId,
                             onClick = {
+                                // Deliberate device pick → clear any stop-suppression so
+                                // the app casts/switches normally.
+                                com.powermediaplayer.service.PlaybackService.notifyUserRequestedCast()
                                 router.selectRoute(route)
                                 sheetOpen = false
                             }
@@ -200,6 +203,10 @@ fun CastSwitcherButton(
                     Spacer(Modifier.height(8.dp))
                     StopRow(
                         onClick = {
+                            // Explicit stop → arm the suppression window so a
+                            // framework-re-armed persistent route can't auto-cast the
+                            // item onto a stray device (the TV→speaker hijack).
+                            com.powermediaplayer.service.PlaybackService.notifyUserStoppedCast()
                             // Return audio to the connected Bluetooth speaker if
                             // there is one — selectRoute(defaultRoute) ALWAYS
                             // forces the phone built-in, which left audio on the
