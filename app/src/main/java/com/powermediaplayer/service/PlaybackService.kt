@@ -2872,13 +2872,13 @@ class PlaybackService : MediaSessionService() {
                     if (!isActive) return@withContext
                     if (castPlayerRef?.get() !== target) return@withContext   // user switched away meanwhile
                     runCatching {
-                        // Live metadata (title/cover + parsed CHAPTERS) so this one-time swap
-                        // doesn't drop the chapter list; mediaId preserved for stop-cast restore.
-                        val castItem = MediaItem.Builder()
+                        // Reuse the current cast item's metadata (built by buildCastMetadata:
+                        // enriched title/author + chapter extras + relay-served cover) and
+                        // just re-point the URI to the faststart file; mediaId preserved.
+                        val cur = target.currentMediaItem
+                        val castItem = (cur?.buildUpon() ?: MediaItem.Builder().setMediaId(uriStr))
                             .setUri("http://$castRelayLanIp:${server.listeningPort}/$token")
                             .setMimeType("audio/mp4")
-                            .setMediaId(uriStr)
-                            .setMediaMetadata(target.mediaMetadata)
                             .build()
                         target.setMediaItems(listOf(castItem), 0, positionMs)
                         target.playWhenReady = playWhenReady
@@ -2971,6 +2971,64 @@ class PlaybackService : MediaSessionService() {
      * rewritten so [DefaultMediaItemConverter] sends the relay URL to
      * the receiver via `MediaInfo.contentUrl`.
      */
+    /** Build the cast MediaMetadata for [item], ROBUST across content sources (cloud /
+     *  phone-local / embedded): enriched title/author (durable if present), PRESERVE the
+     *  chapter extras (chapter_count/chapter_start_*) so the cast keeps the chapter list,
+     *  and make the cover cast-fetchable — http(s) passes straight to the receiver, while
+     *  file:// / content:// / embedded bytes / ArtworkCache get relay-served. Fail-safe:
+     *  any error leaves whatever artwork was already there. */
+    private fun buildCastMetadata(item: MediaItem, server: CastRelayServer): androidx.media3.common.MediaMetadata {
+        val base = Companion.senderMetadataByMediaId[item.mediaId] ?: item.mediaMetadata
+        val b = base.buildUpon()
+        // The ORIGINAL media uri (e.g. the Drive download URL `…?alt=media`) — the key the
+        // cover + chapters were cached under, NOT the cast item's mediaId (which differs).
+        val mediaUri = item.localConfiguration?.uri ?: item.requestMetadata.mediaUri
+        // Chapters: keep the item's own extras; else read the disk chapter cache by media uri.
+        val itemExtras = item.mediaMetadata.extras
+        if (itemExtras?.containsKey("chapter_count") == true) {
+            if (base.extras?.containsKey("chapter_count") != true) b.setExtras(itemExtras)
+        } else if (base.extras?.containsKey("chapter_count") != true && mediaUri != null) {
+            runCatching { com.powermediaplayer.util.M4bChapterParser.cachedOnly(applicationContext, mediaUri) }
+                .getOrNull()?.takeIf { it.containsKey("chapter_count") }
+                ?.let { b.setExtras(it); com.powermediaplayer.diag.DiagLog.event("T302", "cast chapters from cache count=${it.getInt("chapter_count")}") }
+        }
+        runCatching {
+            val ip = castRelayLanIp
+            val artUri = base.artworkUri ?: item.mediaMetadata.artworkUri
+            fun relay(u: android.net.Uri): android.net.Uri {
+                val t = server.register(CastRelayServer.RelayItem.Local(u, "image/jpeg"))
+                return android.net.Uri.parse("http://$ip:${server.listeningPort}/$t")
+            }
+            when {
+                // Remote URL (Spotify/podcast/remote thumbnail) → receiver fetches directly.
+                artUri != null && (artUri.scheme == "http" || artUri.scheme == "https") ->
+                    b.setArtworkUri(artUri)
+                ip == null -> {}                                       // no relay → leave as-is
+                // Phone-local file:// or MediaStore content:// → relay-serve.
+                artUri != null && (artUri.scheme == "file" || artUri.scheme == "content") ->
+                    b.setArtworkUri(relay(artUri))
+                else -> {
+                    // Embedded bytes → cache to a file; else the durable ArtworkCache file
+                    // (keyed by the media uri OR the mediaId — try both).
+                    val data = base.artworkData ?: item.mediaMetadata.artworkData
+                    val f = if (data != null) writeCastCover(item.mediaId, data)
+                        else listOfNotNull(mediaUri?.toString(), item.mediaId).firstNotNullOfOrNull { k ->
+                            com.powermediaplayer.util.ArtworkCache.uriFor(applicationContext, k)
+                                ?.path?.let { java.io.File(it) }?.takeIf { it.exists() }
+                        }
+                    if (f != null) { b.setArtworkUri(relay(android.net.Uri.fromFile(f))); com.powermediaplayer.diag.DiagLog.event("T302", "cast cover relay-served ${f.length()}B") }
+                }
+            }
+        }.onFailure { com.powermediaplayer.diag.DiagLog.event("T302", "cast cover relay failed ${it.javaClass.simpleName}") }
+        return b.build()
+    }
+
+    /** Persist embedded cover bytes to a stable cache file so the relay can serve them. */
+    private fun writeCastCover(mediaId: String, data: ByteArray): java.io.File? = runCatching {
+        val dir = java.io.File(filesDir, "castcover").apply { mkdirs() }
+        java.io.File(dir, "${mediaId.hashCode()}.jpg").also { if (!it.exists() || it.length().toInt() != data.size) it.writeBytes(data) }
+    }.getOrNull()
+
     private fun rebuildForCast(item: MediaItem, server: CastRelayServer): MediaItem {
         val originalUri = item.localConfiguration?.uri
             ?: item.requestMetadata.mediaUri
@@ -3003,9 +3061,7 @@ class PlaybackService : MediaSessionService() {
         return item.buildUpon()
             .setUri(relayUrl)
             .setMimeType(mime)
-            // T302: prefer the durable enriched metadata (title/author/cover) for the cast
-            // item so the receiver shows full info; falls back to the item's own metadata.
-            .setMediaMetadata(Companion.senderMetadataByMediaId[item.mediaId] ?: item.mediaMetadata)
+            .setMediaMetadata(buildCastMetadata(item, server))
             .setRequestMetadata(
                 MediaItem.RequestMetadata.Builder()
                     .setMediaUri(relayUrl)
