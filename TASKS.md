@@ -393,7 +393,7 @@ Hardened build (HEAD 97f73e2) installed on RFCY70BARDJ. Every row evidence-backe
 | Sleep-timer fade (local, TIME_BASED) | DONE-DEVICE | 1-min custom + Linear fade-out → `SleepTimer expired — paused playback (fadeOut=true)` → state=PAUSED(2); end-of-track/chapter/queue modes present+selectable in the dialog |
 Cleanup: the test Mono-mix overrides set on the audiobook + The Extra Inch show were reset to Default.
 REMAINING (NOT fails):
-- Artist albums >5 paging: needs a live Spotify Premium Connect session (the artist view loads from Spotify on the user's account) — genuine external dep.
+- Artist albums >5 paging: DONE-DEVICE — Linkin Park artist page shows 13 albums (`Album x13`), far past the old 5-cap → the next-url paging fix works. Plain browse over adb (NO Premium needed — the earlier "needs Premium" flag was wrong).
 - Drive-reauth banner: needs Drive sign-out to trigger; restoring needs the user's Google re-login — needs user consent (disrupts their Drive access).
 - Metered-BLOCK live observation: would mark the user's LIVE wifi metered (invasive); the constraint is already verified.
 - Voice-boost (F3): audible effect — override-load rides the same verified activeOverride flow; audibility = user.
