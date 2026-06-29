@@ -31,7 +31,12 @@
 
 ## DEVICE VERIFICATION (2026-06-29, RFCY70BARDJ, Drive re-signed-in) — functional, multi-method
 - Live bug found by the user (IO_BAD_HTTP 403 on launch): root-caused via ExoPlayer stack + DiagLog + logcat `Drive download: no access token (signed out?)` → the earlier full wipe cleared Drive sign-in. Fixed: `PlayerErrorMessage` graceful re-sign-in prompt (committed bcdcee1, PlayerErrorMessageTest). After re-sign-in, resume loads BUFFERING→READY at saved pos, no 403.
-- **M1 BT per-file-type** — FUNCTIONAL: `cmd media_session dispatch next/previous` on the live Drive M4B → DiagLog `[BT] keyEvent ... external=true kind=AUDIOBOOK nextAct=next_chapter`. Per-kind resolution works on device.
+- **M1 BT per-file-type** — ALL 4 KINDS device-verified 2026-06-29 (KeyEvent path) via `cmd media_session dispatch next/previous` while each kind was the loaded item, DiagLog `[BT] keyEvent external=true kind=…`:
+  - AUDIOBOOK (Drive M4B) → `nextAct=next_chapter` / `previous_chapter`.
+  - PODCAST (Fighting Cock ep) → `kind=PODCAST` → `skip_forward_seconds 30` / `skip_back_seconds 15`.
+  - MUSIC (Dyscarnate track) → `kind=MUSIC` → `next_track` / `previous_track`.
+  - VIDEO (local clip) → `kind=VIDEO` → `next_track` / `previous_track`.
+  - REMAINING GAP: the AVRCP `onPlayerCommandRequest` path (COMMAND_SEEK_TO_NEXT/PREV) is NOT exercised by `cmd media_session dispatch` (that routes through the KeyEvent `onMediaButtonEvent` path). The AVRCP command path needs a real AVRCP source (car head-unit / Android Auto) — flagged for the user's car BT.
 - **M2 BT chapter nav** — FUNCTIONAL: `→ applyAction action=next_chapter/previous_chapter` + playhead jumped a chapter (52418293→52554394 ms). Real chapter nav, not the placeholder.
 - **M3 backup** — FUNCTIONAL round-trip: UI renders 4 actions; "Back up to Drive" → "Backed up to Drive."; "Restore from Drive" → "Restored 2493 item(s)." FK-safe two-pass restore handled 2493 real rows.
 - **M5 podcast download** — FUNCTIONAL: `dumpsys jobscheduler` shows PodcastSyncWorker `Required constraints: CONNECTIVITY` (wifi+mobile), not UNMETERED.
