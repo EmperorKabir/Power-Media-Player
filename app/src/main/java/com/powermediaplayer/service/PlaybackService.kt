@@ -2696,6 +2696,8 @@ class PlaybackService : MediaSessionService() {
         if (target is CastPlayer && !keepLocalVideo) {
             val relay = castRelayServer
             val cur = items.getOrNull(currentIndex)
+            // Orchestrator self-gates: Drive host + the file name is .m4b/.m4a (fetched at
+            // cast time — reliable, unlike chapter_count which parses async and can be missed).
             if (relay != null && cur != null) {
                 maybeFaststartDriveAudioForCast(cur, target, relay, currentPosition, playWhenReady)
             }
@@ -2830,14 +2832,18 @@ class PlaybackService : MediaSessionService() {
         val uri = original.localConfiguration?.uri ?: original.requestMetadata.mediaUri ?: return
         if (uri.host?.contains("googleapis.com") != true) return            // Drive only
         val uriStr = uri.toString()
-        val mime = original.localConfiguration?.mimeType ?: guessMimeFromUri(uri)
-        val isAudio = mime.startsWith("audio/") ||
-            Regex("\\.(m4b|m4a)(\\?|\$)", RegexOption.IGNORE_CASE).containsMatchIn(uriStr)
-        if (!isAudio) return                                               // audio only
         val fileId = Regex("/files/([^?]+)").find(uriStr)?.groupValues?.getOrNull(1) ?: return
         val meta = original.mediaMetadata
         faststartJob = serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                // Audiobook signal: the Drive file NAME (fetched at cast time — reliable,
+                // unlike chapter_count which parses async and a fast cast misses). .m4b/.m4a
+                // = the moov-at-end audio candidates; video (.mp4) and music (.mp3) excluded.
+                val nm = driveOAuthProvider.fetchFileName(fileId)?.trim()?.lowercase()
+                if (nm == null || !(nm.endsWith(".m4b") || nm.endsWith(".m4a"))) {
+                    com.powermediaplayer.diag.DiagLog.event("T302", "not an audiobook (name=$nm) — skip faststart")
+                    return@launch
+                }
                 val cacheDir = java.io.File(filesDir, "faststart").apply { mkdirs() }
                 val cacheFile = java.io.File(cacheDir, "${fileId.hashCode()}.m4b")
                 val serveFile: java.io.File = if (cacheFile.exists() && cacheFile.length() > 0) {
@@ -2866,7 +2872,9 @@ class PlaybackService : MediaSessionService() {
                     .setUri("http://$castRelayLanIp:${server.listeningPort}/$token")
                     .setMimeType("audio/mp4")
                     .setMediaId(uriStr)                    // preserve mediaId → stop-cast restore intact
-                    .setMediaMetadata(meta)
+                    // Durable enriched metadata (title/author/cover) so the swap doesn't
+                    // briefly blank the now-playing card (T302 metadata blip on re-point).
+                    .setMediaMetadata(Companion.senderMetadataByMediaId[uriStr] ?: meta)
                     .build()
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                     if (!isActive) return@withContext
