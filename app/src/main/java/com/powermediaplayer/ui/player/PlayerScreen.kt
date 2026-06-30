@@ -1661,6 +1661,7 @@ private fun TrackInfoSection(
             frost = coverFrost,
             enabled = frostEnabled,
             palette = coverColors,
+            hasCover = uiState.hasCoverArt,
             baseColor = TextPrimary,
             maxLines = 2
         )
@@ -1672,6 +1673,7 @@ private fun TrackInfoSection(
                 frost = coverFrost,
                 enabled = frostEnabled,
                 palette = coverColors,
+            hasCover = uiState.hasCoverArt,
                 baseColor = coverColors?.vibrant ?: TealAccent,
                 maxLines = 1
             )
@@ -1684,6 +1686,7 @@ private fun TrackInfoSection(
                 frost = coverFrost,
                 enabled = frostEnabled,
                 palette = coverColors,
+            hasCover = uiState.hasCoverArt,
                 baseColor = TextSecondary,
                 maxLines = 1
             )
@@ -1696,6 +1699,7 @@ private fun TrackInfoSection(
                 frost = coverFrost,
                 enabled = frostEnabled,
                 palette = coverColors,
+            hasCover = uiState.hasCoverArt,
                 baseColor = TextTertiary,
                 maxLines = 1
             )

@@ -210,6 +210,7 @@ fun FrostedTextLine(
     baseColor: Color,
     maxLines: Int,
     palette: CoverArtColors? = null,
+    hasCover: Boolean = true,
     modifier: Modifier = Modifier,
     dimAlpha: Float = 0.36f,
     padHorizontal: Float = 12f,
@@ -252,14 +253,25 @@ fun FrostedTextLine(
                         addRoundRect(RoundRect(left, top, right, bottom, CornerRadius(radius, radius)))
                     }
                     clipPath(path) {
-                        translate(frost.coverOriginInRoot.x - origin.x, frost.coverOriginInRoot.y - origin.y) {
-                            drawLayer(frost.blurred)
+                        if (hasCover) {
+                            // Cover present: frost the real backdrop (blur) plus a dark dim.
+                            translate(frost.coverOriginInRoot.x - origin.x, frost.coverOriginInRoot.y - origin.y) {
+                                drawLayer(frost.blurred)
+                            }
+                            drawRect(
+                                color = Color.Black.copy(alpha = dimAlpha),
+                                topLeft = Offset(left, top),
+                                size = Size(right - left, bottom - top)
+                            )
+                        } else {
+                            // No cover art: a faint LIGHT panel so the pill stays visible on a dark
+                            // or plain background (a dark dim would vanish into black).
+                            drawRect(
+                                color = Color.White.copy(alpha = 0.10f),
+                                topLeft = Offset(left, top),
+                                size = Size(right - left, bottom - top)
+                            )
                         }
-                        drawRect(
-                            color = Color.Black.copy(alpha = dimAlpha),
-                            topLeft = Offset(left, top),
-                            size = Size(right - left, bottom - top)
-                        )
                     }
                 }
             }
