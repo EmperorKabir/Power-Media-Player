@@ -111,7 +111,7 @@ fun CrossfadeButton(
                 Text(
                     text = if (s.crossfadeEnabled)
                         "${s.crossfadeMs / 1000} s · $curveLabel · $flagsActive"
-                    else "Off — toggle Master crossfade to enable",
+                    else "Off, toggle Master crossfade to enable",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (s.crossfadeEnabled) TextSecondary else TextTertiary
                 )
@@ -170,7 +170,7 @@ fun CrossfadeButton(
 
                 ToggleRow(
                     label = "Manual fade-now",
-                    description = "Enables a 'Fade now' button below — fast-skip with a 1.5 s fade rather than a hard cut.",
+                    description = "Enables a 'Fade now' button below, fast-skip with a 1.5 s fade rather than a hard cut.",
                     checked = s.crossfadeManualFadeNowEnabled,
                     onChange = { settingsVm.setCrossfadeManualFadeNowEnabled(it); touch() },
                     enabled = s.crossfadeEnabled
@@ -285,7 +285,7 @@ private fun CurveDropdown(
         Text("Fade curve", style = MaterialTheme.typography.titleSmall,
             color = if (enabled) TextPrimary else DisabledGrey)
         Text(
-            "Equal-power keeps perceived loudness constant — what real DJs use. " +
+            "Equal-power keeps perceived loudness constant, what real DJs use. " +
                 "Linear is a constant-rate drop. Exponential lingers then drops fast. " +
                 "S-curve eases in and out.",
             style = MaterialTheme.typography.bodySmall,

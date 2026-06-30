@@ -161,7 +161,7 @@ class OfflineMediaManager @Inject constructor(
             evictOrphanCaches(uri)
             return@withContext Result.success(Unit)
         }
-        Result.failure(IllegalStateException("Nothing to delete — not downloaded"))
+        Result.failure(IllegalStateException("Nothing to delete, not downloaded"))
     }
 
     /** #3 — the durable file + DB row are gone; also evict the cover-art (600 KB-
@@ -193,7 +193,7 @@ class OfflineMediaManager @Inject constructor(
                 if (uri.startsWith("content://")) driveProvider.downloadFullToCache(item, progressId = driveId)
                 else driveOAuthProvider.downloadFullToCache(item, progressId = driveId)
             } catch (_: Throwable) { null }
-                ?: return Result.failure(IllegalStateException("Download failed — try again on Wi-Fi"))
+                ?: return Result.failure(IllegalStateException("Download failed, try again on Wi-Fi"))
             val (path, size) = relocate(item, cache)
             settingsDataStore.upsertOfflineDrive(driveId, path)
             offlineCopyDao.upsert(

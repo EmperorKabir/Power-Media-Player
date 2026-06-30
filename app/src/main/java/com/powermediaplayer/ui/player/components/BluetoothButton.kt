@@ -160,7 +160,7 @@ fun BluetoothButton(
                         .rerouteAudioToPhoneSpeaker(context)
                     android.widget.Toast.makeText(
                         context,
-                        if (ok) "Audio moved to phone speaker — Bluetooth still on"
+                        if (ok) "Audio moved to phone speaker, Bluetooth still on"
                         else "Couldn't switch audio output",
                         android.widget.Toast.LENGTH_SHORT
                     ).show()
@@ -251,7 +251,7 @@ private fun BluetoothSheetContent(
             // reroute toggle (which acts on the local player) is moot. Make the
             // state explicit instead of silently showing nothing.
             Text(
-                text = "Casting — audio is playing on the cast device. " +
+                text = "Casting, audio is playing on the cast device. " +
                     "Bluetooth stays system-connected; stop casting to use it " +
                     "for playback in this app.",
                 style = MaterialTheme.typography.bodySmall,
@@ -262,7 +262,7 @@ private fun BluetoothSheetContent(
             if (rerouteActive) {
                 Text(
                     text = "Audio is on the phone speaker. Bluetooth is still " +
-                        "connected — tap below to play through it again.",
+                        "connected, tap below to play through it again.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )

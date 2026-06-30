@@ -302,7 +302,7 @@ class HueProvider @Inject constructor(
                 }
                 // Common "link button not pressed" path.
                 if (text.contains("link button not pressed")) {
-                    DiagLog.event("HUE", "pair refused — press the bridge link button first")
+                    DiagLog.event("HUE", "pair refused, press the bridge link button first")
                 }
                 null
             }
@@ -323,7 +323,7 @@ class HueProvider @Inject constructor(
 
     private suspend fun put(path: String, json: String, ip: String, key: String): Boolean {
         if (ip.isBlank() || key.isBlank()) {
-            DiagLog.event("HUE", "PUT $path skipped — no bridge / key configured")
+            DiagLog.event("HUE", "PUT $path skipped, no bridge / key configured")
             return false
         }
         return withContext(Dispatchers.IO) {
@@ -566,7 +566,7 @@ class HueProvider @Inject constructor(
                     }
                 }
             }
-            // Entertainment areas (user-created ones survive — useful so
+            // Entertainment areas (user-created ones survive, useful so
             // we don't auto-recreate when the user already has e.g. a
             // "Living Area" entertainment area).
             runCatching {
@@ -797,7 +797,7 @@ class HueProvider @Inject constructor(
                 val chs = entertainmentChannelIds(existing.id)
                 DiagLog.event(
                     "HUE",
-                    "ensureEntertainmentConfig — reusing existing area '${existing.name}'"
+                    "ensureEntertainmentConfig, reusing existing area '${existing.name}'"
                 )
                 return@withContext EnsuredArea(existing.id, chs)
             }
@@ -807,7 +807,7 @@ class HueProvider @Inject constructor(
             if (eligible.isEmpty()) {
                 DiagLog.event(
                     "HUE",
-                    "ensureEntertainmentConfig — area '${area.name}' has no colour/ambiance lights; cannot stream"
+                    "ensureEntertainmentConfig, area '${area.name}' has no colour/ambiance lights; cannot stream"
                 )
                 return@withContext null
             }
@@ -835,7 +835,7 @@ class HueProvider @Inject constructor(
             if (serviceCount == 0) {
                 DiagLog.event(
                     "HUE",
-                    "ensureEntertainmentConfig — area '${area.name}' eligible lights " +
+                    "ensureEntertainmentConfig, area '${area.name}' eligible lights " +
                         "have no entertainment services on the bridge"
                 )
                 return@withContext null
@@ -1006,7 +1006,7 @@ class HueProvider @Inject constructor(
         val key = settings.hueAppKey.first()
         val ids = listLightIds()
         if (ids.isEmpty()) {
-            DiagLog.event("HUE", "applyScene ${preset.name} — no lights, skipped")
+            DiagLog.event("HUE", "applyScene ${preset.name}, no lights, skipped")
             return
         }
         DiagLog.event("HUE", "applyScene ${preset.name} → ${ids.size} lights")

@@ -405,7 +405,7 @@ class SettingsViewModel @Inject constructor(
     fun setReverbWetMix(value: Float) {
         viewModelScope.launch {
             com.powermediaplayer.diag.DiagLog.ui(
-                "settings reverbWetMix=${"%.3f".format(value)} (instant — AuxEffectInfo)"
+                "settings reverbWetMix=${"%.3f".format(value)} (instant, AuxEffectInfo)"
             )
             settingsDataStore.setReverbWetMix(value)
         }
@@ -461,8 +461,8 @@ class SettingsViewModel @Inject constructor(
             _webhookTestStatus.value = "Sending test…"
             val res = webhookEmitter.fireTestSync()
             _webhookTestStatus.value = res.fold(
-                onSuccess = { code -> "Test sent — endpoint replied HTTP $code" },
-                onFailure = { "Test failed — ${it.message}" }
+                onSuccess = { code -> "Test sent, endpoint replied HTTP $code" },
+                onFailure = { "Test failed, ${it.message}" }
             )
         }
     }
@@ -583,7 +583,7 @@ class SettingsViewModel @Inject constructor(
             val priorIntensity = runCatching { settingsDataStore.hueReactiveIntensity.first() }.getOrDefault(-1)
             com.powermediaplayer.diag.DiagLog.event(
                 "HUE",
-                "DISCONNECT room/zone — priorArea=$priorArea priorIntensity=$priorIntensity " +
+                "DISCONNECT room/zone, priorArea=$priorArea priorIntensity=$priorIntensity " +
                     "→ clearing area (intensity preserved)"
             )
             // vc32: do NOT zero the sensitivity. Zeroing made every
@@ -641,7 +641,7 @@ class SettingsViewModel @Inject constructor(
 
     // vc29 — area picker. Each entry exposes the area's id + kind +
     // capability tier counts so the UI can show e.g.
-    // "Living Area (room) — 8 colour, 4 ambiance, 4 dimmable, 2 plugs".
+    // "Living Area (room), 8 colour, 4 ambiance, 4 dimmable, 2 plugs".
     data class HueAreaSummary(
         val key: String,        // "<kind>:<uuid>" composite for DataStore
         val displayName: String,

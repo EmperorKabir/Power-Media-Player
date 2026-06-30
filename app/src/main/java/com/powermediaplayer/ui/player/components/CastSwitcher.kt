@@ -152,7 +152,7 @@ fun CastSwitcherButton(
     ) {
         Icon(
             imageVector = if (isCasting) Icons.Filled.CastConnected else Icons.Filled.Cast,
-            contentDescription = if (isCasting) "Cast (currently casting — tap to switch or stop)" else "Cast to a device",
+            contentDescription = if (isCasting) "Cast (currently casting, tap to switch or stop)" else "Cast to a device",
             tint = if (isCasting) TealAccent else TealAccent.copy(alpha = 0.7f)
         )
     }
@@ -169,14 +169,14 @@ fun CastSwitcherButton(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = if (isCasting) "Cast — switch device or stop" else "Cast to a device",
+                    text = if (isCasting) "Cast, switch device or stop" else "Cast to a device",
                     style = MaterialTheme.typography.titleMedium,
                     color = TealAccent
                 )
                 Spacer(Modifier.height(8.dp))
                 if (routes.isEmpty()) {
                     Text(
-                        text = "No Cast devices discovered yet — make sure they're on the same Wi-Fi.",
+                        text = "No Cast devices discovered yet, make sure they're on the same Wi-Fi.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary,
                         modifier = Modifier.padding(vertical = 12.dp)

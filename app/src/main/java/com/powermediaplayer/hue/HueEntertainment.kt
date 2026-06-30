@@ -148,7 +148,7 @@ class HueEntertainment @Inject constructor(
             return
         }
         if (streamJob?.isActive == true) {
-            DiagLog.event("HUE", "entertainment.start ignored — already streaming")
+            DiagLog.event("HUE", "entertainment.start ignored, already streaming")
             return
         }
         streamJob = scope.launch {
@@ -156,7 +156,7 @@ class HueEntertainment @Inject constructor(
             val appKey = settings.hueAppKey.first()
             val clientKey = settings.hueClientKey.first()
             if (ip.isBlank() || appKey.isBlank() || clientKey.isBlank()) {
-                DiagLog.event("HUE", "entertainment.start — missing creds")
+                DiagLog.event("HUE", "entertainment.start, missing creds")
                 return@launch
             }
             val area = ensured.areaId
@@ -164,7 +164,7 @@ class HueEntertainment @Inject constructor(
             if (lightChannels.isEmpty()) {
                 DiagLog.event(
                     "HUE",
-                    "entertainment.start — ensured area has 0 channels; can't stream"
+                    "entertainment.start, ensured area has 0 channels; can't stream"
                 )
                 return@launch
             }
@@ -172,7 +172,7 @@ class HueEntertainment @Inject constructor(
             settings.setHueEntertainmentId(area)
             val started = hueProvider.startEntertainmentStream(area)
             if (!started) {
-                DiagLog.event("HUE", "entertainment.start — bridge refused streaming PUT")
+                DiagLog.event("HUE", "entertainment.start, bridge refused streaming PUT")
                 return@launch
             }
             val handshakeOk = runCatching { connectDtls(ip, appKey, hexDecode(clientKey)) }
@@ -441,7 +441,7 @@ class HueEntertainment @Inject constructor(
                 }
                 runCatching { dtls?.send(frameBuf, 0, frameBuf.size) }
                     .onFailure {
-                        DiagLog.event("HUE", "DTLS send failed: ${it.message} — stopping stream + dimmable")
+                        DiagLog.event("HUE", "DTLS send failed: ${it.message}, stopping stream + dimmable")
                         // vc29.10 — when the bridge refuses our DTLS
                         // datagrams it's almost always saturated.
                         // Continuing the dimmable PUTs on top would

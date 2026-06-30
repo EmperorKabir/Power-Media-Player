@@ -75,7 +75,7 @@ fun HeadphoneEqSection(
                 if (selected != null)
                     "Auto-applies '${selected.name}' on headphone connect"
                 else
-                    "Off — global EQ stays active even with headphones",
+                    "Off, global EQ stays active even with headphones",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )
@@ -104,7 +104,7 @@ fun HeadphoneEqSection(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            "Off — never auto-swap",
+                            "Off, never auto-swap",
                             color = if (selectedId == -1L) TealAccent else TextPrimary,
                             modifier = Modifier.fillMaxWidth()
                         )

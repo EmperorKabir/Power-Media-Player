@@ -1008,7 +1008,7 @@ class PlaybackService : MediaSessionService() {
                             "PMP_DIAG",
                             "CASTOFF slider settled off=${off}ms but INERT " +
                                 "(castLocalVideoActive=$castLocalVideoActive initialSyncDone=$castInitialSyncDone) " +
-                                "— offset only applies while casting a VIDEO to an audio-only device"
+                                ",  offset only applies while casting a VIDEO to an audio-only device"
                         )
                     }
                 }
@@ -1093,9 +1093,9 @@ class PlaybackService : MediaSessionService() {
                         val active = mediaSession?.player
                         when {
                             active is androidx.media3.cast.CastPlayer ->
-                                "Crossfade paused — Cast manages its own playback."
+                                "Crossfade paused, Cast manages its own playback."
                             else ->
-                                "Crossfade paused — current source can't crossfade."
+                                "Crossfade paused, current source can't crossfade."
                         }
                     } else null
                 }
@@ -1324,7 +1324,7 @@ class PlaybackService : MediaSessionService() {
         if (!seedOk) {
             com.powermediaplayer.diag.DiagLog.player(
                 "cold-start seed TIMED OUT after " +
-                    "${android.os.SystemClock.uptimeMillis() - seedStartMs}ms — " +
+                    "${android.os.SystemClock.uptimeMillis() - seedStartMs}ms, " +
                     "playback may start at defaults until DataStore catches up"
             )
         }
@@ -1756,7 +1756,7 @@ class PlaybackService : MediaSessionService() {
                             if (areaKey != activeHueAreaKey) {
                                 com.powermediaplayer.diag.DiagLog.event(
                                     "HUE",
-                                    "area changed mid-stream ($activeHueAreaKey → $areaKey) — restarting engine"
+                                    "area changed mid-stream ($activeHueAreaKey → $areaKey), restarting engine"
                                 )
                                 hueEntertainment.stop()
                                 // fall through to the start path below
@@ -1793,7 +1793,7 @@ class PlaybackService : MediaSessionService() {
                         if (area == null) {
                             com.powermediaplayer.diag.DiagLog.event(
                                 "HUE",
-                                "auto-start skipped — no area picked and no entertainment areas on bridge"
+                                "auto-start skipped, no area picked and no entertainment areas on bridge"
                             )
                             return@collect
                         }
@@ -1806,7 +1806,7 @@ class PlaybackService : MediaSessionService() {
                         if (ensured == null || ensured.channelIds.isEmpty()) {
                             com.powermediaplayer.diag.DiagLog.event(
                                 "HUE",
-                                "auto-start skipped — could not ensure entertainment config " +
+                                "auto-start skipped, could not ensure entertainment config " +
                                     "for area='${area.name}' (kind=${area.kind} colour=${breakdown.colour.size} " +
                                     "ambiance=${breakdown.ambiance.size})"
                             )
@@ -1849,7 +1849,7 @@ class PlaybackService : MediaSessionService() {
                         if (intensity > 0 && isPlaying && (isCast || isSpotify)) {
                             com.powermediaplayer.diag.DiagLog.event(
                                 "HUE",
-                                "auto-start skipped — audio is on remote (isCast=$isCast isSpotify=$isSpotify); " +
+                                "auto-start skipped, audio is on remote (isCast=$isCast isSpotify=$isSpotify); " +
                                     "PCM tap sees silence on these sources"
                             )
                         }
@@ -1925,7 +1925,7 @@ class PlaybackService : MediaSessionService() {
                     // the user stopped casting (the TV→speaker hijack).
                     if (now < suppressAutoCastUntilMs) {
                         com.powermediaplayer.diag.DiagLog.event(
-                            "CAST", "auto-cast suppressed (cast was just stopped) — ignoring re-armed route"
+                            "CAST", "auto-cast suppressed (cast was just stopped), ignoring re-armed route"
                         )
                         return
                     }
@@ -2228,7 +2228,7 @@ class PlaybackService : MediaSessionService() {
             if (duckedDueToFocus) { Companion.setFocusDuck(false); duckedDueToFocus = false }
             pausedDueToFocus = false
             com.powermediaplayer.util.Diag.i(
-                "PMP_DIAG", "AudioFocus change=$change ignored — casting (remote output)"
+                "PMP_DIAG", "AudioFocus change=$change ignored, casting (remote output)"
             )
             return
         }
@@ -2636,7 +2636,7 @@ class PlaybackService : MediaSessionService() {
             if (server == null) {
                 com.powermediaplayer.util.Diag.w(
                     "PMP_DIAG",
-                    "Cast aborted — relay unavailable (no Wi-Fi LAN IP or " +
+                    "Cast aborted, relay unavailable (no Wi-Fi LAN IP or " +
                         "NanoHTTPD failed). Receiver cannot fetch content:// " +
                         "URIs without the relay. Keeping local playback."
                 )
@@ -2644,7 +2644,7 @@ class PlaybackService : MediaSessionService() {
                     runCatching {
                         android.widget.Toast.makeText(
                             applicationContext,
-                            "Cast unavailable — connect to Wi-Fi and retry",
+                            "Cast unavailable, connect to Wi-Fi and retry",
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }
@@ -2874,18 +2874,18 @@ class PlaybackService : MediaSessionService() {
                     // Already cached → rebuildForCast cast it DIRECTLY (full metadata +
                     // chapters preserved, no re-point/blank). Nothing to swap.
                     runCatching { cacheFile.setLastModified(System.currentTimeMillis()) }
-                    com.powermediaplayer.diag.DiagLog.event("T302", "faststart cached — cast directly, no swap")
+                    com.powermediaplayer.diag.DiagLog.event("T302", "faststart cached, cast directly, no swap")
                     return@launch
                 }
                 // Cache MISS. Audiobook signal: the Drive file NAME (reliable at cast time;
                 // chapter_count parses async). .m4b/.m4a = the moov-at-end audio candidates.
                 val nm = driveOAuthProvider.fetchFileName(fileId)?.trim()?.lowercase()
                 if (nm == null || !(nm.endsWith(".m4b") || nm.endsWith(".m4a"))) {
-                    com.powermediaplayer.diag.DiagLog.event("T302", "not an audiobook (name=$nm) — skip faststart")
+                    com.powermediaplayer.diag.DiagLog.event("T302", "not an audiobook (name=$nm), skip faststart")
                     return@launch
                 }
                 val src = resolveFaststartSource(uriStr, fileId) ?: run {
-                    com.powermediaplayer.diag.DiagLog.event("T302", "no local source — faststart skipped, Drive relay stands")
+                    com.powermediaplayer.diag.DiagLog.event("T302", "no local source, faststart skipped, Drive relay stands")
                     return@launch
                 }
                 val r = com.powermediaplayer.util.Mp4Faststart.faststart(src.first, cacheFile)
@@ -2938,7 +2938,7 @@ class PlaybackService : MediaSessionService() {
             id = fileId, name = "cast", mimeType = "audio/mp4", size = 0L,
             downloadUrl = uriStr, sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
         )
-        com.powermediaplayer.diag.DiagLog.event("T302", "no offline copy — downloading full file for faststart cast (Wi-Fi)")
+        com.powermediaplayer.diag.DiagLog.event("T302", "no offline copy, downloading full file for faststart cast (Wi-Fi)")
         val dl = driveOAuthProvider.downloadFullToCache(item) ?: return null
         return dl to true
     }
@@ -2967,7 +2967,7 @@ class PlaybackService : MediaSessionService() {
         if (lanIp == null) {
             com.powermediaplayer.util.Diag.w(
                 "PMP_DIAG",
-                "CastRelay: no Wi-Fi IPv4 — cannot relay to receiver"
+                "CastRelay: no Wi-Fi IPv4, cannot relay to receiver"
             )
             return null
         }
@@ -3221,7 +3221,7 @@ class PlaybackService : MediaSessionService() {
         // Picture-in-Picture is active must NOT tear the service down.
         if (com.powermediaplayer.MainActivityHolder.isInPip) {
             com.powermediaplayer.diag.DiagLog.lifecycle(
-                "PlaybackService.onTaskRemoved — PiP active, service kept alive"
+                "PlaybackService.onTaskRemoved, PiP active, service kept alive"
             )
             super.onTaskRemoved(rootIntent)
             return
@@ -3257,7 +3257,7 @@ class PlaybackService : MediaSessionService() {
                     runCatching { spotifyProvider.pause() }
                 }
                 com.powermediaplayer.diag.DiagLog.lifecycle(
-                    "onTaskRemoved — Spotify mirror active → best-effort Connect pause"
+                    "onTaskRemoved, Spotify mirror active → best-effort Connect pause"
                 )
             }
             player?.let { runCatching { it.stop(); it.clearMediaItems() } }
@@ -3617,7 +3617,7 @@ class PlaybackService : MediaSessionService() {
                 }
                 else -> {
                     com.powermediaplayer.diag.DiagLog.bt(
-                        "→ keyEvent ${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} unhandled — passthrough"
+                        "→ keyEvent ${android.view.KeyEvent.keyCodeToString(keyEvent.keyCode)} unhandled, passthrough"
                     )
                     false
                 }

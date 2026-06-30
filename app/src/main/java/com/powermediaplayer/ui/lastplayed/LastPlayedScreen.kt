@@ -140,7 +140,7 @@ fun LastPlayedScreen(
                     )
                     choiceRow(0, "Hold position", "Always resume from where you starred it.")
                     choiceRow(1, "Resume live", "Resume from wherever you last left off.")
-                    choiceRow(2, "Both", "Saves it twice — one 'Hold position' and one 'Resume live' favourite (uses two of your favourite slots).")
+                    choiceRow(2, "Both", "Saves it twice, one 'Hold position' and one 'Resume live' favourite (uses two of your favourite slots).")
                 }
             },
             confirmButton = {
@@ -151,11 +151,11 @@ fun LastPlayedScreen(
                             val okFixed = viewModel.pinSession(id, followLive = false)
                             val okLive = viewModel.pinSession(id, followLive = true)
                             if (!okFixed || !okLive) snackbar.showSnackbar(
-                                "Favourites full (10/10) — couldn't add both; unpin some first"
+                                "Favourites full (10/10), couldn't add both; unpin some first"
                             )
                         } else {
                             val ok = viewModel.pinSession(id, followLive = choice == 1)
-                            if (!ok) snackbar.showSnackbar("Favourites full (10/10) — unpin one first")
+                            if (!ok) snackbar.showSnackbar("Favourites full (10/10), unpin one first")
                         }
                     }
                 }) { Text("Save", color = TealAccent) }
@@ -172,7 +172,7 @@ fun LastPlayedScreen(
             mediaUri = com.powermediaplayer.data.repository.overrideKeyFor(
                 item.mediaUri, item.isPinned, item.followLive
             ),
-            title = item.title + if (item.followLive) " — Resume live" else "",
+            title = item.title + if (item.followLive) ", Resume live" else "",
             dao = viewModel.mediaOverrideDao,
             onDismiss = { overrideTarget = null }
         )
@@ -198,7 +198,7 @@ fun LastPlayedScreen(
                     {
                         scope.launch {
                             val ok = viewModel.pinSession(item.id)
-                            if (!ok) snackbar.showSnackbar("Favourites full (10/10) — unpin one first")
+                            if (!ok) snackbar.showSnackbar("Favourites full (10/10), unpin one first")
                         }
                         contextItem = null
                     }
@@ -390,7 +390,7 @@ fun LastPlayedScreen(
                                         scope.launch {
                                             val ok = viewModel.pinSession(item.id)
                                             if (!ok) snackbar.showSnackbar(
-                                                "Favourites full (10/10) — unpin one first"
+                                                "Favourites full (10/10), unpin one first"
                                             )
                                         }
                                     } else {
@@ -796,7 +796,7 @@ private fun HistoryRowWithBookmarks(
                     }
                     if (bookmarks.size > bookmarkCap) {
                         Text(
-                            "+${bookmarks.size - bookmarkCap} more — pin to see all",
+                            "+${bookmarks.size - bookmarkCap} more, pin to see all",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary,
                             modifier = Modifier.padding(start = 8.dp, top = 4.dp)

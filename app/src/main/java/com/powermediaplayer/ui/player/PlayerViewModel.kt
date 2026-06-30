@@ -1222,7 +1222,7 @@ class PlayerViewModel @Inject constructor(
         _sleepTimerExpired.value = true
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
-            "SleepTimer expired — mode=$label"
+            "SleepTimer expired, mode=$label"
         )
     }
 
@@ -1269,7 +1269,7 @@ class PlayerViewModel @Inject constructor(
             _sleepTimerExpired.value = true
             com.powermediaplayer.util.Diag.i(
                 "PMP_DIAG",
-                "SleepTimer expired — paused playback (fadeOut=$fadeOutEnabled)"
+                "SleepTimer expired, paused playback (fadeOut=$fadeOutEnabled)"
             )
         }
     }
@@ -1502,7 +1502,7 @@ class PlayerViewModel @Inject constructor(
                                 withContext(Dispatchers.Main) {
                                     android.widget.Toast.makeText(
                                         context,
-                                        "Can't reverse this file — playing on normally",
+                                        "Can't reverse this file, playing on normally",
                                         android.widget.Toast.LENGTH_SHORT
                                     ).show()
                                 }

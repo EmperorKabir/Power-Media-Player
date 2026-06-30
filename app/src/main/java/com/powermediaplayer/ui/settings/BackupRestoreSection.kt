@@ -125,9 +125,9 @@ fun BackupRestoreSection(vm: BackupViewModel = hiltViewModel()) {
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
         Text(
-            text = "Save everything except your actual media files — settings, per-file " +
+            text = "Save everything except your actual media files, settings, per-file " +
                 "effects, equaliser presets, favourites, play history, bookmarks, playlists, " +
-                "podcast subscriptions and all metadata — to a file or to Google Drive, and " +
+                "podcast subscriptions and all metadata, to a file or to Google Drive, and " +
                 "restore it on this or another device.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary,

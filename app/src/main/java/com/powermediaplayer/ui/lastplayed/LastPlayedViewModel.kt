@@ -195,7 +195,7 @@ class LastPlayedViewModel @Inject constructor(
                 }
                 if (!com.powermediaplayer.playback.ResumeGate.isCurrent(token)) {
                     com.powermediaplayer.diag.DiagLog.resume(
-                        "playAlbumTrack ABORT token=$token — superseded"
+                        "playAlbumTrack ABORT token=$token, superseded"
                     )
                     return@launch
                 }
@@ -457,7 +457,7 @@ class LastPlayedViewModel @Inject constructor(
                     // survives navigation; perfect for this signal.
                     val msg = play?.exceptionOrNull()?.message
                         ?.takeIf { it.isNotBlank() }
-                        ?: "No active Spotify device — open Spotify on your phone or a speaker, then tap again"
+                        ?: "No active Spotify device, open Spotify on your phone or a speaker, then tap again"
                     com.powermediaplayer.diag.DiagLog.event(
                         "SPOTIFY",
                         "tap-fail toast → $msg"
@@ -536,7 +536,7 @@ class LastPlayedViewModel @Inject constructor(
                             .map { android.net.Uri.fromFile(it) }
                             .onFailure {
                                 com.powermediaplayer.diag.DiagLog.resume(
-                                    "reverse failed — playing forward: ${it.message}"
+                                    "reverse failed, playing forward: ${it.message}"
                                 )
                             }
                             .getOrDefault(uri)
@@ -596,7 +596,7 @@ class LastPlayedViewModel @Inject constructor(
                 // whatever the user has since switched to.
                 if (!com.powermediaplayer.playback.ResumeGate.isCurrent(token)) {
                     com.powermediaplayer.diag.DiagLog.resume(
-                        "coroutine ABORT token=$token — superseded"
+                        "coroutine ABORT token=$token, superseded"
                     )
                     return@launch
                 }

@@ -167,7 +167,7 @@ class CloudViewModel @Inject constructor(
             } else {
                 val msg = if (com.powermediaplayer.util.DownloadProgressBus.isCancelled(item.id))
                     "Download cancelled: ${item.name}"
-                else "Couldn't save offline — try again on Wi-Fi."
+                else "Couldn't save offline, try again on Wi-Fi."
                 _uiState.update { it.copy(errorMessage = msg) }
             }
           } finally {
@@ -315,7 +315,7 @@ class CloudViewModel @Inject constructor(
             val now = !row.isStarred
             offlineCopyDao.setStarred(driveId, now)
             _uiState.update {
-                it.copy(errorMessage = if (now) "Pinned — protected from auto-cleanup" else "Unpinned")
+                it.copy(errorMessage = if (now) "Pinned, protected from auto-cleanup" else "Unpinned")
             }
         }
     }
@@ -631,7 +631,7 @@ class CloudViewModel @Inject constructor(
                 driveOAuthProvider.getFileMetadata(id)
             }
             if (item == null) {
-                _uiState.update { it.copy(errorMessage = "Couldn't load $name — it may have been removed from Drive.") }
+                _uiState.update { it.copy(errorMessage = "Couldn't load $name, it may have been removed from Drive.") }
                 return@launch
             }
             withContext(Dispatchers.Main) {
@@ -889,7 +889,7 @@ class CloudViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     activeProvider = CloudProviderType.GOOGLE_DRIVE,
-                    errorMessage = "Added \"$folderName\" — opening it"
+                    errorMessage = "Added \"$folderName\", opening it"
                 )
             }
             browseDrive(folderId, folderName)
@@ -1553,7 +1553,7 @@ class CloudViewModel @Inject constructor(
                     .map { android.net.Uri.fromFile(it) }
                     .onFailure { t ->
                         _uiState.update { it.copy(
-                            errorMessage = t.message ?: "Reverse mode failed — playing forward"
+                            errorMessage = t.message ?: "Reverse mode failed, playing forward"
                         ) }
                     }
                     .getOrDefault(uri)

@@ -545,7 +545,7 @@ fun PlayerScreen(
                         modifier = Modifier.padding(end = 8.dp)
                     )
                     Text(
-                        text = "Sleep timer finished — playback paused.",
+                        text = "Sleep timer finished, playback paused.",
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f)
@@ -1177,7 +1177,7 @@ private fun OverlayContent(
         )
         if (uiState.isSpotifyActive) {
             Text(
-                text = "Speed / pitch don't apply to Spotify Connect — audio plays " +
+                text = "Speed / pitch don't apply to Spotify Connect, audio plays " +
                     "on the Spotify device. Switch to local or Drive to use them.",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextSecondary,
@@ -1228,7 +1228,7 @@ private fun OverlayContent(
                 Text(
                     text = when {
                         abEnd != null -> "A–B ON"
-                        abStart != null -> "A set — tap for B"
+                        abStart != null -> "A set, tap for B"
                         else -> "A–B Loop"
                     },
                     style = MaterialTheme.typography.labelMedium
@@ -1535,7 +1535,7 @@ private fun PlayerScreenExpanded(
                     Text(
                         text = when {
                             abEndE != null -> "A–B ON"
-                            abStartE != null -> "A set — tap for B"
+                            abStartE != null -> "A set, tap for B"
                             else -> "A–B Loop"
                         },
                         style = MaterialTheme.typography.labelMedium
@@ -2208,7 +2208,7 @@ private fun PositionSection(
             }
         },
         onPlaylistSeekToRemainingMs = {
-            seekDialog = SeekDialogReq("Jump — album/book remaining", pos.playlistRemainingFormatted, pos.totalPlaylistDurationMs) { ms ->
+            seekDialog = SeekDialogReq("Jump, album/book remaining", pos.playlistRemainingFormatted, pos.totalPlaylistDurationMs) { ms ->
                 viewModel.seekToPlaylistPosition(pos.totalPlaylistDurationMs - ms)
             }
         },

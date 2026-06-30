@@ -745,7 +745,7 @@ class SpotifyProvider @Inject constructor(
                 "Spotify.playTrackOnConnectDevice $spotifyUri context=$contextUri"
             )
             val token = currentAccessToken() ?: return@withContext Result.failure(
-                IllegalStateException("Spotify session expired — sign in again")
+                IllegalStateException("Spotify session expired, sign in again")
             )
             // An album/playlist/show URI passed as the "track" is really a
             // CONTEXT — route it through context_uri. The uris:[…] field only
@@ -778,7 +778,7 @@ class SpotifyProvider @Inject constructor(
                 return@withContext firstAttempt
             }
 
-            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.play no active device — listing")
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.play no active device, listing")
             var devices = listDevices(token)
             if (devices.isEmpty()) {
                 // Spotify isn't running anywhere. Auto-launch the
@@ -951,7 +951,7 @@ class SpotifyProvider @Inject constructor(
         return try {
             val pm = context.packageManager
             if (pm.getLaunchIntentForPackage("com.spotify.music") == null) {
-                com.powermediaplayer.util.Diag.w("PMP_DIAG", "Spotify auto-launch skipped — app not installed")
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "Spotify auto-launch skipped, app not installed")
                 return false
             }
             val bridge = Intent(
@@ -1031,7 +1031,7 @@ class SpotifyProvider @Inject constructor(
                 )
                 when (resp.code) {
                     in 200..299 -> Result.success(Unit)
-                    401 -> Result.failure(IllegalStateException("Spotify session expired — sign in again"))
+                    401 -> Result.failure(IllegalStateException("Spotify session expired, sign in again"))
                     403 -> {
                         // Spotify returns 403 for several reasons. Distinguish
                         // by reading the error.reason field — only PREMIUM_
@@ -1087,7 +1087,7 @@ class SpotifyProvider @Inject constructor(
      */
     suspend fun transferPlaybackTo(deviceId: String): Result<Unit> = withContext(Dispatchers.IO) {
         val token = currentAccessToken() ?: return@withContext Result.failure(
-            IllegalStateException("Spotify session expired — sign in again")
+            IllegalStateException("Spotify session expired, sign in again")
         )
         transferPlayback(token, deviceId)
     }
@@ -1519,7 +1519,7 @@ class SpotifyProvider @Inject constructor(
                         )
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
-                            "Spotify poll null snap — clear=$clear graceRemainMs=" +
+                            "Spotify poll null snap, clear=$clear graceRemainMs=" +
                                 (bannerGraceUntilMs - android.os.SystemClock.uptimeMillis())
                         )
                         if (clear) {
@@ -1908,7 +1908,7 @@ class SpotifyProvider @Inject constructor(
                             cachedAuthStateJson = null
                             com.powermediaplayer.util.Diag.i(
                                 "PMP_DIAG",
-                                "Spotify refresh token expired (invalid_grant) — discarded; user must re-sign-in"
+                                "Spotify refresh token expired (invalid_grant), discarded; user must re-sign-in"
                             )
                         }
                     }

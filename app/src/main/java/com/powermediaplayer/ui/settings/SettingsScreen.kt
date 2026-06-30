@@ -138,7 +138,7 @@ fun SettingsScreen(
                     "restore", "launch", "last played", "autoplay", "auto play")
             ) {
                 Text(
-                    text = "What this app does when something else needs the speakers — phone calls, alarms, navigation, or another music app.",
+                    text = "What this app does when something else needs the speakers, phone calls, alarms, navigation, or another music app.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -183,7 +183,7 @@ fun SettingsScreen(
                 SettingsToggleItem(
                     title = "Stop playback on swipe-away",
                     description = "When you swipe the app off the Recents list, stop the music. " +
-                        "Off by default — most music apps keep playing in the background " +
+                        "Off by default, most music apps keep playing in the background " +
                         "after a swipe-away, which is what you want for podcasts in the car.",
                     icon = Icons.Filled.Close,
                     checked = uiState.stopOnTaskRemoved,
@@ -193,7 +193,7 @@ fun SettingsScreen(
                     Icons.Filled.SkipNext, uiState.gaplessPlayback) { viewModel.setGapless(it) }
                 SettingsToggleItem(
                     title = "Skip silence",
-                    description = "Automatically shorten silent gaps in the audio — handy " +
+                    description = "Automatically shorten silent gaps in the audio, handy " +
                         "for podcasts and audiobooks. Per-file overrides can turn it on " +
                         "for one item. Local/Drive only (not Spotify or Cast).",
                     icon = Icons.Filled.FastForward,
@@ -221,7 +221,7 @@ fun SettingsScreen(
                 SettingsToggleItem("Auto-play on Bluetooth connect",
                     "Start playing when a Bluetooth audio device connects, and when " +
                         "the app launches with one already connected. Independent of " +
-                        "the other triggers below — any enabled trigger can start " +
+                        "the other triggers below, any enabled trigger can start " +
                         "playback (all share the conditions further down).",
                     Icons.Filled.Bluetooth, uiState.resumeOnBt) { viewModel.setResumeOnBt(it) }
                 SettingsToggleItem("Auto-play on Cast connect",
@@ -254,7 +254,7 @@ fun SettingsScreen(
                         title = "Auto-play on launch",
                         description = "Start playing the moment the app opens, from " +
                             "where you left off. Independent of the Bluetooth / Cast / " +
-                            "headphone triggers — any enabled trigger can start " +
+                            "headphone triggers, any enabled trigger can start " +
                             "playback. Off by default so opening the app never makes " +
                             "unexpected sound.",
                         icon = Icons.Filled.PlayArrow,
@@ -359,8 +359,8 @@ fun SettingsScreen(
                 SettingsToggleItem(
                     title = "Deep Scan",
                     description = "When you tap 'Refresh metadata' on a single track, read " +
-                            "deeper inside the file to recover details — artist, album, " +
-                            "cover art — that the quick library scan can miss. The normal " +
+                            "deeper inside the file to recover details, artist, album, " +
+                            "cover art, that the quick library scan can miss. The normal " +
                             "library scan always uses the fast method, so this setting " +
                             "doesn't slow scanning down.",
                     icon = Icons.Filled.DocumentScanner,
@@ -418,13 +418,13 @@ fun SettingsScreen(
                     title = "Measure loudness of new files automatically",
                     description = "Measure the loudness of each new audio file as it's found, so " +
                         "tracks recorded at different volumes all play at a similar level. Off by " +
-                        "default — the first measurement of a big library can take a while.",
+                        "default, the first measurement of a big library can take a while.",
                     icon = Icons.Filled.GraphicEq,
                     checked = uiState.replayGainAutoScan,
                     onCheckedChange = { viewModel.setReplayGainAutoScan(it) }
                 )
                 SettingsToggleItem("Volume normalisation (even out track volumes)",
-                    "Automatic loudness normalisation — plays every track at a similar volume so you're not reaching for the volume between songs. Uses each file's own loudness measurement (known as ReplayGain), targeting a consistent level.",
+                    "Automatic loudness normalisation, plays every track at a similar volume so you're not reaching for the volume between songs. Uses each file's own loudness measurement (known as ReplayGain), targeting a consistent level.",
                     Icons.Filled.GraphicEq, uiState.replayGainEnabled) { viewModel.setReplayGain(it) }
             },
             SettingsItem(
@@ -459,7 +459,7 @@ fun SettingsScreen(
                         "(or any Bluetooth remote), independently for each kind of media. " +
                         "Audiobooks default to chapter navigation, podcasts to skip, and " +
                         "music and video to track. Works with any car that already " +
-                        "controls media over Bluetooth — no setup needed in the car.",
+                        "controls media over Bluetooth, no setup needed in the car.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -558,7 +558,7 @@ fun SettingsScreen(
                     "Mix both channels into a centred mono image (still output as stereo so headphones receive the same on both ears).",
                     Icons.Filled.Adjust, uiState.monoMix) { viewModel.setMonoMix(it) }
                 SettingsToggleItem("Surround sound passthrough",
-                    "If you're plugged into a home-cinema receiver or soundbar (over HDMI or USB), turn this on to pass surround sound (Dolby / DTS) through untouched, so the receiver decodes it. Leave it off for headphones or your phone speaker — the player then mixes everything down to normal stereo.",
+                    "If you're plugged into a home-cinema receiver or soundbar (over HDMI or USB), turn this on to pass surround sound (Dolby / DTS) through untouched, so the receiver decodes it. Leave it off for headphones or your phone speaker, the player then mixes everything down to normal stereo.",
                     Icons.Filled.Speaker, uiState.passthroughAudio) { viewModel.setPassthroughAudio(it) }
                 SliderRow("Volume boost", "+${uiState.volumeBoostMb / 100} dB",
                     uiState.volumeBoostMb.toFloat(), 0f..2000f,
@@ -567,7 +567,7 @@ fun SettingsScreen(
                     uiState.pitch, 0.5f..2.0f,
                     default = 1.0f) { viewModel.setPitch(it) }
                 SettingsToggleItem("Reverse audio (audio only)",
-                    "Plays a song or recording backwards — audio only, one " +
+                    "Plays a song or recording backwards, audio only, one " +
                         "file at a time. The first play takes a moment while " +
                         "the file is flipped; after that it's instant. Works " +
                         "with files on your phone (up to 60 minutes long) and " +
@@ -586,7 +586,7 @@ fun SettingsScreen(
                     title = "Software Decoding",
                     description = "Hardware decoding (default) uses your phone's dedicated video chip " +
                             "for smooth, battery-efficient playback. Switch to Software decoding if you " +
-                            "see visual corruption, green screens, or freezing — this uses the CPU instead, " +
+                            "see visual corruption, green screens, or freezing, this uses the CPU instead, " +
                             "which is slower but more compatible.",
                     icon = Icons.Filled.Memory,
                     checked = uiState.useSoftwareDecoding,
@@ -619,25 +619,25 @@ fun SettingsScreen(
                 listOf("subtitle", "captions", "caption", "srt", "vtt", "ass", "ssa",
                     "opensubtitles", "delay", "format")
             ) {
-                SettingsSectionHeader("Subtitles — OpenSubtitles account")
+                SettingsSectionHeader("Subtitles, OpenSubtitles account")
                 com.powermediaplayer.ui.settings.OpenSubtitlesSection()
-                SettingsSectionHeader("Subtitles — Format Preference")
+                SettingsSectionHeader("Subtitles, Format Preference")
                 val formats = listOf(
                     SubtitleFormatInfo(
                         code = "SRT",
-                        name = "SRT — simple subtitles",
+                        name = "SRT, simple subtitles",
                         description = "Simple text subtitles. Just words on screen with basic timing. " +
-                                "Works everywhere — the most universally supported format."
+                                "Works everywhere, the most universally supported format."
                     ),
                     SubtitleFormatInfo(
                         code = "VTT",
-                        name = "VTT — web subtitles",
+                        name = "VTT, web subtitles",
                         description = "The kind used by most streaming sites such as YouTube and Netflix. " +
                                 "Can show simple styling like bold text and colours."
                     ),
                     SubtitleFormatInfo(
                         code = "ASS",
-                        name = "ASS — fancy subtitles",
+                        name = "ASS, fancy subtitles",
                         description = "Subtitles that can use custom fonts, place text anywhere on screen, " +
                                 "and add effects such as sing-along (karaoke) highlighting. Often " +
                                 "seen on anime and professionally subtitled films."
@@ -793,7 +793,7 @@ fun SettingsScreen(
             ) {
                 SettingsToggleItem(
                     title = "External app control (Tasker / Macrodroid)",
-                    description = "Let automation apps like Tasker or MacroDroid control playback — " +
+                    description = "Let automation apps like Tasker or MacroDroid control playback, " +
                         "play, pause, skip and jump. Off by default; only turn it on for apps " +
                         "you trust.",
                     icon = Icons.Filled.Code,
@@ -1718,7 +1718,7 @@ private fun FontSizeScalePicker(
         Text(
             text = "Scales text and touch targets across the whole app. " +
                 "Icon glyphs stay at their design size. Drag the slider " +
-                "to preview — every screen reflows live.",
+                "to preview, every screen reflows live.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
         )
@@ -1989,9 +1989,9 @@ fun SmartHomePlaceholder() {
         Text(
             text = "This player can work with your smart home in two ways, both " +
                 "free and set up elsewhere in Settings:\n\n" +
-                "• Philips Hue — make your lights pulse in time with the music. " +
+                "• Philips Hue, make your lights pulse in time with the music. " +
                 "Set it up just above, under 'Philips Hue'.\n" +
-                "• Webhooks — tell another app (such as Home Assistant or IFTTT) " +
+                "• Webhooks, tell another app (such as Home Assistant or IFTTT) " +
                 "when your music starts or stops, so it can react. Set it up " +
                 "under Settings → Automation → Webhooks.",
             style = MaterialTheme.typography.bodySmall,
@@ -2016,12 +2016,12 @@ private fun WebhooksSection(
     SettingsSectionHeader("Webhooks (send events to other apps)")
     Text(
         text = "A webhook lets this player tell another app when your music " +
-            "starts, stops or changes — so that app can react (for example, dim " +
+            "starts, stops or changes, so that app can react (for example, dim " +
             "the lights when a track begins). You paste in a web address from a " +
-            "home-automation app (such as Home Assistant, IFTTT or Tasker — its " +
+            "home-automation app (such as Home Assistant, IFTTT or Tasker, its " +
             "app gives you the address), choose which events to send below, then " +
             "tap Save. Your privacy is protected: the player never sends song " +
-            "names or file locations — only a short code for the track, the time, " +
+            "names or file locations, only a short code for the track, the time, " +
             "and how far through it is.",
         style = MaterialTheme.typography.bodySmall,
         color = TextTertiary,
@@ -2067,7 +2067,7 @@ private fun WebhooksSection(
     )
     SettingsToggleItem(
         title = "When you pause",
-        description = "Send an event when YOU pause. Automatic pauses — a phone call, another app — don't count.",
+        description = "Send an event when YOU pause. Automatic pauses, a phone call, another app, don't count.",
         icon = Icons.Filled.Pause,
         checked = onPause,
         onCheckedChange = setPause
@@ -2081,7 +2081,7 @@ private fun WebhooksSection(
     )
     SettingsToggleItem(
         title = "When you skip to the next track",
-        description = "Send an event when you press Next — in the app, or on a Bluetooth remote or car stereo.",
+        description = "Send an event when you press Next, in the app, or on a Bluetooth remote or car stereo.",
         icon = Icons.Filled.SkipNext,
         checked = onSkipNext,
         onCheckedChange = setSkipNext
@@ -2168,7 +2168,7 @@ private fun HueSection(
         OutlinedTextField(
             value = manualIp,
             onValueChange = { manualIp = it },
-            label = { Text("Bridge IP (optional — find in Hue app)") },
+            label = { Text("Bridge IP (optional, find in Hue app)") },
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
@@ -2243,7 +2243,7 @@ private fun HueSection(
         )
         if (areas.isEmpty()) {
             Text(
-                text = "No rooms / zones found yet — tap Refresh.",
+                text = "No rooms / zones found yet, tap Refresh.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -2330,7 +2330,7 @@ private fun HueSection(
         Text(
             text = "'Disconnect room/zone' clears your selection " +
                 "and stops streaming until you pick again. 'Unpair bridge' " +
-                "forgets the bridge entirely — you'll need to press the " +
+                "forgets the bridge entirely, you'll need to press the " +
                 "bridge button to re-pair.",
             style = MaterialTheme.typography.labelSmall,
             color = TextTertiary,
@@ -2348,7 +2348,7 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
         )
         Text(
-            text = "Lights pulse with the music — bass kicks flash bright, " +
+            text = "Lights pulse with the music, bass kicks flash bright, " +
                 "treble runs cool blues, mids track melody. The colour-cycle " +
                 "rate is BPM-driven so transitions feel musical, and rises " +
                 "with the slider below. Sensitivity controls both brightness " +
@@ -2360,7 +2360,7 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
         Text(
-            text = "Works with any room or zone in your Hue app — the player " +
+            text = "Works with any room or zone in your Hue app, the player " +
                 "auto-creates the Entertainment configuration the first time " +
                 "you pick one. Colour bulbs are streamed over Hue's low-latency " +
                 "Entertainment protocol; white-only bulbs are pulsed via a " +
@@ -2372,7 +2372,7 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
         )
         Text(
-            text = "Doesn't apply to Spotify Connect or Cast — those play " +
+            text = "Doesn't apply to Spotify Connect or Cast, those play " +
                 "audio on a remote device, so the analyser has nothing to " +
                 "see. Reactive lighting auto-pauses on those sources.",
             style = MaterialTheme.typography.bodySmall,
@@ -2395,8 +2395,8 @@ private fun HueSection(
                 )
                 Text(
                     text = "ON: each colour light handles a different audio band " +
-                        "(bass → reds, treble → blues) — wide spatial spectrum. " +
-                        "OFF: all colour lights show the same colour together — " +
+                        "(bass → reds, treble → blues), wide spatial spectrum. " +
+                        "OFF: all colour lights show the same colour together, " +
                         "unified feel. Auto-falls back to OFF if fewer than 3 " +
                         "colour lights in the pick.",
                     style = MaterialTheme.typography.bodySmall,
@@ -2459,7 +2459,7 @@ private fun HueSection(
             Text(
                 text = "Only needed if plain white bulbs still feel slightly off " +
                     "the beat. Slide left to flash them a touch earlier, right to " +
-                    "flash a touch later. 'Auto' (0 ms) suits most setups — this is " +
+                    "flash a touch later. 'Auto' (0 ms) suits most setups, this is " +
                     "a small nudge on top of the timing the player already works " +
                     "out for you.",
                 style = MaterialTheme.typography.labelSmall,
@@ -2558,7 +2558,7 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
         )
         Text(
-            text = "Generic Hue scene + on-off — duplicates what the Hue app " +
+            text = "Generic Hue scene + on-off, duplicates what the Hue app " +
                 "already does. Useful when you want to set the mood without " +
                 "leaving the player.",
             style = MaterialTheme.typography.bodySmall,

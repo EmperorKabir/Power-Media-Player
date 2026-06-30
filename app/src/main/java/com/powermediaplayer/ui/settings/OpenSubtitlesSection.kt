@@ -80,8 +80,8 @@ fun OpenSubtitlesSection(
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (signedIn) "OpenSubtitles — signed in as $savedEmail"
-                    else "OpenSubtitles — sign in to auto-fetch subtitles",
+                    if (signedIn) "OpenSubtitles, signed in as $savedEmail"
+                    else "OpenSubtitles, sign in to auto-fetch subtitles",
                     style = MaterialTheme.typography.titleSmall, color = TextPrimary
                 )
                 Text(
@@ -163,7 +163,7 @@ fun OpenSubtitlesSection(
                             OpenSubtitlesClient(apiKey).login(email, password)
                         }
                         if (newToken == null) {
-                            status = "Sign-in failed — check API key + credentials."
+                            status = "Sign-in failed, check API key + credentials."
                         } else {
                             // §C9 LOCKED — credentials in
                             // EncryptedSharedPreferences. Plain DataStore
