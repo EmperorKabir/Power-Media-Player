@@ -40,27 +40,31 @@ class PlayerTextColourTest {
         assertEquals(PlayerTextColour.white, c)
     }
 
-    @Test fun dynamic_picksHighContrastSwatchOverDarkBackdrop() {
-        // dark backdrop: a light vibrant swatch should be chosen (high contrast), not B/W fallback
-        val palette = CoverArtColors(
-            dominant = Color(0xFF202020),
-            vibrant = Color(0xFFEED14B),       // light yellow, high contrast on dark
-            lightVibrant = Color(0xFFFFF1A8),
-            muted = Color(0xFF6B6B6B)
-        )
+    @Test fun dynamic_darkBackdrop_givesLightSaturatedColour() {
+        val palette = CoverArtColors(dominant = Color(0xFF202020), vibrant = Color(0xFFE0B020)) // amber
         val c = PlayerTextColour.dynamic(palette, backdropLum = 0.06f, dimAlpha = 0.34f)
-        assertTrue("expected a light palette swatch", PlayerTextColour.luminance(c) > 0.5f)
-        assertTrue("should not be the plain white fallback", c != PlayerTextColour.white || true)
+        assertTrue("expected a LIGHT result on a dark backdrop", PlayerTextColour.luminance(c) > 0.5f)
+        assertTrue("expected a COLOURED (saturated) result, not white", PlayerTextColour.hueSat(c).second > 0.1f)
     }
 
-    @Test fun dynamic_lowContrastPalette_fallsBackToBlackOrWhite() {
-        // every swatch is mid-grey, close to the (dimmed) mid backdrop -> no candidate clears the
-        // contrast threshold -> black/white fallback.
-        val palette = CoverArtColors(
-            dominant = Color(0xFF7F7F7F),
-            vibrant = Color(0xFF808080),
-            muted = Color(0xFF777777)
-        )
+    @Test fun dynamic_lightBackdrop_givesDarkSaturatedColour() {
+        val palette = CoverArtColors(dominant = Color(0xFFEEEEEE), vibrant = Color(0xFF2060D0)) // blue
+        val c = PlayerTextColour.dynamic(palette, backdropLum = 0.95f, dimAlpha = 0.20f)
+        assertTrue("expected a DARK result on a light backdrop", PlayerTextColour.luminance(c) < 0.5f)
+        assertTrue("expected a COLOURED (saturated) result, not black", PlayerTextColour.hueSat(c).second > 0.1f)
+    }
+
+    @Test fun dynamic_midBackdrop_stillColoured_notWhite() {
+        // The regression: a vibrant palette on a MID backdrop used to fall back to white. Now it
+        // keeps the hue and adjusts lightness, so it stays coloured.
+        val palette = CoverArtColors(dominant = Color(0xFF606060), vibrant = Color(0xFFC03030)) // red
+        val c = PlayerTextColour.dynamic(palette, backdropLum = 0.45f, dimAlpha = 0.34f)
+        assertTrue("should not collapse to white/black on a vibrant cover",
+            PlayerTextColour.hueSat(c).second > 0.1f)
+    }
+
+    @Test fun dynamic_greyscaleCover_fallsBackToBlackOrWhite() {
+        val palette = CoverArtColors(dominant = Color(0xFF7F7F7F), vibrant = Color(0xFF808080))
         val c = PlayerTextColour.dynamic(palette, backdropLum = 0.5f, dimAlpha = 0.0f)
         assertTrue(c == PlayerTextColour.white || c == PlayerTextColour.nearBlack)
     }

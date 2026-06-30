@@ -1646,10 +1646,10 @@ private fun TrackInfoSection(
         // adapted to the REAL blurred backdrop behind it. Robust to Fit/Crop/zoom/fold/display and
         // to variable line lengths.
         val coverFrost = com.powermediaplayer.ui.player.components.LocalCoverFrost.current
-        // S2: a pill behind EVERY title/metadata line for consistency, with or without cover art.
-        // With cover art the pill frosts the real backdrop; with none the captured backdrop is
-        // dark, so the same path yields a subtle dim scrim pill.
-        val frostEnabled = !uiState.isVideoContent && coverFrost != null
+        // S2: a pill behind EVERY title/metadata line for consistency, on audio AND video.
+        // With cover art the pill frosts the real backdrop; over video it uses a dark scrim; with
+        // neither (plain audio) it uses a faint light panel. See FrostedTextLine.
+        val frostEnabled = coverFrost != null
         // §C17 — year • genre line, populated by online enrichment when the embedded tags don't carry them.
         val yearGenreLine = listOfNotNull(
             uiState.year.takeIf { it > 0 }?.toString(),
@@ -1662,6 +1662,7 @@ private fun TrackInfoSection(
             enabled = frostEnabled,
             palette = coverColors,
             hasCover = uiState.hasCoverArt,
+            isVideo = uiState.isVideoContent,
             baseColor = TextPrimary,
             maxLines = 2
         )
@@ -1674,6 +1675,7 @@ private fun TrackInfoSection(
                 enabled = frostEnabled,
                 palette = coverColors,
             hasCover = uiState.hasCoverArt,
+            isVideo = uiState.isVideoContent,
                 baseColor = coverColors?.vibrant ?: TealAccent,
                 maxLines = 1
             )
@@ -1687,6 +1689,7 @@ private fun TrackInfoSection(
                 enabled = frostEnabled,
                 palette = coverColors,
             hasCover = uiState.hasCoverArt,
+            isVideo = uiState.isVideoContent,
                 baseColor = TextSecondary,
                 maxLines = 1
             )
@@ -1700,6 +1703,7 @@ private fun TrackInfoSection(
                 enabled = frostEnabled,
                 palette = coverColors,
             hasCover = uiState.hasCoverArt,
+            isVideo = uiState.isVideoContent,
                 baseColor = TextTertiary,
                 maxLines = 1
             )

@@ -211,6 +211,7 @@ fun FrostedTextLine(
     maxLines: Int,
     palette: CoverArtColors? = null,
     hasCover: Boolean = true,
+    isVideo: Boolean = false,
     modifier: Modifier = Modifier,
     dimAlpha: Float = 0.36f,
     padHorizontal: Float = 12f,
@@ -227,11 +228,15 @@ fun FrostedTextLine(
     val adaptive = rememberResolvedTextColour(
         frost, region, config.mode, config.customColour, palette, dimAlpha
     )
-    val shadow = if (enabled) Shadow(Color.Black.copy(alpha = 0.55f), Offset(0f, 1f), 4f) else null
+    val textColour = if (enabled) adaptive else baseColor
+    // Crisp, not blurry: a dark halo only behind LIGHT text. Dark text reads cleanly on the dim
+    // pill, and a dark shadow under it just smears the glyphs (the "blurry" look).
+    val shadow = if (enabled && PlayerTextColour.luminance(textColour) > 0.5f)
+        Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), 3f) else null
     Text(
         text = text,
         style = style.copy(shadow = shadow),
-        color = if (enabled) adaptive else baseColor,
+        color = textColour,
         textAlign = TextAlign.Center,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
@@ -239,10 +244,12 @@ fun FrostedTextLine(
         modifier = modifier
             .onGloballyPositioned { val b = it.boundsInRoot(); origin = b.topLeft; region = b }
             .drawBehind {
-                val l = layout
-                if (!enabled || frost == null || !frost.captured || l == null) return@drawBehind
+                val l = layout ?: return@drawBehind
+                if (!enabled) return@drawBehind
                 // drawBehind canvas = the OUTER (pre-padding) box; text content is inset by (padX,padY).
                 // Pill extends padX/padY beyond each glyph line → equal gap all round (centred per line).
+                val f = frost
+                val useFrost = hasCover && f != null && f.captured
                 for (i in 0 until l.lineCount) {
                     if (l.getLineRight(i) - l.getLineLeft(i) <= 0f) continue
                     val left = l.getLineLeft(i)
@@ -253,24 +260,36 @@ fun FrostedTextLine(
                         addRoundRect(RoundRect(left, top, right, bottom, CornerRadius(radius, radius)))
                     }
                     clipPath(path) {
-                        if (hasCover) {
-                            // Cover present: frost the real backdrop (blur) plus a dark dim.
-                            translate(frost.coverOriginInRoot.x - origin.x, frost.coverOriginInRoot.y - origin.y) {
-                                drawLayer(frost.blurred)
+                        when {
+                            useFrost && f != null -> {
+                                // Cover present: frost the real backdrop (blur) plus a dark dim.
+                                translate(f.coverOriginInRoot.x - origin.x, f.coverOriginInRoot.y - origin.y) {
+                                    drawLayer(f.blurred)
+                                }
+                                drawRect(
+                                    color = Color.Black.copy(alpha = dimAlpha),
+                                    topLeft = Offset(left, top),
+                                    size = Size(right - left, bottom - top)
+                                )
                             }
-                            drawRect(
-                                color = Color.Black.copy(alpha = dimAlpha),
-                                topLeft = Offset(left, top),
-                                size = Size(right - left, bottom - top)
-                            )
-                        } else {
-                            // No cover art: a faint LIGHT panel so the pill stays visible on a dark
-                            // or plain background (a dark dim would vanish into black).
-                            drawRect(
-                                color = Color.White.copy(alpha = 0.10f),
-                                topLeft = Offset(left, top),
-                                size = Size(right - left, bottom - top)
-                            )
+                            isVideo -> {
+                                // Over video: a dark scrim so the text reads over any frame
+                                // (a light panel would vanish on a bright picture).
+                                drawRect(
+                                    color = Color.Black.copy(alpha = 0.42f),
+                                    topLeft = Offset(left, top),
+                                    size = Size(right - left, bottom - top)
+                                )
+                            }
+                            else -> {
+                                // No cover on a plain/dark background: a faint LIGHT panel so the
+                                // pill stays visible (a dark dim would vanish into black).
+                                drawRect(
+                                    color = Color.White.copy(alpha = 0.10f),
+                                    topLeft = Offset(left, top),
+                                    size = Size(right - left, bottom - top)
+                                )
+                            }
                         }
                     }
                 }

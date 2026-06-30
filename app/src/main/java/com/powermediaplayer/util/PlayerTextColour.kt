@@ -34,14 +34,28 @@ object PlayerTextColour {
     /** Black or white, whichever reads better on a backdrop of [effectiveLum]. */
     fun blackOrWhite(effectiveLum: Float): Color = if (effectiveLum > 0.5f) nearBlack else white
 
-    /** The opposite colour (channel inversion), used as a vivid fallback candidate. */
-    fun complement(c: Color): Color = Color(1f - c.red, 1f - c.green, 1f - c.blue, 1f)
+    /** Hue (0..360) and saturation (0..1) of a colour. Pure (no Android types). */
+    fun hueSat(c: Color): Pair<Float, Float> {
+        val r = c.red; val g = c.green; val b = c.blue
+        val mx = maxOf(r, g, b); val mn = minOf(r, g, b); val d = mx - mn
+        val h = when {
+            d == 0f -> 0f
+            mx == r -> 60f * ((g - b) / d)
+            mx == g -> 60f * ((b - r) / d) + 120f
+            else -> 60f * ((r - g) / d) + 240f
+        }
+        val hue = ((h % 360f) + 360f) % 360f
+        val sat = if (mx == 0f) 0f else d / mx
+        return hue to sat
+    }
 
     /**
-     * Per-file dynamic colour. [backdropLum] is the raw cover luminance behind the text;
-     * [dimAlpha] is the pill's dim, so candidates are scored against the EFFECTIVE background.
-     * Picks the palette swatch (or the dominant's complement) with the best contrast that clears
-     * [minContrast]; otherwise falls back to black or white.
+     * Per-file dynamic colour. Takes the HUE from the artwork's most colourful swatch and builds a
+     * vivid LIGHT version (on a dark backdrop) or DARK version (on a light backdrop), then nudges
+     * its lightness until it clears [minContrast] against the effective (dimmed) backdrop. So the
+     * result is always a colour drawn from the artwork AND legible, instead of falling back to
+     * white whenever a raw swatch happened not to contrast. Only a greyscale cover yields black or
+     * white. [backdropLum] is the raw cover luminance; [dimAlpha] is the pill's dim.
      */
     fun dynamic(
         palette: CoverArtColors?,
@@ -51,17 +65,37 @@ object PlayerTextColour {
     ): Color {
         val effective = backdropLum * (1f - dimAlpha)
         if (palette == null) return blackOrWhite(effective)
-        val candidates = listOfNotNull(
-            palette.lightVibrant,
-            palette.vibrant,
-            palette.muted,
-            palette.darkVibrant,
-            palette.darkMuted,
-            complement(palette.dominant)
-        )
-        val best = candidates.maxByOrNull { contrast(luminance(it), effective) }
-        return if (best != null && contrast(luminance(best), effective) >= minContrast) best
-        else blackOrWhite(effective)
+        val src = palette.vibrant ?: palette.lightVibrant ?: palette.darkVibrant
+            ?: palette.muted ?: palette.darkMuted ?: palette.dominant
+        val (hue, sat) = hueSat(src)
+        if (sat < 0.18f) return blackOrWhite(effective)   // greyscale cover, no hue to use
+        val darkBackdrop = effective < 0.5f
+        // Dark backdrop: a LIGHT tint of the hue (full value, lower saturation as needed for
+        // contrast, but capped so it stays a visible pastel, never washing out to white).
+        // Light backdrop: a DEEP tint (high saturation, lower value as needed, capped above black).
+        return if (darkBackdrop) {
+            val v = 1f
+            var s = 0.85f
+            var c = Color.hsv(hue, s, v)
+            var guard = 0
+            while (contrast(luminance(c), effective) < minContrast && s > 0.30f && guard < 12) {
+                s = (s - 0.08f).coerceAtLeast(0.30f)
+                c = Color.hsv(hue, s, v)
+                guard++
+            }
+            c
+        } else {
+            val s = 0.92f
+            var v = 0.55f
+            var c = Color.hsv(hue, s, v)
+            var guard = 0
+            while (contrast(luminance(c), effective) < minContrast && v > 0.20f && guard < 12) {
+                v = (v - 0.05f).coerceAtLeast(0.20f)
+                c = Color.hsv(hue, s, v)
+                guard++
+            }
+            c
+        }
     }
 
     /** Resolve the final colour for the active mode. [backdropLum] only matters for Default/Dynamic. */
