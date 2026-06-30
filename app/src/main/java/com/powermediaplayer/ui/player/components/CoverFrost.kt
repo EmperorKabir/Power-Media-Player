@@ -42,6 +42,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.Immutable
+import com.powermediaplayer.util.CoverArtColors
+import com.powermediaplayer.util.PlayerTextColour
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -148,6 +151,44 @@ fun rememberAdaptiveTextColor(frost: CoverFrost?, bounds: Rect?, dimAlpha: Float
     return color
 }
 
+/** The user's player text colour choice (S3/S4), provided by the player screen from settings. */
+@Immutable
+data class PlayerTextColourConfig(
+    val mode: Int = PlayerTextColour.MODE_DEFAULT,
+    val customColour: Color? = null,
+)
+
+val LocalPlayerTextColour = staticCompositionLocalOf { PlayerTextColourConfig() }
+
+/**
+ * Resolve the pill text colour for the active mode. Custom needs no backdrop sample; Default and
+ * Dynamic sample the real backdrop luminance behind [bounds] and hand it to [PlayerTextColour].
+ * Dynamic also uses the artwork [palette] to pick a per-file colour.
+ */
+@Composable
+fun rememberResolvedTextColour(
+    frost: CoverFrost?,
+    bounds: Rect?,
+    mode: Int,
+    customColour: Color?,
+    palette: CoverArtColors?,
+    dimAlpha: Float,
+): Color {
+    if (mode == PlayerTextColour.MODE_CUSTOM && customColour != null) return customColour
+    var lum by remember { mutableStateOf(0f) }
+    LaunchedEffect(frost?.captured, bounds) {
+        if (frost == null || bounds == null || !frost.captured) return@LaunchedEffect
+        val sampled = runCatching {
+            val bmp = frost.sharp.toImageBitmap()
+            withContext(Dispatchers.Default) { averageLuminance(bmp, bounds, frost.coverOriginInRoot) }
+        }.getOrNull()
+        if (sampled != null) lum = sampled
+    }
+    return remember(mode, customColour, palette, lum, dimAlpha) {
+        PlayerTextColour.resolve(mode, customColour, palette, lum, dimAlpha)
+    }
+}
+
 /**
  * One piece of cover text (title/artist/…) with a per-VISUAL-LINE frosted pill. Each rendered line
  * gets its OWN rounded backdrop sized to that line's width — so a long title that wraps to two lines
@@ -168,6 +209,7 @@ fun FrostedTextLine(
     enabled: Boolean,
     baseColor: Color,
     maxLines: Int,
+    palette: CoverArtColors? = null,
     modifier: Modifier = Modifier,
     dimAlpha: Float = 0.36f,
     padHorizontal: Float = 12f,
@@ -180,7 +222,10 @@ fun FrostedTextLine(
     var origin by remember { mutableStateOf(Offset.Zero) }
     var region by remember { mutableStateOf<Rect?>(null) }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val adaptive = rememberAdaptiveTextColor(frost, region, dimAlpha)
+    val config = LocalPlayerTextColour.current
+    val adaptive = rememberResolvedTextColour(
+        frost, region, config.mode, config.customColour, palette, dimAlpha
+    )
     val shadow = if (enabled) Shadow(Color.Black.copy(alpha = 0.55f), Offset(0f, 1f), 4f) else null
     Text(
         text = text,

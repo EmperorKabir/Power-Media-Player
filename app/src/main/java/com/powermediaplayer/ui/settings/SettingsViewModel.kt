@@ -151,6 +151,18 @@ class SettingsViewModel @Inject constructor(
     val btMappingSet: StateFlow<BtMappingSet> = settingsDataStore.btMappingSetFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BtMappingSet.DEFAULT)
 
+    /** S3/S4: player (pill) text colour. Standalone flows (not in the indexed uiState combine). */
+    val playerTextColourMode: StateFlow<Int> = settingsDataStore.playerTextColourMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val playerCustomTextColour: StateFlow<Int> = settingsDataStore.playerCustomTextColour
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0xFFFFFFFF.toInt())
+    fun setPlayerTextColourMode(v: Int) {
+        viewModelScope.launch { settingsDataStore.setPlayerTextColourMode(v) }
+    }
+    fun setPlayerCustomTextColour(v: Int) {
+        viewModelScope.launch { settingsDataStore.setPlayerCustomTextColour(v) }
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         listOf<Flow<Any>>(
             settingsDataStore.useDeepScan,

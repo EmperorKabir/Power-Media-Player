@@ -27,6 +27,10 @@ class SettingsDataStore @Inject constructor(
         val USE_SOFTWARE_DECODING = booleanPreferencesKey("use_software_decoding")
         val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
         val SLEEP_TIMER_MINUTES = intPreferencesKey("sleep_timer_minutes")
+        // S3/S4: player (pill) text colour. Mode 0 default (black/white by brightness),
+        // 1 custom (the colour below), 2 dynamic (app picks per file from the artwork).
+        val PLAYER_TEXT_COLOUR_MODE = intPreferencesKey("player_text_colour_mode")
+        val PLAYER_CUSTOM_TEXT_COLOUR = intPreferencesKey("player_custom_text_colour") // ARGB int
         val LAST_EQ_PRESET_ID = longPreferencesKey("last_eq_preset_id")
         val HEADPHONE_EQ_PRESET_ID = longPreferencesKey("headphone_eq_preset_id")
         val THEME_ACCENT_HEX = stringPreferencesKey("theme_accent_hex")
@@ -693,6 +697,22 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun setAutoplayOnLaunch(v: Boolean) {
         context.dataStore.edit { it[Keys.AUTOPLAY_ON_LAUNCH] = v }
+    }
+
+    /** Player (pill) text colour mode: 0 default, 1 custom, 2 dynamic. */
+    val playerTextColourMode: Flow<Int> = context.dataStore.data.map {
+        it[Keys.PLAYER_TEXT_COLOUR_MODE] ?: 0
+    }
+    suspend fun setPlayerTextColourMode(v: Int) {
+        context.dataStore.edit { it[Keys.PLAYER_TEXT_COLOUR_MODE] = v }
+    }
+
+    /** Custom player text colour as an ARGB int. Default opaque white. */
+    val playerCustomTextColour: Flow<Int> = context.dataStore.data.map {
+        it[Keys.PLAYER_CUSTOM_TEXT_COLOUR] ?: 0xFFFFFFFF.toInt()
+    }
+    suspend fun setPlayerCustomTextColour(v: Int) {
+        context.dataStore.edit { it[Keys.PLAYER_CUSTOM_TEXT_COLOUR] = v }
     }
 
     // ── Granular Resume & auto-play (2026-06-26) ───────────────────────────

@@ -384,8 +384,15 @@ fun PlayerScreen(
         // so the picture fills the whole screen on phones, tablets, and
         // unfolded foldables. Audio uses the size-appropriate layout.
         val coverFrost = com.powermediaplayer.ui.player.components.rememberCoverFrost()
+        val playerTextMode by viewModel.playerTextColourMode.collectAsStateWithLifecycle()
+        val playerTextCustom by viewModel.playerCustomTextColour.collectAsStateWithLifecycle()
         androidx.compose.runtime.CompositionLocalProvider(
-            com.powermediaplayer.ui.player.components.LocalCoverFrost provides coverFrost
+            com.powermediaplayer.ui.player.components.LocalCoverFrost provides coverFrost,
+            com.powermediaplayer.ui.player.components.LocalPlayerTextColour provides
+                com.powermediaplayer.ui.player.components.PlayerTextColourConfig(
+                    mode = playerTextMode,
+                    customColour = androidx.compose.ui.graphics.Color(playerTextCustom)
+                )
         ) {
         when {
             showEmptyState -> EmptyPlayerState(onNavigateToLibrary)
@@ -1653,6 +1660,7 @@ private fun TrackInfoSection(
             style = MaterialTheme.typography.headlineSmall,
             frost = coverFrost,
             enabled = frostEnabled,
+            palette = coverColors,
             baseColor = TextPrimary,
             maxLines = 2
         )
@@ -1663,6 +1671,7 @@ private fun TrackInfoSection(
                 style = MaterialTheme.typography.titleMedium,
                 frost = coverFrost,
                 enabled = frostEnabled,
+                palette = coverColors,
                 baseColor = coverColors?.vibrant ?: TealAccent,
                 maxLines = 1
             )
@@ -1674,6 +1683,7 @@ private fun TrackInfoSection(
                 style = MaterialTheme.typography.bodyMedium,
                 frost = coverFrost,
                 enabled = frostEnabled,
+                palette = coverColors,
                 baseColor = TextSecondary,
                 maxLines = 1
             )
@@ -1685,6 +1695,7 @@ private fun TrackInfoSection(
                 style = MaterialTheme.typography.labelSmall,
                 frost = coverFrost,
                 enabled = frostEnabled,
+                palette = coverColors,
                 baseColor = TextTertiary,
                 maxLines = 1
             )

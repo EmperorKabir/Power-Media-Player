@@ -24,6 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.data.preferences.BluetoothMediaActions
 import com.powermediaplayer.data.preferences.BtMediaKind
@@ -816,6 +820,70 @@ fun SettingsScreen(
                     currentMode = uiState.artworkScaleMode,
                     onModeChange = { viewModel.setArtworkScaleMode(it) }
                 )
+            },
+            SettingsItem(
+                "player-text-colour", "Player text colour",
+                listOf("text", "colour", "color", "title", "pill", "dynamic", "custom",
+                    "legibility", "contrast", "cover text")
+            ) {
+                val ptcMode by viewModel.playerTextColourMode.collectAsStateWithLifecycle()
+                val ptcCustom by viewModel.playerCustomTextColour.collectAsStateWithLifecycle()
+                var pickerOpen by remember { mutableStateOf(false) }
+                Text(
+                    text = "Colour of the title and details shown over the cover. Default picks " +
+                        "black or white for contrast. Custom uses a colour you choose. Dynamic " +
+                        "lets the app pick a colour from each cover's own palette, so it differs " +
+                        "per file.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        com.powermediaplayer.util.PlayerTextColour.MODE_DEFAULT to "Default",
+                        com.powermediaplayer.util.PlayerTextColour.MODE_CUSTOM to "Custom",
+                        com.powermediaplayer.util.PlayerTextColour.MODE_DYNAMIC to "Dynamic"
+                    ).forEach { (m, label) ->
+                        FilterChip(
+                            selected = ptcMode == m,
+                            onClick = { viewModel.setPlayerTextColourMode(m) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                if (ptcMode == com.powermediaplayer.util.PlayerTextColour.MODE_CUSTOM) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(androidx.compose.ui.graphics.Color(ptcCustom))
+                                .border(1.dp, androidx.compose.ui.graphics.Color(0x55FFFFFF), CircleShape)
+                                .clickable { pickerOpen = true }
+                        )
+                        TextButton(onClick = { pickerOpen = true }) { Text("Choose colour") }
+                    }
+                }
+                if (pickerOpen) {
+                    ColourPickerDialog(
+                        initial = androidx.compose.ui.graphics.Color(ptcCustom),
+                        onDismiss = { pickerOpen = false },
+                        onPick = { picked ->
+                            viewModel.setPlayerCustomTextColour(picked.toArgb())
+                            viewModel.setPlayerTextColourMode(
+                                com.powermediaplayer.util.PlayerTextColour.MODE_CUSTOM
+                            )
+                            pickerOpen = false
+                        }
+                    )
+                }
             },
             SettingsItem(
                 "font-size", "Font & hitbox size",

@@ -78,6 +78,16 @@ class PlayerViewModel @Inject constructor(
             false
         )
 
+    /** S3/S4: player (pill) text colour mode (0 default, 1 custom, 2 dynamic) + custom ARGB. */
+    val playerTextColourMode: kotlinx.coroutines.flow.StateFlow<Int> =
+        settingsDataStore.playerTextColourMode.stateIn(
+            viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), 0
+        )
+    val playerCustomTextColour: kotlinx.coroutines.flow.StateFlow<Int> =
+        settingsDataStore.playerCustomTextColour.stateIn(
+            viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), 0xFFFFFFFF.toInt()
+        )
+
     fun toggleShuffle() {
         val next = !shuffleEnabled.value
         // Local/Drive queue: ExoPlayer-level shuffle (no-op for the Spotify mirror).
