@@ -7,7 +7,7 @@ import com.powermediaplayer.ui.library.MediaFileInfo
  * Treats a folder of media files as a single audiobook / podcast where
  * each file becomes one chapter. Folder-wide chapter timestamps are
  * computed by accumulating per-file durations so the chapter picker can
- * display "Chapter 7 — 02:14:33" referring to the absolute position
+ * display "Chapter 7, 02:14:33" referring to the absolute position
  * across the entire queue.
  */
 object FolderChapterAggregator {

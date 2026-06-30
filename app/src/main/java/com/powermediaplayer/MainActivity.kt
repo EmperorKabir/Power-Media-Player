@@ -192,7 +192,7 @@ class MainActivity : FragmentActivity() {
                     if (folds.isEmpty()) {
                         com.powermediaplayer.util.Diag.i(
                             "PMP_DIAG",
-                            "[POSTURE] flat/slab — no FoldingFeature (features=${info.displayFeatures.size})"
+                            "[POSTURE] flat/slab, no FoldingFeature (features=${info.displayFeatures.size})"
                         )
                     } else folds.forEach { f ->
                         com.powermediaplayer.util.Diag.i(

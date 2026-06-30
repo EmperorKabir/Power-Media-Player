@@ -60,7 +60,7 @@ fun HiddenFilesSheet(
             )
             Text(
                 text = "These files are hidden from the Library list. " +
-                    "They are still on your phone — only the in-app filter is affected.",
+                    "They are still on your phone, only the in-app filter is affected.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextTertiary
             )

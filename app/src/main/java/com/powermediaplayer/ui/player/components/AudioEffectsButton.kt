@@ -192,7 +192,7 @@ fun AudioEffectsButton(
                     Text(
                         "Reverb works on phone speaker and wired headphones. " +
                             "On some Bluetooth audio outputs the effect may be " +
-                            "bypassed by the BT codec — try wired output if you " +
+                            "bypassed by the BT codec, try wired output if you " +
                             "can't hear it.",
                         style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary

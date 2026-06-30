@@ -686,7 +686,7 @@ class PlaybackSessionCoordinator @Inject constructor(
                         if (!com.powermediaplayer.playback.ResumeGate.isCurrent(gateToken)) {
                             com.powermediaplayer.diag.DiagLog.dec(
                                 branch = "cold-start",
-                                reason = "superseded by a user play intent — abort restore"
+                                reason = "superseded by a user play intent, abort restore"
                             )
                             return@runCatching
                         }
@@ -942,7 +942,7 @@ class PlaybackSessionCoordinator @Inject constructor(
                             com.powermediaplayer.util.Diag.i(
                                 "PMP_DIAG",
                                 "Cold-start Spotify resume failed (no Connect " +
-                                    "device?) — cleared mirror"
+                                    "device?), cleared mirror"
                             )
                         }
                     }.onFailure { spotifyProvider.clearProvisionalMirror() }

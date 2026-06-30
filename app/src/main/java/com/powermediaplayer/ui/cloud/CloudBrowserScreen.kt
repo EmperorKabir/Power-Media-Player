@@ -316,7 +316,7 @@ fun CloudBrowserScreen(
             text = {
                 Text(
                     "Please select the FOLDER CONTAINING the files you want, " +
-                        "and NOT the files themselves — files won't appear on the " +
+                        "and NOT the files themselves, files won't appear on the " +
                         "selection screen. You'll then be able to browse the FILES " +
                         "here in the app.",
                     color = TextPrimary,
@@ -550,7 +550,7 @@ fun CloudBrowserScreen(
                                         color = SpotifyGreen
                                     )
                                     Text(
-                                        text = "Pick a speaker or another device — Spotify, Google Home, etc.",
+                                        text = "Pick a speaker or another device, Spotify, Google Home, etc.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TextTertiary
                                     )
@@ -962,7 +962,7 @@ fun CloudBrowserScreen(
                                                 if (ok)
                                                     "Pinned '$folderLabel' ($audioCount tracks)"
                                                 else
-                                                    "Couldn't pin — favourites full or no audio in folder",
+                                                    "Couldn't pin, favourites full or no audio in folder",
                                                 android.widget.Toast.LENGTH_LONG
                                             ).show()
                                         }
@@ -1223,7 +1223,7 @@ private fun SpotifyConnectPickerSheet(
                     .padding(top = 4.dp, bottom = 4.dp)
             ) {
                 Text(
-                    text = "Not yet working — Spotify only lets other apps see " +
+                    text = "Not yet working, Spotify only lets other apps see " +
                         "Spotify-aware speakers and devices here, so things like " +
                         "Google Home, Fire Stick, Sonos and smart TVs don't show " +
                         "up yet. For now, use the Cast icon on the Player tab " +
@@ -1269,7 +1269,7 @@ private fun SpotifyConnectPickerSheet(
                     Text(
                         text = "Spotify's public API only returns devices that are currently " +
                             "active on Spotify Connect. Google Home / Nest / Fire Stick / Sonos " +
-                            "show up in the official Spotify app via local-network discovery — " +
+                            "show up in the official Spotify app via local-network discovery, " +
                             "a channel third-party apps can't use.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextTertiary
@@ -1285,7 +1285,7 @@ private fun SpotifyConnectPickerSheet(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = "Alternative: tap the Cast icon on the Player tab to send LOCAL " +
-                            "audio to a Chromecast / Google Home / smart TV directly — that uses " +
+                            "audio to a Chromecast / Google Home / smart TV directly, that uses " +
                             "Cast (not Spotify Connect) and discovers devices over your Wi-Fi.",
                         style = MaterialTheme.typography.labelSmall,
                         color = SpotifyGreen

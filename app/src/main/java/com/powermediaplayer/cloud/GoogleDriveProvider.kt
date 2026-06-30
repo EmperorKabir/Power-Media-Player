@@ -329,7 +329,7 @@ class GoogleDriveProvider @Inject constructor(
                 if (visited[0] >= SEARCH_TRAVERSAL_CAP) {
                     com.powermediaplayer.util.Diag.i(
                         "PMP_DIAG",
-                        "Drive search stopped at $SEARCH_TRAVERSAL_CAP nodes — tree larger than the walk budget"
+                        "Drive search stopped at $SEARCH_TRAVERSAL_CAP nodes, tree larger than the walk budget"
                     )
                 }
                 Result.success(out.take(200))

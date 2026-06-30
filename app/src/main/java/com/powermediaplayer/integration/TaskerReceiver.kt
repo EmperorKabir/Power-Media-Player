@@ -50,7 +50,7 @@ class TaskerReceiver : BroadcastReceiver() {
             if (!enabled) {
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
-                    "TaskerReceiver ignored '$action' — toggle is OFF"
+                    "TaskerReceiver ignored '$action', toggle is OFF"
                 )
                 return@launch
             }

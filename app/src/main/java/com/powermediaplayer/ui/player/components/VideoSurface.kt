@@ -264,7 +264,7 @@ object VideoSurfaceBinding {
                         .getExoPlayer()?.setVideoTextureView(survivor)
                 }
                 com.powermediaplayer.util.Diag.i(
-                    "PMP_PIP", "surface released while current — re-bound survivor"
+                    "PMP_PIP", "surface released while current, re-bound survivor"
                 )
             }
         }

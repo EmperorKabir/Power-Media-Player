@@ -110,7 +110,7 @@ class AlarmReceiver : BroadcastReceiver() {
         )
         val notif = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Power Media Player alarm — ${alarm.timeLabel}")
+            .setContentTitle("Power Media Player alarm, ${alarm.timeLabel}")
             .setContentText(alarm.displayLabel.ifBlank { alarm.daysLabel })
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)

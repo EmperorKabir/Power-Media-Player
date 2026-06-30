@@ -148,7 +148,7 @@ fun LibraryScreen(
                             android.widget.Toast.makeText(
                                 context,
                                 if (ok) "Pinned '${item.album}' (${members.size} tracks)"
-                                else "Favourites full — unpin one first",
+                                else "Favourites full, unpin one first",
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                         }

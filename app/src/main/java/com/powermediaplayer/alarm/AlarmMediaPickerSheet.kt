@@ -203,7 +203,7 @@ fun AlarmMediaPickerSheet(
             Spacer(Modifier.height(8.dp))
             if (all.isEmpty()) {
                 Text(
-                    if (q.isBlank()) "Nothing yet — bookmark or favourite a track first."
+                    if (q.isBlank()) "Nothing yet, bookmark or favourite a track first."
                     else "No matches.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,

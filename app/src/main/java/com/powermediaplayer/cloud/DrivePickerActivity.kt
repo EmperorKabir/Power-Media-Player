@@ -48,7 +48,7 @@ class DrivePickerActivity : ComponentActivity() {
 
         val token = intent.getStringExtra(EXTRA_OAUTH_TOKEN)
         if (token.isNullOrBlank()) {
-            Toast.makeText(this, "No Drive token — sign in first", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "No Drive token, sign in first", Toast.LENGTH_LONG).show()
             setResult(Activity.RESULT_CANCELED)
             finish()
             return
@@ -154,7 +154,7 @@ class DrivePickerActivity : ComponentActivity() {
                           pmpRebuildPicker();
                           // Re-render on WIDTH (orientation / fold) changes ONLY.
                           // A height-only resize is the soft keyboard opening; do
-                          // NOT rebuild then — disposing the picker blurs the
+                          // NOT rebuild then, disposing the picker blurs the
                           // focused search box, so the IME is dismissed the instant
                           // it tries to show (show/hide churn → keyboard never
                           // appears). Width changes still rebuild to refit the fold.

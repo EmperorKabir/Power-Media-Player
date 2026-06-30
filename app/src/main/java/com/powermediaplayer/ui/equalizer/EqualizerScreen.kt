@@ -103,7 +103,7 @@ fun EqualizerScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "EQ applies to phone playback only — disabled while casting.",
+                    text = "EQ applies to phone playback only, disabled while casting.",
                     style = MaterialTheme.typography.bodySmall,
                     color = com.powermediaplayer.ui.theme.DisabledGrey,
                     modifier = Modifier.padding(12.dp)

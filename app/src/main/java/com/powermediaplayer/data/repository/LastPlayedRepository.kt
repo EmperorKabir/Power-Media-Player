@@ -111,7 +111,7 @@ class LastPlayedRepository @Inject constructor(
         val used = pinSlotsUsed()
         if (used >= PIN_CAP) {
             return Result.failure(
-                IllegalStateException("Favourites full ($used/$PIN_CAP) — unpin one first")
+                IllegalStateException("Favourites full ($used/$PIN_CAP), unpin one first")
             )
         }
         val order = used // append to end

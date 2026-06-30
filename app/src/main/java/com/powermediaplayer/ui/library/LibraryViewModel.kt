@@ -596,7 +596,7 @@ class LibraryViewModel @Inject constructor(
                             .map { android.net.Uri.fromFile(it) }
                             .onFailure {
                                 com.powermediaplayer.util.Diag.w(
-                                    "PMP_DIAG", "reverse failed — playing forward", it
+                                    "PMP_DIAG", "reverse failed, playing forward", it
                                 )
                             }
                             .getOrDefault(file.uri)

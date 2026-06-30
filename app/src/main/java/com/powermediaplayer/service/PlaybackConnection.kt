@@ -249,7 +249,7 @@ class PlaybackConnection @Inject constructor(
     fun connect() {
         if (controllerFuture != null) {
             com.powermediaplayer.diag.DiagLog.lifecycle(
-                "PlaybackConnection.connect() skipped — future already in flight"
+                "PlaybackConnection.connect() skipped, future already in flight"
             )
             return
         }
@@ -269,7 +269,7 @@ class PlaybackConnection @Inject constructor(
             .setListener(object : androidx.media3.session.MediaController.Listener {
                 override fun onDisconnected(controller: androidx.media3.session.MediaController) {
                     com.powermediaplayer.diag.DiagLog.lifecycle(
-                        "PlaybackConnection.onDisconnected — service-side session lost; " +
+                        "PlaybackConnection.onDisconnected, service-side session lost; " +
                             "resetting cold-start guard + dropping local controller refs"
                     )
                     // Reset the cold-start guard so a subsequent

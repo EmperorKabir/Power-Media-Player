@@ -851,7 +851,7 @@ private fun EpisodeRow(
                 isDownloaded -> IconButton(onClick = { confirmDelete = true }) {
                     Icon(
                         Icons.Filled.DeleteOutline,
-                        contentDescription = "Downloaded — tap to delete",
+                        contentDescription = "Downloaded, tap to delete",
                         tint = TealAccent,
                         modifier = Modifier.size(22.dp)
                     )
