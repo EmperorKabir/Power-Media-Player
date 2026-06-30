@@ -117,7 +117,7 @@ fun InfoSheet(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "${data.tab} — what each control does",
+                text = "${data.tab}: what each control does",
                 style = MaterialTheme.typography.titleMedium,
                 color = TealAccent
             )
