@@ -1568,7 +1568,7 @@ class CloudViewModel @Inject constructor(
                 )
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle(item.name)
+                        .setTitle(com.powermediaplayer.util.TextNormalizer.cleanFileTitle(item.name))
                         .setExtras(extras)
                         .build()
                 )

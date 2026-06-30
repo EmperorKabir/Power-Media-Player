@@ -187,7 +187,7 @@ class LastPlayedViewModel @Inject constructor(
                         )
                         .setMediaMetadata(
                             androidx.media3.common.MediaMetadata.Builder()
-                                .setTitle(title)
+                                .setTitle(com.powermediaplayer.util.TextNormalizer.cleanFileTitle(title))
                                 .setExtras(chapterExtras)
                                 .build()
                         )
@@ -584,7 +584,7 @@ class LastPlayedViewModel @Inject constructor(
                         )
                         .setMediaMetadata(
                             androidx.media3.common.MediaMetadata.Builder()
-                                .setTitle(item.title)
+                                .setTitle(com.powermediaplayer.util.TextNormalizer.cleanFileTitle(item.title))
                                 .setArtist(item.subtitle)
                                 .setExtras(chapterExtras)
                                 .build()

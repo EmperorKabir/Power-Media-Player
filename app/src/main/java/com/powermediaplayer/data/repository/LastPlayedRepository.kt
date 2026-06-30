@@ -327,7 +327,9 @@ class LastPlayedRepository @Inject constructor(
                     // Display safety-net: repair any mojibake already PERSISTED in a
                     // row (e.g. a title enriched before the source fix) so the list
                     // matches the player. Idempotent + cheap (no-op on clean text).
-                    title = com.powermediaplayer.util.TextNormalizer.fixMojibake(e.title),
+                    title = com.powermediaplayer.util.TextNormalizer.cleanFileTitle(
+                        com.powermediaplayer.util.TextNormalizer.fixMojibake(e.title)
+                    ),
                     subtitle = com.powermediaplayer.util.TextNormalizer.fixMojibake(e.subtitle),
                     artworkUri = e.artworkUri,
                     source = sourceOf(e.source),
@@ -354,7 +356,9 @@ class LastPlayedRepository @Inject constructor(
                 HistoryItem(
                     id = f.id,
                     mediaUri = f.mediaUri,
-                    title = com.powermediaplayer.util.TextNormalizer.fixMojibake(f.title),
+                    title = com.powermediaplayer.util.TextNormalizer.cleanFileTitle(
+                        com.powermediaplayer.util.TextNormalizer.fixMojibake(f.title)
+                    ),
                     subtitle = com.powermediaplayer.util.TextNormalizer.fixMojibake(f.subtitle),
                     artworkUri = f.artworkUri,
                     source = sourceOf(f.source),

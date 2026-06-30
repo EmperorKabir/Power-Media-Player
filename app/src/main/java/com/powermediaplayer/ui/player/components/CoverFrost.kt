@@ -28,6 +28,20 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -54,9 +68,6 @@ class CoverFrost(
 
     /** true once the cover has actually recorded a frame (so we don't frost over nothing). */
     var captured by mutableStateOf(false)
-
-    /** the title block's bounds in root coords — set by [frostedTitleBackground], read by its draw. */
-    var lastTitleBounds by mutableStateOf<Rect?>(null)
 }
 
 val LocalCoverFrost = staticCompositionLocalOf<CoverFrost?> { null }
@@ -84,30 +95,6 @@ fun Modifier.captureCoverFrost(frost: CoverFrost?): Modifier =
             frost.blurred.record { drawLayer(frost.sharp) }
             frost.captured = true
             drawLayer(frost.sharp)
-        }
-
-/**
- * Frosted-glass backdrop behind ONLY the title block: draws the blurred cover region that is
- * truly behind this element (translated so it pixel-aligns with the background) + a dim. On
- * API < 31 the blur is a no-op, so it shows a sharp-but-dimmed slice — still readable, and the
- * adaptive text colour carries the legibility. Reports the block's bounds for colour sampling.
- */
-fun Modifier.frostedTitleBackground(
-    frost: CoverFrost?,
-    enabled: Boolean,
-    onBounds: (Rect) -> Unit,
-    dimAlpha: Float = 0.34f,
-): Modifier =
-    if (frost == null || !enabled) this else this
-        .onGloballyPositioned { val r = it.boundsInRoot(); frost.lastTitleBounds = r; onBounds(r) }
-        .drawBehind {
-            if (!frost.captured) return@drawBehind
-            val b = frost.lastTitleBounds ?: return@drawBehind
-            // translate so the layer pixel at the block's top-left lands at this canvas origin
-            translate(frost.coverOriginInRoot.x - b.left, frost.coverOriginInRoot.y - b.top) {
-                drawLayer(frost.blurred)
-            }
-            drawRect(color = Color.Black.copy(alpha = dimAlpha))
         }
 
 /** Average perceived luminance (0..1) of [bounds] (root coords) within the captured cover. */
@@ -159,4 +146,81 @@ fun rememberAdaptiveTextColor(frost: CoverFrost?, bounds: Rect?, dimAlpha: Float
         color = if (effective > 0.5f) Color(0xFF0E0E0E) else Color.White
     }
     return color
+}
+
+/**
+ * One piece of cover text (title/artist/…) with a per-VISUAL-LINE frosted pill. Each rendered line
+ * gets its OWN rounded backdrop sized to that line's width — so a long title that wraps to two lines
+ * shows two independent pills (different widths), not one rectangle with dead space. The backdrop is
+ * the REAL blurred cover behind the glyphs (translated to pixel-align) + a dim, clipped to each
+ * line's rounded rect; the text colour adapts to that region's luminance. When [enabled] is false
+ * (video / no cover) it renders plain text in [baseColor]. API < 31 has no blur, so the pill shows a
+ * sharp-but-dimmed cover slice — still legible, and the adaptive colour + shadow carry it.
+ *
+ * The element pads the text by ([padHorizontal], [padVertical]); the pills extend by the same amount
+ * around each glyph line, so the padding and the pill geometry stay in lock-step (see the draw math).
+ */
+@Composable
+fun FrostedTextLine(
+    text: String,
+    style: TextStyle,
+    frost: CoverFrost?,
+    enabled: Boolean,
+    baseColor: Color,
+    maxLines: Int,
+    modifier: Modifier = Modifier,
+    dimAlpha: Float = 0.36f,
+    padHorizontal: Float = 12f,
+    padVertical: Float = 5f,
+) {
+    val density = LocalDensity.current
+    val padX = with(density) { padHorizontal.dp.toPx() }
+    val padY = with(density) { padVertical.dp.toPx() }
+    val radius = with(density) { 9.dp.toPx() }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    var region by remember { mutableStateOf<Rect?>(null) }
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val adaptive = rememberAdaptiveTextColor(frost, region, dimAlpha)
+    val shadow = if (enabled) Shadow(Color.Black.copy(alpha = 0.55f), Offset(0f, 1f), 4f) else null
+    Text(
+        text = text,
+        style = style.copy(shadow = shadow),
+        color = if (enabled) adaptive else baseColor,
+        textAlign = TextAlign.Center,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        onTextLayout = { layout = it },
+        modifier = modifier
+            .onGloballyPositioned { val b = it.boundsInRoot(); origin = b.topLeft; region = b }
+            .drawBehind {
+                val l = layout
+                if (!enabled || frost == null || !frost.captured || l == null) return@drawBehind
+                // drawBehind canvas = the OUTER (pre-padding) box; text content is inset by (padX,padY).
+                // Pill extends padX/padY beyond each glyph line → equal gap all round (centred per line).
+                for (i in 0 until l.lineCount) {
+                    if (l.getLineRight(i) - l.getLineLeft(i) <= 0f) continue
+                    val left = l.getLineLeft(i)
+                    val top = l.getLineTop(i)
+                    val right = l.getLineRight(i) + 2f * padX
+                    val bottom = l.getLineBottom(i) + 2f * padY
+                    val path = Path().apply {
+                        addRoundRect(RoundRect(left, top, right, bottom, CornerRadius(radius, radius)))
+                    }
+                    clipPath(path) {
+                        translate(frost.coverOriginInRoot.x - origin.x, frost.coverOriginInRoot.y - origin.y) {
+                            drawLayer(frost.blurred)
+                        }
+                        drawRect(
+                            color = Color.Black.copy(alpha = dimAlpha),
+                            topLeft = Offset(left, top),
+                            size = Size(right - left, bottom - top)
+                        )
+                    }
+                }
+            }
+            .padding(
+                horizontal = if (enabled) padHorizontal.dp else 0.dp,
+                vertical = if (enabled) padVertical.dp else 0.dp
+            )
+    )
 }

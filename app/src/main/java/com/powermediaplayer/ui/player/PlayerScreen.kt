@@ -52,6 +52,9 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clip
+import com.powermediaplayer.ui.player.components.captureCoverFrost
+import com.powermediaplayer.ui.player.components.FrostedTextLine
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -380,6 +383,10 @@ fun PlayerScreen(
         // Video ALWAYS uses the Compact layout regardless of screen size,
         // so the picture fills the whole screen on phones, tablets, and
         // unfolded foldables. Audio uses the size-appropriate layout.
+        val coverFrost = com.powermediaplayer.ui.player.components.rememberCoverFrost()
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.powermediaplayer.ui.player.components.LocalCoverFrost provides coverFrost
+        ) {
         when {
             showEmptyState -> EmptyPlayerState(onNavigateToLibrary)
             displayState.isVideoContent -> PlayerScreenCompact(
@@ -429,6 +436,7 @@ fun PlayerScreen(
                 onShowInfo = { showInfoSheet = true },
                 horizontalPadding = 0
             )
+        }
         }
         }
 
@@ -824,6 +832,7 @@ private fun PlayerScreenCompact(
                 artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted,
+                modifier = Modifier.captureCoverFrost(com.powermediaplayer.ui.player.components.LocalCoverFrost.current),
                 contentScale = artworkContentScale
             )
         }
@@ -1428,6 +1437,7 @@ private fun PlayerScreenExpanded(
                 artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted,
+                modifier = Modifier.captureCoverFrost(com.powermediaplayer.ui.player.components.LocalCoverFrost.current),
                 contentScale = artworkContentScale
             )
         }
@@ -1623,49 +1633,56 @@ private fun TrackInfoSection(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = uiState.title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = TextPrimary,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-        if (uiState.artist.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = uiState.artist,
-                style = MaterialTheme.typography.titleMedium,
-                color = coverColors?.vibrant ?: TealAccent,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        if (uiState.album.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = uiState.album,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        // §C17 — year • genre line, populated by online enrichment when
-        // the embedded tags don't carry them.
+        // Cover-text legibility (2026-06-30): each line carries its OWN per-visual-line frosted
+        // pill (FrostedTextLine) sized to that line — a long title that wraps shows two independent
+        // pills (different widths), not one rectangle with dead space — with a light/dark colour
+        // adapted to the REAL blurred backdrop behind it. Robust to Fit/Crop/zoom/fold/display and
+        // to variable line lengths.
+        val coverFrost = com.powermediaplayer.ui.player.components.LocalCoverFrost.current
+        val frostEnabled = !uiState.isVideoContent && uiState.hasCoverArt && coverFrost != null
+        // §C17 — year • genre line, populated by online enrichment when the embedded tags don't carry them.
         val yearGenreLine = listOfNotNull(
             uiState.year.takeIf { it > 0 }?.toString(),
             uiState.genre.takeIf { it.isNotBlank() }
         ).joinToString(" • ")
+        FrostedTextLine(
+            text = uiState.title,
+            style = MaterialTheme.typography.headlineSmall,
+            frost = coverFrost,
+            enabled = frostEnabled,
+            baseColor = TextPrimary,
+            maxLines = 2
+        )
+        if (uiState.artist.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            FrostedTextLine(
+                text = uiState.artist,
+                style = MaterialTheme.typography.titleMedium,
+                frost = coverFrost,
+                enabled = frostEnabled,
+                baseColor = coverColors?.vibrant ?: TealAccent,
+                maxLines = 1
+            )
+        }
+        if (uiState.album.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            FrostedTextLine(
+                text = uiState.album,
+                style = MaterialTheme.typography.bodyMedium,
+                frost = coverFrost,
+                enabled = frostEnabled,
+                baseColor = TextSecondary,
+                maxLines = 1
+            )
+        }
         if (yearGenreLine.isNotEmpty()) {
             Spacer(modifier = Modifier.height(2.dp))
-            Text(
+            FrostedTextLine(
                 text = yearGenreLine,
                 style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-                textAlign = TextAlign.Center,
+                frost = coverFrost,
+                enabled = frostEnabled,
+                baseColor = TextTertiary,
                 maxLines = 1
             )
         }

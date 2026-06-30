@@ -100,6 +100,34 @@ object TextNormalizer {
             .trim()
     }
 
+    // A media file extension at the very end of the string.
+    private val MEDIA_EXT = Regex(
+        "\\.(m4b|m4a|mp3|aac|flac|ogg|oga|opus|wav|wma|mp4|m4v|mkv|webm|avi|mov|3gp|ts)$",
+        RegexOption.IGNORE_CASE
+    )
+    // A 10-char bracketed token — Amazon/Audible ASIN shape (e.g. "[B00U7UVOTY]").
+    private val BRACKET_ID = Regex("\\s*[\\[(]([A-Za-z0-9]{10})[\\])]")
+
+    /**
+     * Strip file-name cruft when a media FILE NAME has leaked in as the display
+     * title — a Drive audiobook with no embedded ©nam tag falls back to its file
+     * name, so the player/Last Played show e.g. "Jurassic Park: A Novel
+     * [B00U7UVOTY].m4b". Removes a trailing media extension and a bracketed
+     * ASIN-style id (10 chars containing BOTH a letter and a digit), but leaves
+     * legitimate bracketed words like "[Live]" or "[Remastered]" alone.
+     * Idempotent; returns the input unchanged if cleaning would empty it.
+     */
+    fun cleanFileTitle(s: String): String {
+        if (s.isEmpty()) return s
+        var out = MEDIA_EXT.replace(s.trim(), "")
+        out = BRACKET_ID.replace(out) { m ->
+            val inner = m.groupValues[1]
+            if (inner.any { it.isDigit() } && inner.any { it.isLetter() }) "" else m.value
+        }
+        out = out.replace(Regex("\\s{2,}"), " ").trim()
+        return out.ifBlank { s }
+    }
+
     /**
      * Compare two strings using the locale collator after normalization.
      * Stable, null-safe, and gives correct ordering for accented and

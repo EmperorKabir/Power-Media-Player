@@ -1624,7 +1624,7 @@ class PlayerViewModel @Inject constructor(
         }
         return NormalisedTrackText(
             key = key,
-            title = TextNormalizer.normalize(ps.title),
+            title = TextNormalizer.cleanFileTitle(TextNormalizer.normalize(ps.title)),
             artist = TextNormalizer.normalize(ps.artist),
             album = TextNormalizer.normalize(ps.album),
             description = TextNormalizer.normalize(ps.description),
