@@ -58,6 +58,9 @@ class MediaThumbnailFetcher(
             }
             null
         } catch (e: Exception) {
+            com.powermediaplayer.util.Diag.w(
+                "PMP_DIAG", "MediaThumbnailFetcher FAIL uri=${request.uri}: ${e.message}"
+            )
             null
         } finally {
             runCatching { mmr.release() }

@@ -685,8 +685,9 @@ fun CloudBrowserScreen(
                             },
                             onLongClick = { if (!item.isFolder) contextItem = item },
                             isOffline = isDriveTrack && offlineIds.containsKey(item.id),
-                            localThumbnailUri = offlineIds[item.id]?.let {
-                                android.net.Uri.fromFile(java.io.File(it))
+                            localThumbnailUri = offlineIds[item.id]?.let { p ->
+                                if (p.startsWith("content://")) android.net.Uri.parse(p)
+                                else android.net.Uri.fromFile(java.io.File(p))
                             },
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
@@ -791,6 +792,10 @@ fun CloudBrowserScreen(
                             FavouriteTrackRow(
                                 fav = fav,
                                 isOffline = offlineIds.containsKey(fav.id),
+                                localThumbnailUri = offlineIds[fav.id]?.let { p ->
+                                    if (p.startsWith("content://")) android.net.Uri.parse(p)
+                                    else android.net.Uri.fromFile(java.io.File(p))
+                                },
                                 isSaving = fav.id in savingOffline,
                                 isEnriching = fav.id in enrichingIds,
                                 onSaveOffline = { viewModel.saveDriveOffline(favItem) },
@@ -1067,8 +1072,9 @@ fun CloudBrowserScreen(
                             },
                             onLongClick = { if (!item.isFolder) contextItem = item },
                             isOffline = isDriveTrack && offlineIds.containsKey(item.id),
-                            localThumbnailUri = offlineIds[item.id]?.let {
-                                android.net.Uri.fromFile(java.io.File(it))
+                            localThumbnailUri = offlineIds[item.id]?.let { p ->
+                                if (p.startsWith("content://")) android.net.Uri.parse(p)
+                                else android.net.Uri.fromFile(java.io.File(p))
                             },
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
@@ -1879,6 +1885,7 @@ private fun FavouriteTrackRow(
     onClick: () -> Unit,
     onUnstar: () -> Unit,
     isOffline: Boolean = false,
+    localThumbnailUri: android.net.Uri? = null,
     isSaving: Boolean = false,
     isEnriching: Boolean = false,
     onSaveOffline: () -> Unit = {},
@@ -1905,6 +1912,16 @@ private fun FavouriteTrackRow(
                 tint = TealAccent,
                 modifier = Modifier.size(18.dp)
             )
+            // S6: a downloaded favourite shows its own embedded art or a video frame
+            // over the icon; the icon stays as the fallback if neither decodes.
+            localThumbnailUri?.let { uri ->
+                coil3.compose.AsyncImage(
+                    model = com.powermediaplayer.util.MediaThumbnailRequest(uri),
+                    contentDescription = "Favourite track",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
         Text(
