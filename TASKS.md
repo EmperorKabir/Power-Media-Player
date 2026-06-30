@@ -409,3 +409,14 @@ LOCKED DESIGN (Compose 1.8 = BOM 2025.04.00, no new dep; API verified via Contex
 - Fallback API<31 (minSdk30): blur no-op → dim scrim + adaptive colour + shadow (still legible).
 - Status: DONE + device-verified 2026-06-30 on Jurassic Park red/white cover. Evolved on user feedback to PER-VISUAL-LINE pills (FrostedTextLine draws one rounded pill per rendered line via TextLayoutResult.getLineLeft/Right/Top/Bottom — a wrapped 2-line title yields two independently-sized pills, no dead space). Device-verified: 3 data-lines each render their own line-sized pill (the "DRIVE" pill hugs the word). User waived further wrapping test ("it's fine").
 - LINKED FIX (user 2026-06-30) — filename-as-title: Drive audiobook with no embedded ©nam tag fell back to its file name ("Jurassic Park: A Novel [B00U7UVOTY].m4b" — the ".m4b"+ASIN prove it's the filename, not a tag). Added TextNormalizer.cleanFileTitle (strips trailing media ext + 10-char ASIN-shaped bracket, keeps legit "[Live]"). Applied at: player display (PlayerViewModel:1627), Cloud source (CloudViewModel), Last Played playback sources (LastPlayedViewModel ×2), Recent+Pinned list (LastPlayedRepository ×2). DONE + device-verified: player, Last Played list rows, and mini-player all show clean "Jurassic Park: A Novel".
+
+### S — PLAYER + METADATA IMPROVEMENTS (user 2026-06-30, spec docs/superpowers/specs/2026-06-30-player-metadata-improvements-design.md; "do all in one go, context7 + superpowers, build+device-test")
+Punctuation rule for ALL new/edited user text: no em-dashes or unnecessary hyphens; colons/commas/semicolons/full stops; keep layman tone.
+| # | Item | Phase | Status |
+|---|------|-------|--------|
+| S1 | Auto-resume missing-source guard + friendly FILE_NOT_FOUND (PlaybackSessionCoordinator restore guard; PlayerErrorMessage mapping; clear dead recent row) | M | TODO |
+| S2 | Always show a subtle pill (drop hasCoverArt gate; no-cover scrim branch in FrostedTextLine) | M | TODO |
+| S3 | Player text colour modes: Default (B/W global), Custom (picked colour global), Dynamic (app-chosen per file from artwork palette, contrast-scored, may use complementary) | M | TODO |
+| S4 | Settings UI for S3 + compact custom HSV colour picker (no new dep) | M | TODO |
+| S5 | Grammar/punctuation sweep of ALL user-visible text; remove hyphens/em-dashes; layman tone; info-box completeness | M | TODO |
+| S6 | Drive/offline thumbnails: artwork > video frame (Coil videoFramePercent 0.1) > icon; artwork priority for video | M | TODO |
