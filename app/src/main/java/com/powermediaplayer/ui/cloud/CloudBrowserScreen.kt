@@ -685,6 +685,9 @@ fun CloudBrowserScreen(
                             },
                             onLongClick = { if (!item.isFolder) contextItem = item },
                             isOffline = isDriveTrack && offlineIds.containsKey(item.id),
+                            localThumbnailUri = offlineIds[item.id]?.let {
+                                android.net.Uri.fromFile(java.io.File(it))
+                            },
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             isEnriching = item.id in enrichingIds,
@@ -1064,6 +1067,9 @@ fun CloudBrowserScreen(
                             },
                             onLongClick = { if (!item.isFolder) contextItem = item },
                             isOffline = isDriveTrack && offlineIds.containsKey(item.id),
+                            localThumbnailUri = offlineIds[item.id]?.let {
+                                android.net.Uri.fromFile(java.io.File(it))
+                            },
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             isEnriching = item.id in enrichingIds,
@@ -1595,6 +1601,9 @@ private fun CloudItemRow(
     onForget: () -> Unit = {},
     onLongClick: () -> Unit = {},
     isOffline: Boolean = false,
+    // S6: local copy of a downloaded file, used to show its own embedded art or a
+    // video frame as the thumbnail instead of a generic icon.
+    localThumbnailUri: android.net.Uri? = null,
     canManageOffline: Boolean = false,
     isSavingOffline: Boolean = false,
     isEnriching: Boolean = false,
@@ -1629,21 +1638,23 @@ private fun CloudItemRow(
                     .isVideoByName(item.name, item.mimeType) -> Icons.Filled.VideoFile to "Video"
                 else -> Icons.Filled.AudioFile to "Audio"
             }
-            // Show real album art whenever the item carries a thumbnail. NB:
-            // Spotify albums/playlists/shows are isFolder=true (browsable
-            // containers) yet DO have a cover in thumbnailUri — so the gate is
-            // on thumbnailUri alone, NOT !isFolder (the earlier bug: albums fell
-            // through to the folder icon). Real Drive folders have no thumbnail,
-            // so they still get the folder icon via the fallback below.
-            if (item.thumbnailUri != null) {
+            // Thumbnail priority: the carried artwork URL first (Spotify albums or
+            // Drive thumbnails); then a downloaded file's OWN embedded art or, for a
+            // video, a frame (MediaThumbnailRequest); then the type icon. The icon is
+            // drawn behind, so it shows whenever the image resolves to nothing (a real
+            // Drive folder, or a file with no art and no decodable frame).
+            // NB: the artwork gate is thumbnailUri alone, NOT !isFolder, so Spotify
+            // albums/playlists (isFolder=true but with a cover) still render their art.
+            val thumbModel: Any? = item.thumbnailUri
+                ?: localThumbnailUri?.let { com.powermediaplayer.util.MediaThumbnailRequest(it) }
+            Icon(icon, contentDescription = label, tint = TealAccent, modifier = Modifier.size(22.dp))
+            if (thumbModel != null) {
                 coil3.compose.AsyncImage(
-                    model = item.thumbnailUri,
+                    model = thumbModel,
                     contentDescription = label,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop
                 )
-            } else {
-                Icon(icon, contentDescription = label, tint = TealAccent, modifier = Modifier.size(22.dp))
             }
         }
         Spacer(Modifier.width(12.dp))

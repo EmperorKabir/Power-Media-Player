@@ -55,6 +55,10 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider,
                 add(com.powermediaplayer.util.LocalTrackArtFetcher.Factory(context))
                 // #12 — decode a local video's first frame as a row thumbnail.
                 add(coil3.video.VideoFrameDecoder.Factory())
+                // S6 — downloaded media rows: embedded artwork first, else a video
+                // frame, else fall through to the file icon (MediaThumbnailRequest).
+                add(com.powermediaplayer.util.MediaThumbnailFetcher.Key())
+                add(com.powermediaplayer.util.MediaThumbnailFetcher.Factory(context))
             }
             .build()
 
