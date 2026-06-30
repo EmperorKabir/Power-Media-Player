@@ -414,8 +414,8 @@ LOCKED DESIGN (Compose 1.8 = BOM 2025.04.00, no new dep; API verified via Contex
 Punctuation rule for ALL new/edited user text: no em-dashes or unnecessary hyphens; colons/commas/semicolons/full stops; keep layman tone.
 | # | Item | Phase | Status |
 |---|------|-------|--------|
-| S1 | Auto-resume missing-source guard + friendly FILE_NOT_FOUND (PlaybackSessionCoordinator restore guard; PlayerErrorMessage mapping; clear dead recent row) | M | TODO |
-| S2 | Always show a subtle pill (drop hasCoverArt gate; no-cover scrim branch in FrostedTextLine) | M | TODO |
+| S1 | Auto-resume missing-source guard + friendly FILE_NOT_FOUND (PlaybackSessionCoordinator restore guard; PlayerErrorMessage mapping; clear dead recent row) | M | DONE(code+unit: SourceAvailability probe guards cold-start restore; PlayerErrorMessage.MISSING_FILE + isMissingFile, PlayerErrorMessageTest green; onPlayerError maps FILE_NOT_FOUND; assembleDebug green). DEVICE-VERIFY pending phone reconnect |
+| S2 | Always show a subtle pill (drop hasCoverArt gate; no-cover scrim branch in FrostedTextLine) | M | DONE(code: dropped hasCoverArt gate; no-cover captured backdrop is dark → existing frost path yields a dim scrim pill; assembleDebug green). DEVICE-VERIFY pending phone reconnect |
 | S3 | Player text colour modes: Default (B/W global), Custom (picked colour global), Dynamic (app-chosen per file from artwork palette, contrast-scored, may use complementary) | M | TODO |
 | S4 | Settings UI for S3 + compact custom HSV colour picker (no new dep) | M | TODO |
 | S5 | Grammar/punctuation sweep of ALL user-visible text; remove hyphens/em-dashes; layman tone; info-box completeness | M | TODO |

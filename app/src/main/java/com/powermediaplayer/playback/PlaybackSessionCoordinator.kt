@@ -699,6 +699,22 @@ class PlaybackSessionCoordinator @Inject constructor(
                             podcastOfflineResolver.localUriFor(recent.mediaUri)
                                 ?: driveOfflineResolver.localUriFor(recent.mediaUri)
                         } ?: uri
+                        // S1: do not auto-resume a source that has since been deleted or moved.
+                        // A missing local file (e.g. a screen recording the user removed) would
+                        // otherwise reach ExoPlayer and raise FILE_NOT_FOUND with a scary banner.
+                        // Probe off-Main; if gone, abort the restore quietly. The row is left in
+                        // place (the file may return from removable storage), and a manual tap
+                        // now shows a plain "no longer available" message.
+                        val sourceReachable = withContext(Dispatchers.IO) {
+                            com.powermediaplayer.util.SourceAvailability.exists(context, playUri)
+                        }
+                        if (!sourceReachable) {
+                            com.powermediaplayer.diag.DiagLog.dec(
+                                branch = "cold-start",
+                                reason = "source missing or unavailable, skip auto-resume (no error banner)"
+                            )
+                            return@runCatching
+                        }
                         // vc32: the launch restore must never parse a
                         // remote file inline — on a slow network that
                         // holds the loading banner for minutes and its

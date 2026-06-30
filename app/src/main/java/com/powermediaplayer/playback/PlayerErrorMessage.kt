@@ -9,11 +9,19 @@ package com.powermediaplayer.playback
  */
 object PlayerErrorMessage {
     const val DRIVE_REAUTH =
-        "Couldn't load this Google Drive item — sign in to Google Drive again to resume it."
+        "Couldn't load this Google Drive item. Sign in to Google Drive again to resume it."
     const val NETWORK =
-        "Network problem — check your connection and try again."
+        "Network problem. Check your connection, then try again."
+    const val MISSING_FILE =
+        "This file is no longer available. It may have been moved or deleted."
 
-    fun resolve(isDriveBadHttp: Boolean, isNetwork: Boolean, rawFallback: String): String = when {
+    fun resolve(
+        isDriveBadHttp: Boolean,
+        isNetwork: Boolean,
+        isMissingFile: Boolean = false,
+        rawFallback: String
+    ): String = when {
+        isMissingFile -> MISSING_FILE
         isDriveBadHttp -> DRIVE_REAUTH
         isNetwork -> NETWORK
         else -> rawFallback

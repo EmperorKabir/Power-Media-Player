@@ -785,12 +785,17 @@ class PlaybackConnection @Inject constructor(
                 val isBadHttp = error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
                 val isNetwork = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
                     error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                // A deleted or moved local file (commonly hit when auto-resume reloads a file the
+                // user has since removed) raises FILE_NOT_FOUND. Show a plain explanation instead
+                // of the raw "ERROR_CODE_IO_FILE_NOT_FOUND: Source error".
+                val isMissingFile = error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND
                 val raw = error.errorCodeName + ": " + (error.message ?: "Playback failed")
                 _playerState.value = _playerState.value.copy(
                     playerError = com.powermediaplayer.playback.PlayerErrorMessage.resolve(
                         isDriveBadHttp = isBadHttp &&
                             com.powermediaplayer.playback.PlayerErrorMessage.isDriveUri(uri),
                         isNetwork = isNetwork,
+                        isMissingFile = isMissingFile,
                         rawFallback = raw
                     )
                 )

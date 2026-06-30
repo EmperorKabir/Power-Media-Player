@@ -22,10 +22,31 @@ class PlayerErrorMessageTest {
         )
     }
 
+    @Test fun missingFile_showsFriendlyMessage() {
+        assertEquals(
+            PlayerErrorMessage.MISSING_FILE,
+            PlayerErrorMessage.resolve(
+                isDriveBadHttp = false, isNetwork = false, isMissingFile = true, rawFallback = "x"
+            )
+        )
+    }
+
+    @Test fun missingFile_takesPriorityOverRaw() {
+        assertEquals(
+            PlayerErrorMessage.MISSING_FILE,
+            PlayerErrorMessage.resolve(
+                isDriveBadHttp = false, isNetwork = false, isMissingFile = true,
+                rawFallback = "ERROR_CODE_IO_FILE_NOT_FOUND: Source error"
+            )
+        )
+    }
+
     @Test fun otherError_fallsBackToRaw() {
         assertEquals(
             "ERROR_CODE_DECODING_FAILED: boom",
-            PlayerErrorMessage.resolve(false, false, "ERROR_CODE_DECODING_FAILED: boom")
+            PlayerErrorMessage.resolve(
+                isDriveBadHttp = false, isNetwork = false, rawFallback = "ERROR_CODE_DECODING_FAILED: boom"
+            )
         )
     }
 
