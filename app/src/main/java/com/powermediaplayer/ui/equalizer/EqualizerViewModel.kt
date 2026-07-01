@@ -28,12 +28,12 @@ object EqBands {
             if (k >= 10) Math.round(k).toString() else "%.1f".format(k)
         } else Math.round(hz).toString()
 
-    /** "22-44 Hz", "354-707 Hz", "0.7-1.4 kHz", "11-23 kHz", … */
+    /** "22 to 44 Hz", "354 to 707 Hz", "0.7 to 1.4 kHz", "11 to 23 kHz", … */
     val RANGE_LABELS: List<String> = CENTERS.map { c ->
         val lo = c / ROOT2
         val hi = c * ROOT2
         val kHz = c >= 1000.0
-        "${fmt(lo, kHz)}-${fmt(hi, kHz)} ${if (kHz) "kHz" else "Hz"}"
+        "${fmt(lo, kHz)} to ${fmt(hi, kHz)} ${if (kHz) "kHz" else "Hz"}"
     }
 }
 
