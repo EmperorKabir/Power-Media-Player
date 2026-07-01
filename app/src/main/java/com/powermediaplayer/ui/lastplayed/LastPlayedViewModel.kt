@@ -164,7 +164,7 @@ class LastPlayedViewModel @Inject constructor(
 
     /** Tap a pinned-album track → play that single file. Reuses the
      *  same MediaItem build path as playLocalAt for chapters parsing. */
-    fun playAlbumTrack(trackUri: String, title: String) {
+    fun playAlbumTrack(trackUri: String, title: String, artist: String = "") {
         val uri = runCatching { Uri.parse(trackUri) }.getOrNull() ?: return
         viewModelScope.launch {
             // vc32: parse-bearing path — token so a newer play
@@ -188,6 +188,10 @@ class LastPlayedViewModel @Inject constructor(
                         .setMediaMetadata(
                             androidx.media3.common.MediaMetadata.Builder()
                                 .setTitle(com.powermediaplayer.util.TextNormalizer.cleanFileTitle(title))
+                                // Carry the pinned-album artist on the item's OWN metadata so a
+                                // title-only track (no embedded cover to gate the parsed fallback,
+                                // e.g. a bare MP3) still shows its artist without risking a sticky bleed.
+                                .apply { if (artist.isNotBlank()) setArtist(artist) }
                                 .setExtras(chapterExtras)
                                 .build()
                         )
