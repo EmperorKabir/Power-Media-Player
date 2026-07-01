@@ -62,7 +62,7 @@ import kotlinx.coroutines.withContext
  *
  * The player content Box provides a [CoverFrost] via [LocalCoverFrost]; [CoverArtBackground] is
  * tagged with [captureCoverFrost]; the title block (TrackInfoSection) consumes it via
- * [frostedTitleBackground] + [rememberAdaptiveTextColor].
+ * [frostedTitleBackground] + [rememberResolvedTextColour].
  */
 @Stable
 class CoverFrost(
@@ -136,26 +136,6 @@ private fun averageLuminance(bmp: ImageBitmap, bounds: Rect, coverOrigin: Offset
     return if (n > 0) (sum / n).toFloat() else null
 }
 
-/**
- * Light/dark text colour chosen from the REAL backdrop luminance behind [bounds] (after the
- * frost dim is accounted for). Recomputes only when the cover or the block bounds change.
- */
-@Composable
-fun rememberAdaptiveTextColor(frost: CoverFrost?, bounds: Rect?, dimAlpha: Float = 0.34f): Color {
-    var color by remember { mutableStateOf(Color.White) }
-    LaunchedEffect(frost?.captured, bounds) {
-        if (frost == null || bounds == null || !frost.captured) return@LaunchedEffect
-        val lum = runCatching {
-            val bmp = frost.sharp.toImageBitmap()
-            withContext(Dispatchers.Default) { averageLuminance(bmp, bounds, frost.coverOriginInRoot) }
-        }.getOrNull() ?: return@LaunchedEffect
-        // effective luminance behind the text = backdrop dimmed by the black frost
-        val effective = lum * (1f - dimAlpha)
-        color = if (effective > 0.5f) Color(0xFF0E0E0E) else Color.White
-    }
-    return color
-}
-
 /** The user's player text colour choice (S3/S4), provided by the player screen from settings. */
 @Immutable
 data class PlayerTextColourConfig(
@@ -181,7 +161,11 @@ fun rememberResolvedTextColour(
 ): Color {
     if (mode == PlayerTextColour.MODE_CUSTOM && customColour != null) return customColour
     var lum by remember { mutableStateOf(0f) }
-    LaunchedEffect(frost?.captured, bounds) {
+    // Re-sample the backdrop luminance when the cover changes (palette) as well as when the block
+    // bounds change. frost.captured latches true and never resets, so keying on it alone would keep
+    // a stale luminance across a track/cover change whose title happens to be the same width — which
+    // for Default mode (colour depends only on luminance) would leave the previous cover's decision.
+    LaunchedEffect(frost?.captured, bounds, palette) {
         if (frost == null || bounds == null || !frost.captured) return@LaunchedEffect
         val sampled = runCatching {
             val bmp = frost.sharp.toImageBitmap()

@@ -1227,9 +1227,9 @@ private fun OverlayContent(
             ) {
                 Text(
                     text = when {
-                        abEnd != null -> "A–B ON"
+                        abEnd != null -> "A to B ON"
                         abStart != null -> "A set, tap for B"
-                        else -> "A–B Loop"
+                        else -> "A to B Loop"
                     },
                     style = MaterialTheme.typography.labelMedium
                 )
@@ -1534,9 +1534,9 @@ private fun PlayerScreenExpanded(
                 ) {
                     Text(
                         text = when {
-                            abEndE != null -> "A–B ON"
+                            abEndE != null -> "A to B ON"
                             abStartE != null -> "A set, tap for B"
-                            else -> "A–B Loop"
+                            else -> "A to B Loop"
                         },
                         style = MaterialTheme.typography.labelMedium
                     )

@@ -15,9 +15,18 @@ object SourceAvailability {
 
     fun exists(context: Context, uri: Uri): Boolean = when (uri.scheme?.lowercase()) {
         "file" -> runCatching { File(uri.path ?: return false).exists() }.getOrDefault(false)
-        "content" -> runCatching {
-            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
-        }.getOrDefault(false)
+        "content" -> {
+            // Prefer an AFD probe; fall back to openInputStream so a provider that supports streams
+            // but not asset-file-descriptors is not mis-read as "gone" (a false negative would
+            // silently skip an otherwise-playable auto-resume).
+            val viaAfd = runCatching {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } == true
+            }.getOrDefault(false)
+            if (viaAfd) true
+            else runCatching {
+                context.contentResolver.openInputStream(uri)?.use { true } == true
+            }.getOrDefault(false)
+        }
         "http", "https" -> true
         null -> runCatching { File(uri.toString()).exists() }.getOrDefault(false)
         else -> true

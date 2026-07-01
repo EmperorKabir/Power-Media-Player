@@ -658,7 +658,7 @@ fun SettingsScreen(
                     default = 1f) { viewModel.setSubtitleTextSize(it) }
                 Text(
                     text = "Positive = subtitles appear later; negative = earlier. " +
-                        "Typical nudge is ±100–500 ms.",
+                        "Typical nudge is ±100 to 500 ms.",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 2.dp)
@@ -1911,7 +1911,7 @@ fun BtVideoAudioOffsetRow(
             text = "Watching video through Bluetooth speakers or headphones can " +
                 "make the sound arrive slightly after the picture (Bluetooth adds " +
                 "a short delay). Slide right to hold the picture back so it matches " +
-                "the sound. Range 0-1 second.",
+                "the sound. Range 0 to 1 second.",
             style = MaterialTheme.typography.bodySmall,
             color = TextTertiary
         )
@@ -2492,11 +2492,11 @@ private fun HueSection(
             modifier = Modifier.padding(horizontal = 24.dp)
         )
         Text(
-            text = "0 = off. Low (1-30) feels ambient: white lights gently " +
+            text = "0 = off. Low (1 to 30) feels ambient: white lights gently " +
                 "breathe, colours change every ~2 seconds, only the biggest " +
-                "beats flash. Mid (40-70) is melody-reactive: white lights " +
+                "beats flash. Mid (40 to 70) is melody-reactive: white lights " +
                 "swing with the bass, colours change ~once per second. High " +
-                "(80-100) is pulse-driven: white lights sit at a low " +
+                "(80 to 100) is pulse-driven: white lights sit at a low " +
                 "baseline and JUMP on every transient (beats, drops, " +
                 "transitions), colours change about twice a second. Some " +
                 "non-Hue bulbs react a little slower at the highest settings; " +
@@ -2536,8 +2536,8 @@ private fun HueSection(
         )
         Text(
             text = "Adjust so the light flashes line up with what you hear. " +
-                "Roughly: phone speaker or a cable, 150-250 ms; Bluetooth, " +
-                "300-500 ms; a USB-C headphone adapter, near 0 ms. The player " +
+                "Roughly: phone speaker or a cable, 150 to 250 ms; Bluetooth, " +
+                "300 to 500 ms; a USB-C headphone adapter, near 0 ms. The player " +
                 "also adds your 'Audio delay' and Bluetooth video offset " +
                 "automatically, so changing those won't throw the lights off.",
             style = MaterialTheme.typography.labelSmall,
