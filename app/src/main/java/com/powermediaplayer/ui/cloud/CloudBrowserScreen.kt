@@ -75,6 +75,7 @@ fun CloudBrowserScreen(
         }
     }
     val offlineIds by viewModel.offlineDrivePairs.collectAsStateWithLifecycle()
+    val enrichedCovers by viewModel.enrichedCovers.collectAsStateWithLifecycle()
     val savingOffline by viewModel.savingOffline.collectAsStateWithLifecycle()
     // #16 D6 — Drive items being background-enriched after a favourite. Purely
     // informational; never blocks taps/scroll/playback.
@@ -689,6 +690,7 @@ fun CloudBrowserScreen(
                                 if (p.startsWith("content://")) android.net.Uri.parse(p)
                                 else android.net.Uri.fromFile(java.io.File(p))
                             },
+                            enrichedCoverUri = enrichedCovers[item.id]?.let { android.net.Uri.parse(it) },
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             isEnriching = item.id in enrichingIds,
@@ -796,6 +798,7 @@ fun CloudBrowserScreen(
                                     if (p.startsWith("content://")) android.net.Uri.parse(p)
                                     else android.net.Uri.fromFile(java.io.File(p))
                                 },
+                                enrichedCoverUri = enrichedCovers[fav.id]?.let { android.net.Uri.parse(it) },
                                 isSaving = fav.id in savingOffline,
                                 isEnriching = fav.id in enrichingIds,
                                 onSaveOffline = { viewModel.saveDriveOffline(favItem) },
@@ -1076,6 +1079,7 @@ fun CloudBrowserScreen(
                                 if (p.startsWith("content://")) android.net.Uri.parse(p)
                                 else android.net.Uri.fromFile(java.io.File(p))
                             },
+                            enrichedCoverUri = enrichedCovers[item.id]?.let { android.net.Uri.parse(it) },
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             isEnriching = item.id in enrichingIds,
@@ -1610,6 +1614,8 @@ private fun CloudItemRow(
     // S6: local copy of a downloaded file, used to show its own embedded art or a
     // video frame as the thumbnail instead of a generic icon.
     localThumbnailUri: android.net.Uri? = null,
+    // Cover extracted at favourite time (before a full download) — shown ahead of Drive's thumbnail.
+    enrichedCoverUri: android.net.Uri? = null,
     canManageOffline: Boolean = false,
     isSavingOffline: Boolean = false,
     isEnriching: Boolean = false,
@@ -1644,15 +1650,16 @@ private fun CloudItemRow(
                     .isVideoByName(item.name, item.mimeType) -> Icons.Filled.VideoFile to "Video"
                 else -> Icons.Filled.AudioFile to "Audio"
             }
-            // Thumbnail priority: the carried artwork URL first (Spotify albums or
-            // Drive thumbnails); then a downloaded file's OWN embedded art or, for a
-            // video, a frame (MediaThumbnailRequest); then the type icon. The icon is
-            // drawn behind, so it shows whenever the image resolves to nothing (a real
-            // Drive folder, or a file with no art and no decodable frame).
-            // NB: the artwork gate is thumbnailUri alone, NOT !isFolder, so Spotify
-            // albums/playlists (isFolder=true but with a cover) still render their art.
-            val thumbModel: Any? = item.thumbnailUri
-                ?: localThumbnailUri?.let { com.powermediaplayer.util.MediaThumbnailRequest(it) }
+            // Thumbnail priority: a downloaded file's OWN embedded art / video frame first, then the
+            // cover extracted at favourite time, then the carried artwork URL (Spotify album covers
+            // and — as a last resort — Drive's own thumbnail, which is unreliable/black for m4b),
+            // then the type icon. The icon is drawn behind, so it shows whenever the image resolves
+            // to nothing (a real Drive folder, or a file with no art and no decodable frame).
+            // Spotify albums have no local/enriched cover, so they fall through to item.thumbnailUri.
+            val thumbModel: Any? =
+                localThumbnailUri?.let { com.powermediaplayer.util.MediaThumbnailRequest(it) }
+                    ?: enrichedCoverUri
+                    ?: item.thumbnailUri
             Icon(icon, contentDescription = label, tint = TealAccent, modifier = Modifier.size(22.dp))
             if (thumbModel != null) {
                 coil3.compose.AsyncImage(
@@ -1886,6 +1893,7 @@ private fun FavouriteTrackRow(
     onUnstar: () -> Unit,
     isOffline: Boolean = false,
     localThumbnailUri: android.net.Uri? = null,
+    enrichedCoverUri: android.net.Uri? = null,
     isSaving: Boolean = false,
     isEnriching: Boolean = false,
     onSaveOffline: () -> Unit = {},
@@ -1912,11 +1920,14 @@ private fun FavouriteTrackRow(
                 tint = TealAccent,
                 modifier = Modifier.size(18.dp)
             )
-            // S6: a downloaded favourite shows its own embedded art or a video frame
-            // over the icon; the icon stays as the fallback if neither decodes.
-            localThumbnailUri?.let { uri ->
+            // A downloaded favourite shows its own embedded art / video frame; a favourited-but-not-
+            // downloaded item shows the cover extracted at favourite time (enrichedCoverUri). The
+            // icon stays as the fallback if neither is available or decodes.
+            val cover: Any? = localThumbnailUri?.let { com.powermediaplayer.util.MediaThumbnailRequest(it) }
+                ?: enrichedCoverUri
+            cover?.let { model ->
                 coil3.compose.AsyncImage(
-                    model = com.powermediaplayer.util.MediaThumbnailRequest(uri),
+                    model = model,
                     contentDescription = "Favourite track",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop

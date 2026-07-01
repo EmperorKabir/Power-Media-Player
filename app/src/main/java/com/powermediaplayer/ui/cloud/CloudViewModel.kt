@@ -118,6 +118,17 @@ class CloudViewModel @Inject constructor(
                 emptyMap()
             )
 
+    /** {driveId → extracted cover URI} for enriched favourites, so the Cloud list shows the real
+     *  cover (pulled at favourite time) instead of Drive's unreliable thumbnail or a bare icon. */
+    val enrichedCovers: kotlinx.coroutines.flow.StateFlow<Map<String, String>> =
+        enrichmentCacheDao.observeCovered()
+            .map { rows -> rows.mapNotNull { r -> r.artworkUrl?.let { r.cacheKey to it } }.toMap() }
+            .stateIn(
+                viewModelScope,
+                kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                emptyMap()
+            )
+
     fun hasOfflineCopy(driveId: String): Boolean = offlineDrivePairs.value.containsKey(driveId)
 
     /** Drive ids with an in-flight offline save — drives the row's spinner. */

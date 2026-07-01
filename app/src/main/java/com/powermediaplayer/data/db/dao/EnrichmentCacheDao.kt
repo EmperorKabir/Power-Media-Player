@@ -20,6 +20,11 @@ interface EnrichmentCacheDao {
     @Query("SELECT COUNT(*) FROM enrichment_cache")
     suspend fun count(): Int
 
+    /** Every enriched row that carries a cover, so a favourited (therefore enriched) Drive item
+     *  can show its extracted cover in the Cloud list even before the full file is downloaded. */
+    @Query("SELECT * FROM enrichment_cache WHERE artworkUrl IS NOT NULL")
+    fun observeCovered(): kotlinx.coroutines.flow.Flow<List<EnrichmentCacheEntity>>
+
     /** #16 — search the full enriched field set (title/artist/album/genre) so an
      *  author (artist), series (album) or narrator/genre search all hit. */
     @Query(
