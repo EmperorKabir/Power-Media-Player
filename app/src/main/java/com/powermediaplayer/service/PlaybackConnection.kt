@@ -1102,8 +1102,14 @@ class PlaybackConnection @Inject constructor(
         } else {
             null
         }
-        val resolvedArtUri = overArtwork ?: metadata.artworkUri ?: itemMetadata?.artworkUri
-        val resolvedArtBytes = overArtworkBytes ?: ownedMetaBytes ?: itemMetadata?.artworkData
+        // Prefer the item's OWN MediaItem metadata over the merged player metadata for the
+        // sticky-prone fields: Media3 leaves null artist/album/artwork holding the PREVIOUS track's
+        // values, which bled a finished audiobook's cover + artist onto the next video.
+        val ownMeta = rawCurrentItem?.mediaMetadata
+        val resolvedArtUri = overArtwork ?: ownMeta?.artworkUri ?: itemMetadata?.artworkUri
+        val itemArtBytes = itemMetadata?.artworkData
+            ?.takeUnless { it.contentEquals(lastEmbeddedArt) && embeddedArtOwnerId != rawId }
+        val resolvedArtBytes = overArtworkBytes ?: ownedMetaBytes ?: itemArtBytes
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
@@ -1127,12 +1133,13 @@ class PlaybackConnection @Inject constructor(
             title = overTitle ?: cached?.title?.toString()?.takeIf { it.isNotBlank() }
                 ?: metadata.title?.toString().orEmpty()
                     .ifBlank { itemMetadata?.title?.toString() ?: "" },
+            // artist/album come from the override, the (now sticky-free) per-id cache, or the item's
+            // OWN metadata — NOT the merged player metadata, which carries the previous track's
+            // artist/album when this item's own tags are null (the bleed).
             artist = overArtist ?: cached?.artist?.toString()?.takeIf { it.isNotBlank() }
-                ?: metadata.artist?.toString().orEmpty()
-                    .ifBlank { itemMetadata?.artist?.toString() ?: "" },
+                ?: ownMeta?.artist?.toString()?.takeIf { it.isNotBlank() } ?: "",
             album = overAlbum ?: cached?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
-                ?: metadata.albumTitle?.toString().orEmpty()
-                    .ifBlank { itemMetadata?.albumTitle?.toString() ?: "" },
+                ?: ownMeta?.albumTitle?.toString()?.takeIf { it.isNotBlank() } ?: "",
             artworkUri = resolvedArtUri,
             artworkBytes = resolvedArtBytes,
             playbackSpeed = c.playbackParameters.speed,

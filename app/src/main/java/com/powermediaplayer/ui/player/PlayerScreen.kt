@@ -1655,6 +1655,12 @@ private fun TrackInfoSection(
             uiState.year.takeIf { it > 0 }?.toString(),
             uiState.genre.takeIf { it.isNotBlank() }
         ).joinToString(" • ")
+        // De-duplicate the metadata lines: hide any line that merely repeats one already shown
+        // (e.g. a podcast whose artist tag == album tag). The title is always shown and seeds the
+        // set; a file with a genuinely distinct artist AND album still shows both. Case/space-insensitive.
+        val shownLines = HashSet<String>()
+        val firstShow: (String) -> Boolean = { s -> s.isNotBlank() && shownLines.add(s.trim().lowercase()) }
+        firstShow(uiState.title)
         FrostedTextLine(
             text = uiState.title,
             style = MaterialTheme.typography.headlineSmall,
@@ -1666,7 +1672,7 @@ private fun TrackInfoSection(
             baseColor = TextPrimary,
             maxLines = 2
         )
-        if (uiState.artist.isNotEmpty()) {
+        if (firstShow(uiState.artist)) {
             Spacer(modifier = Modifier.height(4.dp))
             FrostedTextLine(
                 text = uiState.artist,
@@ -1680,7 +1686,7 @@ private fun TrackInfoSection(
                 maxLines = 1
             )
         }
-        if (uiState.album.isNotEmpty()) {
+        if (firstShow(uiState.album)) {
             Spacer(modifier = Modifier.height(2.dp))
             FrostedTextLine(
                 text = uiState.album,
@@ -1694,7 +1700,7 @@ private fun TrackInfoSection(
                 maxLines = 1
             )
         }
-        if (yearGenreLine.isNotEmpty()) {
+        if (firstShow(yearGenreLine)) {
             Spacer(modifier = Modifier.height(2.dp))
             FrostedTextLine(
                 text = yearGenreLine,

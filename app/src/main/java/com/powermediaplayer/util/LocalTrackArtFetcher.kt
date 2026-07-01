@@ -4,10 +4,12 @@ import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import coil3.ImageLoader
+import coil3.asImage
 import coil3.decode.DataSource
 import coil3.decode.ImageSource
 import coil3.fetch.FetchResult
 import coil3.fetch.Fetcher
+import coil3.fetch.ImageFetchResult
 import coil3.fetch.SourceFetchResult
 import coil3.key.Keyer
 import coil3.request.Options
@@ -74,6 +76,33 @@ class LocalTrackArtFetcher(
             }
         }
 
+        // 3) VIDEO fallback: a representative frame ~10% in. Audio has no video track →
+        //    getFrameAtTime returns null → we throw and the caller's icon shows. Artwork priority
+        //    (steps 1-2) is preserved; this only rescues LOCAL video rows (e.g. Last Played), which
+        //    previously fell straight to the music-note icon.
+        if (data.mediaUri !in noFrame) {
+            val frame = runCatching {
+                val mmr = MediaMetadataRetriever()
+                try {
+                    mmr.setDataSource(context, Uri.parse(data.mediaUri))
+                    if (mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes") {
+                        val durMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                            ?.toLongOrNull() ?: 0L
+                        val atUs = (durMs * 1000L / 10L).coerceAtLeast(0L)
+                        mmr.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    } else null
+                } finally {
+                    runCatching { mmr.release() }
+                }
+            }.getOrNull()
+            if (frame != null) {
+                return@withContext ImageFetchResult(
+                    frame.asImage(), isSampled = false, dataSource = DataSource.DISK
+                )
+            }
+            noFrame.add(data.mediaUri)
+        }
+
         throw NoTrackArtException(data.mediaUri)
     }
 
@@ -109,6 +138,10 @@ class LocalTrackArtFetcher(
         // picture, so a no-embedded-art row doesn't re-open the (expensive)
         // retriever on every rebind. The URI fallback still runs.
         val noEmbedded: MutableSet<String> =
+            java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+        // URIs with no video frame either (audio rows) — skip re-probing the retriever on rebind.
+        val noFrame: MutableSet<String> =
             java.util.concurrent.ConcurrentHashMap.newKeySet()
     }
 }

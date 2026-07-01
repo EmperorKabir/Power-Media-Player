@@ -13,27 +13,32 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * 10-band graphic-EQ band geometry. Centres match EqualizerAudioProcessor.CENTERS;
- * Q=1.41 → ~1-octave bands, so each band's inclusive range is centre/√2 … centre×√2
- * (the −3dB edges), contiguous across bands. Labels show the RANGE, not the centre.
+ * 10-band graphic-EQ band geometry. Centres match EqualizerAudioProcessor.CENTERS; Q=1.41 →
+ * ~1-octave bands (the −3dB edges are centre/√2 … centre×√2). Labels show each band's frequency
+ * RANGE. The edges are computed ONCE from the shared geometric boundary between neighbours and
+ * rounded to whole Hz, so adjacent bands never disagree; each band then starts 1 Hz above the
+ * previous band's top, giving a consistent "…44 | 45…" read (never an overlap or a repeated value),
+ * a unit on BOTH numbers, and no Hz↔kHz jump mid-scale.
  */
 object EqBands {
     val CENTERS = doubleArrayOf(
         31.0, 63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0
     )
-    private val ROOT2 = Math.sqrt(2.0)
-    private fun fmt(hz: Double, kHz: Boolean): String =
-        if (kHz) {
-            val k = hz / 1000.0
-            if (k >= 10) Math.round(k).toString() else "%.1f".format(k)
-        } else Math.round(hz).toString()
 
-    /** "22 to 44 Hz", "354 to 707 Hz", "0.7 to 1.4 kHz", "11 to 23 kHz", … */
-    val RANGE_LABELS: List<String> = CENTERS.map { c ->
-        val lo = c / ROOT2
-        val hi = c * ROOT2
-        val kHz = c >= 1000.0
-        "${fmt(lo, kHz)} to ${fmt(hi, kHz)} ${if (kHz) "kHz" else "Hz"}"
+    /** "22 Hz to 44 Hz", "45 Hz to 89 Hz", … "11315 Hz to 22627 Hz" — contiguous, no overlap. */
+    val RANGE_LABELS: List<String> = run {
+        val n = CENTERS.size
+        val root2 = Math.sqrt(2.0)
+        // n+1 shared edges: outer two are centre÷√2 and centre×√2; inner ones are the geometric
+        // mean of the two neighbouring centres (identical to either centre×√2, so a single value).
+        val edges = IntArray(n + 1)
+        edges[0] = Math.round(CENTERS[0] / root2).toInt()
+        for (i in 1 until n) edges[i] = Math.round(Math.sqrt(CENTERS[i - 1] * CENTERS[i])).toInt()
+        edges[n] = Math.round(CENTERS[n - 1] * root2).toInt()
+        (0 until n).map { i ->
+            val lo = if (i == 0) edges[0] else edges[i] + 1
+            "$lo Hz to ${edges[i + 1]} Hz"
+        }
     }
 }
 

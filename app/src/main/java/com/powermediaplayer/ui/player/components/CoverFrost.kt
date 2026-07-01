@@ -230,7 +230,10 @@ fun FrostedTextLine(
         Color(0xE6000000) else Color(0xD9FFFFFF)
     val strokePx = with(density) {
         val fs = if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.sp.toPx()
-        (fs * 0.045f).coerceIn(1.2f, 5f)
+        // The small lines are floor-bound, so the floor is the lever that makes their halo visible;
+        // a heavier coefficient + floor gives titleMedium/body/labelSmall a real outline, not just
+        // the large title. The upper cap keeps the title's outline from turning heavy.
+        (fs * 0.06f).coerceIn(2.0f, 6f)
     }
     Box(
         modifier = modifier

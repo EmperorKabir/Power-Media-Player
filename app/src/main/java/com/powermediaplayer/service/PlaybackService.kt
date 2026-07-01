@@ -2344,6 +2344,11 @@ class PlaybackService : MediaSessionService() {
                 scheduleWidgetRefresh()
             }
 
+            // Owner-tracking for the cover so a later-parsed embedded cover is captured for Cast
+            // while Media3's sticky carry-over (the previous track's artworkData) is not.
+            private var lastCapturedArt: ByteArray? = null
+            private var lastCapturedArtOwnerId: String? = null
+
             override fun onMediaMetadataChanged(
                 mediaMetadata: androidx.media3.common.MediaMetadata
             ) {
@@ -2353,12 +2358,28 @@ class PlaybackService : MediaSessionService() {
                 // tags). Mirror the merged metadata into the sender
                 // cache continuously so when the user later taps Cast,
                 // the cache already has the rich version.
-                val curId = player?.currentMediaItem?.mediaId
+                val curItem = player?.currentMediaItem
+                val curId = curItem?.mediaId
                 if (!curId.isNullOrEmpty()) {
-                    val existing = senderMetadataByMediaId[curId]
+                    // Base the per-id cache on THIS item's OWN MediaItem metadata (app-set: correct
+                    // for local files, null artist/album for a tagless video) plus any prior
+                    // enrichment for this id — NOT the fully-merged player metadata, whose null
+                    // fields stick to the PREVIOUS track's values and would bleed the last item's
+                    // artist/album/cover onto this one (user-reported: a video showing the finished
+                    // audiobook's metadata).
                     val builder = androidx.media3.common.MediaMetadata.Builder()
-                    existing?.let { builder.populate(it) }
-                    builder.populate(mediaMetadata)
+                    senderMetadataByMediaId[curId]?.let { builder.populate(it) }
+                    curItem.mediaMetadata.let { builder.populate(it) }
+                    // Overlay the freshly-parsed cover ONLY when it is genuinely new bytes owned by
+                    // THIS item, so Cast still gets the rich cover but sticky carry-over is rejected.
+                    val art = mediaMetadata.artworkData
+                    if (art != null && !art.contentEquals(lastCapturedArt)) {
+                        lastCapturedArt = art
+                        lastCapturedArtOwnerId = curId
+                    }
+                    if (lastCapturedArt != null && lastCapturedArtOwnerId == curId) {
+                        builder.setArtworkData(lastCapturedArt, mediaMetadata.artworkDataType)
+                    }
                     senderMetadataByMediaId[curId] = builder.build()
                 }
                 // Widget art arrives AFTER onMediaItemTransition for
