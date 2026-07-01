@@ -2345,8 +2345,15 @@ class PlaybackService : MediaSessionService() {
             }
 
             // Owner-tracking for the cover so a later-parsed embedded cover is captured for Cast
-            // while Media3's sticky carry-over (the previous track's artworkData) is not.
+            // while Media3's sticky carry-over (the previous track's artworkData) is not. Keyed on
+            // byte-identity: a genuinely new cover has different bytes (owner advances); sticky
+            // carry-over has identical bytes (owner stays, overlay rejected). Accepted limitation:
+            // two consecutive DISTINCT tracks that share the exact same embedded cover art (a
+            // multi-file audiobook) are indistinguishable from sticky carry-over, so the 2nd such
+            // track's cover is not re-captured here; switchPlayer re-snapshots merged metadata for
+            // the current item at cast time, so this only affects a later same-cover Cast transition.
             private var lastCapturedArt: ByteArray? = null
+            private var lastCapturedArtType: Int? = null
             private var lastCapturedArtOwnerId: String? = null
 
             override fun onMediaMetadataChanged(
@@ -2367,18 +2374,29 @@ class PlaybackService : MediaSessionService() {
                     // fields stick to the PREVIOUS track's values and would bleed the last item's
                     // artist/album/cover onto this one (user-reported: a video showing the finished
                     // audiobook's metadata).
+                    val existing = senderMetadataByMediaId[curId]
                     val builder = androidx.media3.common.MediaMetadata.Builder()
-                    senderMetadataByMediaId[curId]?.let { builder.populate(it) }
+                    existing?.let { builder.populate(it) }
                     curItem.mediaMetadata.let { builder.populate(it) }
+                    // Don't let the item's filename title clobber an already-enriched cache title: a
+                    // Drive item's MediaItem.title is the cleaned FILE NAME, and the enricher later
+                    // writes the REAL title into the cache — populate(own) above would overwrite it.
+                    val enrichedTitle = existing?.title?.toString()
+                    if (!enrichedTitle.isNullOrBlank() &&
+                        enrichedTitle != curItem.mediaMetadata.title?.toString()
+                    ) {
+                        builder.setTitle(enrichedTitle)
+                    }
                     // Overlay the freshly-parsed cover ONLY when it is genuinely new bytes owned by
                     // THIS item, so Cast still gets the rich cover but sticky carry-over is rejected.
                     val art = mediaMetadata.artworkData
                     if (art != null && !art.contentEquals(lastCapturedArt)) {
                         lastCapturedArt = art
+                        lastCapturedArtType = mediaMetadata.artworkDataType
                         lastCapturedArtOwnerId = curId
                     }
                     if (lastCapturedArt != null && lastCapturedArtOwnerId == curId) {
-                        builder.setArtworkData(lastCapturedArt, mediaMetadata.artworkDataType)
+                        builder.setArtworkData(lastCapturedArt, lastCapturedArtType)
                     }
                     senderMetadataByMediaId[curId] = builder.build()
                 }

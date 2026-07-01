@@ -1134,12 +1134,20 @@ class PlaybackConnection @Inject constructor(
                 ?: metadata.title?.toString().orEmpty()
                     .ifBlank { itemMetadata?.title?.toString() ?: "" },
             // artist/album come from the override, the (now sticky-free) per-id cache, or the item's
-            // OWN metadata — NOT the merged player metadata, which carries the previous track's
-            // artist/album when this item's own tags are null (the bleed).
+            // OWN metadata. Last resort: the merged player metadata's PARSED value, but ONLY for an
+            // item that provided its own embedded cover (embeddedArtOwnerId == rawId) — a rich tagged
+            // file. A bare video/tagless item does not own the cover, so the merged value there is
+            // the previous track's sticky carry-over and is NOT used (this is what prevents the
+            // bleed). The gate restores parsed artist/album for title-only MediaItems, e.g. a
+            // pinned-album track tapped from a cold cache.
             artist = overArtist ?: cached?.artist?.toString()?.takeIf { it.isNotBlank() }
-                ?: ownMeta?.artist?.toString()?.takeIf { it.isNotBlank() } ?: "",
+                ?: ownMeta?.artist?.toString()?.takeIf { it.isNotBlank() }
+                ?: metadata.artist?.toString()?.takeIf { it.isNotBlank() && embeddedArtOwnerId == rawId }
+                ?: "",
             album = overAlbum ?: cached?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
-                ?: ownMeta?.albumTitle?.toString()?.takeIf { it.isNotBlank() } ?: "",
+                ?: ownMeta?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
+                ?: metadata.albumTitle?.toString()?.takeIf { it.isNotBlank() && embeddedArtOwnerId == rawId }
+                ?: "",
             artworkUri = resolvedArtUri,
             artworkBytes = resolvedArtBytes,
             playbackSpeed = c.playbackParameters.speed,

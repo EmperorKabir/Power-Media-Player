@@ -76,20 +76,29 @@ class LocalTrackArtFetcher(
             }
         }
 
-        // 3) VIDEO fallback: a representative frame ~10% in. Audio has no video track →
-        //    getFrameAtTime returns null → we throw and the caller's icon shows. Artwork priority
-        //    (steps 1-2) is preserved; this only rescues LOCAL video rows (e.g. Last Played), which
-        //    previously fell straight to the music-note icon.
+        // 3) VIDEO fallback: a SCALED representative frame ~10% in (downscaled to the row's target
+        //    size so a 4K frame doesn't hand Coil a ~33 MB bitmap). Only rows that are DEFINITIVELY
+        //    audio (HAS_VIDEO probe succeeded and returned not-"yes") are negative-cached — a
+        //    transient decode failure or a frame miss on a real video must NOT permanently blacklist
+        //    the row. Artwork priority (steps 1-2) is preserved; this only rescues LOCAL video rows.
         if (data.mediaUri !in noFrame) {
+            var hasVideo: Boolean? = null
             val frame = runCatching {
                 val mmr = MediaMetadataRetriever()
                 try {
                     mmr.setDataSource(context, Uri.parse(data.mediaUri))
-                    if (mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes") {
+                    val hv = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
+                    hasVideo = hv
+                    if (hv) {
                         val durMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                             ?.toLongOrNull() ?: 0L
                         val atUs = (durMs * 1000L / 10L).coerceAtLeast(0L)
-                        mmr.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                        val tw = (options.size.width as? coil3.size.Dimension.Pixels)?.px ?: 512
+                        val th = (options.size.height as? coil3.size.Dimension.Pixels)?.px ?: 512
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1)
+                            mmr.getScaledFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, tw, th)
+                        else
+                            mmr.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                     } else null
                 } finally {
                     runCatching { mmr.release() }
@@ -97,10 +106,13 @@ class LocalTrackArtFetcher(
             }.getOrNull()
             if (frame != null) {
                 return@withContext ImageFetchResult(
-                    frame.asImage(), isSampled = false, dataSource = DataSource.DISK
+                    frame.asImage(), isSampled = true, dataSource = DataSource.DISK
                 )
             }
-            noFrame.add(data.mediaUri)
+            // Blacklist ONLY confirmed-audio rows; a video that failed to yield a frame this time
+            // (decoder contention, transient I/O, or a swallowed error → hasVideo stays null) stays
+            // re-probable on the next bind.
+            if (hasVideo == false) noFrame.add(data.mediaUri)
         }
 
         throw NoTrackArtException(data.mediaUri)

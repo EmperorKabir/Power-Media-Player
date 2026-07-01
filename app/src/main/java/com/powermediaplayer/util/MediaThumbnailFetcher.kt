@@ -29,6 +29,7 @@ data class MediaThumbnailRequest(val uri: Uri)
 class MediaThumbnailFetcher(
     private val context: Context,
     private val request: MediaThumbnailRequest,
+    private val options: Options,
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? {
@@ -51,9 +52,16 @@ class MediaThumbnailFetcher(
                 val durMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                     ?.toLongOrNull() ?: 0L
                 val atUs = (durMs * 1000L / 10L).coerceAtLeast(0L)
-                val frame = mmr.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                // Scale the frame to the row's target size so a 4K video doesn't hand Coil a ~33 MB
+                // full-res bitmap for a list thumbnail.
+                val tw = (options.size.width as? coil3.size.Dimension.Pixels)?.px ?: 512
+                val th = (options.size.height as? coil3.size.Dimension.Pixels)?.px ?: 512
+                val frame = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1)
+                    mmr.getScaledFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, tw, th)
+                else
+                    mmr.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 if (frame != null) {
-                    return ImageFetchResult(frame.asImage(), isSampled = false, dataSource = DataSource.DISK)
+                    return ImageFetchResult(frame.asImage(), isSampled = true, dataSource = DataSource.DISK)
                 }
             }
             null
@@ -72,7 +80,7 @@ class MediaThumbnailFetcher(
             data: MediaThumbnailRequest,
             options: Options,
             imageLoader: ImageLoader
-        ): Fetcher = MediaThumbnailFetcher(context, data)
+        ): Fetcher = MediaThumbnailFetcher(context, data, options)
     }
 
     /** Memory-cache key for the custom data type. */
