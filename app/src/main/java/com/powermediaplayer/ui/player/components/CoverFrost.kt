@@ -42,6 +42,11 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.runtime.Immutable
 import com.powermediaplayer.util.CoverArtColors
 import com.powermediaplayer.util.PlayerTextColour
@@ -233,14 +238,17 @@ fun FrostedTextLine(
     // pill, and a dark shadow under it just smears the glyphs (the "blurry" look).
     val shadow = if (enabled && PlayerTextColour.luminance(textColour) > 0.5f)
         Shadow(Color.Black.copy(alpha = 0.6f), Offset(0f, 1f), 3f) else null
-    Text(
-        text = text,
-        style = style.copy(shadow = shadow),
-        color = textColour,
-        textAlign = TextAlign.Center,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        onTextLayout = { layout = it },
+    // Thin outline so the text stands out from the pill even when its colour is close to the
+    // backdrop. Adaptive: a dark halo behind LIGHT text, a light halo behind DARK text. Width
+    // scales with the font size (robust to the app font-scale) and with density (robust to
+    // display type). No colour-logic change; this is a legibility outline only.
+    val outlineColour = if (PlayerTextColour.luminance(textColour) > 0.5f)
+        Color(0xE6000000) else Color(0xD9FFFFFF)
+    val strokePx = with(density) {
+        val fs = if (style.fontSize.isSpecified) style.fontSize.toPx() else 16.sp.toPx()
+        (fs * 0.045f).coerceIn(1.2f, 5f)
+    }
+    Box(
         modifier = modifier
             .onGloballyPositioned { val b = it.boundsInRoot(); origin = b.topLeft; region = b }
             .drawBehind {
@@ -298,5 +306,28 @@ fun FrostedTextLine(
                 horizontal = if (enabled) padHorizontal.dp else 0.dp,
                 vertical = if (enabled) padVertical.dp else 0.dp
             )
-    )
+    ) {
+        // Outline (stroked glyphs) drawn behind the fill; identical text/style/maxLines so it
+        // lays out the same and registers exactly under the fill.
+        if (enabled) {
+            Text(
+                text = text,
+                style = style.copy(drawStyle = Stroke(width = strokePx, join = StrokeJoin.Round)),
+                color = outlineColour,
+                textAlign = TextAlign.Center,
+                maxLines = maxLines,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        // Fill glyphs on top; this Text drives the layout used by the per-line pill draw.
+        Text(
+            text = text,
+            style = style.copy(shadow = shadow),
+            color = textColour,
+            textAlign = TextAlign.Center,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { layout = it }
+        )
+    }
 }
