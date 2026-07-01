@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -110,6 +111,20 @@ fun MiniPlayerBar(
                 } else if (ui.artworkUri != null) {
                     coil3.compose.AsyncImage(
                         model = ui.artworkUri,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else if (ui.isVideoContent && ui.currentMediaUri.isNotBlank()) {
+                    // Video with no embedded cover: show a frame snapshot (same fetcher as the
+                    // Last Played / library video rows) instead of a bland icon — this is what the
+                    // mini-player shows for a paused video. A film icon sits behind as the fallback
+                    // while the frame decodes or if none can be produced.
+                    Icon(Icons.Filled.Movie, contentDescription = null,
+                        tint = TealAccent, modifier = Modifier.size(20.dp))
+                    coil3.compose.AsyncImage(
+                        model = com.powermediaplayer.util.MediaThumbnailRequest(
+                            android.net.Uri.parse(ui.currentMediaUri)
+                        ),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize()
                     )

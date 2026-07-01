@@ -1757,6 +1757,7 @@ class PlayerViewModel @Inject constructor(
                 ) && playerState.isSeekable
             ),
             isVideoContent = playerState.isVideoContent,
+            currentMediaUri = playerState.currentMediaUri,
             audioFormatLabel = playerState.audioFormatLabel,
             mediaKind = inferMediaKind(playerState),
             isCurrentMediaCastable = isCastableMedia(playerState)

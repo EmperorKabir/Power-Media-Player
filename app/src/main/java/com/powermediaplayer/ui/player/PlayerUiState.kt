@@ -98,6 +98,8 @@ data class PlayerUiState(
 
     // Video support
     val isVideoContent: Boolean = false,
+    // Current item's media URI (mediaId) — lets surfaces like the mini-player fetch a video frame.
+    val currentMediaUri: String = "",
 
     // Audio output indicator — codec · channel layout · sample rate.
     // Empty when no audio track is selected.
