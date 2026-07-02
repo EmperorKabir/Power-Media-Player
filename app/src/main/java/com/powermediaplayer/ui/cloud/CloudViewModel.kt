@@ -1595,7 +1595,16 @@ class CloudViewModel @Inject constructor(
             val cachedEnriched = driveTagEnricher.cached(item.id)
             playbackConnection.setLocalMetadata(
                 cachedEnriched ?: LocalMetadataOverride(
-                    title = item.name,
+                    // Don't pin a raw filename over ExoPlayer's own parsed moov title:
+                    // streaming parses the real title (+ covr cover) in seconds, but any
+                    // non-blank override title outranks it — so the raw "…[ID].m4b" would
+                    // show for the whole enrich window. Null for a raw filename lets the
+                    // parsed title through immediately; the enricher heals the durable copy
+                    // later. (Drive's black audio thumb is now nulled at the provider, so
+                    // artworkUri no longer masks the parsed cover either.)
+                    title = item.name.takeUnless {
+                        com.powermediaplayer.util.MediaClassifier.looksLikeRawMediaFilename(it)
+                    },
                     artworkUri = item.thumbnailUri
                 )
             )

@@ -17,4 +17,19 @@ class SeekTimeParserTest {
     @Test fun tooManyPartsIsNull() = assertNull(parseTimeToMs("1:2:3:4"))
     @Test fun negativeIsNull() = assertNull(parseTimeToMs("-5"))
     @Test fun whitespaceTrimmed() = assertEquals(90_000L, parseTimeToMs("  1:30  "))
+
+    // #4 — digit-mask that inserts colons for the numeric keypad (no colon key).
+    @Test fun maskEmpty() = assertEquals("", maskTimeDigits(""))
+    @Test fun maskOneDigit() = assertEquals("5", maskTimeDigits("5"))
+    @Test fun maskTwoDigits() = assertEquals("90", maskTimeDigits("90"))
+    @Test fun maskThreeDigits() = assertEquals("1:30", maskTimeDigits("130"))
+    @Test fun maskFourDigits() = assertEquals("12:30", maskTimeDigits("1230"))
+    @Test fun maskFiveDigits() = assertEquals("6:08:13", maskTimeDigits("60813"))
+    @Test fun maskSixDigits() = assertEquals("12:34:56", maskTimeDigits("123456"))
+    // Re-masking an already-formatted value (what onValueChange receives) is stable.
+    @Test fun maskIdempotentOnFormatted() = assertEquals("6:08:13", maskTimeDigits("6:08:13"))
+    // Caps at hh:mm:ss (6 digits); extra leading digits are dropped.
+    @Test fun maskCapsAtSixDigits() = assertEquals("23:45:67", maskTimeDigits("1234567"))
+    // The mask output feeds the parser for the common h:mm:ss case.
+    @Test fun maskFeedsParser() = assertEquals(22_093_000L, parseTimeToMs(maskTimeDigits("60813")))
 }

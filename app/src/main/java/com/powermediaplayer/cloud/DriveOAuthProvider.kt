@@ -558,7 +558,14 @@ class DriveOAuthProvider @Inject constructor(
             sourceProvider = CloudProviderType.GOOGLE_DRIVE,
             isFolder = isFolder,
             parentId = parentId,
-            thumbnailUri = thumb?.let { Uri.parse(it) }
+            // Drive builds a video-FRAME thumbnail from the MP4 container. A .m4b
+            // audiobook is MP4 (mimeType video/mp4) with no real video track, so the
+            // frame is a solid BLACK square that would paint over the type icon.
+            // Keep Drive's thumbnail only for genuine videos; audio falls back to the
+            // icon (its true embedded cover arrives via the enricher / favourite art).
+            thumbnailUri = thumb
+                ?.takeIf { com.powermediaplayer.util.MediaClassifier.isVideoByName(name, mime) }
+                ?.let { Uri.parse(it) }
         )
     }
 

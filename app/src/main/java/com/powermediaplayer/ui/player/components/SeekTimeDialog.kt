@@ -46,6 +46,22 @@ fun parseTimeToMs(raw: String): Long? {
 }
 
 /**
+ * Formats raw digit input into a right-aligned m:ss / h:mm:ss display, so the
+ * numeric keypad (which has no colon key) still produces colon-separated time.
+ * The user types digits only; colons appear automatically from the right
+ * (ss, then mm, then h). Output feeds [parseTimeToMs], which validates the
+ * <60 bounds on the seconds/minutes fields. Capped at 6 digits (hh:mm:ss).
+ */
+fun maskTimeDigits(raw: String): String {
+    val d = raw.filter { it.isDigit() }.takeLast(6)
+    return when {
+        d.length <= 2 -> d
+        d.length <= 4 -> d.dropLast(2) + ":" + d.takeLast(2)
+        else -> d.dropLast(4) + ":" + d.substring(d.length - 4, d.length - 2) + ":" + d.takeLast(2)
+    }
+}
+
+/**
  * #4 — numeric time-entry dialog. Tapping the elapsed/remaining time labels on
  * either player layout opens this; the caller supplies the title, the current
  * formatted value as a hint, the seekable ceiling, and the seek action. One
@@ -69,14 +85,16 @@ fun SeekTimeDialog(
         text = {
             Column {
                 Text(
-                    "Current: $currentLabel. Enter a time (m:ss, h:mm:ss, or seconds).",
+                    "Current: $currentLabel. Type digits — they fill in as m:ss then h:mm:ss.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    // Numeric keypad has no colon key; auto-insert colons from the
+                    // digits the user types so h:mm:ss is enterable without one.
+                    onValueChange = { text = maskTimeDigits(it) },
                     singleLine = true,
                     isError = text.isNotEmpty() && !valid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

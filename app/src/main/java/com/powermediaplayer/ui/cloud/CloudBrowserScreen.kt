@@ -325,12 +325,23 @@ fun CloudBrowserScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    viewModel.markDriveFirstPickWarningSeen()
-                    pendingFirstPickWarning = false
-                    launchDriveOAuth()
-                }) {
-                    Text("I understand", color = TealAccent)
+                // Robust tap target on both folded + unfolded form factors: a short
+                // label otherwise yields a thin hitbox. Enforce a min 56dp x 120dp
+                // button with roomy content padding.
+                TextButton(
+                    onClick = {
+                        viewModel.markDriveFirstPickWarningSeen()
+                        pendingFirstPickWarning = false
+                        launchDriveOAuth()
+                    },
+                    modifier = Modifier.defaultMinSize(minWidth = 120.dp, minHeight = 56.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                ) {
+                    Text(
+                        "I understand",
+                        color = TealAccent,
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
             },
             containerColor = OledBlack
