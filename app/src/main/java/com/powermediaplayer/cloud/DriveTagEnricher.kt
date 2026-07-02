@@ -71,8 +71,14 @@ class DriveTagEnricher @Inject constructor(
           try {
             // Dedup: if the same file is already being enriched (e.g. tapped from
             // the Cloud tab AND Last Played near-simultaneously), don't start a
-            // second hundreds-of-MB download — let the in-flight one finish.
-            if (!ChapterCache.shared.markFilling(stableKey)) return@launch
+            // second hundreds-of-MB download — let the in-flight one finish. If the
+            // caller wanted the search-cache row and a PRIOR enrich already filled
+            // the in-process cache, still write the row (a favourite tapped while
+            // its first play is loading must not silently lose its cover row).
+            if (!ChapterCache.shared.markFilling(stableKey)) {
+                if (writeSearchCache) cache[item.id]?.let { ov -> writeSearchRow(item.id, ov) }
+                return@launch
+            }
             // setCloudFetchInProgress INSIDE the try so the finally's
             // unmarkFilling is unreachable only if markFilling itself threw —
             // i.e. the fill flag can never get permanently stuck for the process.
@@ -94,11 +100,16 @@ class DriveTagEnricher @Inject constructor(
                     }.getOrDefault(false)
                     if (readable) found = parseAndApply(item, offUri, stableKey)
                 }
+                // Track whether a real local copy was PARSED (vs downloads failing):
+                // a completed parse that finds nothing is a durable "no art" answer;
+                // a failed download must stay retryable (no row written).
+                var parseRan = found
                 var temp = if (found) null else try {
                     if (isSaf) driveProvider.downloadToCache(item)
                     else driveOAuthProvider.downloadToCache(item)
                 } catch (_: Throwable) { null }
                 if (temp != null) {
+                    parseRan = true
                     found = parseAndApply(item, android.net.Uri.fromFile(temp), stableKey)
                     runCatching { temp.delete() }
                 }
@@ -108,26 +119,27 @@ class DriveTagEnricher @Inject constructor(
                         else driveOAuthProvider.downloadFullToCache(item)
                     } catch (_: Throwable) { null }
                     if (temp != null) {
+                        parseRan = true
                         parseAndApply(item, android.net.Uri.fromFile(temp), stableKey)
                         runCatching { temp.delete() }
+                    } else if (!isSaf) {
+                        // Full download unavailable (>4 GB cap or transfer failure)
+                        // — a bounded tail Range fetch can still recover the COVER
+                        // (moov/…/covr sits in the tail for moov-at-end files).
+                        // Tags/chapters stay unavailable; art alone beats nothing.
+                        tailArtFallback(item, stableKey)
                     }
                 }
                 // #16 — store extracted tags in enrichment_cache (favourite-enrich)
-                // so a never-played item is searchable by author/series.
-                // cache[item.id] was populated by parseAndApply when tags exist.
+                // so a never-played item is searchable by author/series and its
+                // cover shows in the Cloud list. cache[item.id] was populated by
+                // parseAndApply/tailArtFallback when anything was found; a parsed-
+                // but-empty file gets the durable NO_ART row (no re-fetch loops).
                 if (writeSearchCache) {
-                    cache[item.id]?.let { ov ->
-                        runCatching {
-                            enrichmentCacheDao.put(
-                                com.powermediaplayer.data.db.entity.EnrichmentCacheEntity(
-                                    cacheKey = item.id, provider = "drive-fav-tags",
-                                    title = ov.title, artist = ov.artist, album = ov.album,
-                                    year = null, genre = null,
-                                    artworkUrl = ov.artworkUri?.toString(),
-                                    fetchedAtMs = System.currentTimeMillis()
-                                )
-                            )
-                        }
+                    val ov = cache[item.id]
+                    when {
+                        ov != null -> writeSearchRow(item.id, ov)
+                        parseRan -> writeSearchRow(item.id, LocalMetadataOverride())
                     }
                 }
             } finally {
@@ -138,6 +150,58 @@ class DriveTagEnricher @Inject constructor(
           } finally {
             onDone?.invoke()
           }
+        }
+    }
+
+    /** Upsert the enrichment_cache row for [id] from [ov]. A null artworkUri means
+     *  the parse COMPLETED and found no cover → the durable NO_ART sentinel, so the
+     *  browse/favourite paths stop re-fetching a confirmed-artless file. */
+    private suspend fun writeSearchRow(id: String, ov: LocalMetadataOverride) {
+        runCatching {
+            enrichmentCacheDao.put(
+                com.powermediaplayer.data.db.entity.EnrichmentCacheEntity(
+                    cacheKey = id,
+                    provider = com.powermediaplayer.data.db.entity
+                        .EnrichmentCacheEntity.PROVIDER_DRIVE_FULL,
+                    title = ov.title, artist = ov.artist, album = ov.album,
+                    year = null, genre = null,
+                    artworkUrl = ov.artworkUri?.toString()
+                        ?: com.powermediaplayer.data.db.entity.EnrichmentCacheEntity.NO_ART,
+                    fetchedAtMs = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    /** Cover-only recovery when the FULL download is unavailable (>4 GB cap or a
+     *  failed transfer): fetch the last 8 MB by HTTP Range and pull the iTunes covr
+     *  image straight out of the tail bytes. MP4-family only (that's where a
+     *  moov-at-end cover lives); other formats carry art at the file START, which
+     *  the 32 MB head attempt already covered. */
+    private suspend fun tailArtFallback(item: CloudMediaItem, stableKey: String) {
+        val ext = item.name.substringAfterLast('.', "").lowercase()
+        if (ext !in setOf("m4b", "m4a", "mp4", "m4v", "mov")) return
+        if (item.size <= 0L) return
+        val tailBytes = 8L * 1024 * 1024
+        val start = (item.size - tailBytes).coerceAtLeast(0L)
+        val temp = runCatching {
+            driveOAuthProvider.downloadRangeToCache(item, start, item.size - 1, "tailart")
+        }.getOrNull() ?: return
+        try {
+            val art = runCatching {
+                com.powermediaplayer.util.Mp4CoverTailParser.extractCoverFromBuffer(temp.readBytes())
+            }.getOrNull() ?: return
+            val artUri = ArtworkCache.write(context, stableKey, art) ?: return
+            val override = LocalMetadataOverride(artworkUri = artUri, artworkBytes = art)
+            cache[item.id] = override
+            playbackConnection.setLocalMetadataIfCurrent(override, stableKey)
+            runCatching { lastPlayedRepo.updateArtworkByUri(stableKey, artUri.toString()) }
+            com.powermediaplayer.util.Diag.i(
+                "PowerMediaPlayer",
+                "DriveTagEnricher tailArtFallback: cover ${art.size}B from tail range"
+            )
+        } finally {
+            runCatching { temp.delete() }
         }
     }
 

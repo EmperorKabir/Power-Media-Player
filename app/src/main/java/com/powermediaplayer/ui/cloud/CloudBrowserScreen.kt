@@ -77,6 +77,10 @@ fun CloudBrowserScreen(
     val offlineIds by viewModel.offlineDrivePairs.collectAsStateWithLifecycle()
     val enrichedCovers by viewModel.enrichedCovers.collectAsStateWithLifecycle()
     val savingOffline by viewModel.savingOffline.collectAsStateWithLifecycle()
+    // Favourite-cover reconciliation: converge every favourite to "covered or
+    // confirmed artless" on Cloud entry (self-heals failed/interrupted/evicted
+    // enriches; once per process, silent).
+    androidx.compose.runtime.LaunchedEffect(Unit) { viewModel.sweepFavouriteCovers() }
     // #16 D6 — Drive items being background-enriched after a favourite. Purely
     // informational; never blocks taps/scroll/playback.
     val enrichingIds by viewModel.enrichingIds.collectAsStateWithLifecycle()
@@ -690,6 +694,11 @@ fun CloudBrowserScreen(
                         val isSpotifyAlbum = item.sourceProvider == CloudProviderType.SPOTIFY &&
                             item.isFolder &&
                             (item.mimeType.endsWith("album") || item.mimeType.endsWith("playlist"))
+                        // Browse-time cover peek — self-guarded (audio-only, once per
+                        // item per process, ≤2 concurrent bounded Range fetches).
+                        androidx.compose.runtime.LaunchedEffect(item.id) {
+                            viewModel.peekCoverIfNeeded(item)
+                        }
                         CloudItemRow(
                             item = item,
                             onClick = {
@@ -1064,6 +1073,11 @@ fun CloudBrowserScreen(
                             else -> false
                         }
                         val canFavourite = isDriveFolder || isDriveTrack || isSpotify
+                        // Browse-time cover peek — self-guarded (audio-only, once per
+                        // item per process, ≤2 concurrent bounded Range fetches).
+                        androidx.compose.runtime.LaunchedEffect(item.id) {
+                            viewModel.peekCoverIfNeeded(item)
+                        }
                         CloudItemRow(
                             item = item,
                             isFavourite = isFav,

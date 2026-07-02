@@ -655,7 +655,10 @@ class LastPlayedViewModel @Inject constructor(
                                 downloadUrl = item.mediaUri,
                                 sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
                             ),
-                            item.mediaUri
+                            item.mediaUri,
+                            // Cover row too, so a play from Last Played also lights up
+                            // the Cloud list (state-driven cover pipeline).
+                            writeSearchCache = true
                         )
                     } else if (isRemote) {
                         // Non-Drive remote (rare): keep the best-effort inline

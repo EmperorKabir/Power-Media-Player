@@ -21,4 +21,22 @@ data class EnrichmentCacheEntity(
     val genre: String?,
     val artworkUrl: String?,
     val fetchedAtMs: Long
-)
+) {
+    companion object {
+        /**
+         * Sentinel artworkUrl meaning "this file was fully parsed and CONFIRMED to
+         * carry no embedded cover". Distinguishes 'known artless — never re-fetch'
+         * from 'never attempted / fetch failed — retry later' (artworkUrl == null).
+         * Excluded from observeCovered so it never renders.
+         */
+        const val NO_ART = "noart"
+
+        /** Row written by DriveTagEnricher after a FULL parse — complete evidence
+         *  (tags AND art/no-art), so favourite-enrich never repeats it. */
+        const val PROVIDER_DRIVE_FULL = "drive-fav-tags"
+
+        /** Row written by the browse-time art peek / ArtworkCache backfill — art
+         *  only, no search tags, so favourite-enrich still runs the full parse. */
+        const val PROVIDER_DRIVE_PEEK = "drive-art-peek"
+    }
+}

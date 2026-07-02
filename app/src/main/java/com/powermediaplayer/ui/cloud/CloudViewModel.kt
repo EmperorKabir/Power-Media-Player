@@ -29,8 +29,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 
 data class CloudUiState(
@@ -118,11 +121,21 @@ class CloudViewModel @Inject constructor(
                 emptyMap()
             )
 
-    /** {driveId → extracted cover URI} for enriched favourites, so the Cloud list shows the real
-     *  cover (pulled at favourite time) instead of Drive's unreliable thumbnail or a bare icon. */
+    /** {driveId → extracted cover URI} for enriched items, so the Cloud list shows the real
+     *  cover (pulled at favourite/browse/play time) instead of Drive's unreliable thumbnail or
+     *  a bare icon. Rows whose file:// target was LRU-evicted from ArtworkCache are filtered
+     *  out here (a dangling row must render as the icon, and the sweep re-enriches it). */
     val enrichedCovers: kotlinx.coroutines.flow.StateFlow<Map<String, String>> =
         enrichmentCacheDao.observeCovered()
-            .map { rows -> rows.mapNotNull { r -> r.artworkUrl?.let { r.cacheKey to it } }.toMap() }
+            .map { rows ->
+                rows.mapNotNull { r ->
+                    val url = r.artworkUrl ?: return@mapNotNull null
+                    val alive = !url.startsWith("file:") ||
+                        (android.net.Uri.parse(url).path?.let { java.io.File(it).exists() } == true)
+                    if (alive) r.cacheKey to url else null
+                }.toMap()
+            }
+            .flowOn(Dispatchers.IO)
             .stateIn(
                 viewModelScope,
                 kotlinx.coroutines.flow.SharingStarted.Eagerly,
@@ -579,10 +592,27 @@ class CloudViewModel @Inject constructor(
     private fun maybeEnrichFavourite(item: CloudMediaItem) {
         val id = item.id
         viewModelScope.launch(Dispatchers.IO) {
-            val alreadyEnriched = runCatching {
-                playbackHistoryDao.countDriveRow(item.downloadUrl) > 0 ||
-                    enrichmentCacheDao.get(id) != null
-            }.getOrDefault(false)
+            // Backfill first: an earlier PLAY already wrote the cover bytes to the
+            // durable ArtworkCache (keyed by downloadUrl) — surface them with zero
+            // network by writing the missing enrichment row. This is what fixes the
+            // played-before-favourited case (G1): the old skip trusted the history
+            // row as "already enriched" although play-time enrichment never wrote
+            // the row the Cloud list reads covers from.
+            val row = runCatching { enrichmentCacheDao.get(id) }.getOrNull()
+            if (row?.artworkUrl == null) {
+                com.powermediaplayer.util.ArtworkCache
+                    .uriFor(context, item.downloadUrl)
+                    ?.let { writeArtRow(id, row, it.toString()) }
+            }
+            // Skip ONLY on real evidence: a row written by the FULL enricher parse
+            // (tags AND art-or-confirmed-no-art). A peek/backfill row (art only, no
+            // search tags) still gets the full parse so #16 search keeps working; a
+            // legacy artless row (artworkUrl null) retries once and converges to
+            // art or the NO_ART sentinel.
+            val fresh = runCatching { enrichmentCacheDao.get(id) }.getOrNull()
+            val alreadyEnriched = fresh != null && fresh.artworkUrl != null &&
+                fresh.provider ==
+                com.powermediaplayer.data.db.entity.EnrichmentCacheEntity.PROVIDER_DRIVE_FULL
             val offlinePath = runCatching { offlineCopyDao.get(id)?.localPath }.getOrNull()
             val inFlight = !enrichInFlight.add(id)
             val plan = com.powermediaplayer.cloud.FavouriteEnrichPlanner.plan(
@@ -612,6 +642,158 @@ class CloudViewModel @Inject constructor(
                     _enrichingIds.update { it - id }
                 }
             )
+        }
+    }
+
+    /** Upsert an art-only enrichment row for [id], preserving any existing search
+     *  tags. Marked PEEK unless the existing row already came from the full parse. */
+    private suspend fun writeArtRow(
+        id: String,
+        existing: com.powermediaplayer.data.db.entity.EnrichmentCacheEntity?,
+        artUrl: String
+    ) {
+        runCatching {
+            enrichmentCacheDao.put(
+                com.powermediaplayer.data.db.entity.EnrichmentCacheEntity(
+                    cacheKey = id,
+                    provider = existing?.provider
+                        ?: com.powermediaplayer.data.db.entity
+                            .EnrichmentCacheEntity.PROVIDER_DRIVE_PEEK,
+                    title = existing?.title, artist = existing?.artist,
+                    album = existing?.album, year = existing?.year,
+                    genre = existing?.genre,
+                    artworkUrl = artUrl,
+                    fetchedAtMs = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    private val favouriteSweepDone = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Reconciliation sweep — the favourite-art pipeline is state-driven, not
+     * event-driven: whatever a tap's timing was (favourited mid-load, fetch died on
+     * bad network, cover LRU-evicted), the next Cloud visit converges every
+     * favourite to "covered or confirmed artless". Once per process; silent.
+     */
+    fun sweepFavouriteCovers() {
+        if (!favouriteSweepDone.compareAndSet(false, true)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val favs = runCatching { settingsDataStore.driveFavouriteTracks.first() }
+                .getOrNull() ?: return@launch
+            for (fav in favs) {
+                val row = runCatching { enrichmentCacheDao.get(fav.id) }.getOrNull()
+                val art = row?.artworkUrl
+                val fileGone = art != null &&
+                    art != com.powermediaplayer.data.db.entity.EnrichmentCacheEntity.NO_ART &&
+                    art.startsWith("file:") &&
+                    android.net.Uri.parse(art).path?.let { !java.io.File(it).exists() } == true
+                if (row != null && art != null && !fileGone) continue
+                if (fileGone) {
+                    // Clear the dangling pointer so the skip logic re-enriches.
+                    runCatching { enrichmentCacheDao.put(row!!.copy(artworkUrl = null)) }
+                }
+                // SAF content:// favourites have no REST metadata endpoint; their
+                // covers come from the play/download paths instead.
+                if (fav.id.startsWith("content://")) continue
+                val item = runCatching { driveOAuthProvider.getFileMetadata(fav.id) }
+                    .getOrNull() ?: continue
+                maybeEnrichFavourite(item)
+            }
+        }
+    }
+
+    // ── Browse-time cover peek: any listed audio file shows its real embedded ──
+    // cover, downloaded or not, favourited or not (bounded Range fetches).
+    private val peekAttempted =
+        java.util.Collections.synchronizedSet(HashSet<String>())
+    private val peekSemaphore = Semaphore(2)
+
+    /**
+     * Extract and persist the embedded cover for a listed (not downloaded, not
+     * necessarily favourited) Drive audio file. Bounded: a 4 MB head Range fetch
+     * (ID3/FLAC/faststart-MP4 art lives at the start), then for MP4-family files an
+     * 8 MB tail Range fetch (moov-at-end `covr`). At most 2 in flight; one attempt
+     * per item per process; the outcome is persisted (cover URI or the NO_ART
+     * sentinel) so future sessions skip the network entirely. A FAILED fetch
+     * persists nothing — it stays retryable via the sweep/favourite/play paths.
+     */
+    fun peekCoverIfNeeded(item: CloudMediaItem) {
+        if (item.isFolder || item.sourceProvider != CloudProviderType.GOOGLE_DRIVE) return
+        if (item.id.startsWith("content://")) return // SAF: no Range API; covered on play/download
+        if (com.powermediaplayer.util.MediaClassifier.isVideoByName(item.name, item.mimeType)) return
+        if (enrichedCovers.value.containsKey(item.id)) return
+        if (!peekAttempted.add(item.id)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val row = runCatching { enrichmentCacheDao.get(item.id) }.getOrNull()
+            if (row?.artworkUrl != null) return@launch // covered or confirmed artless
+            if (runCatching { offlineCopyDao.get(item.id)?.localPath }.getOrNull() != null) {
+                return@launch // row renders the local copy's own embedded art already
+            }
+            // Free path: a prior play left the cover in the durable ArtworkCache.
+            com.powermediaplayer.util.ArtworkCache.uriFor(context, item.downloadUrl)?.let {
+                writeArtRow(item.id, row, it.toString())
+                return@launch
+            }
+            peekSemaphore.withPermit {
+                when (val peek = peekEmbeddedArt(item)) {
+                    is PeekResult.Found -> {
+                        val uri = com.powermediaplayer.util.ArtworkCache
+                            .write(context, item.downloadUrl, peek.bytes)
+                        if (uri != null) writeArtRow(item.id, row, uri.toString())
+                    }
+                    PeekResult.NoArt -> writeArtRow(
+                        item.id, row,
+                        com.powermediaplayer.data.db.entity.EnrichmentCacheEntity.NO_ART
+                    )
+                    PeekResult.FetchFailed -> Unit // retryable — write nothing
+                }
+            }
+        }
+    }
+
+    private sealed interface PeekResult {
+        data class Found(val bytes: ByteArray) : PeekResult
+        object NoArt : PeekResult
+        object FetchFailed : PeekResult
+    }
+
+    private suspend fun peekEmbeddedArt(item: CloudMediaItem): PeekResult {
+        val headBytes = 4L * 1024 * 1024
+        val head = runCatching {
+            driveOAuthProvider.downloadRangeToCache(item, 0L, headBytes - 1, "peekhead")
+        }.getOrNull() ?: return PeekResult.FetchFailed
+        try {
+            val art = runCatching {
+                android.media.MediaMetadataRetriever().use { mmr ->
+                    mmr.setDataSource(head.path)
+                    mmr.embeddedPicture
+                }
+            }.getOrNull()
+            if (art != null && art.isNotEmpty()) return PeekResult.Found(art)
+        } finally {
+            runCatching { head.delete() }
+        }
+        // Start-of-file formats are settled by the head; only MP4-family files can
+        // still hide their cover in a moov at the END of the file.
+        val ext = item.name.substringAfterLast('.', "").lowercase()
+        if (ext !in setOf("m4b", "m4a", "mp4", "m4v", "mov")) return PeekResult.NoArt
+        if (item.size in 1..headBytes) return PeekResult.NoArt // whole file was in the head
+        if (item.size <= 0L) return PeekResult.NoArt // unknown size: no tail Range possible
+        val tailBytes = 8L * 1024 * 1024
+        val start = (item.size - tailBytes).coerceAtLeast(0L)
+        val tail = runCatching {
+            driveOAuthProvider.downloadRangeToCache(item, start, item.size - 1, "peektail")
+        }.getOrNull() ?: return PeekResult.FetchFailed
+        return try {
+            val art = runCatching {
+                com.powermediaplayer.util.Mp4CoverTailParser
+                    .extractCoverFromBuffer(tail.readBytes())
+            }.getOrNull()
+            if (art != null) PeekResult.Found(art) else PeekResult.NoArt
+        } finally {
+            runCatching { tail.delete() }
         }
     }
 
@@ -1521,7 +1703,7 @@ class CloudViewModel @Inject constructor(
                 } else if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE &&
                     !item.isFolder
                 ) {
-                    driveTagEnricher.enrich(viewModelScope, item, stableKey)
+                    driveTagEnricher.enrich(viewModelScope, item, stableKey, writeSearchCache = true)
                 }
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
@@ -1624,7 +1806,7 @@ class CloudViewModel @Inject constructor(
             // when we already have this item's tags cached this session.
             if (item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder &&
                 cachedEnriched == null) {
-                driveTagEnricher.enrich(viewModelScope, item, stableKey)
+                driveTagEnricher.enrich(viewModelScope, item, stableKey, writeSearchCache = true)
             }
             maybePrefetchNextCloud(item)
         }
@@ -1656,7 +1838,9 @@ class CloudViewModel @Inject constructor(
             } ?: return@launch
             val nextKey = next.downloadUrl.ifEmpty { next.id }
             com.powermediaplayer.util.Diag.i("PMP_DIAG", "prefetch next cloud tags: ${next.name}")
-            driveTagEnricher.enrich(viewModelScope, next, nextKey, silent = true)
+            driveTagEnricher.enrich(
+                viewModelScope, next, nextKey, silent = true, writeSearchCache = true
+            )
         }
     }
 

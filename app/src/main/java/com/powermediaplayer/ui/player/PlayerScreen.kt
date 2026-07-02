@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.ui.player.components.*
@@ -1663,7 +1664,9 @@ private fun TrackInfoSection(
         firstShow(uiState.title)
         FrostedTextLine(
             text = uiState.title,
-            style = MaterialTheme.typography.headlineSmall,
+            // +1sp on the 24sp headlineSmall (user-requested "tiny bit" bump);
+            // lineHeight stays 32sp (> 1.2x ratio) so nothing clips at any scale.
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 25.sp),
             frost = coverFrost,
             enabled = frostEnabled,
             palette = coverColors,
@@ -1690,7 +1693,8 @@ private fun TrackInfoSection(
             Spacer(modifier = Modifier.height(2.dp))
             FrostedTextLine(
                 text = uiState.album,
-                style = MaterialTheme.typography.bodyMedium,
+                // +1sp on the 14sp bodyMedium; hierarchy stays 25 > 16 > 15 > 12.
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                 frost = coverFrost,
                 enabled = frostEnabled,
                 palette = coverColors,
@@ -1742,16 +1746,24 @@ private fun TrackInfoSection(
         // Audio format indicator — codec + channel layout + sample rate.
         // Visible for both audio and video tracks (most films have a
         // separate audio track and the user often cares about whether
-        // they're getting Atmos vs stereo downmix).
+        // they're getting Atmos vs stereo downmix). In the same frosted-pill
+        // system as the other metadata lines (it was the only un-pilled line,
+        // and its plain grey text vanished against bright covers); labelMedium
+        // (12sp) with tightened padding keeps it the smallest, quietest pill.
         if (uiState.audioFormatLabel.isNotEmpty()) {
             Spacer(modifier = Modifier.height(4.dp))
-            Text(
+            FrostedTextLine(
                 text = uiState.audioFormatLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = TextTertiary,
-                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.labelMedium,
+                frost = coverFrost,
+                enabled = frostEnabled,
+                palette = coverColors,
+                hasCover = uiState.hasCoverArt,
+                isVideo = uiState.isVideoContent,
+                baseColor = TextTertiary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                padHorizontal = 10f,
+                padVertical = 4f
             )
         }
         if (uiState.description.isNotEmpty()) {

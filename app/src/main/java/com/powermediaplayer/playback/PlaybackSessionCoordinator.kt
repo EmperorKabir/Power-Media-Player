@@ -873,7 +873,10 @@ class PlaybackSessionCoordinator @Inject constructor(
                                     sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
                                 ),
                                 recent.mediaUri,
-                                silent = true
+                                silent = true,
+                                // Cover row too, so the cold-start heal also lights up
+                                // the Cloud list (state-driven cover pipeline).
+                                writeSearchCache = true
                             )
                         }
                     }.onFailure { t ->
