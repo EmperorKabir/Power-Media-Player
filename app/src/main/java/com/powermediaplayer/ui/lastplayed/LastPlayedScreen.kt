@@ -288,7 +288,9 @@ fun LastPlayedScreen(
                                 album = album,
                                 tracksProvider = { viewModel.observePinnedAlbumTracks(album.id) },
                                 onPlayTrack = { trackUri, title ->
-                                    viewModel.playAlbumTrack(trackUri, title, album.artist)
+                                    viewModel.playAlbumTrack(
+                                        trackUri, title, album.artist, album.title, album.artworkUri
+                                    )
                                     onNavigateToPlayer()
                                 },
                                 onUnpin = { viewModel.unpinAlbum(album.id) }

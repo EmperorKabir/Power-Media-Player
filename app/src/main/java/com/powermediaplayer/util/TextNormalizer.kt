@@ -100,9 +100,12 @@ object TextNormalizer {
             .trim()
     }
 
-    // A media file extension at the very end of the string.
+    // A media file extension at the very end of the string. DERIVED from
+    // MediaClassifier.RAW_MEDIA_EXTENSIONS so cleanFileTitle strips EXACTLY the
+    // extensions looksLikeRawMediaFilename flags — otherwise a flagged-but-
+    // unstripped ext (e.g. .mpg) loops the raw-filename heal and shows "Name.ext".
     private val MEDIA_EXT = Regex(
-        "\\.(m4b|m4a|mp3|aac|flac|ogg|oga|opus|wav|wma|mp4|m4v|mkv|webm|avi|mov|3gp|ts)$",
+        "\\.(" + MediaClassifier.RAW_MEDIA_EXTENSIONS.joinToString("|") + ")$",
         RegexOption.IGNORE_CASE
     )
     // A 10-char bracketed token — Amazon/Audible ASIN shape (e.g. "[B00U7UVOTY]").

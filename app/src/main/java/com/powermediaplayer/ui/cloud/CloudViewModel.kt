@@ -438,7 +438,12 @@ class CloudViewModel @Inject constructor(
                 val cleanRow = if (com.powermediaplayer.util.MediaClassifier
                         .looksLikeRawMediaFilename(item.name))
                     lastPlayedRepo.cleanRowForUri(uri) else null
-                val title = cleanRow?.title ?: item.name
+                // Clean the filename before it's PERSISTED, not just displayed: a
+                // raw "…[ASIN].m4b" stored here seeds cold-start resume before the
+                // enricher heals the row. cleanFileTitle is idempotent on an already
+                // clean name, so this is safe when looksLikeRaw was false.
+                val title = cleanRow?.title
+                    ?: com.powermediaplayer.util.TextNormalizer.cleanFileTitle(item.name)
                 // Carry the clean author too (the source label is only a pre-enrich
                 // placeholder); a clean sibling already has the real author.
                 val subtitle = cleanRow?.subtitle?.takeIf {
@@ -1595,13 +1600,15 @@ class CloudViewModel @Inject constructor(
             val cachedEnriched = driveTagEnricher.cached(item.id)
             playbackConnection.setLocalMetadata(
                 cachedEnriched ?: LocalMetadataOverride(
-                    // Don't pin a raw filename over ExoPlayer's own parsed moov title:
-                    // streaming parses the real title (+ covr cover) in seconds, but any
-                    // non-blank override title outranks it — so the raw "…[ID].m4b" would
-                    // show for the whole enrich window. Null for a raw filename lets the
-                    // parsed title through immediately; the enricher heals the durable copy
-                    // later. (Drive's black audio thumb is now nulled at the provider, so
-                    // artworkUri no longer masks the parsed cover either.)
+                    // Don't pin a RAW filename as the override title — a non-blank override
+                    // title outranks every lower layer, so "…[ID].m4b" would show for the
+                    // whole enrich window. Nulling it for a raw name lets the item's OWN
+                    // CLEANED title show meanwhile (set on the MediaItem via cleanFileTitle);
+                    // the enricher then lands the real moov title into the override + cache.
+                    // (The live stream-parsed title is deliberately NOT surfaced here — the
+                    // cleaned-filename layer outranks it, to avoid Media3 sticky-title bleed.)
+                    // Drive's black audio thumb is nulled at the provider, so artworkUri is
+                    // null for audio and no longer masks the real cover.
                     title = item.name.takeUnless {
                         com.powermediaplayer.util.MediaClassifier.looksLikeRawMediaFilename(it)
                     },

@@ -32,6 +32,15 @@ object MediaClassifier {
         "wmv", "flv", "mpg", "mpeg"
     )
 
+    /**
+     * Every extension that marks a title as a RAW media filename (audio + video
+     * containers). TextNormalizer.cleanFileTitle DERIVES its strip-regex from
+     * THIS set, so the flag-set and the strip-set can never drift — a file whose
+     * ext is flagged here but not stripped there would loop the raw-filename heal
+     * forever (e.g. was the case for .mpg/.wmv/.ape/.aiff/.m4p before this).
+     */
+    val RAW_MEDIA_EXTENSIONS: Set<String> = AUDIO_EXTENSIONS + VIDEO_CONTAINER_EXTENSIONS
+
     /** Lower-cased file extension after the last dot, or "" when none. */
     private fun extOf(name: String): String =
         name.substringAfterLast('.', "").lowercase()
@@ -52,7 +61,7 @@ object MediaClassifier {
             .substringBefore('#')
             .substringAfterLast('.', "")
             .lowercase()
-        return ext in AUDIO_EXTENSIONS || ext in VIDEO_CONTAINER_EXTENSIONS
+        return ext in RAW_MEDIA_EXTENSIONS
     }
 
     /**

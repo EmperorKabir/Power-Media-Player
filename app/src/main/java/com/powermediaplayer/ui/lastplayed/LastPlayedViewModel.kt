@@ -164,7 +164,13 @@ class LastPlayedViewModel @Inject constructor(
 
     /** Tap a pinned-album track → play that single file. Reuses the
      *  same MediaItem build path as playLocalAt for chapters parsing. */
-    fun playAlbumTrack(trackUri: String, title: String, artist: String = "") {
+    fun playAlbumTrack(
+        trackUri: String,
+        title: String,
+        artist: String = "",
+        album: String = "",
+        artworkUri: String? = null
+    ) {
         val uri = runCatching { Uri.parse(trackUri) }.getOrNull() ?: return
         viewModelScope.launch {
             // vc32: parse-bearing path — token so a newer play
@@ -188,10 +194,18 @@ class LastPlayedViewModel @Inject constructor(
                         .setMediaMetadata(
                             androidx.media3.common.MediaMetadata.Builder()
                                 .setTitle(com.powermediaplayer.util.TextNormalizer.cleanFileTitle(title))
-                                // Carry the pinned-album artist on the item's OWN metadata so a
-                                // title-only track (no embedded cover to gate the parsed fallback,
-                                // e.g. a bare MP3) still shows its artist without risking a sticky bleed.
-                                .apply { if (artist.isNotBlank()) setArtist(artist) }
+                                // Carry the pinned-album artist + album + cover URI on the item's OWN
+                                // metadata so a title-only track still shows them: a bare MP3 has no
+                                // embedded cover to open the parsed-metadata gate (artist/album), and a
+                                // 2nd+ track that shares ONE byte-identical cover is indistinguishable
+                                // from Media3's sticky carry-over so its cover bytes get suppressed. An
+                                // explicit per-item URI sidesteps both without risking a sticky bleed.
+                                .apply {
+                                    if (artist.isNotBlank()) setArtist(artist)
+                                    if (album.isNotBlank()) setAlbumTitle(album)
+                                    artworkUri?.takeIf { it.isNotBlank() }
+                                        ?.let { setArtworkUri(Uri.parse(it)) }
+                                }
                                 .setExtras(chapterExtras)
                                 .build()
                         )
@@ -704,7 +718,10 @@ class LastPlayedViewModel @Inject constructor(
                 val cleanRow = if (com.powermediaplayer.util.MediaClassifier
                         .looksLikeRawMediaFilename(item.title))
                     repo.cleanRowForUri(item.mediaUri) else null
-                val recordTitle = cleanRow?.title ?: item.title
+                // Clean before PERSISTING (not just displaying) so the stored seed
+                // is never dirtier than the display; idempotent on an already-clean title.
+                val recordTitle = cleanRow?.title
+                    ?: com.powermediaplayer.util.TextNormalizer.cleanFileTitle(item.title)
                 val recordSubtitle = cleanRow?.subtitle?.takeIf { it.isNotBlank() } ?: item.subtitle
                 repo.recordPlay(
                     com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
