@@ -114,4 +114,25 @@ class Mp4CoverTailParserTest {
         val moov = box("moov", metaBox(box("ilst", box("covr", dataBox(jpeg)))))
         assertArrayEquals(jpeg, Mp4CoverTailParser.extractCoverFromBuffer(moov))
     }
+
+    @Test
+    fun bareQuickTimeMetaWithoutVersionWordAlsoWorks() {
+        // QuickTime .mov writes meta with NO 4-byte version/flags word — the
+        // children start immediately after the header.
+        val bareMeta = box("meta", box("ilst", box("covr", dataBox(jpeg))))
+        val moov = box("moov", box("udta", bareMeta))
+        assertArrayEquals(jpeg, Mp4CoverTailParser.extractCoverFromBuffer(moov))
+    }
+
+    @Test
+    fun dataBoxSmallerThanItsOwnHeaderRejected() {
+        // A 'data' box whose size (12) is less than header+type+locale (16) must
+        // yield a negative length and be rejected, never crash.
+        val badData = ByteArray(12).also {
+            it[3] = 12
+            "data".toByteArray(Charsets.ISO_8859_1).copyInto(it, 4)
+        }
+        val moov = box("moov", box("udta", metaBox(box("ilst", box("covr", badData)))))
+        assertNull(Mp4CoverTailParser.extractCoverFromBuffer(moov))
+    }
 }

@@ -42,6 +42,12 @@ class DriveTagEnricher @Inject constructor(
      *  (cast-return, re-tap) restores them instantly with no re-download. */
     private val cache = java.util.concurrent.ConcurrentHashMap<String, LocalMetadataOverride>()
 
+    private companion object {
+        /** Size of the head-range attempt (mirrors downloadToCache): a file at or
+         *  under this was parsed IN FULL by the head attempt. */
+        const val HEAD_WINDOW_BYTES = 32L * 1024 * 1024
+    }
+
     fun cached(id: String): LocalMetadataOverride? = cache[id]
 
     /**
@@ -76,7 +82,11 @@ class DriveTagEnricher @Inject constructor(
             // the in-process cache, still write the row (a favourite tapped while
             // its first play is loading must not silently lose its cover row).
             if (!ChapterCache.shared.markFilling(stableKey)) {
-                if (writeSearchCache) cache[item.id]?.let { ov -> writeSearchRow(item.id, ov) }
+                // PEEK grade: this bail cannot know whether the prior parse was
+                // complete; the in-flight enrich writes its own graded row.
+                if (writeSearchCache) {
+                    cache[item.id]?.let { ov -> writeSearchRow(item.id, ov, complete = false) }
+                }
                 return@launch
             }
             // setCloudFetchInProgress INSIDE the try so the finally's
@@ -86,6 +96,12 @@ class DriveTagEnricher @Inject constructor(
                 if (!silent) playbackConnection.setCloudFetchInProgress(true)
                 val isSaf = item.id.startsWith("content://")
                 var found = false
+                // Evidence grade: the durable PROVIDER_DRIVE_FULL / NO_ART verdict
+                // may be written ONLY after a COMPLETE copy was parsed (offline
+                // copy, full download, or a file that fits inside the 32 MB head).
+                // A partial parse or failed transfer is NOT evidence of artlessness
+                // — those write PEEK-grade art or nothing, staying retryable.
+                var completeParsed = false
                 // §C28 — REUSE an existing offline copy first: no re-download, works
                 // with no network, and avoids a second copy of a file already saved.
                 val offlinePath = runCatching { offlineCopyDao.get(item.id)?.localPath }.getOrNull()
@@ -98,48 +114,54 @@ class DriveTagEnricher @Inject constructor(
                             else -> java.io.File(offUri.path ?: offlinePath).exists()
                         }
                     }.getOrDefault(false)
-                    if (readable) found = parseAndApply(item, offUri, stableKey)
+                    if (readable) {
+                        found = parseAndApply(item, offUri, stableKey)
+                        // A readable offline copy IS the complete file: its parse is
+                        // final evidence even when artless — never re-download what
+                        // already sits on disk.
+                        completeParsed = true
+                    }
                 }
-                // Track whether a real local copy was PARSED (vs downloads failing):
-                // a completed parse that finds nothing is a durable "no art" answer;
-                // a failed download must stay retryable (no row written).
-                var parseRan = found
-                var temp = if (found) null else try {
+                var temp = if (completeParsed) null else try {
                     if (isSaf) driveProvider.downloadToCache(item)
                     else driveOAuthProvider.downloadToCache(item)
                 } catch (_: Throwable) { null }
                 if (temp != null) {
-                    parseRan = true
                     found = parseAndApply(item, android.net.Uri.fromFile(temp), stableKey)
+                    // The head window IS the whole file for anything at or under it.
+                    if (item.size in 1..HEAD_WINDOW_BYTES) completeParsed = true
                     runCatching { temp.delete() }
                 }
-                if (!found) {
+                if (!found && !completeParsed) {
                     temp = try {
                         if (isSaf) driveProvider.downloadFullToCache(item)
                         else driveOAuthProvider.downloadFullToCache(item)
                     } catch (_: Throwable) { null }
                     if (temp != null) {
-                        parseRan = true
+                        completeParsed = true
                         parseAndApply(item, android.net.Uri.fromFile(temp), stableKey)
                         runCatching { temp.delete() }
                     } else if (!isSaf) {
                         // Full download unavailable (>4 GB cap or transfer failure)
                         // — a bounded tail Range fetch can still recover the COVER
-                        // (moov/…/covr sits in the tail for moov-at-end files).
-                        // Tags/chapters stay unavailable; art alone beats nothing.
+                        // (moov/…/covr sits in the tail for moov-at-end files). The
+                        // resulting row stays PEEK-grade (completeParsed = false),
+                        // so tags/chapters are retried by a later favourite/play.
                         tailArtFallback(item, stableKey)
                     }
                 }
                 // #16 — store extracted tags in enrichment_cache (favourite-enrich)
                 // so a never-played item is searchable by author/series and its
-                // cover shows in the Cloud list. cache[item.id] was populated by
-                // parseAndApply/tailArtFallback when anything was found; a parsed-
-                // but-empty file gets the durable NO_ART row (no re-fetch loops).
+                // cover shows in the Cloud list. Grading: a COMPLETE parse writes
+                // the durable FULL row (art or the NO_ART verdict); a partial parse
+                // writes PEEK-grade art only; failed transfers write NOTHING so the
+                // sweep / next favourite / next play retries.
                 if (writeSearchCache) {
                     val ov = cache[item.id]
                     when {
-                        ov != null -> writeSearchRow(item.id, ov)
-                        parseRan -> writeSearchRow(item.id, LocalMetadataOverride())
+                        ov != null -> writeSearchRow(item.id, ov, complete = completeParsed)
+                        completeParsed ->
+                            writeSearchRow(item.id, LocalMetadataOverride(), complete = true)
                     }
                 }
             } finally {
@@ -153,19 +175,31 @@ class DriveTagEnricher @Inject constructor(
         }
     }
 
-    /** Upsert the enrichment_cache row for [id] from [ov]. A null artworkUri means
-     *  the parse COMPLETED and found no cover → the durable NO_ART sentinel, so the
-     *  browse/favourite paths stop re-fetching a confirmed-artless file. */
-    private suspend fun writeSearchRow(id: String, ov: LocalMetadataOverride) {
+    /**
+     * Upsert the enrichment_cache row for [id] from [ov], graded by evidence:
+     * [complete] = a COMPLETE copy was parsed, so a missing cover is the durable
+     * NO_ART verdict and the row is PROVIDER_DRIVE_FULL (never re-parsed). A
+     * partial parse ([complete] = false) may only contribute PEEK-grade art —
+     * with no art there is nothing durable to say, so no row is written and the
+     * item stays retryable (a transient failure must never masquerade as
+     * "confirmed artless").
+     */
+    private suspend fun writeSearchRow(id: String, ov: LocalMetadataOverride, complete: Boolean) {
+        val art = ov.artworkUri?.toString()
+        if (!complete && art == null) return
         runCatching {
             enrichmentCacheDao.put(
                 com.powermediaplayer.data.db.entity.EnrichmentCacheEntity(
                     cacheKey = id,
-                    provider = com.powermediaplayer.data.db.entity
-                        .EnrichmentCacheEntity.PROVIDER_DRIVE_FULL,
+                    provider = if (complete)
+                        com.powermediaplayer.data.db.entity
+                            .EnrichmentCacheEntity.PROVIDER_DRIVE_FULL
+                    else
+                        com.powermediaplayer.data.db.entity
+                            .EnrichmentCacheEntity.PROVIDER_DRIVE_PEEK,
                     title = ov.title, artist = ov.artist, album = ov.album,
                     year = null, genre = null,
-                    artworkUrl = ov.artworkUri?.toString()
+                    artworkUrl = art
                         ?: com.powermediaplayer.data.db.entity.EnrichmentCacheEntity.NO_ART,
                     fetchedAtMs = System.currentTimeMillis()
                 )

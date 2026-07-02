@@ -48,16 +48,22 @@ object Mp4CoverTailParser {
             // 64-bit largesize / to-end boxes are legal MP4 but never used for the
             // small metadata containers we walk; treat as structural mismatch.
             if (size < 8L || off + size > end) throw IllegalStateException("bad child box")
-            val childPayloadStart = when (type) {
-                // meta carries a 4-byte version/flags word before its children.
-                "meta" -> off + 12
-                else -> off + 8
-            }
             val childEnd = (off + size).toInt()
             when (type) {
-                "udta", "meta", "ilst" -> {
-                    if (childPayloadStart < childEnd) {
-                        walkChildren(buf, childPayloadStart, childEnd)?.let { return it }
+                "udta", "ilst" -> {
+                    if (off + 8 < childEnd) {
+                        walkChildren(buf, off + 8, childEnd)?.let { return it }
+                    }
+                }
+                "meta" -> {
+                    // ISO/iTunes meta carries a 4-byte version/flags word before its
+                    // children; QuickTime .mov writes a BARE meta without one. Try
+                    // both layouts, each locally contained so a misparse of one
+                    // offset cannot abort the whole moov candidate.
+                    for (payloadStart in intArrayOf(off + 12, off + 8)) {
+                        if (payloadStart >= childEnd) continue
+                        runCatching { walkChildren(buf, payloadStart, childEnd) }
+                            .getOrNull()?.let { return it }
                     }
                 }
                 "covr" -> extractDataPayload(buf, off + 8, childEnd)?.let { return it }

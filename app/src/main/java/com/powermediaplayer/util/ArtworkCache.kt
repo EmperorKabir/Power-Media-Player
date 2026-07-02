@@ -65,8 +65,12 @@ object ArtworkCache {
     }
 
     /** #3 — cover art was unbounded (600 KB-1 MB each, no cap). LRU-trim to this
-     *  budget on every write so the cacheDir footprint can't grow without limit. */
-    const val CAP_BYTES: Long = 32L * 1024 * 1024 // 32 MB ≈ 32-50 covers
+     *  budget on every write so the filesDir footprint can't grow without limit.
+     *  Raised 32→256 MB for the browse-time cover peek: a large Drive folder can
+     *  legitimately hold hundreds of covers, and a 32 MB cap evicted most of them
+     *  DURING the browse (then favourite-sweep churn re-downloaded full files to
+     *  restore evicted favourite art). 256 MB ≈ 250-400 covers. */
+    const val CAP_BYTES: Long = 256L * 1024 * 1024
 
     /** #3 — delete the cached cover for [key] (called on offline-remove so the
      *  600 KB-1 MB file doesn't orphan in cacheDir until the OS evicts it). */

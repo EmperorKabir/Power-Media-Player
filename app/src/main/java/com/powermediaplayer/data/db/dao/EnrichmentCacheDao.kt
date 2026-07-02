@@ -20,11 +20,12 @@ interface EnrichmentCacheDao {
     @Query("SELECT COUNT(*) FROM enrichment_cache")
     suspend fun count(): Int
 
-    /** Every enriched row that carries a REAL cover (the 'noart' confirmed-artless
-     *  sentinel is excluded), so an enriched Drive item can show its extracted cover
-     *  in the Cloud list even before the full file is downloaded. */
+    /** Every enriched row that carries a REAL cover (the confirmed-artless sentinel
+     *  is excluded), so an enriched Drive item can show its extracted cover in the
+     *  Cloud list even before the full file is downloaded. */
     @Query(
-        "SELECT * FROM enrichment_cache WHERE artworkUrl IS NOT NULL AND artworkUrl != 'noart'"
+        "SELECT * FROM enrichment_cache WHERE artworkUrl IS NOT NULL " +
+            "AND artworkUrl != '${EnrichmentCacheEntity.NO_ART}'"
     )
     fun observeCovered(): kotlinx.coroutines.flow.Flow<List<EnrichmentCacheEntity>>
 
