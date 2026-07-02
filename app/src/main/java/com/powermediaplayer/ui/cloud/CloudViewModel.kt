@@ -835,9 +835,13 @@ class CloudViewModel @Inject constructor(
         }
         if (item.size <= 0L) return PeekResult.Inconclusive // no size → no tail Range
         // The 8 MB tail is the expensive half of the peek: on METERED networks skip
-        // it and stay inconclusive (retries on an unmetered session). The user's
-        // no-gate directive applies to FAVOURITE enrichment, which stays ungated.
-        if (isMeteredNetwork()) return PeekResult.Inconclusive
+        // it and stay inconclusive (retries on an unmetered session) UNLESS the user
+        // opted in via Settings ("Download cover art on mobile data" — Android flags
+        // cellular metered regardless of the plan, so unlimited-plan users need the
+        // toggle). The no-gate directive for FAVOURITE enrichment is unaffected.
+        if (isMeteredNetwork() &&
+            !runCatching { settingsDataStore.coverArtOnMobileData.first() }.getOrDefault(false)
+        ) return PeekResult.Inconclusive
         val tailBytes = 8L * 1024 * 1024
         val start = (item.size - tailBytes).coerceAtLeast(0L)
         val tail = runCatching {

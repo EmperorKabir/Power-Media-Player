@@ -127,6 +127,9 @@ class SettingsDataStore @Inject constructor(
         val CROSSFADE_MS = intPreferencesKey("crossfade_ms")
         val RESUME_ON_BT = booleanPreferencesKey("resume_on_bt")
         val PREFETCH_NEXT_CLOUD = booleanPreferencesKey("prefetch_next_cloud")
+        // Browse-time cover peek: allow the larger tail fetch on metered networks.
+        // Default OFF to protect capped mobile plans; unlimited-plan users opt in.
+        val COVER_ART_ON_MOBILE_DATA = booleanPreferencesKey("cover_art_on_mobile_data")
 
         // Recent search history per search box — single ordered string
         // (U+001F-delimited, most-recent-first) so insertion order survives
@@ -1479,6 +1482,7 @@ class SettingsDataStore @Inject constructor(
     val crossfadeMs: Flow<Int> = context.dataStore.data.map { it[Keys.CROSSFADE_MS] ?: 0 }
     val resumeOnBt: Flow<Boolean> = context.dataStore.data.map { it[Keys.RESUME_ON_BT] ?: false }
     val prefetchNextCloud: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREFETCH_NEXT_CLOUD] ?: true }
+    val coverArtOnMobileData: Flow<Boolean> = context.dataStore.data.map { it[Keys.COVER_ART_ON_MOBILE_DATA] ?: false }
 
     // ── Recent searches (per box, ordered most-recent-first, max 12) ──────────
     private val rsSep = ""
@@ -1531,6 +1535,7 @@ class SettingsDataStore @Inject constructor(
     suspend fun setCrossfadeMs(ms: Int) { context.dataStore.edit { it[Keys.CROSSFADE_MS] = ms } }
     suspend fun setResumeOnBt(v: Boolean) { context.dataStore.edit { it[Keys.RESUME_ON_BT] = v } }
     suspend fun setPrefetchNextCloud(v: Boolean) { context.dataStore.edit { it[Keys.PREFETCH_NEXT_CLOUD] = v } }
+    suspend fun setCoverArtOnMobileData(v: Boolean) { context.dataStore.edit { it[Keys.COVER_ART_ON_MOBILE_DATA] = v } }
 
     val artworkScaleMode: Flow<String> = context.dataStore.data.map {
         // Coerce unknown values back to "fit" so older / corrupt entries

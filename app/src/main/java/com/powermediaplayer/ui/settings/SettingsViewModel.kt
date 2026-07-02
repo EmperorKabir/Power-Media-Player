@@ -38,6 +38,7 @@ data class SettingsUiState(
     val crossfadeMs: Int = 0,
     val resumeOnBt: Boolean = false,
     val prefetchNextCloud: Boolean = true,
+    val coverArtOnMobileData: Boolean = false,
     val reverbPreset: Int = 0,
     val stereoFlip: Boolean = false,
     val monoMix: Boolean = false,
@@ -240,7 +241,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.hueAppKey,
             settingsDataStore.restoreLastOnLaunch,
             settingsDataStore.autoplayOnLaunch,
-            settingsDataStore.castVideoAudioOffsetMs
+            settingsDataStore.castVideoAudioOffsetMs,
+            settingsDataStore.coverArtOnMobileData
         )
     ) { v ->
         SettingsUiState(
@@ -319,7 +321,8 @@ class SettingsViewModel @Inject constructor(
             hueAppKey = v[72] as String,
             restoreLastOnLaunch = v[73] as Boolean,
             autoplayOnLaunch = v[74] as Boolean,
-            castVideoAudioOffsetMs = v[75] as Int
+            castVideoAudioOffsetMs = v[75] as Int,
+            coverArtOnMobileData = v[76] as Boolean
         )
     }
         // vc29.26 — drop duplicate emissions + conflate rapid bursts.
@@ -932,5 +935,6 @@ class SettingsViewModel @Inject constructor(
     fun setCrossfade(ms: Int) = viewModelScope.launch { settingsDataStore.setCrossfadeMs(ms) }.let{}
     fun setResumeOnBt(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnBt(v) }.let{}
     fun setPrefetchNextCloud(v: Boolean) = viewModelScope.launch { settingsDataStore.setPrefetchNextCloud(v) }.let{}
+    fun setCoverArtOnMobileData(v: Boolean) = viewModelScope.launch { settingsDataStore.setCoverArtOnMobileData(v) }.let{}
     fun setArtworkScaleMode(mode: String) = viewModelScope.launch { settingsDataStore.setArtworkScaleMode(mode) }.let{}
 }

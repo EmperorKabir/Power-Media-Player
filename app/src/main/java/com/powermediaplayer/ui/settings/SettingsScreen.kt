@@ -430,7 +430,8 @@ fun SettingsScreen(
             SettingsItem(
                 "cloud", "Cloud",
                 listOf("offline", "storage", "prefetch", "pre-fetch", "buffer", "drive",
-                    "stream", "download", "folder", "podcast", "location")
+                    "stream", "download", "folder", "podcast", "location",
+                    "mobile data", "metered", "cover", "art", "artwork", "thumbnail")
             ) {
                 com.powermediaplayer.ui.settings.OfflineStorageLimitRow()
                 // Part 4.3 — global storage-location pickers + Downloads manager.
@@ -438,6 +439,15 @@ fun SettingsScreen(
                 SettingsToggleItem("Pre-fetch next cloud track",
                     "Buffer the next item in a cloud queue for seamless transition.",
                     Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }
+                SettingsToggleItem("Download cover art on mobile data",
+                    "While you browse cloud files, the app quietly fetches a small piece of " +
+                        "each audio file to find its cover picture. On Wi-Fi it fetches " +
+                        "everything it needs. On mobile data it normally fetches only the " +
+                        "smallest piece and waits for Wi-Fi to get the rest, which protects " +
+                        "capped data plans. Turn this on if your plan is unlimited and you " +
+                        "want full cover art on mobile data as well. Playing, favouriting " +
+                        "and downloading are never restricted by this setting.",
+                    Icons.Filled.CloudDownload, uiState.coverArtOnMobileData) { viewModel.setCoverArtOnMobileData(it) }
             },
             SettingsItem(
                 "backup-restore", "Back up & restore",
