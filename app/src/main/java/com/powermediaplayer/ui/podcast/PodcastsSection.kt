@@ -247,6 +247,10 @@ class PodcastsViewModel @Inject constructor(
     fun downloadEpisode(e: PodcastEpisodeEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             if (_downloading.value.contains(e.guid)) return@launch
+            if (com.powermediaplayer.util.MobileDataPolicy.downloadsBlocked(appContext, settings)) {
+                setStatus(com.powermediaplayer.util.MobileDataPolicy.BLOCKED_MESSAGE)
+                return@launch
+            }
             markDownloading(e.guid, true)
             com.powermediaplayer.util.DownloadProgressBus.label(e.guid, e.title)
             try {
@@ -287,6 +291,10 @@ class PodcastsViewModel @Inject constructor(
 
     fun downloadLatestForShow(feedUrl: String, n: Int) {
         viewModelScope.launch(Dispatchers.IO) {
+            if (com.powermediaplayer.util.MobileDataPolicy.downloadsBlocked(appContext, settings)) {
+                setStatus(com.powermediaplayer.util.MobileDataPolicy.BLOCKED_MESSAGE)
+                return@launch
+            }
             val show = podcastDao.getShow(feedUrl) ?: return@launch
             val global = settings.podcastDownloadTreeUri.first().ifBlank { null }
             val budget = if (n > 0) n else 5

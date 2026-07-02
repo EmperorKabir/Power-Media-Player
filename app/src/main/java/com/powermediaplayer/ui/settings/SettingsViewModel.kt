@@ -39,6 +39,7 @@ data class SettingsUiState(
     val resumeOnBt: Boolean = false,
     val prefetchNextCloud: Boolean = true,
     val coverArtOnMobileData: Boolean = false,
+    val downloadFilesOnMobileData: Boolean = true,
     val reverbPreset: Int = 0,
     val stereoFlip: Boolean = false,
     val monoMix: Boolean = false,
@@ -242,7 +243,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.restoreLastOnLaunch,
             settingsDataStore.autoplayOnLaunch,
             settingsDataStore.castVideoAudioOffsetMs,
-            settingsDataStore.coverArtOnMobileData
+            settingsDataStore.coverArtOnMobileData,
+            settingsDataStore.downloadFilesOnMobileData
         )
     ) { v ->
         SettingsUiState(
@@ -322,7 +324,8 @@ class SettingsViewModel @Inject constructor(
             restoreLastOnLaunch = v[73] as Boolean,
             autoplayOnLaunch = v[74] as Boolean,
             castVideoAudioOffsetMs = v[75] as Int,
-            coverArtOnMobileData = v[76] as Boolean
+            coverArtOnMobileData = v[76] as Boolean,
+            downloadFilesOnMobileData = v[77] as Boolean
         )
     }
         // vc29.26 — drop duplicate emissions + conflate rapid bursts.
@@ -936,5 +939,6 @@ class SettingsViewModel @Inject constructor(
     fun setResumeOnBt(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnBt(v) }.let{}
     fun setPrefetchNextCloud(v: Boolean) = viewModelScope.launch { settingsDataStore.setPrefetchNextCloud(v) }.let{}
     fun setCoverArtOnMobileData(v: Boolean) = viewModelScope.launch { settingsDataStore.setCoverArtOnMobileData(v) }.let{}
+    fun setDownloadFilesOnMobileData(v: Boolean) = viewModelScope.launch { settingsDataStore.setDownloadFilesOnMobileData(v) }.let{}
     fun setArtworkScaleMode(mode: String) = viewModelScope.launch { settingsDataStore.setArtworkScaleMode(mode) }.let{}
 }

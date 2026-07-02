@@ -36,7 +36,8 @@ class DriveTagEnricher @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val lastPlayedRepo: LastPlayedRepository,
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
-    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore
 ) {
     /** Tags already extracted this process, keyed by Drive file id — a re-open
      *  (cast-return, re-tap) restores them instantly with no re-download. */
@@ -122,7 +123,22 @@ class DriveTagEnricher @Inject constructor(
                         completeParsed = true
                     }
                 }
-                var temp = if (completeParsed) null else try {
+                // Settings, Cloud, "Download files on mobile data": when off on a
+                // metered network, skip the NETWORK transfers entirely (the offline
+                // copy reuse above needs none). Nothing durable is written for a
+                // skipped item, so it stays retryable and self-heals on Wi-Fi via
+                // the sweep, the next favourite, or the next play. Streaming is
+                // untouched: the player still parses basic tags from the stream.
+                val meteredBlocked = !completeParsed &&
+                    com.powermediaplayer.util.MobileDataPolicy
+                        .downloadsBlocked(context, settingsDataStore)
+                if (meteredBlocked) {
+                    com.powermediaplayer.util.Diag.i(
+                        "PowerMediaPlayer",
+                        "DriveTagEnricher: skipped (downloads on mobile data disabled)"
+                    )
+                }
+                var temp = if (completeParsed || meteredBlocked) null else try {
                     if (isSaf) driveProvider.downloadToCache(item)
                     else driveOAuthProvider.downloadToCache(item)
                 } catch (_: Throwable) { null }
@@ -132,7 +148,7 @@ class DriveTagEnricher @Inject constructor(
                     if (item.size in 1..HEAD_WINDOW_BYTES) completeParsed = true
                     runCatching { temp.delete() }
                 }
-                if (!found && !completeParsed) {
+                if (!found && !completeParsed && !meteredBlocked) {
                     temp = try {
                         if (isSaf) driveProvider.downloadFullToCache(item)
                         else driveOAuthProvider.downloadFullToCache(item)

@@ -161,6 +161,12 @@ class CloudViewModel @Inject constructor(
 
     fun saveDriveOffline(item: CloudMediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
+            if (com.powermediaplayer.util.MobileDataPolicy.downloadsBlocked(context, settingsDataStore)) {
+                _uiState.update {
+                    it.copy(errorMessage = com.powermediaplayer.util.MobileDataPolicy.BLOCKED_MESSAGE)
+                }
+                return@launch
+            }
             _savingOffline.update { it + item.id }
             com.powermediaplayer.util.DownloadProgressBus.label(item.id, item.name)
           try {
@@ -222,8 +228,17 @@ class CloudViewModel @Inject constructor(
             _uiState.update { it.copy(errorMessage = "Nothing to download (already offline or no audio).") }
             return
         }
-        _uiState.update { it.copy(errorMessage = "Downloading ${targets.size} file(s) offline…") }
-        targets.forEach { saveDriveOffline(it) }
+        viewModelScope.launch(Dispatchers.IO) {
+            // One message for the whole folder, before the per-file fan-out.
+            if (com.powermediaplayer.util.MobileDataPolicy.downloadsBlocked(context, settingsDataStore)) {
+                _uiState.update {
+                    it.copy(errorMessage = com.powermediaplayer.util.MobileDataPolicy.BLOCKED_MESSAGE)
+                }
+                return@launch
+            }
+            _uiState.update { it.copy(errorMessage = "Downloading ${targets.size} file(s) offline…") }
+            targets.forEach { saveDriveOffline(it) }
+        }
     }
 
     /** §C28 — copies saved before v18 have a blank displayName → the Downloads
@@ -803,6 +818,14 @@ class CloudViewModel @Inject constructor(
     }
 
     private suspend fun peekEmbeddedArt(item: CloudMediaItem): PeekResult {
+        // The WHOLE peek (4 MB head + 8 MB tail) honours Settings, Cloud,
+        // "Download cover art on mobile data": on a metered network with the
+        // toggle off, fetch nothing and stay Inconclusive, so the item retries
+        // on Wi-Fi or after the toggle flips. Android flags cellular metered
+        // regardless of the plan, so unlimited-plan users need the toggle.
+        if (isMeteredNetwork() &&
+            !runCatching { settingsDataStore.coverArtOnMobileData.first() }.getOrDefault(false)
+        ) return PeekResult.Inconclusive
         val ext = item.name.substringAfterLast('.', "").lowercase()
         val mp4Family = ext in setOf("m4b", "m4a", "mp4", "m4v", "mov")
         // Formats whose art sits at the file START and which MediaMetadataRetriever
@@ -834,14 +857,6 @@ class CloudViewModel @Inject constructor(
             else PeekResult.Inconclusive
         }
         if (item.size <= 0L) return PeekResult.Inconclusive // no size → no tail Range
-        // The 8 MB tail is the expensive half of the peek: on METERED networks skip
-        // it and stay inconclusive (retries on an unmetered session) UNLESS the user
-        // opted in via Settings ("Download cover art on mobile data" — Android flags
-        // cellular metered regardless of the plan, so unlimited-plan users need the
-        // toggle). The no-gate directive for FAVOURITE enrichment is unaffected.
-        if (isMeteredNetwork() &&
-            !runCatching { settingsDataStore.coverArtOnMobileData.first() }.getOrDefault(false)
-        ) return PeekResult.Inconclusive
         val tailBytes = 8L * 1024 * 1024
         val start = (item.size - tailBytes).coerceAtLeast(0L)
         val tail = runCatching {

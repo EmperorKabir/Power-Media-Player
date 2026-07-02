@@ -43,13 +43,21 @@ class PodcastSyncWorker @AssistedInject constructor(
         val parser = RssFeedParser()
         val downloader = com.powermediaplayer.podcast.PodcastDownloader(applicationContext)
         val globalTree = settings.podcastDownloadTreeUri.first().ifBlank { null }
+        // Feed refresh (small XML) always runs on any connection, preserving the
+        // 2026-06-26 "seamless" directive; only the EPISODE AUDIO downloads honour
+        // Settings, Cloud, "Download files on mobile data". Blocked episodes are
+        // picked up by the next sync on an unmetered network (skip-if-present).
+        val downloadsAllowed = !com.powermediaplayer.util.MobileDataPolicy
+            .downloadsBlocked(applicationContext, settings)
         val shows = podcastDao.observeShows().first()
         val sem = Semaphore(3)
         val results = coroutineScope {
             shows.map { show ->
                 async {
                     sem.withPermit {
-                        runCatching { syncShow(parser, downloader, show, globalTree) }.getOrDefault(0 to 0)
+                        runCatching {
+                            syncShow(parser, downloader, show, globalTree, downloadsAllowed)
+                        }.getOrDefault(0 to 0)
                     }
                 }
             }.map { it.await() }
@@ -72,7 +80,8 @@ class PodcastSyncWorker @AssistedInject constructor(
         parser: RssFeedParser,
         downloader: PodcastDownloader,
         show: com.powermediaplayer.data.db.entity.PodcastShowEntity,
-        globalTree: String?
+        globalTree: String?,
+        downloadsAllowed: Boolean
     ): Pair<Int, Int> {
         val parsed = runCatching { parser.fetch(show.feedUrl) }.getOrNull()
             ?: return 0 to 0
@@ -94,7 +103,7 @@ class PodcastSyncWorker @AssistedInject constructor(
         var downloaded = 0
         // §C10 auto-download — when the user opted in, fetch the
         // newest N episodes' audio files into the spec'd folder.
-        if (show.autoDownload) {
+        if (show.autoDownload && downloadsAllowed) {
             val budget = if (show.retentionLastN > 0) show.retentionLastN else 5
             // Re-read so localPath set by an earlier sync is visible (skip-if-present).
             val stored = podcastDao.observeEpisodes(show.feedUrl).first()

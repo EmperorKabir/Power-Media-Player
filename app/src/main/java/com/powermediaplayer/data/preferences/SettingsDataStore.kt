@@ -130,6 +130,11 @@ class SettingsDataStore @Inject constructor(
         // Browse-time cover peek: allow the larger tail fetch on metered networks.
         // Default OFF to protect capped mobile plans; unlimited-plan users opt in.
         val COVER_ART_ON_MOBILE_DATA = booleanPreferencesKey("cover_art_on_mobile_data")
+        // Large file transfers (offline saves, podcast episodes, full metadata
+        // fetches) on metered networks. Default ON: these are user-initiated or
+        // user-opted-in actions, and blocking them by default would make a tapped
+        // download silently fail; capped-plan users switch it off.
+        val DOWNLOAD_FILES_ON_MOBILE_DATA = booleanPreferencesKey("download_files_on_mobile_data")
 
         // Recent search history per search box — single ordered string
         // (U+001F-delimited, most-recent-first) so insertion order survives
@@ -1483,6 +1488,7 @@ class SettingsDataStore @Inject constructor(
     val resumeOnBt: Flow<Boolean> = context.dataStore.data.map { it[Keys.RESUME_ON_BT] ?: false }
     val prefetchNextCloud: Flow<Boolean> = context.dataStore.data.map { it[Keys.PREFETCH_NEXT_CLOUD] ?: true }
     val coverArtOnMobileData: Flow<Boolean> = context.dataStore.data.map { it[Keys.COVER_ART_ON_MOBILE_DATA] ?: false }
+    val downloadFilesOnMobileData: Flow<Boolean> = context.dataStore.data.map { it[Keys.DOWNLOAD_FILES_ON_MOBILE_DATA] ?: true }
 
     // ── Recent searches (per box, ordered most-recent-first, max 12) ──────────
     private val rsSep = ""
@@ -1536,6 +1542,7 @@ class SettingsDataStore @Inject constructor(
     suspend fun setResumeOnBt(v: Boolean) { context.dataStore.edit { it[Keys.RESUME_ON_BT] = v } }
     suspend fun setPrefetchNextCloud(v: Boolean) { context.dataStore.edit { it[Keys.PREFETCH_NEXT_CLOUD] = v } }
     suspend fun setCoverArtOnMobileData(v: Boolean) { context.dataStore.edit { it[Keys.COVER_ART_ON_MOBILE_DATA] = v } }
+    suspend fun setDownloadFilesOnMobileData(v: Boolean) { context.dataStore.edit { it[Keys.DOWNLOAD_FILES_ON_MOBILE_DATA] = v } }
 
     val artworkScaleMode: Flow<String> = context.dataStore.data.map {
         // Coerce unknown values back to "fit" so older / corrupt entries

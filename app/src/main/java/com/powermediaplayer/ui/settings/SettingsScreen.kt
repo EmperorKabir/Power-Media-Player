@@ -439,14 +439,24 @@ fun SettingsScreen(
                 SettingsToggleItem("Pre-fetch next cloud track",
                     "Buffer the next item in a cloud queue for seamless transition.",
                     Icons.Filled.CloudDownload, uiState.prefetchNextCloud) { viewModel.setPrefetchNextCloud(it) }
+                SettingsToggleItem("Download files on mobile data",
+                    "Applies when you are on mobile data instead of Wi-Fi. When this is " +
+                        "off, saving files for offline use, podcast episode downloads " +
+                        "including automatic ones, and full metadata fetches for cloud " +
+                        "audiobooks all wait for Wi-Fi, and the app tells you when a " +
+                        "download was blocked. Streaming, browsing, casting and podcast " +
+                        "feed updates always work on any connection. Android treats all " +
+                        "mobile data as limited, even unlimited plans, so leave this on " +
+                        "if your plan is unlimited.",
+                    Icons.Filled.CloudDownload, uiState.downloadFilesOnMobileData) { viewModel.setDownloadFilesOnMobileData(it) }
                 SettingsToggleItem("Download cover art on mobile data",
                     "While you browse cloud files, the app quietly fetches a small piece of " +
-                        "each audio file to find its cover picture. On Wi-Fi it fetches " +
-                        "everything it needs. On mobile data it normally fetches only the " +
-                        "smallest piece and waits for Wi-Fi to get the rest, which protects " +
-                        "capped data plans. Turn this on if your plan is unlimited and you " +
-                        "want full cover art on mobile data as well. Playing, favouriting " +
-                        "and downloading are never restricted by this setting.",
+                        "each audio file to find its cover picture. On Wi-Fi this always " +
+                        "happens. On mobile data it waits for Wi-Fi unless you turn this " +
+                        "on, which protects capped data plans. Turn this on if your plan " +
+                        "is unlimited and you want cover art to appear while browsing on " +
+                        "mobile data. Playing, favouriting and downloading are never " +
+                        "affected by this setting.",
                     Icons.Filled.CloudDownload, uiState.coverArtOnMobileData) { viewModel.setCoverArtOnMobileData(it) }
             },
             SettingsItem(

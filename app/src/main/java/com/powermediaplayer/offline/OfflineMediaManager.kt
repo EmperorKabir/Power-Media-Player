@@ -135,6 +135,13 @@ class OfflineMediaManager @Inject constructor(
 
     /** Download the media at [uri] for offline use. [title] names the stored file. */
     suspend fun download(uri: String, title: String): Result<Unit> = withContext(Dispatchers.IO) {
+        // The failure message is surfaced verbatim by the Player/Last Played
+        // offlineStatus toasts, so the user learns WHY nothing downloaded.
+        if (com.powermediaplayer.util.MobileDataPolicy.downloadsBlocked(context, settingsDataStore)) {
+            return@withContext Result.failure(
+                IllegalStateException(com.powermediaplayer.util.MobileDataPolicy.BLOCKED_MESSAGE)
+            )
+        }
         // Podcast first: a non-Drive http uri with a known episode.
         if (uri.startsWith("http") && !isOAuthDriveUri(uri)) {
             val ep = podcastDao.episodeByAudioUrl(uri)
