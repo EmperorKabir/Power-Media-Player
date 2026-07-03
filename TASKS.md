@@ -315,6 +315,17 @@ DONE this session (device-verified unless noted):
 - Independent effects for "Both" favourites (3409aa7): Resume-live pin plays + edits a SCOPED override key (uri␁live); Hold/non-favourite keep plain uri. PlaybackService.currentOverrideKeyFlow carries it via a MediaItem extra; unpin clears the correct scoped key. Built + unit-tested; DEVICE-VERIFIED 2026-07-02: This Inevitable Ruin pinned as Both -> Pinned-tracks section shows "Hold position" + "Resume live" rows; set Hold Stereo flip On, the Resume-live 3-dot popup (title ", Resume live", scoped key) was independently Default so set it Off, re-checked Hold still On (no leakage). Recent/Hold rows share the plain key (backward-compat holds).
 - Inherited per-show effects HINT in the episode override popup (3409aa7): read-only "From this podcast (unless overridden below): …" line. Built; DEVICE-VERIFIED 2026-07-02: StarTalk show Voice-boost override -> episode popup showed the teal hint "Voice boost On". BUG FOUND+FIXED (5efea73): inheritedSummary() omitted the voiceBoost + skipSilence axes, so a show override on either was silently absent from the hint. No feedUrl-mismatch bug: a first failed attempt used The Extra Inch + The Fighting Cock (both Tottenham podcasts) = override set on one, episode opened on the other.
 
+### FULL-CODEBASE EFFICIENCY AUDIT — PAUSED 2026-07-03 (user-requested stopping point)
+- Three-lens audit (android-efficiency-audit skill) launched over all 200 files / 6 batches; session
+  limits killed the first fleet; five agents were resumed from transcripts then PAUSED cleanly at the
+  user's request. NO code was modified by the audit (read-only phase); repo committed+pushed through
+  vc46 (f208df2).
+- Resume state, partial findings files, agent transcript ids and the exact resume procedure are in
+  `.audit_checklist.md` (repo root, section "PAUSED STATE"). Best partial artefact so far:
+  `.audit_findings_reasoning_b2.md` (134 lines, settings+cloud UI).
+- Remaining phases after findings complete: cross-examination -> conflict resolution -> preservation
+  gate -> execution + build/tests -> cleanup (delete working files).
+
 OUTSTANDING — needs the user / device follow-up:
 1. EQ Hz LABELS QUERY (user 2026-06-26): "what do the eq hz labels actually mean? should they refer to a range or frequencies for clarity?" — ANSWER (to deliver): the labels (31 Hz … 16 kHz) are each band's CENTRE frequency (uiState.bandFrequencies, from the Android Equalizer engine), NOT a range. A 10-band graphic EQ splits the spectrum into ~1-octave bands; each slider boosts/cuts a band centred on its label and tapering to the neighbours. DECISION NEEDED: keep centre-freq labels (standard, matches every graphic EQ) vs show ranges (e.g. "44–88 Hz") vs add a short caption ("band centres; each affects nearby frequencies"). Likely best: keep centre labels + a one-line caption/info. NOT yet implemented — awaiting user steer.
 2. **DONE-DEVICE 2026-07-02** Independent "Both"-favourite effects (B): pinned This Inevitable Ruin as BOTH; Pinned-tracks rows "Hold position" + "Resume live"; Hold Stereo flip On vs Resume-live Stereo flip Off held independently (no leakage); Recent/Hold share the plain-uri override (backward compat).
