@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug ("Power Test") label override: the debug variant installs side by
+     side with the Play build (applicationIdSuffix .test), so it needs a
+     distinct launcher/tile name. -->
+<resources>
+    <string name="app_name">Power Test</string>
+</resources>

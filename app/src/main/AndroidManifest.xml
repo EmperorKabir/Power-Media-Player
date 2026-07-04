@@ -169,7 +169,7 @@
             android:name=".widget.PlaybackQuickSettingsTile"
             android:exported="true"
             android:icon="@android:drawable/ic_media_play"
-            android:label="Power Media Player"
+            android:label="@string/app_name"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

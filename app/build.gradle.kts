@@ -91,6 +91,13 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            // "Power Test" side-by-side build (2026-07-05): own package so it
+            // installs ALONGSIDE the Play Store app instead of replacing it.
+            // Fresh, separate data (DataStore/DB/files). Google Drive sign-in is
+            // package-bound at the OAuth console, so Drive auth may refuse on
+            // this copy — everything local/BT/cast/podcast/alarm is testable.
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
         }
     }
 
