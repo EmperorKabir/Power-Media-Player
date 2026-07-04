@@ -10,34 +10,10 @@ import androidx.palette.graphics.Palette
  */
 object PaletteHelper {
 
-    /**
-     * Extract the dominant vibrant color from a bitmap.
-     * Falls back to muted, then dominant swatch.
-     */
-    fun extractDominantColor(bitmap: Bitmap): Color {
-        val palette = Palette.from(bitmap).generate()
-
-        val color = palette.getVibrantColor(
-            palette.getMutedColor(
-                palette.getDominantColor(0xFF009688.toInt())
-            )
-        )
-
-        return Color(color)
-    }
-
-    /**
-     * Extract a dark vibrant color suitable for status bar.
-     */
-    fun extractStatusBarColor(bitmap: Bitmap): Int {
-        val palette = Palette.from(bitmap).generate()
-
-        return palette.getDarkVibrantColor(
-            palette.getDarkMutedColor(
-                0xFF000000.toInt()
-            )
-        )
-    }
+    // Audit B6: the legacy extractDominantColor/extractStatusBarColor helpers
+    // (zero callers) were the double-quantisation shape that audit 4.3 replaced
+    // with the single-generate extractColorSet below — removed so the old shape
+    // cannot be re-adopted by accident.
 
     /**
      * Extract a full color set from cover art for dynamic theming.

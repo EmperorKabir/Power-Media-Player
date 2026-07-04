@@ -239,10 +239,8 @@ class LibraryViewModel @Inject constructor(
             .build()
         playbackConnection.addNext(item)
     }
-    /** §C27: undo a hide. */
-    fun unhideUri(uri: String) {
-        viewModelScope.launch { settingsDataStore.unhideUri(uri) }
-    }
+    // Audit B3: the unhideUri wrapper here was uncalled (the Hidden files sheet
+    // routes through SettingsViewModel's copy). Removed.
 
     /**
      * Delete a media file from the device. ONLY call after user has
@@ -894,28 +892,9 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Create a single MediaItem from a picked file URI for immediate playback.
-     */
-    fun createSingleMediaItem(uri: Uri): MediaItem {
-        val extras = com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, uri)
-        val mime = context.contentResolver.getType(uri).orEmpty()
-        extras.putBoolean("is_video_hint", mime.startsWith("video/"))
-        return MediaItem.Builder()
-            .setMediaId(uri.toString())
-            .setUri(uri)
-            .setRequestMetadata(
-                MediaItem.RequestMetadata.Builder()
-                    .setMediaUri(uri)
-                    .build()
-            )
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setExtras(extras)
-                    .build()
-            )
-            .build()
-    }
+    // Audit B3: createSingleMediaItem was uncalled AND parsed chapters on the
+    // CALLER thread (a Main-thread parse landmine if ever wired). The live
+    // single-file path is playSingle. Removed.
 
     /**
      * Resolve metadata from a SAF-picked file URI using ContentResolver.

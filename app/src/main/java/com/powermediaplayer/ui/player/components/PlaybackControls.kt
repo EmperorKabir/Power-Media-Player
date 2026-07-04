@@ -272,31 +272,6 @@ private fun SkipButton(
 }
 
 /**
- * Generic icon control button (SkipPrevious / SkipNext).
- */
-@Composable
-private fun ControlButton(
-    icon: ImageVector,
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    size: Int = 32
-) {
-    IconButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.size(52.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            modifier = Modifier.size(size.dp),
-            tint = if (enabled) TextPrimary else DisabledGrey
-        )
-    }
-}
-
-/**
  * ── Prepared UI Components for Coordinator Agent ──────────────────────
  * Labeled navigation buttons to explicitly distinguish between
  * structural skips like 'Chapter / Track' vs entire 'File'.

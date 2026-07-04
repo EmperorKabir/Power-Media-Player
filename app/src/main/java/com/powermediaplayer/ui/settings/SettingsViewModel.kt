@@ -545,7 +545,6 @@ class SettingsViewModel @Inject constructor(
 
     /** Legacy entry point — keep for backward call sites; routes via the
      *  new two-step path. */
-    fun pairHueBridge() = discoverHueBridge()
 
     fun applyHueScene(preset: com.powermediaplayer.hue.HueProvider.ScenePreset) {
         viewModelScope.launch {

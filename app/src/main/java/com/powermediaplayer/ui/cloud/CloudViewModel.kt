@@ -59,15 +59,9 @@ data class CloudUiState(
     val priorSearchQuery: String = "",
     val priorSearchResults: List<CloudMediaItem> = emptyList(),
     val spotifySection: com.powermediaplayer.cloud.SpotifySection? = null,
-    /**
-     * Snapshot of source-picker roots (Drive, OneDrive, internal
-     * storage, USB-OTG, …) populated when the user taps "Pick a
-     * folder" so the cloud screen can show a chooser instead of
-     * relying on the SAF picker's drawer (which is unreachable on
-     * some Samsung / fold builds).
-     */
-    val pickerRoots: List<GoogleDriveProvider.CloudRoot> = emptyList(),
-    val pickerRootsVisible: Boolean = false,
+    // Audit B2: the source-picker chooser state (pickerRoots/pickerRootsVisible)
+    // was written but never read — the Samsung-drawer workaround it backed was
+    // superseded by the Drive Picker WebView path. Removed with its plumbing.
 
     /**
      * Spotify Connect device picker — populated by [refreshSpotifyConnectDevices]
@@ -1182,26 +1176,10 @@ class CloudViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Populate [CloudUiState.pickerRoots] with every available
-     * DocumentsProvider root so the Cloud screen can show a chooser.
-     * The chooser is the supported entry point on devices whose SAF
-     * picker hides the source drawer; tapping a root deep-links the
-     * picker straight into that source via EXTRA_INITIAL_URI.
-     */
-    fun openPickerChooser() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val roots = runCatching { driveProvider.queryDocumentRoots() }.getOrDefault(emptyList())
-            _uiState.update { it.copy(pickerRoots = roots, pickerRootsVisible = true) }
-        }
-    }
-
-    fun dismissPickerChooser() {
-        _uiState.update { it.copy(pickerRootsVisible = false) }
-    }
-
-    fun buildDeepLinkedDriveIntent(root: GoogleDriveProvider.CloudRoot): Intent =
-        driveProvider.buildDeepLinkedSignInIntent(root.initialUri())
+    // Audit B2: openPickerChooser/dismissPickerChooser/buildDeepLinkedDriveIntent
+    // were the never-invoked plumbing of the orphaned SourceChooserDialog
+    // (superseded by the Drive Picker WebView). Removed; the provider's
+    // buildSignInIntent/queryDocumentRoots API is untouched.
 
     fun handleDriveResult(data: Intent?) {
         viewModelScope.launch {

@@ -115,12 +115,9 @@ class LastPlayedViewModel @Inject constructor(
     // every tab re-entry reset them. Debounce + staleness now live in
     // the process-wide com.powermediaplayer.playback.ResumeGate.
 
-    /**
-     * §C7 — drop overrides when a row stops being pinned.
-     */
-    fun clearOverridesForUri(uri: String) {
-        viewModelScope.launch(Dispatchers.IO) { mediaOverrideDao.clear(uri) }
-    }
+    // Audit B3: the old clearOverridesForUri(uri) wrapper was uncalled AND
+    // subtly wrong (plain uri; the live path in unpin() clears by the SCOPED
+    // overrideKeyFor key, which the "Both"-favourite system requires). Removed.
 
     val dynamic: StateFlow<List<LastPlayedRepository.HistoryItem>> =
         repo.observeDynamic().stateIn(
@@ -150,13 +147,8 @@ class LastPlayedViewModel @Inject constructor(
 
     fun observePinnedAlbumTracks(albumId: Long) = repo.observeAlbumTracks(albumId)
 
-    suspend fun pinAlbum(
-        albumKey: String,
-        title: String,
-        artist: String,
-        artworkUri: String?,
-        tracks: List<LastPlayedRepository.AlbumTrackToPin>
-    ): Boolean = repo.pinAlbum(albumKey, title, artist, artworkUri, tracks).isSuccess
+    // Audit B3: the pinAlbum wrapper here had no callers (Library pins via
+    // LibraryViewModel.pinAlbum, Cloud pins via the repository directly). Removed.
 
     fun unpinAlbum(albumId: Long) {
         viewModelScope.launch(Dispatchers.IO) { repo.unpinAlbum(albumId) }

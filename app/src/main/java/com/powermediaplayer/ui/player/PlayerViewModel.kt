@@ -33,10 +33,9 @@ class PlayerViewModel @Inject constructor(
     private val bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
     private val mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository,
-    private val subtitleAutoFetcher: com.powermediaplayer.subtitles.SubtitleAutoFetcher,
-    private val replayGainDao: com.powermediaplayer.data.db.dao.ReplayGainDao,
-    private val replayGainScanner: com.powermediaplayer.replaygain.ReplayGainScanner,
-    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    // Audit B1: subtitleAutoFetcher/replayGainDao/replayGainScanner/enrichmentCacheDao
+    // were injected here but unused — their live use moved to PlaybackSessionCoordinator
+    // (commit 3131738). Removed.
     private val offlineMediaManager: com.powermediaplayer.offline.OfflineMediaManager,
     private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
     @param:ApplicationContext private val context: Context
@@ -224,11 +223,6 @@ class PlayerViewModel @Inject constructor(
             }
         }
     }
-
-    private val musicBrainzClient =
-        com.powermediaplayer.enrichment.MusicBrainzClient()
-    private val discogsClient =
-        com.powermediaplayer.enrichment.DiscogsClient()
 
     /**
      * §B5 LOCKED — auto-revert reason exposed via a Flow so the player
@@ -879,8 +873,6 @@ class PlayerViewModel @Inject constructor(
         }
         playbackConnection.skipForward(seconds)
     }
-    fun nextChapter() = playbackConnection.nextChapter()
-    fun previousChapter() = playbackConnection.previousChapter()
     fun nextChapterOrTrack() {
         if (isSpotifyActive) spotifyNext()
         else playbackConnection.nextChapterOrTrack()
@@ -1315,34 +1307,10 @@ class PlayerViewModel @Inject constructor(
     }
 
     /**
-     * Sleep timer that pauses at the end of the CURRENT chapter (or
-     * track if the file has no chapters). Power-user feature: lets the
-     * listener fall asleep without losing their place mid-chapter.
+     * Sleep-at-end-of-chapter is served by startSleepTimerMode(END_OF_CHAPTER);
+     * the pre-mode-enum wrapper (startSleepAtEndOfChapter) was uncalled and
+     * lacked fade support — removed by audit B1.
      */
-    fun startSleepAtEndOfChapter() {
-        sleepTimerJob?.cancel()
-        sleepTimerJob = viewModelScope.launch {
-            val state = uiState.value
-            val pos = playbackConnection.playerState.value.currentPosition
-            val target: Long = if (state.hasChapters && state.chapterDurationMs > 0) {
-                state.chapterStartMs + state.chapterDurationMs
-            } else {
-                playbackConnection.playerState.value.duration
-            }
-            val deltaMs = (target - pos).coerceAtLeast(1_000L)
-            com.powermediaplayer.util.Diag.i("PMP_DIAG", "SleepAtEndOfChapter delta=${deltaMs}ms target=${target}ms")
-            _sleepTimerRemainingMs.value = deltaMs
-            var remaining = deltaMs
-            while (remaining > 0) {
-                delay(1000)
-                remaining -= 1000
-                _sleepTimerRemainingMs.value = remaining.coerceAtLeast(0)
-            }
-            playbackConnection.pause()
-            _sleepTimerRemainingMs.value = 0
-            _sleepTimerExpired.value = true
-        }
-    }
 
     // ── A-B loop ─────────────────────────────────────────────────
     private val _abLoopStart = MutableStateFlow<Long?>(null)

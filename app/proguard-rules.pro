@@ -5,8 +5,6 @@
 -dontwarn androidx.media3.**
 
 # FFmpegMediaMetadataRetriever — JNI bindings
--keep class wseemann.media.** { *; }
--dontwarn wseemann.media.**
 
 # Hilt — generated injection code
 -keep class dagger.hilt.** { *; }
