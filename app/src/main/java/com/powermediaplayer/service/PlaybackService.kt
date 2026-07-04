@@ -267,6 +267,18 @@ class PlaybackService : MediaSessionService() {
     private var debouncedSeekJob: kotlinx.coroutines.Job? = null
 
     companion object {
+        /**
+         * 2026-07-05 auto-resume evidence fix: true when the most recent pause was
+         * CAUSED by audio-route loss (BT/wired disconnect → Media3's
+         * becoming-noisy auto-pause), cleared by any user play/pause. The
+         * coordinator's onStop persist reads this so "BT died mid-listen, then
+         * the app was backgrounded" still counts as was-playing for the
+         * "Only when it was playing when closed" autoplay gate — device logs
+         * showed that sequence persisting wasPlaying=false and permanently
+         * blocking resume-on-BT / launch autoplay.
+         */
+        @Volatile var lastPauseWasRouteLoss: Boolean = false
+
         // Custom session commands for features not in standard transport controls
         const val ACTION_SKIP_BACK_5    = "ACTION_SKIP_BACK_5"
         const val ACTION_SKIP_BACK_10   = "ACTION_SKIP_BACK_10"
@@ -1421,6 +1433,19 @@ class PlaybackService : MediaSessionService() {
                 com.powermediaplayer.diag.DiagLog.player(
                     "playWhenReady=$playWhenReady reason=$rname"
                 )
+                // Route-loss memory for the was-playing autoplay gate (see the
+                // companion field's doc). Deliberate user action always wins.
+                if (!playWhenReady &&
+                    reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY
+                ) {
+                    lastPauseWasRouteLoss = true
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "route-loss",
+                        reason = "becoming-noisy pause → lastPauseWasRouteLoss=true"
+                    )
+                } else if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
+                    lastPauseWasRouteLoss = false
+                }
                 // Webhooks: pause vs resume only fire on USER-initiated
                 // changes — avoids firing for AUDIO_FOCUS_LOSS pauses
                 // (call, alarm) which the user didn't trigger.

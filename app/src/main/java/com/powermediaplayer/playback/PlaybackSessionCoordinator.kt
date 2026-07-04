@@ -82,8 +82,13 @@ class PlaybackSessionCoordinator @Inject constructor(
                     // when closed" gate (covers the local player + Spotify mirror).
                     // onStop precedes most swipe-aways / system kills.
                     val spot = spotifyProvider.spotifyState.value
+                    // 2026-07-05: a pause CAUSED by route loss (BT/wired dropped
+                    // mid-listen → becoming-noisy auto-pause) counts as was-playing;
+                    // the listener did not choose to stop. Device logs showed that
+                    // sequence persisting false here and gating off resume-on-BT.
                     val wasPlaying = if (spot != null) spot.isPlaying
-                        else playbackConnection.getPlayer()?.isPlaying == true
+                        else playbackConnection.getPlayer()?.isPlaying == true ||
+                            com.powermediaplayer.service.PlaybackService.lastPauseWasRouteLoss
                     scope.launch(Dispatchers.IO) {
                         runCatching { settingsDataStore.setLastWasPlaying(wasPlaying) }
                     }

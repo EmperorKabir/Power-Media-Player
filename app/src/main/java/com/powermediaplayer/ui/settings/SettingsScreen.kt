@@ -933,12 +933,26 @@ fun SettingsScreen(
                 // technical events (BT remote opcodes, audio-effect attach
                 // results, key lifecycle, crashes) to app-private external
                 // storage so testers can pull the file via adb or Files app.
+                // 2026-07-05 fix: the size was read once per composition, so tapping
+                // Clear left the OLD number on screen until something else (like
+                // toggling the switch) recomposed the row. State + explicit refresh
+                // after Clear; also moves the directory walk off the main thread.
+                var diagBytes by remember { mutableStateOf(-1L) }
+                var diagRefresh by remember { mutableStateOf(0) }
+                LaunchedEffect(uiState.diagLogEnabled, diagRefresh) {
+                    // Small grace after Clear: the writer closes + recreates the
+                    // current file asynchronously.
+                    if (diagRefresh > 0) kotlinx.coroutines.delay(250)
+                    diagBytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        viewModel.diagLogBytes()
+                    }
+                }
                 DiagLogPicker(
                     enabled = uiState.diagLogEnabled,
                     path = viewModel.diagLogPath(),
-                    bytes = viewModel.diagLogBytes(),
+                    bytes = diagBytes.coerceAtLeast(0L),
                     onToggle = { viewModel.setDiagLogEnabled(it) },
-                    onClear = { viewModel.clearDiagLog() }
+                    onClear = { viewModel.clearDiagLog(); diagRefresh++ }
                 )
             },
             SettingsItem(

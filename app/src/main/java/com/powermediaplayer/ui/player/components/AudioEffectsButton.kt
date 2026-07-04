@@ -3,7 +3,9 @@ package com.powermediaplayer.ui.player.components
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Adjust
+import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -222,6 +224,30 @@ fun AudioEffectsButton(
                     on = s.monoMix,
                     enabled = !isTrueMonoOutput,
                     onChange = { settingsVm.setMonoMix(it); touch() }
+                )
+                // 2026-07-05 request: surface the global Trim silence + Voice boost
+                // here alongside the other live audio effects (they were Settings
+                // only). Same global keys the service collects; the per file /
+                // per show override axes in the custom settings popup still win
+                // (mediaOverrideRepo.withOverrideBool: override != null beats global).
+                AudioEffectToggleRow(
+                    icon = Icons.Filled.ContentCut,
+                    label = "Trim silence",
+                    on = s.crossfadeSkipSilence,
+                    onChange = { settingsVm.setCrossfadeSkipSilence(it); touch() }
+                )
+                val voiceBoostOn by settingsVm.voiceBoost.collectAsStateWithLifecycle()
+                AudioEffectToggleRow(
+                    icon = Icons.Filled.RecordVoiceOver,
+                    label = "Voice boost",
+                    on = voiceBoostOn,
+                    onChange = { settingsVm.setVoiceBoost(it); touch() }
+                )
+                Text(
+                    "These two apply everywhere. A file or podcast with its own " +
+                        "custom settings keeps its choice for that file.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary
                 )
                 AudioEffectToggleRow(
                     icon = Icons.Filled.Speaker,
