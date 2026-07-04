@@ -33,16 +33,35 @@ class BootCompletedReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         scope.launch {
             try {
-                val alarms = settingsDataStore.scheduledAlarms.first()
-                var rescheduled = 0
-                alarms.filter { it.enabled }.forEach { alarm ->
-                    AlarmScheduler.schedule(context, alarm)
-                    rescheduled++
+                // Audit §10.1/B-13 Tier 1: at LOCKED_BOOT_COMPLETED the DataStore
+                // file lives in credential-encrypted storage and is unreadable
+                // before first unlock — a throw here escaped the scope (no
+                // exception handler) and could crash the process at every boot.
+                // Degrade to a no-op: the post-unlock BOOT_COMPLETED delivery
+                // re-arms everything. (Pre-unlock re-arm needs a device-protected
+                // store — recorded as a separate user decision.)
+                val um = context.getSystemService(android.os.UserManager::class.java)
+                if (um != null && !um.isUserUnlocked) {
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "Boot reschedule skipped: user locked (action=$action); post-unlock delivery re-arms"
+                    )
+                    return@launch
                 }
-                com.powermediaplayer.util.Diag.i(
-                    "PMP_DIAG",
-                    "Boot reschedule: $rescheduled alarm(s) re-armed (action=$action)"
-                )
+                runCatching {
+                    val alarms = settingsDataStore.scheduledAlarms.first()
+                    var rescheduled = 0
+                    alarms.filter { it.enabled }.forEach { alarm ->
+                        AlarmScheduler.schedule(context, alarm)
+                        rescheduled++
+                    }
+                    com.powermediaplayer.util.Diag.i(
+                        "PMP_DIAG",
+                        "Boot reschedule: $rescheduled alarm(s) re-armed (action=$action)"
+                    )
+                }.onFailure {
+                    com.powermediaplayer.util.Diag.e("PMP_DIAG", "Boot reschedule failed", it)
+                }
             } finally {
                 pendingResult.finish()
             }

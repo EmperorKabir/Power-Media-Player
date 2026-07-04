@@ -1,6 +1,7 @@
 package com.powermediaplayer.data.db.entity
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "podcast_shows")
@@ -25,7 +26,13 @@ data class PodcastShowEntity(
     val displayOrder: Int = 0
 )
 
-@Entity(tableName = "podcast_episodes")
+// Audit B5-01/B-6: feedUrl drives the episode-list + auto-advance queries and
+// audioUrl is looked up on EVERY track change (MediaOverrideRepository) and on
+// cold-start resume — both were full-table scans on an unboundedly-growing table.
+@Entity(
+    tableName = "podcast_episodes",
+    indices = [Index(value = ["feedUrl", "publishedAt"]), Index(value = ["audioUrl"])]
+)
 data class PodcastEpisodeEntity(
     @PrimaryKey
     val guid: String,

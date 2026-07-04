@@ -81,8 +81,16 @@ object DiagLog {
         capacity = 4096,
         onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
     )
-    private val timeFmt = SimpleDateFormat("HH:mm:ss.SSS", Locale.UK)
-    private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
+    // Audit B-16: SimpleDateFormat is NOT thread-safe and event() formats on
+    // arbitrary caller threads (main, IO pools, crash handler) — shared instances
+    // could emit garbled timestamps or throw under concurrency. ThreadLocal keeps
+    // the output byte-identical with no locking.
+    private val timeFmt = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue() = SimpleDateFormat("HH:mm:ss.SSS", Locale.UK)
+    }
+    private val dateFmt = object : ThreadLocal<SimpleDateFormat>() {
+        override fun initialValue() = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
+    }
 
     /** Last lines formatted while the logger was DISABLED. Never touches
      *  disk; flushed into the file the moment the user enables logging so
@@ -170,7 +178,7 @@ object DiagLog {
         }
         val now = System.currentTimeMillis()
         val upMs = SystemClock.uptimeMillis() - startUptimeMs
-        val line = "${dateFmt.format(Date(now))} ${timeFmt.format(Date(now))} " +
+        val line = "${dateFmt.get()!!.format(Date(now))} ${timeFmt.get()!!.format(Date(now))} " +
             "[sess=$sessionToken +${upMs}ms] $tag: $msg"
         if (!enabled) {
             // Memory-only ring; written to disk only if the user enables.
@@ -193,7 +201,7 @@ object DiagLog {
         val d = dir ?: return
         val now = System.currentTimeMillis()
         val upMs = SystemClock.uptimeMillis() - startUptimeMs
-        val line = "${dateFmt.format(Date(now))} ${timeFmt.format(Date(now))} " +
+        val line = "${dateFmt.get()!!.format(Date(now))} ${timeFmt.get()!!.format(Date(now))} " +
             "[sess=$sessionToken +${upMs}ms] $tag: $msg"
         runCatching {
             synchronized(writerLock) {

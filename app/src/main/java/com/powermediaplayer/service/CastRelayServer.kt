@@ -42,7 +42,12 @@ open class CastRelayServer(
     // receiver on the LAN can reach us via the phone's Wi-Fi IP.
 ) : NanoHTTPD(port) {
 
-    private val tokenCounter = AtomicLong(0)
+    // Audit §9.2: tokens are URL path segments on a wildcard-bound LAN server.
+    // The old AtomicLong counter yielded guessable "1","2","3" — any LAN device
+    // could enumerate and fetch the user's media during a cast session. Opaque
+    // end-to-end (generated here, embedded in the receiver URL, looked up in the
+    // map), so widening to 128-bit random hex changes nothing but guessability.
+    private val tokenRandom = java.security.SecureRandom()
     // ConcurrentHashMap: serve() reads from NanoHTTPD worker threads while
     // register() writes from the cast-switch path — a plain map has no
     // visibility guarantee across those threads, so a fresh token could
@@ -98,7 +103,10 @@ open class CastRelayServer(
      */
     @Synchronized
     fun register(item: RelayItem): String {
-        val token = tokenCounter.incrementAndGet().toString(16)
+        val token = ByteArray(16).let { b ->
+            tokenRandom.nextBytes(b)
+            b.joinToString("") { "%02x".format(it) }
+        }
         items[token] = item
         if (item is RelayItem.FaststartDrive) {
             runCatching { prepExecutor.submit { prepareFaststart(item) } }

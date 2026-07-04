@@ -101,8 +101,11 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     //      text columns (playback_history.title/subtitle, offline_copy.displayName,
     //      enrichment_cache.title). Additive CREATE INDEX only.
     // v21 → v22 (2026-06-26): media_overrides per-file skipSilence + voiceBoost.
-    version = 22,
-    exportSchema = false
+    // v22 → v23 (2026-07-04, audit B5-01/B-6): podcast_episodes indices on
+    //      (feedUrl, publishedAt) + audioUrl — the audioUrl lookup runs per track
+    //      change and was an unindexed full-table scan. Additive CREATE INDEX only.
+    version = 23,
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -246,6 +249,22 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE media_overrides ADD COLUMN skipSilence INTEGER")
                 db.execSQL("ALTER TABLE media_overrides ADD COLUMN voiceBoost INTEGER")
+            }
+        }
+
+        // v22 → v23 (audit B5-01/B-6): additive indices; names MUST match Room's
+        // entity-derived naming (index_<table>_<col>[_<col>]) or schema validation
+        // fails at open — same pattern as MIGRATION_20_21.
+        val MIGRATION_22_23: Migration = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_podcast_episodes_feedUrl_publishedAt " +
+                        "ON podcast_episodes(feedUrl, publishedAt)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_podcast_episodes_audioUrl " +
+                        "ON podcast_episodes(audioUrl)"
+                )
             }
         }
 

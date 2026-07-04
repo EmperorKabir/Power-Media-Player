@@ -138,9 +138,15 @@ class PodcastSyncWorker @AssistedInject constructor(
                     .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build()
             ).build()
+            // Audit §4.1/B-4: KEEP froze the spec of whichever build first enqueued
+            // this unique name — devices that ran the old Wi-Fi-only (UNMETERED)
+            // build never received the 2026-06-26 CONNECTED directive. UPDATE
+            // applies the current spec while PRESERVING the enqueue time/period
+            // (no schedule reset on every app start; idempotent when unchanged),
+            // so future constraint edits propagate to upgraders automatically.
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 req
             )
         }

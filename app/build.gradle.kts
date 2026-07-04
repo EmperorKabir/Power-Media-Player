@@ -115,6 +115,12 @@ android {
         buildConfig = true
     }
 
+    // Audit §2.1: export Room schemas so the 22-version hand-written migration
+    // chain becomes testable (MigrationTestHelper) and future bumps are diffable.
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+
     // Robolectric: enable Android-stub default values so unit tests
     // can construct things like android.net.Uri without explicit
     // Robolectric setup. Tests that genuinely need Robolectric (e.g.
@@ -178,7 +184,6 @@ dependencies {
     // Specific icon groups from material-icons — avoids the full 5MB extended bundle.
     // icons-core = base icons (Play, Pause, Settings, etc.)
     // Extended icons needed for FastForward/FastRewind/FileOpen etc.
-    implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3-window-size-class")
@@ -269,8 +274,6 @@ dependencies {
 
     // ── Coroutines ───────────────────────────────────────────────
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.1")
 
     // ── Google Guava (for MediaController ListenableFuture) ─────
     implementation("com.google.guava:guava:33.4.0-android")

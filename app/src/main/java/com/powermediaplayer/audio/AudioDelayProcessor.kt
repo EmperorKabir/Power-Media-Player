@@ -66,6 +66,14 @@ class AudioDelayProcessor(
         return input
     }
 
+    // Audit B-7 (PROJECT_RULES §4 contract): the base flush() clears only the
+    // OUTPUT buffer — subclass ring state must be dropped here or a seek/track
+    // change replays up to MAX_DELAY_MS of pre-seek audio (and a delay→0
+    // transition drains the stale tail). Mirrors Equalizer/Reverb/VoiceBoost.
+    override fun onFlush() {
+        writePos = 0; readPos = 0; filled = 0
+    }
+
     override fun queueInput(inputBuffer: ByteBuffer) {
         val inBytes = inputBuffer.remaining()
         if (inBytes == 0) return

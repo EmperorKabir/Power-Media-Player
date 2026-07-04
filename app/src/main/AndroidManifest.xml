@@ -55,10 +55,9 @@
 
     <!-- Bluetooth: list/connect to A2DP/AVRCP devices on SDK 31+.
          BLUETOOTH_CONNECT is needed to query bonded devices and read
-         names; BLUETOOTH_SCAN is needed to surface available unpaired
+         names; (BLUETOOTH_SCAN removed by audit: no discovery/scan code exists;
          devices in the picker. Both are runtime-prompted. -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <!-- Pre-SDK-31 fallback for reading paired devices. -->
     <uses-permission
         android:name="android.permission.BLUETOOTH"
