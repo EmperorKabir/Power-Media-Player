@@ -345,8 +345,9 @@ class PodcastsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun setStatus(msg: String) =
-        withContext(Dispatchers.Main) { _status.value = msg }
+    private fun setStatus(msg: String) {
+        _status.value = msg // StateFlow writes are thread-safe (audit B3-P4)
+    }
 
     fun addByUrl(rssUrl: String) {
         if (rssUrl.isBlank()) return
@@ -746,7 +747,8 @@ private fun EpisodeList(
     vm: PodcastsViewModel,
     onOverride: (PodcastEpisodeEntity) -> Unit
 ) {
-    val episodes by vm.episodesFor(feedUrl).collectAsStateWithLifecycle(initialValue = emptyList())
+    val episodesFlow = androidx.compose.runtime.remember(feedUrl) { vm.episodesFor(feedUrl) } // audit B3-P1: stable flow instance
+    val episodes by episodesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
         if (episodes.isEmpty()) {
             Text(
@@ -770,7 +772,8 @@ private fun EpisodeRow(
     vm: PodcastsViewModel,
     onOverride: (PodcastEpisodeEntity) -> Unit
 ) {
-    val posMs by vm.episodePosition(e.audioUrl).collectAsStateWithLifecycle(initialValue = null)
+    val posFlow = androidx.compose.runtime.remember(e.audioUrl) { vm.episodePosition(e.audioUrl) } // audit B3-P1
+    val posMs by posFlow.collectAsStateWithLifecycle(initialValue = null)
     val durMs = e.durationS * 1000L
     val pos = posMs ?: 0L
     // A feed's declared itunes:duration is sometimes wrong (seen: 4 min for a

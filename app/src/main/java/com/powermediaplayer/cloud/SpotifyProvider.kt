@@ -1536,7 +1536,9 @@ class SpotifyProvider @Inject constructor(
                 // vc29.26 — gentler initial-burst pacing (was 10×200ms
                 // for the first 2 s). 5×400ms still gives <0.5s metadata
                 // lag after Play but halves radio wake + DataStore reads.
-                delay(if (iter < 5) 400 else 1000)
+                // Audit B5-24: while the mirrored track is PAUSED nothing advances;
+                // stretch to 3 s (control calls restart polling with a fast burst).
+                delay(if (iter < 5) 400 else if (_spotifyState.value?.isPlaying == false) 3_000 else 1000)
             }
         }
     }

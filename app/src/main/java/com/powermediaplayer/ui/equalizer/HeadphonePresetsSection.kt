@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +33,7 @@ import com.powermediaplayer.ui.theme.TextPrimary
 import com.powermediaplayer.ui.theme.TextSecondary
 import com.powermediaplayer.ui.theme.TextTertiary
 import com.powermediaplayer.util.BluetoothHelper
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * §C13 — bottom-of-EQ-tab "Headphone presets" section. Lists every
@@ -53,8 +53,8 @@ fun HeadphonePresetsSection(
 ) {
     val context = LocalContext.current
     val bonded = remember { BluetoothHelper.bondedDevices(context).filter { it.isAudio } }
-    val devicePresets by viewModel.devicePresets.collectAsState(initial = emptyMap())
-    val state by viewModel.uiState.collectAsState()
+    val devicePresets by viewModel.devicePresets.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
     val presets = state.presets
 
     Spacer(Modifier.height(16.dp))

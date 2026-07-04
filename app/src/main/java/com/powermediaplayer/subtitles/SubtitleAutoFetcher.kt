@@ -26,7 +26,9 @@ class SubtitleAutoFetcher @Inject constructor(
     private val cacheDir: File by lazy {
         File(context.cacheDir, "auto-subs").also { it.mkdirs() }
     }
-    private val tried = mutableSetOf<String>()
+    // Audit B6: concurrent video starts (cast + local race) mutated a plain
+    // HashSet across threads; newKeySet matches the fetcher-side pattern.
+    private val tried: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     suspend fun fetchIfNeeded(
         mediaUri: String,

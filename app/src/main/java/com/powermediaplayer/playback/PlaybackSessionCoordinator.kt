@@ -359,7 +359,12 @@ class PlaybackSessionCoordinator @Inject constructor(
             // Last Played row's artwork once per track, not every 5s tick.
             var lastArtTrack: String? = null
             while (isActive) {
-                delay(5_000)
+                // Audit B4-CO-1: every persisted datum below requires something to
+                // be PLAYING; wake 6x less often while fully idle (the onStop saver
+                // independently covers the close-time position).
+                val anyPlaying = playbackConnection.playerState.value.isPlaying ||
+                    spotifyProvider.spotifyState.value?.isPlaying == true
+                delay(if (anyPlaying) 5_000 else 30_000)
                 // vc32: during a Spotify mirror the LOCAL player is
                 // paused on a stale item — Spotify rows never got their
                 // position persisted at all.

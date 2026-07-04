@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlinx.coroutines.flow.update
 
 /**
  * Part 3.3 — unified Downloads view: every offline item in one place —
@@ -128,7 +129,7 @@ class DownloadsViewModel @Inject constructor(
     val selected: StateFlow<Set<String>> = _selected
 
     fun toggleSelected(key: String) {
-        _selected.value = _selected.value.let { if (key in it) it - key else it + key }
+        _selected.update { if (key in it) it - key else it + key } // audit: atomic RMW
     }
 
     fun selectAll() {

@@ -12,7 +12,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -35,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * §C6 — horizontal chip rail above the Library list. Each chip is a
@@ -82,8 +82,8 @@ fun SmartPlaylistRail(
     libraryVm: LibraryViewModel = hiltViewModel(),
     railVm: SmartPlaylistRailViewModel = hiltViewModel()
 ) {
-    val playlists by railVm.playlists.collectAsState()
-    val libraryState by libraryVm.uiState.collectAsState()
+    val playlists by railVm.playlists.collectAsStateWithLifecycle()
+    val libraryState by libraryVm.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     if (playlists.isEmpty()) return
     Row(

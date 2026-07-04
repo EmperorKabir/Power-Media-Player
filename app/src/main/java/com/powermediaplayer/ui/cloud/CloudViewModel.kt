@@ -134,7 +134,7 @@ class CloudViewModel @Inject constructor(
             .flowOn(Dispatchers.IO)
             .stateIn(
                 viewModelScope,
-                kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000) /* audit B2#3: was Eagerly */,
                 emptyMap()
             )
 
@@ -339,7 +339,7 @@ class CloudViewModel @Inject constructor(
             .map { rows -> rows.filter { it.isStarred }.map { it.driveFileId }.toSet() }
             .stateIn(
                 viewModelScope,
-                kotlinx.coroutines.flow.SharingStarted.Eagerly,
+                kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000) /* audit B2#3: was Eagerly */,
                 emptySet()
             )
 
@@ -663,16 +663,20 @@ class CloudViewModel @Inject constructor(
         existing: com.powermediaplayer.data.db.entity.EnrichmentCacheEntity?,
         artUrl: String
     ) {
+        // Audit (superpowers #4): re-read at write time; the caller snapshot can
+        // predate a FULL enrich that landed while a peek fetch was in flight, and
+        // merging from the stale snapshot would clobber the full row tags.
+        val fresh = runCatching { enrichmentCacheDao.get(id) }.getOrNull() ?: existing
         runCatching {
             enrichmentCacheDao.put(
                 com.powermediaplayer.data.db.entity.EnrichmentCacheEntity(
                     cacheKey = id,
-                    provider = existing?.provider
+                    provider = fresh?.provider
                         ?: com.powermediaplayer.data.db.entity
                             .EnrichmentCacheEntity.PROVIDER_DRIVE_PEEK,
-                    title = existing?.title, artist = existing?.artist,
-                    album = existing?.album, year = existing?.year,
-                    genre = existing?.genre,
+                    title = fresh?.title, artist = fresh?.artist,
+                    album = fresh?.album, year = fresh?.year,
+                    genre = fresh?.genre,
                     artworkUrl = artUrl,
                     fetchedAtMs = System.currentTimeMillis()
                 )

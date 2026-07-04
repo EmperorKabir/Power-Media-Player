@@ -34,6 +34,7 @@ import com.powermediaplayer.data.preferences.BtMediaKind
 import kotlinx.coroutines.launch
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.BuildConfig
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 
 /**
  * §D LOCKED order (1 → 15). Each section header carries its §D-NN
@@ -323,7 +324,7 @@ fun SettingsScreen(
                     description = "Fade up from silence when auto-play starts, so a " +
                         "resume on launch / connect isn't jarring. Manual play is " +
                         "unaffected.",
-                    icon = Icons.Filled.VolumeUp,
+                    icon = Icons.AutoMirrored.Filled.VolumeUp,
                     checked = autoplay.fadeIn,
                     onCheckedChange = { viewModel.setAutoplayFadeIn(it) }
                 )

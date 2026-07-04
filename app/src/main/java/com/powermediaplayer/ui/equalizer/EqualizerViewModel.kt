@@ -249,7 +249,8 @@ class EqualizerViewModel @Inject constructor(
                 isCustomModified = false
             )
             settingsDataStore.setLastEqPresetId(id)
-            loadPresets()
+            // Audit B3-EV1: re-calling loadPresets() here leaked one more infinite Room
+            // collector per save/delete; the init collector already refreshes the list.
         }
     }
 
@@ -268,7 +269,8 @@ class EqualizerViewModel @Inject constructor(
                     isCustomModified = false
                 )
             }
-            loadPresets()
+            // Audit B3-EV1: re-calling loadPresets() here leaked one more infinite Room
+            // collector per save/delete; the init collector already refreshes the list.
         }
     }
 

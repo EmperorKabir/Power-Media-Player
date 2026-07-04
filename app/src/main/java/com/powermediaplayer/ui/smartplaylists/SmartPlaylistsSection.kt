@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,7 +23,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,6 +49,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 
 /**
  * §C6 — settings entry for managing smart playlists. Editor is a
@@ -104,7 +104,7 @@ class SmartPlaylistsViewModel @Inject constructor(
 fun SmartPlaylistsSection(
     vm: SmartPlaylistsViewModel = hiltViewModel()
 ) {
-    val playlists by vm.playlists.collectAsState()
+    val playlists by vm.playlists.collectAsStateWithLifecycle()
     var showEditor by remember { mutableStateOf(false) }
     // Non-null while editing an existing playlist; null = creating a new one.
     var editingPlaylist by remember { mutableStateOf<SmartPlaylistEntity?>(null) }
@@ -113,7 +113,7 @@ fun SmartPlaylistsSection(
 
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.PlaylistPlay, contentDescription = null, tint = TealAccent)
+            Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, tint = TealAccent)
             Spacer(Modifier.width(16.dp))
             Column(
                 Modifier

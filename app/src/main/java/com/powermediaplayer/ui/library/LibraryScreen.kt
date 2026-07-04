@@ -40,6 +40,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.util.TimeFormatter
+import androidx.compose.material.icons.automirrored.filled.Sort
 
 /**
  * Media library screen with tabs for Audio and Video files.
@@ -334,7 +335,7 @@ fun LibraryScreen(
                 Box {
                     IconButton(onClick = { sortMenuExpanded = true }) {
                         Icon(
-                            imageVector = Icons.Filled.Sort,
+                            imageVector = Icons.AutoMirrored.Filled.Sort,
                             contentDescription = "Sort menu",
                             tint = TealAccent
                         )

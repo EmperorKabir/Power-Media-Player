@@ -994,7 +994,9 @@ class PlayerViewModel @Inject constructor(
             val fadeWindowMs = 5 * 60_000L
             var rem = remaining
             while (rem > 0) {
-                delay(500)
+                // Audit B1#14: 2 Hz only matters inside the fade window; coarse
+                // 5 s cadence outside it saves hours of wakeups on long tracks.
+                delay(if (rem > fadeWindowMs + 30_000L) 5_000 else 500)
                 val p = playbackConnection.getPlayer() ?: break
                 val newDur = p.duration.coerceAtLeast(0L)
                 val newPos = p.currentPosition.coerceAtLeast(0L)
@@ -1049,12 +1051,16 @@ class PlayerViewModel @Inject constructor(
                 settingsDataStore.sleepTimerFadeOut.first()
             }.getOrNull() == true
             val fadeWindowMs = 5 * 60_000L
+            var lastRem = (nextBoundary - initialPos).coerceAtLeast(0L)
             while (true) {
-                delay(500)
+                // Audit B1#14: coarse cadence far from the boundary; 500 ms inside
+                // the fade window and in the final 30 s (overshoot risk unchanged).
+                delay(if (lastRem > fadeWindowMs + 30_000L) 5_000 else 500)
                 val p = playbackConnection.getPlayer() ?: break
                 val cur = p.currentPosition.coerceAtLeast(0L)
                 val rem = (nextBoundary - cur).coerceAtLeast(0L)
                 _sleepTimerRemainingMs.value = rem
+                lastRem = rem
                 if (fadeOutEnabled && rem in 1..fadeWindowMs) {
                     beginRemoteFadeCaptureIfNeeded()
                     val factor = (rem.toFloat() / fadeWindowMs).coerceIn(0f, 1f)
@@ -1072,16 +1078,22 @@ class PlayerViewModel @Inject constructor(
                 settingsDataStore.sleepTimerFadeOut.first()
             }.getOrNull() == true
             val fadeWindowMs = 5 * 60_000L
+            var tight = false
             while (true) {
-                delay(500)
+                // Audit B1#14: while NOT on the last queue item the remaining time
+                // is not even displayed; 5 s cadence, tightening to 500 ms on the
+                // last item inside the fade window / final 30 s.
+                delay(if (tight) 500 else 5_000)
                 val p = playbackConnection.getPlayer() ?: break
                 val isLastItem = p.currentMediaItemIndex >= p.mediaItemCount - 1
                 if (!isLastItem) {
+                    tight = false
                     _sleepTimerRemainingMs.value = -1L
                     continue
                 }
                 val rem = (p.duration.coerceAtLeast(0L) - p.currentPosition.coerceAtLeast(0L))
                     .coerceAtLeast(0L)
+                tight = rem in 1..(fadeWindowMs + 30_000L)
                 _sleepTimerRemainingMs.value = rem
                 if (fadeOutEnabled && rem in 1..fadeWindowMs) {
                     beginRemoteFadeCaptureIfNeeded()

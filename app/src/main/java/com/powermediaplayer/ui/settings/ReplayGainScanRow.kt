@@ -15,7 +15,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +39,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * §C18 — "Scan now" UI for the ReplayGain pre-scanner. Pulls the
@@ -74,8 +74,8 @@ fun ReplayGainScanRow(
     libraryVm: LibraryViewModel = hiltViewModel(),
     vm: ReplayGainScanViewModel = hiltViewModel()
 ) {
-    val scanning by vm.scanning.collectAsState()
-    val count by vm.lastCount.collectAsState()
+    val scanning by vm.scanning.collectAsStateWithLifecycle()
+    val count by vm.lastCount.collectAsStateWithLifecycle()
     Row(
         modifier = Modifier
             .fillMaxWidth()

@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.powermediaplayer.cloud.CloudMediaItem
 import com.powermediaplayer.cloud.CloudProviderType
 import com.powermediaplayer.ui.theme.*
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 
 private val SpotifyGreen = androidx.compose.ui.graphics.Color(0xFF1DB954)
 
@@ -652,7 +653,7 @@ fun CloudBrowserScreen(
                                             Icons.Filled.Album
                                         com.powermediaplayer.cloud.SpotifySection.SAVED_PLAYLISTS,
                                         com.powermediaplayer.cloud.SpotifySection.FEATURED_PLAYLISTS ->
-                                            Icons.Filled.QueueMusic
+                                            Icons.AutoMirrored.Filled.QueueMusic
                                         com.powermediaplayer.cloud.SpotifySection.SAVED_EPISODES,
                                         com.powermediaplayer.cloud.SpotifySection.SAVED_SHOWS ->
                                             Icons.Filled.Podcasts

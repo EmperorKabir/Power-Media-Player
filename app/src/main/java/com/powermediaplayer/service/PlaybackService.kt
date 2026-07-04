@@ -3314,6 +3314,12 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackService.onDestroy")
+        // Audit B4-PS-5: the process-static sender caches otherwise retain the last
+        // queue artwork bytes (100 KB-2 MB per track) after a swipe-stop until
+        // process death. A new session re-registers items before casting, so this
+        // is safe; the mid-cast process-restart path repopulates from CastPlayer.
+        senderMetadataByMediaId.clear()
+        senderItemByMediaId.clear()
         audioDeviceCallback?.let {
             runCatching { getSystemService(android.media.AudioManager::class.java)?.unregisterAudioDeviceCallback(it) }
         }

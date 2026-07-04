@@ -889,7 +889,12 @@ private fun PlayerScreenCompact(
                 ),
                 label = "videoControlsAlpha"
             )
-            val controlsHidden = controlsAlpha < 0.01f
+            // Audit B1#4: reading the animated alpha here recomposed the whole compact
+            // screen per fade FRAME; derivedStateOf invalidates only on the threshold
+            // crossings, keeping the tap-catcher/semantics gating instants identical.
+            val controlsHidden by androidx.compose.runtime.remember {
+                androidx.compose.runtime.derivedStateOf { controlsAlpha < 0.01f }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()

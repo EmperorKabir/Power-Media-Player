@@ -17,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +31,7 @@ import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
 import com.powermediaplayer.ui.theme.TextSecondary
 import com.powermediaplayer.ui.theme.TextTertiary
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * §C13 — settings entry for Headphone-aware EQ. Opens a chooser sheet
@@ -45,9 +45,9 @@ import com.powermediaplayer.ui.theme.TextTertiary
 fun HeadphoneEqSection(
     eqVm: EqualizerViewModel = hiltViewModel()
 ) {
-    val state by eqVm.uiState.collectAsState()
+    val state by eqVm.uiState.collectAsStateWithLifecycle()
     val presets = state.presets
-    val selectedId by eqVm.headphoneEqPresetId.collectAsState(initial = -1L)
+    val selectedId by eqVm.headphoneEqPresetId.collectAsStateWithLifecycle(initialValue = -1L)
     val selected = presets.firstOrNull { it.id == selectedId }
     var showDialog by remember { mutableStateOf(false) }
 
