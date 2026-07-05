@@ -120,7 +120,7 @@
 
 ## Repo state to clean up on resume (uncommitted as of 2026-06-26)
 - [ ] `app/build.gradle.kts` vc40/1.3.5 — uncommitted.
-- [ ] Context restructure (separate task, mostly done): `PROJECT_RULES.md` (new primer), `CLAUDE.md` (primer pointer), slim `TASKS.md`, `docs/archive/TASKS-history.md`, `docs/archive/superpowers/**` (111 files git-renamed). **`docs/archive/INDEX.md` may be incomplete** (the archiving agent was stopped mid-generation) — finish it.
+- [ ] Context restructure (separate task, mostly done): `PROJECT_RULES.md` (new primer), `CLAUDE.md` (primer pointer), slim `TASKS.md`, `archive/TASKS-history.md`, `archive/superpowers/**` (111 files git-renamed). **`archive/INDEX.md` may be incomplete** (the archiving agent was stopped mid-generation) — finish it.
 - [ ] Commit the restructure + this remediation note together or separately; push.
 
 ## Why these were missed (process fix — apply going forward)

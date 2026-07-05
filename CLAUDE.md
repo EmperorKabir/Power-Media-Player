@@ -7,7 +7,7 @@
   spine, the delicate do-NOT-break contingencies, and the binding build/app
   preferences. It is auto-loaded as binding rules via the user's global `CLAUDE.md`.
 - This file (`CLAUDE.md`) holds only the task-ledger mandate + logging runbooks.
-  Historical detail lives under `docs/archive/` (index: `docs/archive/INDEX.md`).
+  Historical detail lives under `archive/` (index: `archive/INDEX.md`).
 
 ## MANDATORY task ledger — read FIRST, every turn
 

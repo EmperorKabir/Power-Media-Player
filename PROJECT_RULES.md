@@ -5,7 +5,7 @@
 > the work, and the delicate code contingencies that must not be broken. Auto-loaded as binding
 > rules via the user's global `~/.claude/CLAUDE.md`.
 >
-> Live task ledger: `/TASKS.md` (slim — live items only). Closed history: `docs/archive/`.
+> Live task ledger: `/TASKS.md` (slim — live items only). Closed history: `archive/`.
 > Deeper detail pointers: §8.
 >
 > *Last refreshed 2026-06-26 at versionCode 39 / versionName 1.3.5. When a fact here drifts
@@ -161,10 +161,10 @@ episode → show → global) via the Tune popup; see §4.
 
 - **`/TASKS.md`** — live tasks only (PROTOCOL block governs: evidence-gated check-offs, legal statuses,
   phase lock investigate→plan→implement, no skip/defer). Read every turn; it is now slim.
-- **`docs/archive/TASKS-history.md`** — closed/verified task history.
-- **`docs/archive/superpowers/{plans,specs,investigation,audits}`** — full historical design/plan/investigation
-  record. Discover via **`docs/archive/INDEX.md`**; load a specific file only when needed.
-- **`docs/archive/project_operational_state.md`** — superseded 2026-05-05 snapshot (kept for history; this
+- **`archive/TASKS-history.md`** — closed/verified task history.
+- **`archive/superpowers/{plans,specs,investigation,audits}`** — full historical design/plan/investigation
+  record. Discover via **`archive/INDEX.md`**; load a specific file only when needed.
+- **`archive/project_operational_state.md`** — superseded 2026-05-05 snapshot (kept for history; this
   file replaces it).
 - **`release/PLAYBOOK.md`** — Play Console / Spotify-extension release steps.
 - **Auto-memory** (`~/.claude/.../memory/`, indexed by `MEMORY.md`) — preferences + resolved-regression notes,

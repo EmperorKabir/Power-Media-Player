@@ -8,7 +8,7 @@
 > 175/0; device-clean; signed AAB staged to dist/. Audit fixed 1 HIGH (Spotify sleep-timer
 > expiry) + 1 MED-HIGH (cloud-audiobook BT kind) + 5 MED + LOWs.
 
-> Closed/verified history archived to docs/archive/TASKS-history.md (read on demand).
+> Closed/verified history archived to archive/TASKS-history.md (read on demand).
 
 > ## PROTOCOL — applies to every session, every turn, forever
 > 1. **Read this file at the start of EVERY turn** and again after any context
