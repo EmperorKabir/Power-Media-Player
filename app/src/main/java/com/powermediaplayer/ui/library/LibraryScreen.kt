@@ -800,10 +800,34 @@ private fun MediaFileItem(
                         Icons.Filled.VideoFile
                     )
                 )
+            } else if (!file.isVideo) {
+                // 2026-07-10: audio rows now show real cover art via the same
+                // strictly-per-track model Last Played uses (embedded picture
+                // first — MediaMetadataRetriever reads MP4 tail-moov covr on
+                // local files fine — then the scan's CLEANED MediaStore
+                // album-art; borrowed generic-bucket art is nulled upstream).
+                // Coil memory+disk caching keys per uri; misses fall back to
+                // the generic icon via the error painter.
+                AsyncImage(
+                    model = ImageRequest.Builder(ctx)
+                        .data(
+                            com.powermediaplayer.util.LocalTrackArt(
+                                file.uriStr, file.albumArtUri?.toString()
+                            )
+                        )
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Audio file",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    error = androidx.compose.ui.graphics.vector.rememberVectorPainter(
+                        Icons.Filled.AudioFile
+                    )
+                )
             } else {
                 Icon(
-                    imageVector = if (file.isVideo) Icons.Filled.VideoFile else Icons.Filled.AudioFile,
-                    contentDescription = if (file.isVideo) "Video file" else "Audio file",
+                    imageVector = Icons.Filled.VideoFile,
+                    contentDescription = "Video file",
                     tint = TealAccent,
                     modifier = Modifier.size(28.dp)
                 )

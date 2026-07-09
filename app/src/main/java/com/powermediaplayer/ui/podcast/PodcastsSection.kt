@@ -436,6 +436,12 @@ class PodcastsViewModel @Inject constructor(
         }
     }
 
+    /** 2026-07-10: results previously lingered forever — nothing ever emptied
+     *  [_itunesResults], so clearing the search field left stale rows behind. */
+    fun clearItunesResults() {
+        _itunesResults.value = emptyList()
+    }
+
     /** Recent podcast search queries, most-recent-first (persisted). */
     val recentSearches: kotlinx.coroutines.flow.StateFlow<List<String>> =
         settings.recentSearchesPodcast.stateIn(
@@ -502,7 +508,11 @@ fun PodcastsSection(
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = url,
-                onValueChange = { url = it },
+                onValueChange = {
+                    url = it
+                    // Emptying the field dismisses stale search results too.
+                    if (it.isBlank()) vm.clearItunesResults()
+                },
                 label = { Text("RSS feed URL or search term") },
                 singleLine = true,
                 modifier = Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused }
@@ -538,7 +548,7 @@ fun PodcastsSection(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { vm.subscribeFromItunes(hit); url = "" }
+                        .clickable { vm.subscribeFromItunes(hit); url = ""; vm.clearItunesResults() }
                         .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
