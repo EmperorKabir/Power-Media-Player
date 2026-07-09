@@ -14,16 +14,38 @@ import java.nio.ByteBuffer
  * always 5) and the app mapped its 10 sliders onto them 1:1 BY INDEX. So
  * sliders 0–4 ("31"–"500 Hz") actually drove the device's full-spectrum
  * bands (boosting them clipped → the "farty/stuttery" low end) while
- * sliders 5–9 ("1 kHz"–"16 kHz") were never applied at all ("no effect on
- * the high end"). This processor implements all ten bands honestly at their
- * real frequencies, device-independent, with a soft-knee limiter so
- * cumulative boosts round off instead of hard-clipping.
+ * sliders 5–9 ("1 kHz"–"16 kHz") were never applied at all. This processor
+ * implements all ten bands honestly at their real frequencies.
+ *
+ * Output stage (item 6 redesign, 2026-07-09, adversarially cross-examined):
+ * the old design reserved worst-case-boost headroom up front (preGain =
+ * 1/maxGain), which cost the user the full boost amount in LOUDNESS on all
+ * material, all the time — the reported "big volume loss". Root-cause fix:
+ *  - NO static pre-attenuation. Boosted bands play at their true gain.
+ *  - A gain-riding envelope limiter after the cascade: instant attack,
+ *    45 ms peak-hold (covers a full 31 Hz cycle, so periodic bass does not
+ *    re-trigger release ripple), 250 ms exponential release. Gain riding is
+ *    slow relative to the waveform, so unlike a waveshaper it generates no
+ *    harmonics on sustained material.
+ *  - The tanh soft knee remains ONLY as a transient safety net ABOVE the
+ *    limiter ceiling (knee onset == ceiling — ordering matters: a knee below
+ *    the ceiling would recolour everything the limiter parks there).
+ *  - Extreme presets (every band +12 dB) now trade loudness for limiter
+ *    engagement on loud material instead of a permanent −12 dB; that is the
+ *    standard behaviour of mainstream players.
+ *
+ * Transition smoothing (the "brief fart when adjusting" fix): band gains no
+ * longer jump — a smoothed per-band value ramps exponentially (τ≈40 ms)
+ * toward the supplier's target, and coefficients are recomputed from the
+ * SMOOTHED gains per 128-frame sub-block. Every intermediate coefficient set
+ * is an exact RBJ peaking biquad (unconditionally stable for any gain), and
+ * per-block gain deltas stay well under 1 dB, keeping the TDF-II state
+ * switching transients below audibility. Flush snaps the ramp to target so a
+ * seek never replays a ghost transition.
  *
  * Levels are supplied in millibels (100 mB = 1 dB), read lazily per buffer.
- * Flat (every band 0) → exact byte-for-byte pass-through at zero cost, so
- * the rest of the chain (reverb etc.) is untouched unless the EQ is in use.
- * Placed AFTER the reverb processor in the sink chain so reverb's input —
- * and therefore its behaviour — is unchanged by this addition.
+ * Flat (every band 0, ramp settled) → exact byte-for-byte pass-through at
+ * zero cost. Placed AFTER the reverb processor in the sink chain.
  */
 @OptIn(UnstableApi::class)
 class EqualizerAudioProcessor(
@@ -39,23 +61,23 @@ class EqualizerAudioProcessor(
         const val Q = 1.41        // ~1 octave per band (graphic-EQ standard)
         const val N = 10
 
-        // #7 — kill the "robotic / low-bitrate" artefact. The biquads are
-        // correct; the artefact was a HARD soft-knee firing at ~-2 dBFS on
-        // boosted peaks with no headroom and no oversampling → high-order
-        // harmonics that alias. Fix = reserve input headroom so boosts no
-        // longer slam a low threshold (the EQ becomes headroom-managed /
-        // relative — a boosted band sits near unity while the rest sits a
-        // touch lower, the standard clean graphic-EQ behaviour), and replace
-        // the hard knee with a C-infinity-smooth tanh limiter as a last-resort
-        // ceiling whose harmonic spill rolls off fast.
         const val FULL_SCALE = 32767f
-        // Below LIMIT_LINEAR*FS the transfer is exactly unity (no colour);
-        // above it the tanh knee bends smoothly to the FULL_SCALE asymptote.
-        const val LIMIT_LINEAR = 0.85f
-        // Floor on the reserved-headroom attenuation (-24 dB) so a pathological
-        // preset can't drive the signal to silence; the tanh limiter mops up the
-        // tiny residual beyond this.
-        const val MIN_PREGAIN = 0.063
+        // Limiter ceiling AND tanh knee onset — the same point, deliberately.
+        // Below it the transfer is exactly unity; the envelope limiter parks
+        // sustained peaks here (constant gain → no colouration); the knee only
+        // shapes the brief attack overshoot beyond it.
+        const val CEILING = 0.95 * FULL_SCALE.toDouble()
+
+        // Gain-ramp time constant (ms) + recompute granularity (frames).
+        const val RAMP_TAU_MS = 40.0
+        const val SUB_BLOCK_FRAMES = 128
+        // Snap-to-target threshold: below 1 mB the ramp is done.
+        const val SNAP_MB = 1.0
+
+        // Envelope limiter: hold covers one full cycle of the lowest band
+        // (32 ms at 31 Hz) so periodic material holds a constant gain.
+        const val HOLD_MS = 45.0
+        const val RELEASE_TAU_MS = 250.0
     }
 
     private var channels = 0
@@ -73,13 +95,19 @@ class EqualizerAudioProcessor(
     private var z1 = Array(N) { DoubleArray(0) }
     private var z2 = Array(N) { DoubleArray(0) }
 
-    private var lastLevels: List<Int> = listOf(-1)   // force first recompute
+    // Smoothed (currently applied) and target band gains, in millibels.
+    private val smoothedMb = DoubleArray(N)
+    private val targetMb = DoubleArray(N)
     private var anyActive = false
 
-    // #7 — input attenuation reserved for the active preset's worst-case boost.
-    // 1.0 when flat; < 1.0 once any band is boosted, so a boosted resonant peak
-    // no longer crosses a low hard-knee threshold.
-    private var preGain = 1.0
+    // Envelope limiter state.
+    private var env = 0.0
+    private var holdFramesLeft = 0
+    private var holdFrames = 0
+    private var releaseCoef = 1.0
+
+    // Reused per-frame scratch (one slot per channel).
+    private var frameBuf = DoubleArray(0)
 
     override fun onConfigure(input: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (input.encoding != C.ENCODING_PCM_16BIT) return AudioProcessor.AudioFormat.NOT_SET
@@ -87,20 +115,37 @@ class EqualizerAudioProcessor(
         sampleRate = input.sampleRate
         z1 = Array(N) { DoubleArray(channels) }
         z2 = Array(N) { DoubleArray(channels) }
-        lastLevels = listOf(-1)
-        recompute(bandLevelsMbSupplier())
+        frameBuf = DoubleArray(channels)
+        holdFrames = (HOLD_MS * sampleRate / 1000.0).toInt()
+        releaseCoef = Math.exp(-1000.0 / (RELEASE_TAU_MS * sampleRate))
+        env = 0.0
+        holdFramesLeft = 0
+        // Track start: apply the current levels directly (no ramp from flat —
+        // ramping in at track start would audibly sweep the EQ on every song).
+        snapToSupplier()
         return input
     }
 
-    private fun recompute(levels: List<Int>) {
-        lastLevels = levels
+    private fun readTargets() {
+        val levels = bandLevelsMbSupplier()
+        for (i in 0 until N) targetMb[i] = levels.getOrElse(i) { 0 }.toDouble()
+    }
+
+    private fun snapToSupplier() {
+        readTargets()
+        System.arraycopy(targetMb, 0, smoothedMb, 0, N)
+        recompute()
+    }
+
+    /** Rebuild the RBJ peaking coefficients from the SMOOTHED gains. */
+    private fun recompute() {
         var active = false
         for (i in 0 until N) {
-            val mb = levels.getOrElse(i) { 0 }
+            val mb = smoothedMb[i]
             val f0 = CENTERS[i]
             // Skip flat bands and any centre at/above Nyquist (low sample
             // rates) — a peaking filter there is undefined / unstable.
-            if (mb == 0 || sampleRate <= 0 || f0 >= sampleRate * 0.45) {
+            if (Math.abs(mb) < SNAP_MB || sampleRate <= 0 || f0 >= sampleRate * 0.45) {
                 bandActive[i] = false
                 continue
             }
@@ -119,98 +164,123 @@ class EqualizerAudioProcessor(
             active = true
         }
         anyActive = active
-        // #7 — reserve headroom equal to the cascade's ACTUAL worst-case peak
-        // linear gain, so a boosted band sits at unity (never clips) while the
-        // rest sits proportionally lower. We evaluate |H(f)| of the active
-        // cascade at each band centre and reserve the maximum. This keeps the
-        // per-sample tanh limiter from engaging on normal programme at all — so
-        // there are NO harmonics to alias (the +12 dB-all-bands extreme that a
-        // crude dB-sum headroom left at ~9 % THD now measures ~0 %), making
-        // polyphase oversampling unnecessary. A cut-only preset reserves nothing
-        // (maxGain<=1 → preGain=1, no level loss). There is deliberately no
-        // make-up restore: restoring would push the peak back over full scale and
-        // re-introduce the clipping that caused the artefact — the headroom IS
-        // the fix; tanh only mops up any tiny between-centre overshoot.
-        var maxGain = 1.0
-        for (fIdx in 0 until N) {
-            if (!bandActive[fIdx]) continue
-            val f = CENTERS[fIdx]
-            if (sampleRate <= 0 || f >= sampleRate * 0.45) continue
-            val w = 2.0 * Math.PI * f / sampleRate
-            val cw = Math.cos(w); val sw = Math.sin(w)
-            val c2 = Math.cos(2.0 * w); val s2 = Math.sin(2.0 * w)
-            var g = 1.0
-            for (i in 0 until N) {
-                if (!bandActive[i]) continue
-                val nre = b0[i] + b1[i] * cw + b2[i] * c2
-                val nim = -(b1[i] * sw + b2[i] * s2)
-                val dre = 1.0 + a1[i] * cw + a2[i] * c2
-                val dim = -(a1[i] * sw + a2[i] * s2)
-                g *= Math.sqrt((nre * nre + nim * nim) / (dre * dre + dim * dim))
+    }
+
+    /** Advance the gain ramp by [frames] worth of time. Returns true when any
+     *  smoothed value moved (coefficients need a recompute). */
+    private fun advanceRamp(frames: Int): Boolean {
+        var moved = false
+        var pending = false
+        for (i in 0 until N) if (Math.abs(targetMb[i] - smoothedMb[i]) >= SNAP_MB) pending = true
+        if (!pending) {
+            // Snap any sub-threshold residue exactly to target.
+            for (i in 0 until N) if (smoothedMb[i] != targetMb[i]) {
+                smoothedMb[i] = targetMb[i]; moved = true
             }
-            if (g > maxGain) maxGain = g
+            return moved
         }
-        preGain = (1.0 / maxGain).coerceIn(MIN_PREGAIN, 1.0)
+        val alpha = 1.0 - Math.exp(-frames.toDouble() / (RAMP_TAU_MS * sampleRate / 1000.0))
+        for (i in 0 until N) {
+            val d = targetMb[i] - smoothedMb[i]
+            if (d == 0.0) continue
+            smoothedMb[i] = if (Math.abs(d) < SNAP_MB) targetMb[i] else smoothedMb[i] + d * alpha
+            moved = true
+        }
+        return moved
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
-        val levels = bandLevelsMbSupplier()
-        if (levels != lastLevels) recompute(levels)
+        readTargets()
 
-        if (!anyActive || channels == 0) {
-            // Flat → exact pass-through; downstream sees identical bytes.
+        // Flat + settled → exact pass-through; downstream sees identical bytes
+        // and the limiter never touches an un-EQ'd signal.
+        var flat = true
+        for (i in 0 until N) {
+            if (Math.abs(targetMb[i]) >= SNAP_MB || Math.abs(smoothedMb[i]) >= SNAP_MB) {
+                flat = false; break
+            }
+        }
+        if (flat || channels == 0) {
+            for (i in 0 until N) smoothedMb[i] = targetMb[i]
+            anyActive = false
+            env = 0.0; holdFramesLeft = 0
             replaceOutputBuffer(remaining).put(inputBuffer).flip()
             return
         }
 
         val out = replaceOutputBuffer(remaining)
-        val samples = remaining / 2
-        val threshold = LIMIT_LINEAR * FULL_SCALE
-        val span = (1f - LIMIT_LINEAR) * FULL_SCALE
-        var ch = 0
-        repeat(samples) {
-            // Pre-attenuate into the cascade by the reserved headroom (#7).
-            var x = inputBuffer.short.toDouble() * preGain
-            for (i in 0 until N) {
-                if (!bandActive[i]) continue
-                val y = b0[i] * x + z1[i][ch]
-                z1[i][ch] = b1[i] * x - a1[i] * y + z2[i][ch]
-                z2[i][ch] = b2[i] * x - a2[i] * y
-                x = y
+        val totalFrames = remaining / (2 * channels)
+        val span = FULL_SCALE - CEILING
+        var framesLeft = totalFrames
+        while (framesLeft > 0) {
+            val block = if (framesLeft > SUB_BLOCK_FRAMES) SUB_BLOCK_FRAMES else framesLeft
+            if (advanceRamp(block)) recompute()
+            repeat(block) {
+                var framePeak = 0.0
+                for (ch in 0 until channels) {
+                    var x = inputBuffer.short.toDouble()
+                    for (i in 0 until N) {
+                        if (!bandActive[i]) continue
+                        val y = b0[i] * x + z1[i][ch]
+                        z1[i][ch] = b1[i] * x - a1[i] * y + z2[i][ch]
+                        z2[i][ch] = b2[i] * x - a2[i] * y
+                        x = y
+                    }
+                    frameBuf[ch] = x
+                    val a = Math.abs(x)
+                    if (a > framePeak) framePeak = a
+                }
+                // Envelope: instant attack, hold, exponential release. One gain
+                // per FRAME (max across channels) so the stereo image is stable.
+                if (framePeak >= env) {
+                    env = framePeak
+                    holdFramesLeft = holdFrames
+                } else if (holdFramesLeft > 0) {
+                    holdFramesLeft--
+                } else {
+                    env *= releaseCoef
+                }
+                val gain = if (env > CEILING) CEILING / env else 1.0
+                for (ch in 0 until channels) {
+                    var v = frameBuf[ch] * gain
+                    val a = Math.abs(v)
+                    if (a > CEILING) {
+                        // Attack-overshoot safety net only: C-infinity tanh knee
+                        // from the ceiling to the FULL_SCALE asymptote.
+                        val over = (a - CEILING) / span
+                        v = Math.signum(v) * (CEILING + span * Math.tanh(over))
+                    }
+                    val s = v.coerceIn(-FULL_SCALE.toDouble(), FULL_SCALE.toDouble())
+                    out.putShort(s.toInt().toShort())
+                }
             }
-            var v = x.toFloat()
-            val a = kotlin.math.abs(v)
-            if (a > threshold) {
-                // Smooth tanh knee from `threshold` up to the FULL_SCALE
-                // asymptote — C-infinity, so its harmonic spill rolls off far
-                // faster than the old hard knee (which aliased).
-                val over = (a - threshold) / span
-                v = Math.signum(v) * FULL_SCALE *
-                    (LIMIT_LINEAR + (1f - LIMIT_LINEAR) *
-                        kotlin.math.tanh(over.toDouble()).toFloat())
-            }
-            out.putShort(v.coerceIn(-FULL_SCALE, FULL_SCALE).toInt().toShort())
-            ch++
-            if (ch >= channels) ch = 0
+            framesLeft -= block
         }
         out.flip()
     }
 
     override fun onFlush() {
-        // Clear filter memory on seek/flush so a stale tail can't click.
+        // Clear filter memory on seek/flush so a stale tail can't click, and
+        // snap the gain ramp to target so a seek never replays a transition.
         for (i in 0 until N) {
             if (z1[i].isNotEmpty()) java.util.Arrays.fill(z1[i], 0.0)
             if (z2[i].isNotEmpty()) java.util.Arrays.fill(z2[i], 0.0)
         }
+        env = 0.0
+        holdFramesLeft = 0
+        snapToSupplier()
     }
 
     override fun onReset() {
         z1 = Array(N) { DoubleArray(0) }
         z2 = Array(N) { DoubleArray(0) }
-        lastLevels = listOf(-1)
+        frameBuf = DoubleArray(0)
+        java.util.Arrays.fill(smoothedMb, 0.0)
+        java.util.Arrays.fill(targetMb, 0.0)
         anyActive = false
-        preGain = 1.0
+        env = 0.0
+        holdFramesLeft = 0
     }
 }
