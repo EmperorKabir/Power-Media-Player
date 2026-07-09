@@ -1036,6 +1036,14 @@ class PlaybackConnection @Inject constructor(
                     "itemArtwork=${itemMetadata?.artworkUri != null} " +
                     "sampleKeys=[$keys]"
             )
+            // Item 1 (2026-07-09): release-build observable twin of the line above
+            // (Diag.* strips in release). Same 1-in-16 sample gate.
+            com.powermediaplayer.diag.DiagLog.event(
+                "COVER",
+                "meta artData=${(metadata.artworkData ?: itemMetadata?.artworkData)?.size ?: 0}B " +
+                    "artUri=${(metadata.artworkUri ?: itemMetadata?.artworkUri) != null} " +
+                    "title='${metadata.title?.toString().orEmpty().take(24)}'"
+            )
         }
         val chapters = extractChapters(c)
         val isFolderMode = folderChapters != null

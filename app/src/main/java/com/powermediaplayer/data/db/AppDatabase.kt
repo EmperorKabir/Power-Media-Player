@@ -104,7 +104,9 @@ import com.powermediaplayer.data.db.dao.PinnedAlbumDao
     // v22 → v23 (2026-07-04, audit B5-01/B-6): podcast_episodes indices on
     //      (feedUrl, publishedAt) + audioUrl — the audioUrl lookup runs per track
     //      change and was an unindexed full-table scan. Additive CREATE INDEX only.
-    version = 23,
+    // v23 → v24 (2026-07-09, item 7): media_overrides gains customTitle (per-file
+    //      display title override). Additive ALTER.
+    version = 24,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -255,6 +257,12 @@ abstract class AppDatabase : RoomDatabase() {
         // v22 → v23 (audit B5-01/B-6): additive indices; names MUST match Room's
         // entity-derived naming (index_<table>_<col>[_<col>]) or schema validation
         // fails at open — same pattern as MIGRATION_20_21.
+        val MIGRATION_23_24: Migration = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_overrides ADD COLUMN customTitle TEXT")
+            }
+        }
+
         val MIGRATION_22_23: Migration = object : Migration(22, 23) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

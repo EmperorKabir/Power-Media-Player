@@ -47,6 +47,10 @@ data class MediaOverrideEntity(
     val playbackSpeed: Float? = null,
     val pitch: Float? = null,
 
+    // 2026-07-09 item 7: user-facing display title override (the source file's
+    // embedded tag may itself be truncated/garbled; this wins on the player).
+    val customTitle: String? = null,
+
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     fun hasAnyAudio(): Boolean = reverbPreset != null || stereoFlip != null ||
@@ -59,5 +63,8 @@ data class MediaOverrideEntity(
 
     fun hasAnySpeed(): Boolean = playbackSpeed != null || pitch != null
 
-    fun isEmpty(): Boolean = !hasAnyAudio() && !hasAnyVideo() && !hasAnySpeed()
+    fun hasCustomTitle(): Boolean = !customTitle.isNullOrBlank()
+
+    fun isEmpty(): Boolean = !hasAnyAudio() && !hasAnyVideo() && !hasAnySpeed() &&
+        !hasCustomTitle()
 }

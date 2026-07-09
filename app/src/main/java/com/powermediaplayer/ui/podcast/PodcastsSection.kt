@@ -491,8 +491,8 @@ fun PodcastsSection(
                     color = TextPrimary
                 )
                 Text(
-                    "Subscribe by RSS URL. Episode list and auto-sync " +
-                        "are wired and refresh on each visit.",
+                    "Subscribe by RSS URL or search for a show by name. " +
+                        "Episode lists refresh on each visit and sync in the background.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
@@ -585,6 +585,10 @@ fun PodcastsSection(
             )
             expandedFeed?.let { feed ->
                 shows.firstOrNull { it.feedUrl == feed }?.let { show ->
+                    // Item 5a (2026-07-09): the expanded panel renders below the
+                    // whole shows list (deliberate, avoids push-down), so name
+                    // WHOSE episodes these are. Uses theme tokens only.
+                    ExpandedShowHeader(show = show, onCollapse = { expandedFeed = null })
                     ShowSettingsRow(show = show, vm = vm)
                     EpisodeList(
                         feedUrl = show.feedUrl,
@@ -612,6 +616,7 @@ fun PodcastsSection(
                     mediaUri = show.feedUrl,
                     title = show.title,
                     dao = vm.mediaOverrideDao,
+                    showTitleField = false,
                     headerText = "Settings for this whole podcast",
                     applyNote = "These apply to EVERY episode of this podcast. " +
                         "A per-episode override (the 3-dot on an episode) wins " +
@@ -621,6 +626,40 @@ fun PodcastsSection(
                 )
             }
         }
+    }
+}
+
+/** Item 5a (2026-07-09): names WHOSE episodes the expanded panel shows.
+ *  Theme tokens only (surface + accent + type scale) so any future theming
+ *  restyles it automatically. Tapping it collapses, mirroring the show row. */
+@Composable
+private fun ExpandedShowHeader(show: PodcastShowEntity, onCollapse: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(SurfaceElevated)
+            .clickable { onCollapse() }
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PodcastArtwork(show.artworkUrl, 32.dp)
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "Episodes · ${show.title}",
+            style = MaterialTheme.typography.titleSmall,
+            color = TealAccent,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            Icons.Filled.Close,
+            contentDescription = "Collapse ${show.title}",
+            tint = TextSecondary,
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
@@ -650,10 +689,21 @@ private fun ShowSettingsRow(
                 modifier = Modifier.padding(top = 12.dp)
             )
         }
+        // Item 3 (2026-07-09): enabling notifications is the natural moment to
+        // ask for the Android 13+ notification permission. Launching when
+        // already granted is a no-op, so no pre-check is needed.
+        val notifPermission = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { }
         Row(verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Switch(
                 checked = notify,
-                onCheckedChange = { notify = it; persist() }
+                onCheckedChange = {
+                    notify = it; persist()
+                    if (it && android.os.Build.VERSION.SDK_INT >= 33) {
+                        notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
             )
             Text(
                 "  Notify on new episode",

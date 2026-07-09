@@ -325,7 +325,12 @@ fun SleepTimerButton(
 }
 
 private fun formatSpeed(speed: Float): String {
-    return if (speed == speed.toLong().toFloat()) "${speed.toLong()}x" else "${speed}x"
+    // Item 2 (2026-07-09): binary floats cannot represent values like 1.3 —
+    // slider-produced speeds printed as "1.3000001x". Round to 2 dp and trim:
+    // 1.0 → "1x", 1.3 → "1.3x", 1.25 → "1.25x".
+    val r = kotlin.math.round(speed * 100f) / 100f
+    return if (r == r.toLong().toFloat()) "${r.toLong()}x"
+        else "%.2f".format(java.util.Locale.UK, r).trimEnd('0').trimEnd('.') + "x"
 }
 
 @Composable

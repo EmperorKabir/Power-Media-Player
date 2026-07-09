@@ -71,7 +71,10 @@ fun MediaOverridesPopup(
     // When set (per-episode popup), the override row at this key (the podcast's
     // per-show override, keyed by feedUrl) is shown as a read-only "inherited"
     // hint for axes the episode hasn't overridden.
-    inheritedFromUri: String? = null
+    inheritedFromUri: String? = null,
+    // Item 7 (2026-07-09): per-file display title. Hidden for the per-show
+    // (whole podcast) popup, where one title across every episode makes no sense.
+    showTitleField: Boolean = true
 ) {
     val current by dao.getByUri(mediaUri).collectAsState(initial = null)
     // Always collect (stable hook); a blank/placeholder key yields no row.
@@ -129,6 +132,26 @@ fun MediaOverridesPopup(
                     text = "From this podcast (unless overridden below): $inheritedNote",
                     style = MaterialTheme.typography.labelSmall,
                     color = TealAccent
+                )
+            }
+            if (showTitleField) {
+                Spacer(Modifier.height(10.dp))
+                var titleDraft by remember(current) {
+                    mutableStateOf(current?.customTitle ?: "")
+                }
+                androidx.compose.material3.OutlinedTextField(
+                    value = titleDraft,
+                    onValueChange = { titleDraft = it },
+                    label = { Text("Custom title (blank = use the file's own)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (titleDraft.trim() != (current?.customTitle ?: "")) {
+                            TextButton(onClick = {
+                                save(draft.copy(customTitle = titleDraft.trim().ifBlank { null }))
+                            }) { Text("Save", color = TealAccent) }
+                        }
+                    }
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -284,9 +307,9 @@ private fun SpeedTab(
                 onSave(draft.copy(playbackSpeed = if (it) 1.0f else null))
             },
             onValueChange = {
-                onSave(draft.copy(playbackSpeed = it.coerceIn(0.5f, 2.0f)))
+                onSave(draft.copy(playbackSpeed = kotlin.math.round(it.coerceIn(0.5f, 2.0f) * 100f) / 100f))
             },
-            display = { v -> "%.2fx".format(v) }
+            display = { v -> trim2(v) + "x" }
         )
         AxisSlider(
             label = "Pitch",
@@ -297,9 +320,9 @@ private fun SpeedTab(
                 onSave(draft.copy(pitch = if (it) 1.0f else null))
             },
             onValueChange = {
-                onSave(draft.copy(pitch = it.coerceIn(0.5f, 2.0f)))
+                onSave(draft.copy(pitch = kotlin.math.round(it.coerceIn(0.5f, 2.0f) * 100f) / 100f))
             },
-            display = { v -> "%.2fx".format(v) }
+            display = { v -> trim2(v) + "x" }
         )
     }
 }
@@ -314,9 +337,9 @@ private fun inheritedSummary(
     if (show == null) return null
     val parts = mutableListOf<String>()
     if (show.playbackSpeed != null && ep?.playbackSpeed == null)
-        parts += "Speed ${show.playbackSpeed}x"
+        parts += "Speed ${trim2(show.playbackSpeed)}x"
     if (show.pitch != null && ep?.pitch == null)
-        parts += "Pitch ${show.pitch}x"
+        parts += "Pitch ${trim2(show.pitch)}x"
     if (show.volumeBoostMb != null && ep?.volumeBoostMb == null)
         parts += "Boost ${show.volumeBoostMb} mB"
     if (show.stereoFlip != null && ep?.stereoFlip == null)
@@ -457,3 +480,10 @@ private fun AxisChips(
 }
 
 // Audit B2: dead reverbLabel() removed (labels live in the AxisChips options).
+
+// Item 2 (2026-07-09): 2 dp, trailing zeros trimmed (1.3 not 1.3000001; 1.25 kept).
+private fun trim2(v: Float): String {
+    val r = kotlin.math.round(v * 100f) / 100f
+    return if (r == r.toLong().toFloat()) "${r.toLong()}"
+        else "%.2f".format(java.util.Locale.UK, r).trimEnd('0').trimEnd('.')
+}

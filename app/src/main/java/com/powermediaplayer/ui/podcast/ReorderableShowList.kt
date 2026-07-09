@@ -1,6 +1,9 @@
 package com.powermediaplayer.ui.podcast
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,10 +26,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.powermediaplayer.data.db.dao.PodcastDao
 import com.powermediaplayer.data.db.entity.PodcastShowEntity
 import com.powermediaplayer.ui.theme.ErrorRed
+import com.powermediaplayer.ui.theme.SurfaceElevated
+import com.powermediaplayer.ui.theme.TealAccent
 import com.powermediaplayer.ui.theme.TextPrimary
 import com.powermediaplayer.ui.theme.TextSecondary
 import com.powermediaplayer.ui.theme.TextTertiary
@@ -66,13 +72,30 @@ fun ReorderableShowList(
         itemsIndexed(shows, key = { _, s -> "show_${s.feedUrl}" }) { _, show ->
             ReorderableItem(reorderState, key = "show_${show.feedUrl}") { _ ->
                 val c = counts[show.feedUrl]
+                // Item 5b (2026-07-09): make the EXPANDED show unmistakable —
+                // tinted surface + leading accent bar. Theme tokens only.
+                val isExpanded = show.feedUrl == expandedFeed
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                        .background(
+                            if (isExpanded) SurfaceElevated
+                            else androidx.compose.ui.graphics.Color.Transparent
+                        )
                         .clickable { onToggleExpand(show.feedUrl) }
                         .padding(vertical = 8.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (isExpanded) {
+                        Box(
+                            Modifier
+                                .width(3.dp)
+                                .height(56.dp)
+                                .background(TealAccent)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    }
                     PodcastArtwork(show.artworkUrl, 56.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {

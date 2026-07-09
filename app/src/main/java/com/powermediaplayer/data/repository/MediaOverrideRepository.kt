@@ -158,7 +158,10 @@ internal fun mergeEpisodeOverShow(
         videoInvert = ep?.videoInvert ?: show?.videoInvert,
         videoRotation = ep?.videoRotation ?: show?.videoRotation,
         playbackSpeed = ep?.playbackSpeed ?: show?.playbackSpeed,
-        pitch = ep?.pitch ?: show?.pitch
+        pitch = ep?.pitch ?: show?.pitch,
+        // Item 7 (2026-07-09): episode ONLY — a show-level title would rename
+        // every episode, and the per-show popup deliberately has no title field.
+        customTitle = ep?.customTitle
     )
     return if (merged.isEmpty()) null else merged
 }

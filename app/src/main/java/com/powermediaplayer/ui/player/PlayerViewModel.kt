@@ -577,7 +577,10 @@ class PlayerViewModel @Inject constructor(
         _sleepTimerRemainingMs,
         spotifyProvider.spotifyState,
         spotifyProvider.spotifyMetadataFetching,
-        playbackConnection.playerFlow
+        playbackConnection.playerFlow,
+        // Item 7 (2026-07-09): per-file display-title override — some source
+        // files carry truncated/garbled embedded title tags the app cannot fix.
+        mediaOverrideRepo.activeOverride
     ) { args ->
         val playerState = args[0] as PlayerState
         @Suppress("UNCHECKED_CAST")
@@ -585,6 +588,8 @@ class PlayerViewModel @Inject constructor(
         val spotify = args[2] as SpotifyPlaybackState?
         val spotifyFetching = args[3] as Boolean
         val activePlayer = args[4] as androidx.media3.common.Player?
+        val customTitle = (args[5] as com.powermediaplayer.data.db.entity.MediaOverrideEntity?)
+            ?.customTitle?.takeIf { it.isNotBlank() }
         val isCasting = activePlayer is androidx.media3.cast.CastPlayer
         val base = mapToUiState(playerState, sleepRemaining)
         val withSpotify = if (spotify != null) overlaySpotifyState(base, spotify) else base
@@ -593,7 +598,8 @@ class PlayerViewModel @Inject constructor(
         } else withSpotify
         withCloudBanner.copy(
             isSpotifyActive = spotify != null,
-            isCasting = isCasting
+            isCasting = isCasting,
+            title = customTitle ?: withCloudBanner.title
         )
     }
         // Audit 3.3 — position-only ticks no longer reach the UI tree:

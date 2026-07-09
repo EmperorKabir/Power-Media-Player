@@ -99,7 +99,22 @@ class PodcastSyncWorker @AssistedInject constructor(
                 downloadTreeUri = show.downloadTreeUri
             )
         )
+        // Item 3 (2026-07-09): know which episodes are genuinely NEW before the
+        // upsert. First-ever population (empty pre set) never notifies — that
+        // would fire for the entire back catalogue on subscribe.
+        val preGuids: Set<String>? = if (show.notifyOnNewEpisode) {
+            podcastDao.observeEpisodes(show.feedUrl).first().mapTo(HashSet()) { it.guid }
+        } else null
         podcastDao.syncEpisodes(episodes)
+        if (preGuids != null && preGuids.isNotEmpty()) {
+            val fresh = episodes.filter { it.guid !in preGuids }
+            if (fresh.isNotEmpty()) {
+                PodcastNotifier.notifyNewEpisodes(
+                    applicationContext, show, fresh.size,
+                    fresh.maxByOrNull { it.publishedAt }?.title
+                )
+            }
+        }
         var downloaded = 0
         // §C10 auto-download — when the user opted in, fetch the
         // newest N episodes' audio files into the spec'd folder.

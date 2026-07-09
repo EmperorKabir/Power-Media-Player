@@ -79,8 +79,19 @@ fun CoverArtBackground(
                         "Cover decoded: bytes=${bytes.size} bitmap=${it != null} " +
                             "size=${it?.width}x${it?.height}"
                     )
+                    // Item 1 (2026-07-09): Diag.* is stripped from release builds,
+                    // which left the art path unobservable in the field. DiagLog
+                    // writes to the opt-in diagnostic FILE in every build type.
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "COVER",
+                        "decode bytes=${bytes.size} bitmap=${it != null} size=${it?.width}x${it?.height}"
+                    )
                 }
             } else {
+                com.powermediaplayer.diag.DiagLog.event(
+                    "COVER",
+                    "no embedded bytes; uri=${artworkUri != null} hasCoverArt flag drives URI path"
+                )
                 null
             }
         }
@@ -137,6 +148,7 @@ fun CoverArtBackground(
                 modifier = Modifier.fillMaxSize(),
                 onSuccess = { result ->
                     com.powermediaplayer.util.Diag.i("PMP_DIAG", "CoverArt AsyncImage onSuccess uri=$artworkUri")
+                    com.powermediaplayer.diag.DiagLog.event("COVER", "AsyncImage success uri=${com.powermediaplayer.diag.DiagLog.hash(artworkUri.toString())}")
                     val bm = runCatching {
                         (result.result as? SuccessResult)?.image?.toBitmap()
                     }.getOrNull()
