@@ -279,6 +279,12 @@ class PlaybackService : MediaSessionService() {
          */
         @Volatile var lastPauseWasRouteLoss: Boolean = false
 
+        /** 2026-07-10: elapsedRealtime of the last BT A2DP sink connect — the
+         *  MEDIA_PLAY swallow (BMW ignition auto-play suppression) now applies
+         *  only within a short window after this, so a DELIBERATE press of the
+         *  play button on a headset works even with resume-on-BT off. */
+        @Volatile var lastA2dpConnectMs: Long = 0L
+
         // Custom session commands for features not in standard transport controls
         const val ACTION_SKIP_BACK_5    = "ACTION_SKIP_BACK_5"
         const val ACTION_SKIP_BACK_10   = "ACTION_SKIP_BACK_10"
@@ -1539,6 +1545,10 @@ class PlaybackService : MediaSessionService() {
                         it.isSink && it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
                     } == true
                     if (btSinkAdded) btVideoRouteActive = true
+                    // 2026-07-10: timestamp for the MEDIA_PLAY swallow window —
+                    // only key events arriving shortly after a BT connect are
+                    // treated as the head unit's automatic play request.
+                    if (btSinkAdded) lastA2dpConnectMs = android.os.SystemClock.elapsedRealtime()
                     if (btSinkAdded) {
                         // A BT audio device connecting should ROUTE audio to it:
                         // (1) Clear any phone-speaker reroute. The BT-disconnect
@@ -3638,17 +3648,26 @@ class PlaybackService : MediaSessionService() {
                     // A2DP after ignition and the car media controller
                     // re-issues a play request. Snapshot synchronously
                     // — DataStore reads off the binder thread will block.
-                    val allow = runCatching {
+                    val resumeAllowed = runCatching {
                         kotlinx.coroutines.runBlocking {
                             kotlinx.coroutines.withTimeoutOrNull(150) {
                                 settingsDataStore.resumeOnBt.first()
                             }
                         }
                     }.getOrNull() ?: false
+                    // 2026-07-10 refinement: the suppression exists for the HU's
+                    // AUTOMATIC play-on-connect. Only swallow inside a short
+                    // window after a BT connect; a deliberate press later on a
+                    // headset must always work (it previously did nothing when
+                    // the toggle was off — verified via adb on 2026-07-05).
+                    val sinceConnect =
+                        android.os.SystemClock.elapsedRealtime() - lastA2dpConnectMs
+                    val autoPlayWindow = lastA2dpConnectMs != 0L && sinceConnect < 10_000
+                    val allow = resumeAllowed || !autoPlayWindow
                     com.powermediaplayer.diag.DiagLog.dec(
                         branch = "BT-PLAY",
-                        reason = if (allow) "resumeOnBt=true → allowing play" else
-                            "resumeOnBt=false → swallowing play KeyEvent"
+                        reason = "resumeOnBt=$resumeAllowed sinceConnectMs=$sinceConnect " +
+                            if (allow) "→ allowing play" else "→ swallowing auto-play KeyEvent"
                     )
                     if (allow) false else true // false = let Media3 dispatch; true = swallow
                 }

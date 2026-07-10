@@ -749,9 +749,16 @@ class LibraryViewModel @Inject constructor(
                 rows.add(
                     RawAudioRow(
                         id = cursor.getLong(idCol),
-                        title = cursor.getString(titleCol) ?: "Unknown",
-                        artist = cursor.getString(artistCol) ?: "Unknown Artist",
-                        album = cursor.getString(albumCol) ?: "Unknown Album",
+                        // 2026-07-10: some files carry UTF-8-as-Latin-1 tags
+                        // ("Philosopherâ€™s") — repair at scan so every Library
+                        // surface (rows, search, sort keys) sees clean text.
+                        // fixMojibake is idempotent with a cheap marker reject.
+                        title = com.powermediaplayer.util.TextNormalizer
+                            .fixMojibake(cursor.getString(titleCol) ?: "Unknown"),
+                        artist = com.powermediaplayer.util.TextNormalizer
+                            .fixMojibake(cursor.getString(artistCol) ?: "Unknown Artist"),
+                        album = com.powermediaplayer.util.TextNormalizer
+                            .fixMojibake(cursor.getString(albumCol) ?: "Unknown Album"),
                         albumArtist = if (albumArtistCol >= 0) cursor.getString(albumArtistCol) else null,
                         duration = cursor.getLong(durationCol),
                         mime = cursor.getString(mimeCol) ?: "",

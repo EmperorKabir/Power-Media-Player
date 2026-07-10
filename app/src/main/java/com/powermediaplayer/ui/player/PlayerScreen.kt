@@ -86,6 +86,21 @@ val LocalOpenPopupCount = compositionLocalOf<androidx.compose.runtime.MutableInt
  * album/playlist is the active context. Tapping a track plays it WITHIN that
  * context so next/previous + shuffle keep traversing the album.
  */
+/** 2026-07-10 cast-art fix: during a cast session a LOCAL file's artworkUri is
+ *  our cleartext http relay URL — fetchable by the RECEIVER but not by the
+ *  phone (the app permits no cleartext traffic), which is why the player went
+ *  artless while casting. Read the art straight from the local file instead
+ *  via the per-track fetcher. Non-local sources (https enrichment/Spotify art)
+ *  are untouched. */
+private fun castSafeArtModel(uiState: PlayerUiState, artworkBytes: ByteArray?): Any? {
+    val uri = uiState.artworkUri ?: return null
+    return if (artworkBytes == null && uri.scheme == "http" &&
+        uiState.currentMediaUri.startsWith("content://")
+    ) {
+        com.powermediaplayer.util.LocalTrackArt(uiState.currentMediaUri, null)
+    } else uri
+}
+
 @Composable
 private fun SpotifyAlbumTracksButton(viewModel: PlayerViewModel) {
     val tracks by viewModel.spotifyContextTracks.collectAsStateWithLifecycle()
@@ -836,7 +851,7 @@ private fun PlayerScreenCompact(
         } else {
             // Audio content: show album art with palette-extracted colours
             CoverArtBackground(
-                artworkUri = uiState.artworkUri,
+                artworkUri = castSafeArtModel(uiState, artworkBytes),
                 artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted,
@@ -1446,7 +1461,7 @@ private fun PlayerScreenExpanded(
                 .fillMaxHeight()
         ) {
             CoverArtBackground(
-                artworkUri = uiState.artworkUri,
+                artworkUri = castSafeArtModel(uiState, artworkBytes),
                 artworkBytes = artworkBytes,
                 hasCoverArt = uiState.hasCoverArt,
                 onColorsExtracted = onColorsExtracted,
