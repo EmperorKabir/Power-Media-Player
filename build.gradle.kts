@@ -1,6 +1,6 @@
 // Top-level build file for Power Media Player
 plugins {
-    id("com.android.application") version "8.7.3" apply false
+    id("com.android.application") version "8.10.1" apply false
     // Kotlin 2.1.20 + KSP 2.1.20-1.0.32 is a verified stable pairing.
     // KSP version format: {kotlin-version}-{ksp-release}
     // kotlin-android is required because AGP 8.x does NOT have the

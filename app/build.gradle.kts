@@ -22,14 +22,19 @@ fun localProp(key: String): String = localProps.getProperty(key) ?: ""
 
 android {
     namespace = "com.powermediaplayer"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.powermediaplayer"
         minSdk = 30
-        targetSdk = 35
-        versionCode = 49
-        versionName = "1.4.4"
+        // 2026-07-22: Play policy — target API 36 by 31 Aug 2026 or updates
+        // are rejected. Behaviour-change review for 36: edge-to-edge opt-out
+        // removed (we already run enableEdgeToEdge + Compose insets), no
+        // orientation locks to trip the large-screen rule, no native .so
+        // (16 KB page rule moot), WorkManager unaffected.
+        targetSdk = 36
+        versionCode = 50
+        versionName = "1.4.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
