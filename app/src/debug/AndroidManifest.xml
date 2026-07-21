@@ -10,6 +10,17 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <application>
+        <!-- Debug-only test hook (2026-07-19): lets adb launch the Drive
+             Picker WebView directly with a token extra, so the picker's
+             cookie behaviour is testable on-device without the package-bound
+             OAuth step (the .test suffix is not registered at the OAuth
+             console). Release manifest keeps the activity non-exported. -->
+        <activity
+            android:name="com.powermediaplayer.cloud.DrivePickerActivity"
+            android:exported="true"
+            tools:node="merge"
+            tools:replace="android:exported" />
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

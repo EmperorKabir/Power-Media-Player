@@ -78,6 +78,19 @@ class DrivePickerActivity : ComponentActivity() {
                 useWideViewPort = true
                 loadWithOverviewMode = true
             }
+            // 2026-07-19 (new-device regression): the Picker iframe is served
+            // from Google's origin while our page origin is the local base
+            // URL, so every Google cookie here is THIRD-party — and WebView
+            // blocks third-party cookies by default. On a fresh WebView
+            // profile (new phone) Google then refuses the picker outright:
+            // "Can't access your Google Account … try … allowing cookie
+            // access to proceed." Old installs worked only because their
+            // WebView profile predated the stricter enforcement. Scope is
+            // THIS WebView instance only.
+            android.webkit.CookieManager.getInstance().apply {
+                setAcceptCookie(true)
+                setAcceptThirdPartyCookies(v, true)
+            }
             v.webViewClient = WebViewClient()
             v.addJavascriptInterface(
                 JsBridge(token, apiKey, appId),
