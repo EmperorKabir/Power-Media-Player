@@ -46,6 +46,19 @@ object MediaClassifier {
         name.substringAfterLast('.', "").lowercase()
 
     /**
+     * 2026-07-22: is this a playable media file by EITHER its name extension OR
+     * its mime prefix? Cloud stores (Drive) frequently label audiobooks and even
+     * some audio as `application/octet-stream`, so a mime-only test drops them.
+     * The extension set is authoritative; the mime prefix is a fallback for
+     * extensionless names.
+     */
+    fun isMediaByName(name: String, mimeType: String): Boolean {
+        if (extOf(name) in RAW_MEDIA_EXTENSIONS) return true
+        val m = mimeType.lowercase()
+        return m.startsWith("audio/") || m.startsWith("video/")
+    }
+
+    /**
      * True when [title] is still a RAW media filename ("…[B0F14RFHS6].m4b")
      * rather than an embedded-tag title. Drives the cold-start heal-re-enrich
      * (PlaybackSessionCoordinator): a stored title that ends in a media
