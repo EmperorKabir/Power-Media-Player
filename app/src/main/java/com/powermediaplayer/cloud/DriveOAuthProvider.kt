@@ -220,30 +220,59 @@ class DriveOAuthProvider @Inject constructor(
                 // application/octet-stream — notably .m4b audiobooks. List all
                 // non-trashed children and filter client-side by name OR mime.
                 val q = "'$folderId' in parents and trashed = false"
-                val url = "https://www.googleapis.com/drive/v3/files?" +
+                // supportsAllDrives + includeItemsFromAllDrives are REQUIRED to
+                // list a Shared Drive, or a folder someone else owns and shared
+                // with the user. Without them those folders silently return zero
+                // children. Harmless for ordinary My Drive folders.
+                val base = "https://www.googleapis.com/drive/v3/files?" +
                     "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
-                    "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
-                    "&pageSize=200"
-                val req = Request.Builder().url(url)
-                    .addHeader("Authorization", "Bearer $token").build()
-                val items = http.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        return@withContext Result.failure(
-                            IllegalStateException("Drive list HTTP ${resp.code}")
-                        )
+                    "&fields=nextPageToken,files(id,name,mimeType,size,parents,thumbnailLink)" +
+                    "&pageSize=1000" +
+                    "&supportsAllDrives=true&includeItemsFromAllDrives=true" +
+                    "&corpora=allDrives"
+                // Drive caps a page at 1000 entries and returns nextPageToken for
+                // the rest. A single un-paged request therefore TRUNCATED any
+                // folder holding more than a page of files, with no error — the
+                // tail simply never appeared. Follow the token to completion.
+                val items = mutableListOf<CloudMediaItem>()
+                var rawCount = 0
+                var pageToken: String? = null
+                do {
+                    val url = if (pageToken.isNullOrEmpty()) base
+                    else base + "&pageToken=" + java.net.URLEncoder.encode(pageToken, "UTF-8")
+                    val req = Request.Builder().url(url)
+                        .addHeader("Authorization", "Bearer $token").build()
+                    pageToken = http.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) {
+                            val err = resp.body?.string()?.take(300).orEmpty()
+                            com.powermediaplayer.diag.DiagLog.event(
+                                "DRIVE", "listFiles HTTP ${resp.code} folder=$folderId err=$err"
+                            )
+                            return@withContext Result.failure(
+                                IllegalStateException("Drive list HTTP ${resp.code}")
+                            )
+                        }
+                        val body = resp.body?.string().orEmpty()
+                        val root = JsonParser.parseString(body).asJsonObject
+                        val arr = root.getAsJsonArray("files")
+                        if (arr != null) {
+                            rawCount += arr.size()
+                            arr.forEach { el ->
+                                val f = el.asJsonObject
+                                val nm = f.get("name")?.asString.orEmpty()
+                                val mm = f.get("mimeType")?.asString.orEmpty()
+                                // Keep folders + real media; drop docs/images/etc.
+                                if (mm == MIME_FOLDER ||
+                                    com.powermediaplayer.util.MediaClassifier.isMediaByName(nm, mm)
+                                ) toCloudItem(f, parentId = folderId)?.let { items += it }
+                            }
+                        }
+                        root.get("nextPageToken")?.takeIf { !it.isJsonNull }?.asString
                     }
-                    val body = resp.body?.string().orEmpty()
-                    val root = JsonParser.parseString(body).asJsonObject
-                    val arr = root.getAsJsonArray("files") ?: return@use emptyList()
-                    arr.mapNotNull { el ->
-                        val f = el.asJsonObject
-                        val nm = f.get("name")?.asString.orEmpty()
-                        val mm = f.get("mimeType")?.asString.orEmpty()
-                        if (mm == MIME_FOLDER ||
-                            com.powermediaplayer.util.MediaClassifier.isMediaByName(nm, mm)
-                        ) toCloudItem(f, parentId = folderId) else null
-                    }
-                }
+                } while (!pageToken.isNullOrEmpty())
+                com.powermediaplayer.diag.DiagLog.event(
+                    "DRIVE", "listFiles folder=$folderId driveReturned=$rawCount kept=${items.size}"
+                )
                 Result.success(
                     items.sortedWith(
                         compareByDescending<CloudMediaItem> { it.isFolder }

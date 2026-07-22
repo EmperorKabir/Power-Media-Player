@@ -102,7 +102,28 @@ class DrivePickerActivity : ComponentActivity() {
                 setAcceptCookie(true)
                 setAcceptThirdPartyCookies(v, true)
             }
-            v.webViewClient = WebViewClient()
+            // Release-safe diagnostics: a picker load failure lands in the
+            // opt-in DiagLog FILE (not only logcat), so a stuck sign-in on the
+            // Play build stays diagnosable from a pulled log. Fires on error
+            // paths only, so it costs nothing on a healthy load.
+            v.webViewClient = object : WebViewClient() {
+                override fun onReceivedError(
+                    view: WebView, req: android.webkit.WebResourceRequest,
+                    err: android.webkit.WebResourceError
+                ) {
+                    if (req.isForMainFrame) com.powermediaplayer.diag.DiagLog.event(
+                        "PICKER", "loadError ${err.errorCode} ${err.description} url=${req.url}"
+                    )
+                }
+                override fun onReceivedHttpError(
+                    view: WebView, req: android.webkit.WebResourceRequest,
+                    resp: android.webkit.WebResourceResponse
+                ) {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "PICKER", "httpError ${resp.statusCode} url=${req.url}"
+                    )
+                }
+            }
             // 2026-07-22: the Picker opens its Google sign-in as a POPUP. Multiple
             // windows are enabled but nothing handled onCreateWindow, so the popup
             // was silently dropped — the "tap Sign in and nothing happens" dead
@@ -124,6 +145,14 @@ class DrivePickerActivity : ComponentActivity() {
                     }
                     transport.webView = popup
                     resultMsg.sendToTarget()
+                    return true
+                }
+                override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                    if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "PICKER", "consoleErr ${m.message()} @${m.lineNumber()}"
+                        )
+                    }
                     return true
                 }
             }

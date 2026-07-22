@@ -562,6 +562,9 @@ class GoogleDriveProvider @Inject constructor(
             ) break
             Thread.sleep(400)
         }
+        com.powermediaplayer.diag.DiagLog.event(
+            "DRIVESAF", "listChildren uri=${folderUri.lastPathSegment} count=${out.size}"
+        )
         return out
     }
 
