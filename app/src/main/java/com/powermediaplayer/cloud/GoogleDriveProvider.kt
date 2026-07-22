@@ -512,28 +512,49 @@ class GoogleDriveProvider @Inject constructor(
             }
         val childrenUri = android.provider.DocumentsContract
             .buildChildDocumentsUriUsingTree(folderUri, parentDocId)
+        val projection = arrayOf(
+            android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+            android.provider.DocumentsContract.Document.COLUMN_SIZE
+        )
+        // 2026-07-22: Google Drive's DocumentsProvider is NETWORK-backed — its
+        // first query returns an EMPTY cursor with extras[EXTRA_LOADING]=true
+        // while it fetches, then signals more data. A one-shot query therefore
+        // showed a real folder as "empty" until you backed out and re-entered.
+        // Poll until the provider stops reporting loading (or a hard timeout),
+        // so folder contents appear on the first open. Local providers report
+        // loading=false immediately, so they cost one query as before.
         val out = mutableListOf<ChildDoc>()
-        context.contentResolver.query(
-            childrenUri,
-            arrayOf(
-                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
-                android.provider.DocumentsContract.Document.COLUMN_SIZE
-            ),
-            null, null, null
-        )?.use { c ->
-            while (c.moveToNext()) {
-                val docId = c.getString(0) ?: continue
-                out += ChildDoc(
-                    documentUri = android.provider.DocumentsContract
-                        .buildDocumentUriUsingTree(folderUri, docId),
-                    name = c.getString(1).orEmpty(),
-                    mime = c.getString(2).orEmpty(),
-                    size = if (c.isNull(3)) 0L else c.getLong(3)
-                )
+        val deadline = android.os.SystemClock.elapsedRealtime() + 12_000L
+        while (true) {
+            out.clear()
+            var loading = false
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { c ->
+                loading = c.extras?.getBoolean(
+                    android.provider.DocumentsContract.EXTRA_LOADING, false
+                ) == true
+                while (c.moveToNext()) {
+                    val docId = c.getString(0) ?: continue
+                    out += ChildDoc(
+                        documentUri = android.provider.DocumentsContract
+                            .buildDocumentUriUsingTree(folderUri, docId),
+                        name = c.getString(1).orEmpty(),
+                        mime = c.getString(2).orEmpty(),
+                        size = if (c.isNull(3)) 0L else c.getLong(3)
+                    )
+                }
             }
+            // Done when the provider is no longer loading, or we already have
+            // results, or we ran out of time.
+            if (!loading || out.isNotEmpty() ||
+                android.os.SystemClock.elapsedRealtime() >= deadline
+            ) break
+            Thread.sleep(400)
         }
+        com.powermediaplayer.diag.DiagLog.event(
+            "DRIVESAF", "listChildren uri=${folderUri.lastPathSegment} count=${out.size}"
+        )
         return out
     }
 

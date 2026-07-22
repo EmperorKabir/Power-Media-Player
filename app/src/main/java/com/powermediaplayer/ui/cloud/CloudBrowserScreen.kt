@@ -440,7 +440,18 @@ fun CloudBrowserScreen(
                     ProviderCards(
                         driveLoggedIn = uiState.driveLoggedIn,
                         spotifyLoggedIn = uiState.spotifyLoggedIn,
-                        onConnectDrive = { launchDriveOAuth() },
+                        // 2026-07-22: route Drive folder-adding to the Android
+                        // system folder picker (ACTION_OPEN_DOCUMENT_TREE) instead
+                        // of the OAuth JS Picker. Evidence (on-device probe): the
+                        // drive.file OAuth path grants the folder but returns ZERO
+                        // children for pre-existing files (canListChildren=true yet
+                        // files.list empty) — folders opened empty. The system
+                        // picker takes a persistable tree grant and enumerates via
+                        // DocumentsContract, which lists contents like it did on
+                        // the user's previous phones. driveLauncher → handleDriveResult
+                        // stores the content:// root; pickerForId routes it to the
+                        // SAF provider.
+                        onConnectDrive = { driveLauncher.launch(viewModel.buildDriveSignInIntent()) },
                         onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
                         onBrowseDrive = { viewModel.browseDrive(null, "Root") },
                         onBrowseSpotify = { viewModel.browseSpotify() },
