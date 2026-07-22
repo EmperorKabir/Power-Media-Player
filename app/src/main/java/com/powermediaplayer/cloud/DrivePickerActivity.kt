@@ -69,6 +69,21 @@ class DrivePickerActivity : ComponentActivity() {
         }
 
         webView = WebView(this).also { v ->
+            // 2026-07-22 SCALING FIX (regression I introduced in vc50): targeting
+            // Android 16 removed the edge-to-edge opt-out, so this screen began
+            // drawing under the status/navigation bars. The Picker sizes itself
+            // from window.innerWidth/innerHeight, so it measured the wrong
+            // viewport and rendered zoomed-out/zoomed-in until a later resize
+            // corrected it. Inset the WebView by the system bars to restore the
+            // pre-API-36 geometry that commit 154f026 established.
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(v) { view, insets ->
+                val bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                        androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+                )
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                insets
+            }
             v.settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -78,81 +93,37 @@ class DrivePickerActivity : ComponentActivity() {
                 useWideViewPort = true
                 loadWithOverviewMode = true
             }
-            // 2026-07-19 (new-device regression): the Picker iframe is served
-            // from Google's origin while our page origin is the local base
-            // URL, so every Google cookie here is THIRD-party — and WebView
-            // blocks third-party cookies by default. On a fresh WebView
-            // profile (new phone) Google then refuses the picker outright:
-            // "Can't access your Google Account … try … allowing cookie
-            // access to proceed." Old installs worked only because their
-            // WebView profile predated the stricter enforcement. Scope is
-            // THIS WebView instance only.
+            // 2026-07-22: modern WebView blocks third-party cookies by default.
+            // The Picker's frame is Google-origin inside our page, so ALL of its
+            // cookies are third-party — without this the page stops at "Can't
+            // access your Google Account … allowing cookie access to proceed"
+            // (reproduced on this device with the untouched vc46 code).
             android.webkit.CookieManager.getInstance().apply {
                 setAcceptCookie(true)
                 setAcceptThirdPartyCookies(v, true)
             }
-            v.webViewClient = object : WebViewClient() {
-                // Release-safe diagnostics: a picker load failure now lands in
-                // the opt-in DiagLog FILE (not just logcat), so a stuck sign-in
-                // on the Play build is diagnosable from a pulled log.
-                override fun onReceivedError(
-                    view: WebView, req: android.webkit.WebResourceRequest,
-                    err: android.webkit.WebResourceError
-                ) {
-                    if (req.isForMainFrame) com.powermediaplayer.diag.DiagLog.event(
-                        "PICKER", "loadError ${err.errorCode} ${err.description} url=${req.url}"
-                    )
-                }
-                override fun onReceivedHttpError(
-                    view: WebView, req: android.webkit.WebResourceRequest,
-                    resp: android.webkit.WebResourceResponse
-                ) {
-                    com.powermediaplayer.diag.DiagLog.event(
-                        "PICKER", "httpError ${resp.statusCode} url=${req.url}"
-                    )
-                }
-            }
+            v.webViewClient = WebViewClient()
+            // 2026-07-22: the Picker opens its Google sign-in as a POPUP. Multiple
+            // windows are enabled but nothing handled onCreateWindow, so the popup
+            // was silently dropped — the "tap Sign in and nothing happens" dead
+            // tap. Route the popup's first navigation into the main WebView.
             v.webChromeClient = object : android.webkit.WebChromeClient() {
-                // 2026-07-22 FIX (new-device "tap Sign in does nothing"): the
-                // picker's Drive iframe opens its Google sign-in as a POPUP
-                // window. With multiple-windows enabled but no onCreateWindow,
-                // WebView silently dropped that popup — the exact dead tap the
-                // user reported. Route the popup's first navigation back into
-                // the main WebView so the sign-in can actually render. Only
-                // fires when a popup is requested, so devices whose picker
-                // needed no sign-in (the old phone) are unaffected.
                 override fun onCreateWindow(
                     view: WebView, isDialog: Boolean, isUserGesture: Boolean,
                     resultMsg: android.os.Message
                 ): Boolean {
                     val href = view.hitTestResult.extra
-                    if (!href.isNullOrBlank()) {
-                        view.loadUrl(href)
-                        return false
-                    }
-                    // No direct href (JS window.open): hand the popup a transport
-                    // WebView whose first URL we redirect into the main view.
+                    if (!href.isNullOrBlank()) { view.loadUrl(href); return false }
                     val transport = resultMsg.obj as WebView.WebViewTransport
                     val popup = WebView(this@DrivePickerActivity)
                     popup.settings.javaScriptEnabled = true
                     popup.webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
-                            v: WebView, r: android.webkit.WebResourceRequest
-                        ): Boolean {
-                            view.loadUrl(r.url.toString())
-                            return true
-                        }
+                            v2: WebView, r: android.webkit.WebResourceRequest
+                        ): Boolean { view.loadUrl(r.url.toString()); return true }
                     }
                     transport.webView = popup
                     resultMsg.sendToTarget()
-                    return true
-                }
-                override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
-                    if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
-                        com.powermediaplayer.diag.DiagLog.event(
-                            "PICKER", "consoleErr ${m.message()} @${m.lineNumber()}"
-                        )
-                    }
                     return true
                 }
             }

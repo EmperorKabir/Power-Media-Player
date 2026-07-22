@@ -301,6 +301,18 @@ fun CloudBrowserScreen(
         .collectAsStateWithLifecycle(initialValue = true)
     var pendingFirstPickWarning by remember { mutableStateOf(false) }
 
+    // 2026-07-22: PRIMARY way to add a Drive folder is now Android's own folder
+    // picker (ACTION_OPEN_DOCUMENT_TREE). Evidence: Google's embedded Picker
+    // returns 401 without session cookies, the session cannot be injected
+    // (NeedPermission), and a manual sign-in did not persist — verified on
+    // device. The system picker needs no token, cookies or API key, lists Drive
+    // alongside OneDrive/Dropbox/local, and was proven end-to-end on device
+    // (browse → folder → .m4b → streamed and played). [launchDriveOAuth] is
+    // retained as a fallback for devices whose picker hides the Drive source.
+    fun launchDriveSystemPicker() {
+        driveLauncher.launch(viewModel.buildDriveSignInIntent())
+    }
+
     fun launchDriveOAuth() {
         if (firstPickWarningSeen) {
             driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
@@ -423,7 +435,7 @@ fun CloudBrowserScreen(
             spotifyLoggedIn = uiState.spotifyLoggedIn,
             onSelectDrive = {
                 if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
-                else launchDriveOAuth()
+                else launchDriveSystemPicker()
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
@@ -440,18 +452,7 @@ fun CloudBrowserScreen(
                     ProviderCards(
                         driveLoggedIn = uiState.driveLoggedIn,
                         spotifyLoggedIn = uiState.spotifyLoggedIn,
-                        // 2026-07-22: route Drive folder-adding to the Android
-                        // system folder picker (ACTION_OPEN_DOCUMENT_TREE) instead
-                        // of the OAuth JS Picker. Evidence (on-device probe): the
-                        // drive.file OAuth path grants the folder but returns ZERO
-                        // children for pre-existing files (canListChildren=true yet
-                        // files.list empty) — folders opened empty. The system
-                        // picker takes a persistable tree grant and enumerates via
-                        // DocumentsContract, which lists contents like it did on
-                        // the user's previous phones. driveLauncher → handleDriveResult
-                        // stores the content:// root; pickerForId routes it to the
-                        // SAF provider.
-                        onConnectDrive = { driveLauncher.launch(viewModel.buildDriveSignInIntent()) },
+                        onConnectDrive = { launchDriveSystemPicker() },
                         onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
                         onBrowseDrive = { viewModel.browseDrive(null, "Root") },
                         onBrowseSpotify = { viewModel.browseSpotify() },
@@ -881,7 +882,7 @@ fun CloudBrowserScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp, vertical = 4.dp)
-                                    .clickable { launchDriveOAuth() }
+                                    .clickable { launchDriveSystemPicker() }
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,

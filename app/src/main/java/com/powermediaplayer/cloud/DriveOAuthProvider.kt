@@ -215,52 +215,17 @@ class DriveOAuthProvider @Inject constructor(
                 }
                 val token = fetchAccessTokenBlocking()
                     ?: return@withContext Result.failure(IllegalStateException("Not authenticated"))
-                // 2026-07-22: previously the server-side query also filtered
-                // `mimeType contains 'audio/'|'video/'`, which SILENTLY DROPPED
-                // audiobooks (.m4b) and other media that Drive labels
-                // `application/octet-stream` — the reported "folder opens but
-                // shows no files". Now list ALL non-trashed children and keep
-                // folders + anything MediaClassifier recognises by name OR mime.
-                val q = "'$folderId' in parents and trashed = false"
-                // 2026-07-22: supportsAllDrives + includeItemsFromAllDrives are
-                // REQUIRED to list contents of a Shared Drive or a folder shared
-                // with the user (owned by someone else). Without them the list
-                // silently returns zero for those folders — matching the
-                // "driveReturned=0" the log showed. Harmless for My Drive.
+                val q = "'$folderId' in parents and trashed = false " +
+                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
+                    "or mimeType = '$MIME_FOLDER')"
                 val url = "https://www.googleapis.com/drive/v3/files?" +
                     "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
                     "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
-                    "&pageSize=1000" +
-                    "&supportsAllDrives=true&includeItemsFromAllDrives=true" +
-                    "&corpora=allDrives"
+                    "&pageSize=200"
                 val req = Request.Builder().url(url)
                     .addHeader("Authorization", "Bearer $token").build()
-                // Decisive probe: can the app even access the folder itself, and
-                // does its grant permit listing children? (canListChildren). If
-                // the folder GET 404s, the drive.file folder-pick granted nothing;
-                // if it 200s with canListChildren=false, drive.file folder access
-                // does not cover pre-existing children on this account.
-                runCatching {
-                    val probeUrl = "https://www.googleapis.com/drive/v3/files/$folderId?" +
-                        "fields=id,name,driveId,capabilities(canListChildren)" +
-                        "&supportsAllDrives=true"
-                    http.newCall(
-                        Request.Builder().url(probeUrl)
-                            .addHeader("Authorization", "Bearer $token").build()
-                    ).execute().use { p ->
-                        com.powermediaplayer.diag.DiagLog.event(
-                            "DRIVE", "folderProbe HTTP ${p.code} folder=$folderId " +
-                                "body=${p.body?.string()?.take(200).orEmpty()}"
-                        )
-                    }
-                }
-                var rawCount = 0
                 val items = http.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) {
-                        val err = resp.body?.string()?.take(300).orEmpty()
-                        com.powermediaplayer.diag.DiagLog.event(
-                            "DRIVE", "listFiles HTTP ${resp.code} folder=$folderId err=$err"
-                        )
                         return@withContext Result.failure(
                             IllegalStateException("Drive list HTTP ${resp.code}")
                         )
@@ -268,20 +233,11 @@ class DriveOAuthProvider @Inject constructor(
                     val body = resp.body?.string().orEmpty()
                     val root = JsonParser.parseString(body).asJsonObject
                     val arr = root.getAsJsonArray("files") ?: return@use emptyList()
-                    rawCount = arr.size()
                     arr.mapNotNull { el ->
                         val f = el.asJsonObject
-                        val nm = f.get("name")?.asString.orEmpty()
-                        val mm = f.get("mimeType")?.asString.orEmpty()
-                        // Keep folders + real media; drop docs/images/etc.
-                        if (mm == MIME_FOLDER ||
-                            com.powermediaplayer.util.MediaClassifier.isMediaByName(nm, mm)
-                        ) toCloudItem(f, parentId = folderId) else null
+                        toCloudItem(f, parentId = folderId)
                     }
                 }
-                com.powermediaplayer.diag.DiagLog.event(
-                    "DRIVE", "listFiles folder=$folderId driveReturned=$rawCount kept=${items.size}"
-                )
                 Result.success(
                     items.sortedWith(
                         compareByDescending<CloudMediaItem> { it.isFolder }
