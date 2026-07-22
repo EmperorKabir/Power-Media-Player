@@ -279,8 +279,10 @@ class PlaybackConnection @Inject constructor(
                     com.powermediaplayer.playback.PlaybackSessionCoordinator.resetColdStartGuard()
                     // Local-side cleanup so the UI flips to the
                     // disconnected state instead of acting on a stale
-                    // reference. The Activity's next onResume call
-                    // re-invokes connect() and a new controller builds.
+                    // reference. MainActivity.onStart calls connect()
+                    // again (it early-returns while a future is in
+                    // flight), so returning to the foreground rebuilds
+                    // the controller against the fresh service.
                     positionPollingJob?.cancel()
                     this@PlaybackConnection.controller = null
                     _playerFlow.value = null

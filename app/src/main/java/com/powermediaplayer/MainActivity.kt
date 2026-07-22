@@ -127,14 +127,98 @@ class MainActivity : FragmentActivity() {
         com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity.onResume")
     }
 
+    /**
+     * True once this activity instance has been backgrounded at least once,
+     * so the NEXT onStart is a genuine return to the foreground rather than
+     * the first start that follows onCreate. Guards the warm-resume restore
+     * from racing the cold-start restore onCreate has already armed.
+     */
+    private var hasBeenBackgrounded = false
+
+    /** One warm-resume restore attempt at a time (onStart can re-enter). */
+    private val foregroundRestoreInFlight =
+        java.util.concurrent.atomic.AtomicBoolean(false)
+
     override fun onStart() {
         super.onStart()
         com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity.onStart")
+        // The MediaController's onDisconnected handler drops the controller and
+        // nulls controllerFuture when Android kills the service under us. connect()
+        // was only ever called from onCreate, so if this activity instance
+        // survived that kill NOTHING rebuilt the controller — the UI sat on a
+        // dead connection until the process itself was killed. connect() early
+        // -returns while a future is in flight, so calling it here is idempotent.
+        playbackConnection.connect()
+        if (hasBeenBackgrounded) {
+            hasBeenBackgrounded = false
+            maybeRestoreOnForeground("returned to foreground")
+        }
     }
 
     override fun onStop() {
         super.onStop()
+        hasBeenBackgrounded = true
         com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity.onStop isFinishing=$isFinishing")
+    }
+
+    /**
+     * Re-arm the last-played restore when the app comes back to the foreground
+     * and the player is genuinely empty.
+     *
+     * Why this is needed: the restore was armed in exactly one place —
+     * onCreate with savedInstanceState == null. That covers a swipe-away (the
+     * process dies, so the next launch is a true cold start) but NOT the two
+     * warm paths the user hit:
+     *   1. The activity instance survives while Android kills the playback
+     *      service. The controller disconnects, the player empties, and no
+     *      onCreate ever runs again — so nothing re-attempted the restore.
+     *   2. Android destroys the activity for resources but keeps the process
+     *      cached. The recreate arrives with savedInstanceState != null, which
+     *      the onCreate guard treats as a config change and deliberately skips.
+     * Both left the Player tab on "Nothing's playing yet", while a swipe-away
+     * and reopen restored correctly — exactly the reported asymmetry.
+     *
+     * Safety: this only fires when nothing is loaded and nothing is playing, so
+     * a rotation, a PiP return, or coming back mid-listen all no-op. The
+     * coordinator's own checks (Spotify mirror active, restore-on-launch off,
+     * source missing) still apply on top.
+     */
+    private fun maybeRestoreOnForeground(why: String) {
+        if (!foregroundRestoreInFlight.compareAndSet(false, true)) return
+        lifecycleScope.launch {
+            try {
+                val player = kotlinx.coroutines.withTimeoutOrNull(3000) {
+                    playbackConnection.playerFlow.filterNotNull().first()
+                }
+                if (player == null) {
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "warm-resume", reason = "$why → no player after 3s, skip"
+                    )
+                    return@launch
+                }
+                if (spotifyProvider.spotifyState.value != null) {
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "warm-resume", reason = "$why → spotify mirror active, skip"
+                    )
+                    return@launch
+                }
+                if (player.isPlaying || player.mediaItemCount > 0) {
+                    com.powermediaplayer.diag.DiagLog.dec(
+                        branch = "warm-resume",
+                        reason = "$why → session intact " +
+                            "(playing=${player.isPlaying} items=${player.mediaItemCount}), skip"
+                    )
+                    return@launch
+                }
+                com.powermediaplayer.diag.DiagLog.dec(
+                    branch = "warm-resume", reason = "$why → player empty, re-arming restore"
+                )
+                com.powermediaplayer.playback.PlaybackSessionCoordinator.resetColdStartGuard()
+                sessionCoordinator.attemptColdStartRestore()
+            } finally {
+                foregroundRestoreInFlight.set(false)
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -175,6 +259,13 @@ class MainActivity : FragmentActivity() {
         // recreate keeps the live session, so re-restoring there is wrong.
         if (savedInstanceState == null) {
             sessionCoordinator.attemptColdStartRestore()
+        } else {
+            // A non-null savedInstanceState is NOT only a config change: Android
+            // also hands one back when it destroyed the activity for resources
+            // and later recreated it from the back stack. Skipping outright left
+            // that case on the empty state. Route it through the safe check
+            // instead — a rotation still no-ops because its session is intact.
+            maybeRestoreOnForeground("recreated with saved state")
         }
 
         // DIAGNOSTIC (F8 fold posture) — log the RAW FoldingFeature from
