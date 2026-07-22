@@ -414,7 +414,19 @@ class GoogleDriveProvider @Inject constructor(
                     channel.position(start.coerceAtLeast(0L))
                     val maxBytes = if (end == Long.MAX_VALUE) Long.MAX_VALUE
                     else (end - start + 1).coerceAtLeast(0L)
-                    val progTotal = if (item.size > 0L) item.size else maxBytes
+                    // 2026-07-22: Google Drive's DocumentsProvider omits COLUMN_SIZE
+                    // in its folder listing, so item.size is 0 for Drive files and
+                    // the total fell back to maxBytes (effectively infinite) —
+                    // progress computed as written/∞ ≈ 0%, so the bar sat at zero
+                    // for the whole download ("no download progress"). The opened
+                    // descriptor knows the real size; use it when the listing
+                    // didn't supply one.
+                    val fdSize = runCatching { pfd.statSize }.getOrDefault(-1L)
+                    val progTotal = when {
+                        item.size > 0L -> item.size
+                        fdSize > 0L -> fdSize
+                        else -> maxBytes
+                    }
                     cacheFile.outputStream().use { out ->
                         val buf = ByteArray(64 * 1024)
                         var written = 0L
@@ -512,27 +524,43 @@ class GoogleDriveProvider @Inject constructor(
             }
         val childrenUri = android.provider.DocumentsContract
             .buildChildDocumentsUriUsingTree(folderUri, parentDocId)
+        val projection = arrayOf(
+            android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+            android.provider.DocumentsContract.Document.COLUMN_SIZE
+        )
+        // 2026-07-22: Google Drive's DocumentsProvider is NETWORK-backed — its
+        // first query returns an EMPTY cursor with extras[EXTRA_LOADING]=true
+        // while it fetches, then signals when data arrives. A one-shot query
+        // therefore showed a real folder as "Empty folder" until you backed out
+        // and re-entered. Wait for the provider to stop reporting loading (hard
+        // cap), so contents appear on the FIRST open. Local providers report
+        // loading=false immediately and still cost a single query.
         val out = mutableListOf<ChildDoc>()
-        context.contentResolver.query(
-            childrenUri,
-            arrayOf(
-                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
-                android.provider.DocumentsContract.Document.COLUMN_SIZE
-            ),
-            null, null, null
-        )?.use { c ->
-            while (c.moveToNext()) {
-                val docId = c.getString(0) ?: continue
-                out += ChildDoc(
-                    documentUri = android.provider.DocumentsContract
-                        .buildDocumentUriUsingTree(folderUri, docId),
-                    name = c.getString(1).orEmpty(),
-                    mime = c.getString(2).orEmpty(),
-                    size = if (c.isNull(3)) 0L else c.getLong(3)
-                )
+        val deadline = android.os.SystemClock.elapsedRealtime() + 12_000L
+        while (true) {
+            out.clear()
+            var loading = false
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { c ->
+                loading = c.extras?.getBoolean(
+                    android.provider.DocumentsContract.EXTRA_LOADING, false
+                ) == true
+                while (c.moveToNext()) {
+                    val docId = c.getString(0) ?: continue
+                    out += ChildDoc(
+                        documentUri = android.provider.DocumentsContract
+                            .buildDocumentUriUsingTree(folderUri, docId),
+                        name = c.getString(1).orEmpty(),
+                        mime = c.getString(2).orEmpty(),
+                        size = if (c.isNull(3)) 0L else c.getLong(3)
+                    )
+                }
             }
+            if (!loading || out.isNotEmpty() ||
+                android.os.SystemClock.elapsedRealtime() >= deadline
+            ) break
+            Thread.sleep(400)
         }
         return out
     }

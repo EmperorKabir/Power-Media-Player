@@ -215,9 +215,11 @@ class DriveOAuthProvider @Inject constructor(
                 }
                 val token = fetchAccessTokenBlocking()
                     ?: return@withContext Result.failure(IllegalStateException("Not authenticated"))
-                val q = "'$folderId' in parents and trashed = false " +
-                    "and (mimeType contains 'audio/' or mimeType contains 'video/' " +
-                    "or mimeType = '$MIME_FOLDER')"
+                // 2026-07-22: the old server-side filter (mimeType contains
+                // 'audio/'|'video/') SILENTLY DROPPED media that Drive labels
+                // application/octet-stream — notably .m4b audiobooks. List all
+                // non-trashed children and filter client-side by name OR mime.
+                val q = "'$folderId' in parents and trashed = false"
                 val url = "https://www.googleapis.com/drive/v3/files?" +
                     "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
                     "&fields=files(id,name,mimeType,size,parents,thumbnailLink)" +
@@ -235,7 +237,11 @@ class DriveOAuthProvider @Inject constructor(
                     val arr = root.getAsJsonArray("files") ?: return@use emptyList()
                     arr.mapNotNull { el ->
                         val f = el.asJsonObject
-                        toCloudItem(f, parentId = folderId)
+                        val nm = f.get("name")?.asString.orEmpty()
+                        val mm = f.get("mimeType")?.asString.orEmpty()
+                        if (mm == MIME_FOLDER ||
+                            com.powermediaplayer.util.MediaClassifier.isMediaByName(nm, mm)
+                        ) toCloudItem(f, parentId = folderId) else null
                     }
                 }
                 Result.success(
