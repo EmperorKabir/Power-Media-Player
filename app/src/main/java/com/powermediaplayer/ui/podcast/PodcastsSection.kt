@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.isActive
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -430,9 +431,59 @@ class PodcastsViewModel @Inject constructor(
     val itunesResults: StateFlow<List<com.powermediaplayer.podcast.ITunesPodcastSearch.Hit>> = _itunesResults
 
     fun searchItunes(query: String) {
+        typeAheadJob?.cancel()
         viewModelScope.launch(Dispatchers.IO) {
             settings.addRecentSearchPodcast(query)
             _itunesResults.value = itunes.search(query)
+        }
+    }
+
+    /** True while a type-ahead lookup is in flight (drives the field spinner). */
+    private val _searching = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val searching: StateFlow<Boolean> = _searching
+
+    private var typeAheadJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Search-as-you-type against the Apple directory.
+     *
+     * Three constraints shape this, all from the field itself:
+     *  - it is dual-purpose (RSS URL or search term), so anything that looks
+     *    like a URL is left alone until the user commits it with Add / search;
+     *  - every keystroke would otherwise be a network round trip, so the query
+     *    is debounced and needs at least three characters;
+     *  - [searchItunes] records the query as a recent search, which as-you-type
+     *    would fill with every prefix ("d", "du", "dun"...), so this path does
+     *    NOT record. Recents come from the button, or from picking a suggestion.
+     * The previous lookup is cancelled on each keystroke, so a slow early
+     * response cannot land after a later one and show results for stale text.
+     */
+    fun onSearchQueryChanged(query: String) {
+        typeAheadJob?.cancel()
+        val q = query.trim()
+        if (q.isBlank() || q.startsWith("http://", true) || q.startsWith("https://", true)) {
+            _searching.value = false
+            _itunesResults.value = emptyList()
+            return
+        }
+        if (q.length < 3) {
+            _searching.value = false
+            _itunesResults.value = emptyList()
+            return
+        }
+        typeAheadJob = viewModelScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(350)
+            _searching.value = true
+            try {
+                val hits = itunes.search(q)
+                // A cancelled lookup must not publish: without this a slow early
+                // response could land after a later one and show results for text
+                // the user has already moved on from.
+                if (!isActive) return@launch
+                _itunesResults.value = hits
+            } finally {
+                _searching.value = false
+            }
         }
     }
 
@@ -483,6 +534,7 @@ fun PodcastsSection(
     var url by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
     val recentSearches by vm.recentSearches.collectAsStateWithLifecycle()
+    val searching by vm.searching.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
@@ -510,11 +562,29 @@ fun PodcastsSection(
                 value = url,
                 onValueChange = {
                     url = it
-                    // Emptying the field dismisses stale search results too.
-                    if (it.isBlank()) vm.clearItunesResults()
+                    // Searches as you type (debounced, 3 characters, skips URLs),
+                    // and emptying the field dismisses stale results.
+                    vm.onSearchQueryChanged(it)
                 },
                 label = { Text("RSS feed URL or search term") },
                 singleLine = true,
+                trailingIcon = {
+                    if (searching) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = TealAccent
+                        )
+                    } else if (url.isNotEmpty()) {
+                        IconButton(onClick = { url = ""; vm.onSearchQueryChanged("") }) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Clear search",
+                                tint = TextTertiary
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused }
             )
             Spacer(Modifier.width(8.dp))
