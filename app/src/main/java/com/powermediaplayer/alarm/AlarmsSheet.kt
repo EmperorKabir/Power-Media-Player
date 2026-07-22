@@ -78,6 +78,10 @@ fun AlarmsSheet(
             // says it appears on the FIRST alarm save. We surface it
             // when alarms.isNotEmpty() (post-save) AND the permission
             // is missing.
+            // 2026-07-22: exact-alarm permission banner (Android 12+). Shown
+            // whenever the grant is missing — on Android 11 and older
+            // canScheduleExact() is always true so this never appears.
+            ExactAlarmBanner()
             if (alarms.isNotEmpty()) FullScreenIntentBanner()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Alarms", style = MaterialTheme.typography.titleMedium, color = TealAccent)
@@ -200,6 +204,60 @@ private fun IntField(
             singleLine = true,
             modifier = Modifier.size(width = 96.dp, height = 56.dp)
         )
+    }
+}
+
+@Composable
+private fun ExactAlarmBanner() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Re-evaluate whenever the sheet recomposes (e.g. returning from Settings
+    // after a grant) — cheap OS query, no caching so it clears once granted.
+    if (AlarmScheduler.canScheduleExact(context)) return
+    androidx.compose.material3.Surface(
+        color = androidx.compose.ui.graphics.Color(0x33FFA000),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Alarm permission needed",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TextPrimary
+                )
+                Text(
+                    "Android 14+ needs your permission to ring alarms at the " +
+                        "exact time. Without it your saved alarms will not go " +
+                        "off. Tap Grant, then turn on Alarms and reminders.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+            }
+            androidx.compose.material3.TextButton(onClick = {
+                runCatching {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        android.net.Uri.parse("package:${context.packageName}")
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                }.onFailure {
+                    // Fallback: some OEMs don't honour the direct action —
+                    // open the app's settings page instead.
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(
+                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.parse("package:${context.packageName}")
+                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
+            }) { Text("Grant", color = TealAccent) }
+        }
     }
 }
 

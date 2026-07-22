@@ -41,13 +41,17 @@
     <!-- Notifications (SDK 33+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- §C12 — wake-up alarm. USE_EXACT_ALARM is auto-granted to
-         alarm-clock-class apps on Android 13+; SCHEDULE_EXACT_ALARM
-         is the legacy permission. USE_FULL_SCREEN_INTENT is required
-         on API 34+ to display the full-screen alarm activity over the
-         lockscreen; VIBRATE drives the alarm pattern. -->
+    <!-- §C12 — wake-up alarm. 2026-07-22: USE_EXACT_ALARM removed. Google
+         Play restricts USE_EXACT_ALARM to apps whose CORE function is an
+         alarm clock/calendar; a media player with an alarm FEATURE risks
+         rejection. SCHEDULE_EXACT_ALARM is the user-grantable route used
+         instead: on Android 12-13 it is auto-granted; on Android 14+ the app
+         asks the user once (AlarmScheduler.canScheduleExact + the Exact-alarm
+         banner in AlarmsSheet). On Android 11 and older, exact alarms are
+         always allowed and no prompt appears. USE_FULL_SCREEN_INTENT is
+         required on API 34+ for the lock-screen alarm; VIBRATE drives the
+         alarm pattern. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.TURN_SCREEN_ON" />

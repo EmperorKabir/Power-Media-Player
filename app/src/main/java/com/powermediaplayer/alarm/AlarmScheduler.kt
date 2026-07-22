@@ -21,6 +21,18 @@ import java.util.Calendar
  */
 object AlarmScheduler {
 
+    /**
+     * 2026-07-22: true when the OS will honour an exact alarm right now.
+     * Android 12+ (S) gates exact alarms behind a user-grantable permission;
+     * on Android 11 and older there is no gate, so exact alarms always work
+     * and this returns true (old-device safe — no prompt ever shown there).
+     */
+    fun canScheduleExact(context: Context): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) return true
+        val am = context.getSystemService(AlarmManager::class.java) ?: return false
+        return runCatching { am.canScheduleExactAlarms() }.getOrDefault(false)
+    }
+
     fun schedule(context: Context, alarm: AlarmRecord) {
         if (!alarm.enabled) {
             cancel(context, alarm.id)

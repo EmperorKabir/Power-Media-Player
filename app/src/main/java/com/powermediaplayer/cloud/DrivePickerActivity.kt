@@ -91,7 +91,71 @@ class DrivePickerActivity : ComponentActivity() {
                 setAcceptCookie(true)
                 setAcceptThirdPartyCookies(v, true)
             }
-            v.webViewClient = WebViewClient()
+            v.webViewClient = object : WebViewClient() {
+                // Release-safe diagnostics: a picker load failure now lands in
+                // the opt-in DiagLog FILE (not just logcat), so a stuck sign-in
+                // on the Play build is diagnosable from a pulled log.
+                override fun onReceivedError(
+                    view: WebView, req: android.webkit.WebResourceRequest,
+                    err: android.webkit.WebResourceError
+                ) {
+                    if (req.isForMainFrame) com.powermediaplayer.diag.DiagLog.event(
+                        "PICKER", "loadError ${err.errorCode} ${err.description} url=${req.url}"
+                    )
+                }
+                override fun onReceivedHttpError(
+                    view: WebView, req: android.webkit.WebResourceRequest,
+                    resp: android.webkit.WebResourceResponse
+                ) {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "PICKER", "httpError ${resp.statusCode} url=${req.url}"
+                    )
+                }
+            }
+            v.webChromeClient = object : android.webkit.WebChromeClient() {
+                // 2026-07-22 FIX (new-device "tap Sign in does nothing"): the
+                // picker's Drive iframe opens its Google sign-in as a POPUP
+                // window. With multiple-windows enabled but no onCreateWindow,
+                // WebView silently dropped that popup — the exact dead tap the
+                // user reported. Route the popup's first navigation back into
+                // the main WebView so the sign-in can actually render. Only
+                // fires when a popup is requested, so devices whose picker
+                // needed no sign-in (the old phone) are unaffected.
+                override fun onCreateWindow(
+                    view: WebView, isDialog: Boolean, isUserGesture: Boolean,
+                    resultMsg: android.os.Message
+                ): Boolean {
+                    val href = view.hitTestResult.extra
+                    if (!href.isNullOrBlank()) {
+                        view.loadUrl(href)
+                        return false
+                    }
+                    // No direct href (JS window.open): hand the popup a transport
+                    // WebView whose first URL we redirect into the main view.
+                    val transport = resultMsg.obj as WebView.WebViewTransport
+                    val popup = WebView(this@DrivePickerActivity)
+                    popup.settings.javaScriptEnabled = true
+                    popup.webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(
+                            v: WebView, r: android.webkit.WebResourceRequest
+                        ): Boolean {
+                            view.loadUrl(r.url.toString())
+                            return true
+                        }
+                    }
+                    transport.webView = popup
+                    resultMsg.sendToTarget()
+                    return true
+                }
+                override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                    if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "PICKER", "consoleErr ${m.message()} @${m.lineNumber()}"
+                        )
+                    }
+                    return true
+                }
+            }
             v.addJavascriptInterface(
                 JsBridge(token, apiKey, appId),
                 "PMP_PICKER_BRIDGE"
