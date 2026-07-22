@@ -23,11 +23,12 @@
 
 ## 2. Current build coordinates (verify against `app/build.gradle.kts`)
 
-- **versionCode 39 / versionName 1.3.5.** `38/1.3.4` is already published — next Play upload MUST be
+- **versionCode 54 / versionName 1.4.9.** `53/1.4.8` is already published — next Play upload MUST be
   a higher versionCode. Each release gets a distinct versionName.
-- minSdk 30, targetSdk 35, compileSdk 35. `applicationId = com.powermediaplayer`.
+- minSdk 30, targetSdk 36, compileSdk 36. `applicationId = com.powermediaplayer`.
+  (targetSdk 36 since vc50 — Play policy deadline 31 Aug 2026.)
 - **Media3 (ExoPlayer) 1.6.0** — do not bump casually; the custom audio chain + tests are tuned to it.
-- **Room 2.7.1, DB `version = 22`** with an explicit, chained migration path 7→8→…→21→22 (no
+- **Room 2.7.1, DB `version = 24`** with an explicit, chained migration path 7→8→…→21→22 (no
   destructive migration any more — every bump ships an `ALTER`-based `Migration` registered in `AppModule`).
 - Hilt 2.54 + KSP; Compose BOM 2025.04.00; Coil 3.1.0; OkHttp 4.12.0; AppAuth 0.11.1;
   Cast framework 21.5.0; BouncyCastle 1.78.1 (Hue DTLS); NanoHTTPD 2.3.1 (Cast relay).
