@@ -414,7 +414,17 @@ class GoogleDriveProvider @Inject constructor(
                     channel.position(start.coerceAtLeast(0L))
                     val maxBytes = if (end == Long.MAX_VALUE) Long.MAX_VALUE
                     else (end - start + 1).coerceAtLeast(0L)
-                    val progTotal = if (item.size > 0L) item.size else maxBytes
+                    // 2026-07-22: Google Drive's DocumentsProvider omits size in
+                    // its folder listing (item.size==0), so the progress bar had
+                    // no total and sat at 0% for the whole download ("no progress
+                    // status"). The opened descriptor DOES know the real size —
+                    // use it as the total when the listing size is missing.
+                    val fdSize = runCatching { pfd.statSize }.getOrDefault(-1L)
+                    val progTotal = when {
+                        item.size > 0L -> item.size
+                        fdSize > 0L -> fdSize
+                        else -> maxBytes
+                    }
                     cacheFile.outputStream().use { out ->
                         val buf = ByteArray(64 * 1024)
                         var written = 0L
