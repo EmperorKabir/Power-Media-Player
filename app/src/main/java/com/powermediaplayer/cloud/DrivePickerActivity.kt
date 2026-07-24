@@ -229,6 +229,28 @@ class DrivePickerActivity : ComponentActivity() {
                       s.onload = function () {
                         gapi.load("picker", { callback: function () {
                           pmpRebuildPicker();
+                          // 2026-07-24 COLD-START SCALING FIX. On the FIRST open of a
+                          // fresh process, the WebView's system-bar inset padding is
+                          // applied AFTER this JS first runs, which shrinks
+                          // window.innerHeight. The picker had already sized itself
+                          // from the pre-inset (full-bleed) viewport and rendered
+                          // zoomed-out under the bars until you backed out and
+                          // reopened. Watch innerHeight for that one settling change
+                          // and rebuild ONCE at the corrected size. This runs only in
+                          // the first ~2.5s (before any input is focused, so it can't
+                          // fight the soft keyboard), and it no-ops on a warm reopen
+                          // where the padding is already applied (height never moves).
+                          var pmpInitH = window.innerHeight, pmpSettleN = 0;
+                          var pmpSettle = setInterval(function () {
+                            pmpSettleN++;
+                            if (window.innerHeight !== pmpInitH) {
+                              clearInterval(pmpSettle);
+                              if (pmpPicker) { try { pmpPicker.dispose(); } catch(_) {} }
+                              pmpRebuildPicker();
+                            } else if (pmpSettleN >= 25) {
+                              clearInterval(pmpSettle);
+                            }
+                          }, 100);
                           // Re-render on WIDTH (orientation / fold) changes ONLY.
                           // A height-only resize is the soft keyboard opening; do
                           // NOT rebuild then, disposing the picker blurs the
