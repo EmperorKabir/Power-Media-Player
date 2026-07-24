@@ -301,14 +301,18 @@ fun CloudBrowserScreen(
         .collectAsStateWithLifecycle(initialValue = true)
     var pendingFirstPickWarning by remember { mutableStateOf(false) }
 
-    // 2026-07-22: PRIMARY way to add a Drive folder is now Android's own folder
-    // picker (ACTION_OPEN_DOCUMENT_TREE). Evidence: Google's embedded Picker
-    // returns 401 without session cookies, the session cannot be injected
-    // (NeedPermission), and a manual sign-in did not persist — verified on
-    // device. The system picker needs no token, cookies or API key, lists Drive
-    // alongside OneDrive/Dropbox/local, and was proven end-to-end on device
-    // (browse → folder → .m4b → streamed and played). [launchDriveOAuth] is
-    // retained as a fallback for devices whose picker hides the Drive source.
+    // 2026-07-23: Drive folder-adding routes to the embedded Google Picker
+    // ([launchDriveOAuth]) at the user's explicit choice. The investigation is
+    // conclusive: the embedded Picker's web frame (docs.google.com/picker)
+    // returns 401 on a fresh WebView because it has no Google web-login cookie,
+    // which is why it asks to sign in a SECOND time after the native account
+    // chooser (the token from the chooser authorises the API, not the web
+    // frame). Same 401 reproduced on the Oppo AND a fresh Android 16 emulator
+    // (WebView 133, OS signed into Google) — so it is neither the phone nor the
+    // OS/WebView version. The user accepts the two-step sign-in; completing the
+    // in-WebView Google login is expected to set the cookie and let the Picker
+    // render. [launchDriveSystemPicker] is kept as the fallback (no second
+    // sign-in, uses the OS Google session) if the embedded flow does not hold.
     fun launchDriveSystemPicker() {
         driveLauncher.launch(viewModel.buildDriveSignInIntent())
     }
@@ -435,7 +439,7 @@ fun CloudBrowserScreen(
             spotifyLoggedIn = uiState.spotifyLoggedIn,
             onSelectDrive = {
                 if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
-                else launchDriveSystemPicker()
+                else launchDriveOAuth()
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
@@ -452,7 +456,7 @@ fun CloudBrowserScreen(
                     ProviderCards(
                         driveLoggedIn = uiState.driveLoggedIn,
                         spotifyLoggedIn = uiState.spotifyLoggedIn,
-                        onConnectDrive = { launchDriveSystemPicker() },
+                        onConnectDrive = { launchDriveOAuth() },
                         onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
                         onBrowseDrive = { viewModel.browseDrive(null, "Root") },
                         onBrowseSpotify = { viewModel.browseSpotify() },
@@ -882,7 +886,7 @@ fun CloudBrowserScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 12.dp, vertical = 4.dp)
-                                    .clickable { launchDriveSystemPicker() }
+                                    .clickable { launchDriveOAuth() }
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,

@@ -220,16 +220,18 @@ class DriveOAuthProvider @Inject constructor(
                 // application/octet-stream — notably .m4b audiobooks. List all
                 // non-trashed children and filter client-side by name OR mime.
                 val q = "'$folderId' in parents and trashed = false"
-                // supportsAllDrives + includeItemsFromAllDrives are REQUIRED to
-                // list a Shared Drive, or a folder someone else owns and shared
-                // with the user. Without them those folders silently return zero
-                // children. Harmless for ordinary My Drive folders.
+                // 2026-07-24: keep this query at vc46 scope — the DEFAULT corpus
+                // (NO corpora=allDrives / includeItemsFromAllDrives). vc46 listed the
+                // user's My Drive folders fine on the default corpus; corpora=allDrives
+                // was a speculative addition this session, unnecessary here (the default
+                // corpus already spans My Drive + shared-with-me, which is all this
+                // picker deals in) and it risks altering "'<id>' in parents" results for
+                // ordinary My Drive folders. Only the pagination + fields below are
+                // additive over vc46 (the 1000-entry page cap was a real truncation).
                 val base = "https://www.googleapis.com/drive/v3/files?" +
                     "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
                     "&fields=nextPageToken,files(id,name,mimeType,size,parents,thumbnailLink)" +
-                    "&pageSize=1000" +
-                    "&supportsAllDrives=true&includeItemsFromAllDrives=true" +
-                    "&corpora=allDrives"
+                    "&pageSize=1000"
                 // Drive caps a page at 1000 entries and returns nextPageToken for
                 // the rest. A single un-paged request therefore TRUNCATED any
                 // folder holding more than a page of files, with no error — the
