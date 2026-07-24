@@ -23,7 +23,7 @@
 
 ## 2. Current build coordinates (verify against `app/build.gradle.kts`)
 
-- **versionCode 54 / versionName 1.4.9.** `53/1.4.8` is already published — next Play upload MUST be
+- **versionCode 55 / versionName 1.5.0.** `54/1.4.9` is already published — next Play upload MUST be
   a higher versionCode. Each release gets a distinct versionName.
 - minSdk 30, targetSdk 36, compileSdk 36. `applicationId = com.powermediaplayer`.
   (targetSdk 36 since vc50 — Play policy deadline 31 Aug 2026.)
