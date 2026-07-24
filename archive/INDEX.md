@@ -2,6 +2,9 @@
 
 Archived 2026-06-26 from `docs/superpowers/` to keep fresh-context load lean. Nothing deleted; read a file on demand. Live tasks: `/TASKS.md`. Closed task history: `docs/archive/TASKS-history.md`.
 
+## saga writeups (1)
+- `archive/2026-07-drive-picker-oauth-saga.md` — **FULL Drive picker + OAuth investigation (2026-07-22→24).** Read on ANY Drive/OAuth question. Covers: two access paths (SAF vs embedded drive.file); the correct model (drive.file DOES grant a picked folder's files; grants are per OAuth-client); the OAuth client table (do NOT delete client #3, it's live); every wrong theory + why; cold-start scaling fix; the one-time in-WebView second sign-in; why the `.test` build can't test Drive.
+
 ## audits (2)
 - `docs/archive/superpowers/audits/2026-05-06-cast-controls-matrix.md` — Cast-controls matrix — what each control does WHILE casting is active
 - `docs/archive/superpowers/audits/2026-05-06-pre-play-store-audit.md` — Pre-Play-Store Audit — 2026-05-06

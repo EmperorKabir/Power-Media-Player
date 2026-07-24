@@ -101,6 +101,16 @@ episode → show → global) via the Tune popup; see §4.
 
 ## 5. Delicate interactions / do-NOT-break (highest-value contingencies)
 
+- **Google Drive picker + OAuth — read `archive/2026-07-drive-picker-oauth-saga.md`
+  before touching anything Drive/OAuth.** Key do-NOT-break facts: the app has TWO
+  Drive paths (SAF `content://` = full access; embedded `drive.file` picker = the
+  in-app one). The embedded picker DOES work and grants a picked folder's existing
+  files (grants are per OAuth-client). **Do NOT delete Google Cloud OAuth client #3**
+  (`184142114356-hgjp9crjfabivu0e8t99abub2tilm2f7`, `com.powermediaplayer`+debug
+  SHA-1) — it is live (2138 calls/30 days). **Do NOT judge Drive file access on the
+  `.test` build** — it's a different OAuth client with no grants (404s by design).
+  Consent screen is in production (keep the logo blank to stay verification-free).
+
 - **Audio effects are LOCAL-pipeline only.** They work over Bluetooth / wired / phone speaker but NOT
   over Spotify Connect or Chromecast (remote routes decode on the receiver — our PCM chain never runs).
   Never claim an effect applies to Spotify/Cast. Same for video effects (local surface only).
