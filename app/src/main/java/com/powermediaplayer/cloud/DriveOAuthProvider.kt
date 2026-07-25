@@ -42,9 +42,10 @@ import javax.inject.Singleton
  *      official Google account chooser + consent screen.
  *   2. After consent, [handleSignInResult] stores the
  *      [GoogleSignInAccount] and primes a [GoogleAccountCredential].
- *   3. The cloud screen launches [DrivePickerActivity] which embeds
- *      Google's JS Drive Picker. The picker returns folder ids
- *      to add to the user's "picked folders" list.
+ *   3. The cloud screen opens the NATIVE in-app folder browser
+ *      (DriveFolderBrowser), which lists Drive folders via
+ *      [listSubFolders] (drive.readonly) and returns a folder id to
+ *      add to the user's "picked folders" list. No WebView.
  *
  * Flow on subsequent launches: cached account + token refresh, no UI.
  *
@@ -201,8 +202,8 @@ class DriveOAuthProvider @Inject constructor(
     }
 
     /**
-     * Returned from [DrivePickerActivity] after the user picks a
-     * folder in the JS Drive Picker.
+     * Called from the native folder browser (DriveFolderBrowser) after
+     * the user adds a folder. Persists it to the picked-folders list.
      */
     suspend fun rememberPickedFolder(folderId: String, folderName: String) {
         settingsDataStore.addDriveOauthPickedFolder(folderId, folderName)
@@ -214,11 +215,59 @@ class DriveOAuthProvider @Inject constructor(
         settingsDataStore.removeDriveOauthPickedFolder(folderId)
     }
 
-    /**
-     * Snapshot account email so [DrivePickerActivity] can inject it
-     * into the Picker JS for the user's primary Google identity.
-     */
+    /** The signed-in Google account email, or null. Used by the Cloud UI
+     *  to gate the native folder browser (see driveReadyForBrowse). */
     fun currentAccountEmail(): String? = account?.email
+
+    /**
+     * Native folder-browser support: list ONLY the sub-folders of
+     * [parentId] ("root" = My Drive top level), for the in-app folder
+     * browser that replaces the WebView Picker. drive.readonly reads the
+     * whole Drive, so this needs no per-folder grant. Access still flows
+     * through [listFiles]/download after a folder is added.
+     */
+    suspend fun listSubFolders(parentId: String): Result<List<CloudMediaItem>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val token = fetchAccessTokenBlocking()
+                    ?: return@withContext Result.failure(IllegalStateException("Not authenticated"))
+                val q = "mimeType = '$MIME_FOLDER' and '$parentId' in parents and trashed = false"
+                val out = mutableListOf<CloudMediaItem>()
+                var pageToken: String? = null
+                do {
+                    val url = "https://www.googleapis.com/drive/v3/files?" +
+                        "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
+                        "&fields=nextPageToken,files(id,name)&orderBy=name&pageSize=1000" +
+                        (pageToken?.let { "&pageToken=$it" } ?: "")
+                    http.newCall(Request.Builder().url(url)
+                        .addHeader("Authorization", "Bearer $token").build()).execute().use { resp ->
+                        if (!resp.isSuccessful)
+                            return@withContext Result.failure(
+                                IllegalStateException("Drive folders HTTP ${resp.code}"))
+                        val json = JSONObject(resp.body?.string().orEmpty())
+                        json.optJSONArray("files")?.let { files ->
+                            for (i in 0 until files.length()) {
+                                val f = files.getJSONObject(i)
+                                out += CloudMediaItem(
+                                    id = f.getString("id"),
+                                    name = f.optString("name"),
+                                    mimeType = MIME_FOLDER,
+                                    size = 0L,
+                                    downloadUrl = "",
+                                    sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+                                    isFolder = true,
+                                    parentId = parentId
+                                )
+                            }
+                        }
+                        pageToken = json.optString("nextPageToken").ifBlank { null }
+                    }
+                } while (pageToken != null)
+                Result.success(out)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
 
     // ── Drive REST (drive.readonly — reads the user's whole Drive) ──
 

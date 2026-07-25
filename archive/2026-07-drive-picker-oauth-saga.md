@@ -61,11 +61,15 @@ base-package client #3 (the friend's exact client) *also* 404s on fresh picks.
   that the app could stay verification-free — that was true only for `drive.file`.
 - **The 2nd sign-in (§6) and cold-start scaling (§5) are SEPARATE** fresh-install
   WebView-Picker artifacts, not the files cause; they merely surfaced together because
-  a fresh install triggers all three. On the 2026-07-25 emulator run, after readonly
-  consent the Picker opened straight to folders with **no** 2nd sign-in and **no**
-  scaling — may be moot now. Because readonly makes the WebView Picker unnecessary for
-  ACCESS (only for folder CHOICE), replacing it with a native in-app folder list would
-  remove both permanently (deferred pending the user seeing whether they recur).
+  a fresh install triggers all three.
+- **WebView Picker REMOVED 2026-07-25 (vc56/1.5.1).** Because readonly makes the WebView
+  Picker unnecessary for ACCESS (only for folder CHOICE), it was replaced by a NATIVE
+  in-app folder browser (`DriveFolderBrowser` in `CloudBrowserScreen.kt` +
+  `DriveOAuthProvider.listSubFolders`). No WebView ⇒ the 2nd sign-in and scaling are now
+  structurally impossible. `DrivePickerActivity.kt` + `assets/drive_picker.html` + both
+  manifest entries deleted (archived at `archive/webview-drive-picker-REMOVED-2026-07-25.md`,
+  restorable from git blob `2a6053a`). Emulator-verified: navigate → "Add this folder" →
+  `driveReturned=5`, `.m4b` lists + downloads; no WebView/2nd-signin/scaling.
 
 ---
 
@@ -381,9 +385,8 @@ will — ask *when* X's access was granted.
   "unverified app" screen and 100-user cap for public release, add `drive.readonly` to
   the OAuth consent-screen scopes and submit for verification (console step). Owner +
   test users work now by tapping through the unverified screen.
-- **Native folder list (optional):** since readonly no longer needs the JS Picker for
-  ACCESS, replacing the WebView Picker with a native folder browser would remove the
-  2nd sign-in + scaling for good. Pending the user seeing whether either recurs.
+- **Native folder list — DONE (vc56/1.5.1, 2026-07-25):** WebView Picker replaced by
+  `DriveFolderBrowser`; 2nd sign-in + scaling structurally gone. Emulator-verified.
 - **`.aax` handling:** `MediaClassifier` keeps `.m4b` and drops `.aax` (Audible DRM).
   Books that exist ONLY as `.aax` won't list — revisit if it affects the library.
 

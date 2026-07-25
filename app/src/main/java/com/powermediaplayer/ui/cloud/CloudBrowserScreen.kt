@@ -21,7 +21,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.remember
@@ -240,54 +242,21 @@ fun CloudBrowserScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { result -> viewModel.handleSpotifyResult(result.data) }
 
-    // Drive Picker (WebView) launcher — fires after OAuth sign-in
-    // succeeds and we have an access token. Returns picked folder
-    // ID/name which we persist to the user's Drive picked-folders list.
-    val drivePickerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val id = result.data?.getStringExtra(
-                com.powermediaplayer.cloud.DrivePickerActivity.RESULT_FOLDER_ID
-            )
-            val name = result.data?.getStringExtra(
-                com.powermediaplayer.cloud.DrivePickerActivity.RESULT_FOLDER_NAME
-            )
-            if (!id.isNullOrBlank() && !name.isNullOrBlank()) {
-                viewModel.rememberPickedDriveFolder(id, name)
-            }
-        }
-        // Always refresh whatever the result — covers (a) user picked
-        // a FILE not a folder (returns to us with no extras), (b) user
-        // cancelled out, (c) the WebView Picker JS errored. Without
-        // this force, the screen kept stale state and the user reported
-        // "stays on the sign-in screen" even though sign-in actually
-        // succeeded.
-        viewModel.forceRefresh()
-    }
+    // Native folder-browser visibility (replaces the WebView Picker; no
+    // WebView → no second sign-in, no cold-start scaling).
+    var showDriveBrowser by remember { mutableStateOf(false) }
 
     val pickerScope = rememberCoroutineScope()
 
-    // Drive OAuth sign-in launcher. On success, fetch a token off-main
-    // and launch the Picker WebView. On failure or user cancel, dismiss.
+    // Drive OAuth sign-in launcher. On success, open the NATIVE folder
+    // browser. drive.readonly reads the whole Drive, so browsing needs no
+    // WebView Picker grant. On failure / cancel, just refresh.
     val driveOAuthLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         pickerScope.launch {
             val ok = viewModel.handleDriveOAuthResult(result.data)
-            if (ok) {
-                val token = viewModel.fetchDriveAccessToken()
-                if (!token.isNullOrBlank()) {
-                    drivePickerLauncher.launch(
-                        com.powermediaplayer.cloud.DrivePickerActivity.intent(context, token)
-                    )
-                }
-            }
-            // Force refresh regardless — covers the user who signs in
-            // but is then routed away (e.g. Picker fails to launch, or
-            // user backs out before the Picker WebView renders). The
-            // sign-in itself still succeeded; the cards should reflect
-            // the new logged-in state.
+            if (ok) showDriveBrowser = true
             viewModel.forceRefresh()
         }
     }
@@ -318,11 +287,12 @@ fun CloudBrowserScreen(
     }
 
     fun launchDriveOAuth() {
-        if (firstPickWarningSeen) {
-            driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
-        } else {
-            pendingFirstPickWarning = true
-        }
+        if (!firstPickWarningSeen) { pendingFirstPickWarning = true; return }
+        // Already signed in with read access → straight to the native
+        // folder browser. Otherwise do the native Google sign-in first;
+        // its result opens the browser.
+        if (viewModel.driveReadyForBrowse()) showDriveBrowser = true
+        else driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
     }
 
     if (pendingFirstPickWarning) {
@@ -337,10 +307,9 @@ fun CloudBrowserScreen(
             },
             text = {
                 Text(
-                    "Please select the FOLDER CONTAINING the files you want, " +
-                        "and NOT the files themselves, files won't appear on the " +
-                        "selection screen. You'll then be able to browse the FILES " +
-                        "here in the app.",
+                    "Open the folder that CONTAINS your books/music (tap folders to " +
+                        "go into them), then tap “Add this folder”. You'll then " +
+                        "browse the files here in the app.",
                     color = TextPrimary,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -366,6 +335,18 @@ fun CloudBrowserScreen(
                 }
             },
             containerColor = OledBlack
+        )
+    }
+
+    // Native in-app Drive folder browser (replaces the WebView Picker).
+    if (showDriveBrowser) {
+        DriveFolderBrowser(
+            listSubFolders = { pid -> viewModel.listDriveSubFolders(pid) },
+            onAdd = { id, name ->
+                showDriveBrowser = false
+                viewModel.rememberPickedDriveFolder(id, name)
+            },
+            onDismiss = { showDriveBrowser = false }
         )
     }
 
@@ -1979,4 +1960,110 @@ private fun FavouriteFolderRow(
             )
         }
     }
+}
+
+/**
+ * Native in-app Drive folder browser — replaces the WebView Google Picker
+ * (so there is NO WebView → no second in-WebView sign-in, no cold-start
+ * scaling). Lists a folder's sub-folders via drive.readonly; tap a folder
+ * to navigate in, the back arrow to go up, and "Add this folder" to add the
+ * CURRENT folder to the picked list. "root" is Drive's My-Drive-top alias.
+ */
+@Composable
+private fun DriveFolderBrowser(
+    listSubFolders: suspend (String) -> Result<List<com.powermediaplayer.cloud.CloudMediaItem>>,
+    onAdd: (String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val stack = remember { mutableStateListOf("root" to "My Drive") }
+    val current = stack.last()
+    var folders by remember { mutableStateOf<List<com.powermediaplayer.cloud.CloudMediaItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(current.first) {
+        loading = true
+        error = null
+        listSubFolders(current.first)
+            .onSuccess { folders = it }
+            .onFailure { error = it.message ?: "Could not load folders" }
+        loading = false
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = OledBlack,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (stack.size > 1) {
+                    IconButton(onClick = { stack.removeAt(stack.lastIndex) }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Up a folder",
+                            tint = TealAccent
+                        )
+                    }
+                }
+                Text(
+                    current.second,
+                    color = TealAccent,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        },
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                when {
+                    loading -> Row(
+                        Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) { CircularProgressIndicator(color = TealAccent) }
+                    error != null -> Text("Couldn't load folders: $error", color = TextPrimary)
+                    folders.isEmpty() -> Text(
+                        "No sub-folders here. Tap “Add this folder” to add “${current.second}”.",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    else -> LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                        items(folders, key = { it.id }) { f ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { stack.add(f.id to f.name) }
+                                    .padding(vertical = 14.dp, horizontal = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Filled.Folder, contentDescription = null, tint = TealAccent)
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    f.name,
+                                    color = TextPrimary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = current.first != "root",
+                onClick = { onAdd(current.first, current.second) },
+                modifier = Modifier.defaultMinSize(minWidth = 120.dp, minHeight = 56.dp),
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+            ) {
+                Text(
+                    "Add this folder",
+                    color = if (current.first != "root") TealAccent else TextPrimary.copy(alpha = 0.4f)
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = TextPrimary) }
+        }
+    )
 }

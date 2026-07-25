@@ -1105,15 +1105,7 @@ class CloudViewModel @Inject constructor(
         return r.isSuccess
     }
 
-    /**
-     * Fetch a Drive access token off-Main so the picker activity can
-     * inject it into the WebView. Returns null if not signed in.
-     */
-    suspend fun fetchDriveAccessToken(): String? = withContext(Dispatchers.IO) {
-        driveOAuthProvider.fetchAccessTokenBlocking()
-    }
-
-    /** Persist a folder picked via the Drive Picker WebView. */
+    /** Persist a folder added via the native Drive folder browser. */
     /**
      * Pauses Spotify playback on whatever device is currently active.
      * Used by the Connect picker's "Stop playing" / Disconnect row so
@@ -1179,6 +1171,14 @@ class CloudViewModel @Inject constructor(
             browseDrive(folderId, folderName)
         }
     }
+
+    /** Native folder browser: sub-folders of [parentId] ("root" = My Drive top). */
+    suspend fun listDriveSubFolders(parentId: String): Result<List<com.powermediaplayer.cloud.CloudMediaItem>> =
+        driveOAuthProvider.listSubFolders(parentId)
+
+    /** True when signed in AND drive.readonly already granted (skip the sign-in step). */
+    fun driveReadyForBrowse(): Boolean =
+        driveOAuthProvider.currentAccountEmail() != null && !driveOAuthProvider.needsReadConsent()
 
     // Audit B2: openPickerChooser/dismissPickerChooser/buildDeepLinkedDriveIntent
     // were the never-invoked plumbing of the orphaned SourceChooserDialog
