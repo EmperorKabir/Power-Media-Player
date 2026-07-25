@@ -33,8 +33,8 @@ android {
         // orientation locks to trip the large-screen rule, no native .so
         // (16 KB page rule moot), WorkManager unaffected.
         targetSdk = 36
-        versionCode = 56
-        versionName = "1.5.1"
+        versionCode = 57
+        versionName = "1.5.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -42,12 +42,9 @@ android {
         buildConfigField("String", "GDRIVE_ANDROID_CLIENT_ID", "\"${localProp("GDRIVE_ANDROID_CLIENT_ID")}\"")
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${localProp("SPOTIFY_CLIENT_ID")}\"")
         buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"${localProp("SPOTIFY_REDIRECT_URI")}\"")
-        // Drive Picker — JS Picker requires (a) the GCP project number
-        // ("App ID") and (b) a Google API Key restricted to Picker API.
-        // Both are public-by-design (the API key is restricted by API
-        // and origin, not by secrecy).
-        buildConfigField("String", "DRIVE_PICKER_APP_ID", "\"${localProp("DRIVE_PICKER_APP_ID")}\"")
-        buildConfigField("String", "DRIVE_PICKER_API_KEY", "\"${localProp("DRIVE_PICKER_API_KEY")}\"")
+        // (DRIVE_PICKER_APP_ID / DRIVE_PICKER_API_KEY removed 2026-07-25 —
+        //  the WebView JS Picker they fed was deleted for a native folder
+        //  browser; no BuildConfig.DRIVE_PICKER_* consumer remains.)
         // §C9 LOCKED — OpenSubtitles app-identifying API key. The key
         // identifies our APP, not the user; per-user login uses a
         // separate token. Empty default means the auto-fetcher

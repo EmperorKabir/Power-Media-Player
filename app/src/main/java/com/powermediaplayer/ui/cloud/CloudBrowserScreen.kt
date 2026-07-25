@@ -256,7 +256,21 @@ fun CloudBrowserScreen(
     ) { result ->
         pickerScope.launch {
             val ok = viewModel.handleDriveOAuthResult(result.data)
-            if (ok) showDriveBrowser = true
+            // `ok` only means an account came back — NOT that drive.readonly
+            // was granted. If the user declined the Drive scope (or bailed at
+            // the "unverified app" screen after choosing the account), opening
+            // the browser would dead-end on "Not authenticated". Gate on
+            // driveReadyForBrowse (checks the readonly grant) and nudge a retry.
+            if (ok && viewModel.driveReadyForBrowse()) {
+                showDriveBrowser = true
+            } else if (ok) {
+                android.widget.Toast.makeText(
+                    context,
+                    "Drive read access is needed to browse your folders. " +
+                        "Tap Add folder again and allow it.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
             viewModel.forceRefresh()
         }
     }
@@ -270,29 +284,25 @@ fun CloudBrowserScreen(
         .collectAsStateWithLifecycle(initialValue = true)
     var pendingFirstPickWarning by remember { mutableStateOf(false) }
 
-    // 2026-07-23: Drive folder-adding routes to the embedded Google Picker
-    // ([launchDriveOAuth]) at the user's explicit choice. The investigation is
-    // conclusive: the embedded Picker's web frame (docs.google.com/picker)
-    // returns 401 on a fresh WebView because it has no Google web-login cookie,
-    // which is why it asks to sign in a SECOND time after the native account
-    // chooser (the token from the chooser authorises the API, not the web
-    // frame). Same 401 reproduced on the Oppo AND a fresh Android 16 emulator
-    // (WebView 133, OS signed into Google) — so it is neither the phone nor the
-    // OS/WebView version. The user accepts the two-step sign-in; completing the
-    // in-WebView Google login is expected to set the cookie and let the Picker
-    // render. [launchDriveSystemPicker] is kept as the fallback (no second
-    // sign-in, uses the OS Google session) if the embedded flow does not hold.
+    // 2026-07-25: Drive folder-adding opens the NATIVE in-app folder browser
+    // (DriveFolderBrowser) — no WebView, no second sign-in, no scaling.
+    // [launchDriveSystemPicker] is a legacy SAF (system document-tree) path,
+    // kept for adding a folder via the OS file picker.
     fun launchDriveSystemPicker() {
         driveLauncher.launch(viewModel.buildDriveSignInIntent())
     }
 
-    fun launchDriveOAuth() {
-        if (!firstPickWarningSeen) { pendingFirstPickWarning = true; return }
-        // Already signed in with read access → straight to the native
-        // folder browser. Otherwise do the native Google sign-in first;
-        // its result opens the browser.
+    // Open the native folder browser. If already signed in WITH read access,
+    // go straight there; otherwise do the native Google sign-in first (its
+    // result re-gates on read consent before opening the browser).
+    fun proceedToDriveBrowser() {
         if (viewModel.driveReadyForBrowse()) showDriveBrowser = true
         else driveOAuthLauncher.launch(viewModel.buildDriveOAuthSignInIntent())
+    }
+
+    fun launchDriveOAuth() {
+        if (!firstPickWarningSeen) { pendingFirstPickWarning = true; return }
+        proceedToDriveBrowser()
     }
 
     if (pendingFirstPickWarning) {
@@ -322,7 +332,11 @@ fun CloudBrowserScreen(
                     onClick = {
                         viewModel.markDriveFirstPickWarningSeen()
                         pendingFirstPickWarning = false
-                        launchDriveOAuth()
+                        // Proceed directly — the acknowledgement is already
+                        // known here; re-invoking the guarded launchDriveOAuth()
+                        // would re-show this dialog (the persisted flag hasn't
+                        // recomposed yet), forcing a second tap.
+                        proceedToDriveBrowser()
                     },
                     modifier = Modifier.defaultMinSize(minWidth = 120.dp, minHeight = 56.dp),
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
@@ -2022,7 +2036,12 @@ private fun DriveFolderBrowser(
                     ) { CircularProgressIndicator(color = TealAccent) }
                     error != null -> Text("Couldn't load folders: $error", color = TextPrimary)
                     folders.isEmpty() -> Text(
-                        "No sub-folders here. Tap “Add this folder” to add “${current.second}”.",
+                        // At My Drive root "Add this folder" is disabled (you
+                        // can't add all of Drive), so don't tell them to tap it.
+                        if (current.first == "root")
+                            "No folders in My Drive. Open a folder to add it."
+                        else
+                            "No sub-folders here. Tap “Add this folder” to add “${current.second}”.",
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodyMedium
                     )

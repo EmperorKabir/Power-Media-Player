@@ -5,15 +5,8 @@
 # From Google Cloud Console → Clients → Android client
 GDRIVE_ANDROID_CLIENT_ID=
 
-# Drive Picker (JS) — REQUIRED for the Drive folder-pick flow.
-# DRIVE_PICKER_APP_ID is your Google Cloud project NUMBER (not ID).
-#   Find it: GCP Console → Home → Project info → Project number.
-# DRIVE_PICKER_API_KEY is a Google API Key restricted to Picker API.
-#   Create: Console → APIs & Services → Credentials → + Create credentials
-#   → API key. Then click the new key → "API restrictions" → Restrict key
-#   → tick "Google Picker API" only. Save.
-DRIVE_PICKER_APP_ID=
-DRIVE_PICKER_API_KEY=
+# (DRIVE_PICKER_APP_ID / DRIVE_PICKER_API_KEY removed 2026-07-25 — the WebView
+#  JS Picker was replaced by a native folder browser; no Picker key needed.)
 
 # From Spotify Developer Dashboard → app → Settings
 SPOTIFY_CLIENT_ID=

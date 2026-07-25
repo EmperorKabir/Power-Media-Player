@@ -130,9 +130,9 @@ class DriveOAuthProvider @Inject constructor(
     /**
      * True when signed in but the account has NOT yet granted
      * drive.readonly — e.g. a returning user last authorised under the
-     * old drive.file-only scope. The Cloud UI surfaces a "grant read
-     * access" re-connect prompt; re-running [buildSignInIntent]
-     * incrementally adds the scope and keeps the picked folders.
+     * old drive.file-only scope. The Cloud "Add folder" flow gates on
+     * this (via driveReadyForBrowse): when true it re-launches sign-in,
+     * which incrementally adds the scope and keeps the picked folders.
      */
     fun needsReadConsent(): Boolean {
         val acc = account ?: return false
@@ -178,25 +178,32 @@ class DriveOAuthProvider @Inject constructor(
     }
 
     /**
-     * Synchronously fetch a fresh OAuth access token. Blocks on the
-     * Google Auth blocking call, so MUST be called off Main. Returns
-     * null when not signed in or refresh fails.
+     * Synchronously fetch a fresh READ (drive.readonly) access token.
+     * Blocks on the Google Auth call, so MUST be called off Main. Returns
+     * null when not signed in or refresh fails. Scoped to readonly ONLY —
+     * NOT combined with drive.file — so reads (listing, download, cast,
+     * playback) never hard-fail just because the write scope is missing;
+     * readonly alone suffices for all reads. Backup WRITES use
+     * [fetchWriteTokenBlocking] instead.
      */
-    fun fetchAccessTokenBlocking(): String? {
-        val acc = account ?: return null
+    fun fetchAccessTokenBlocking(): String? = tokenForScopes("oauth2:$SCOPE_DRIVE_READONLY")
+
+    /**
+     * READ-token's write sibling: a fresh drive.file token for the backup
+     * upload/update paths (readonly cannot write). Kept separate so the
+     * two scopes are never coupled in one all-or-nothing getToken call.
+     */
+    fun fetchWriteTokenBlocking(): String? = tokenForScopes("oauth2:$SCOPE_DRIVE_FILE")
+
+    private fun tokenForScopes(scopeSpec: String): String? {
+        val acc = account?.account ?: return null
         return try {
-            // GoogleAuthUtil is part of play-services-auth and returns
-            // the OAuth access token synchronously, refreshing if
-            // needed. The "oauth2:" prefix is required by the older API
-            // surface; multiple scopes are space-separated. readonly reads
-            // the user's Drive; drive.file covers the backup upload.
-            com.google.android.gms.auth.GoogleAuthUtil.getToken(
-                context,
-                acc.account ?: return null,
-                "oauth2:$SCOPE_DRIVE_READONLY $SCOPE_DRIVE_FILE"
-            )
+            // GoogleAuthUtil returns the OAuth access token synchronously,
+            // refreshing if needed. The "oauth2:" prefix is required by the
+            // older API surface.
+            com.google.android.gms.auth.GoogleAuthUtil.getToken(context, acc, scopeSpec)
         } catch (e: Exception) {
-            com.powermediaplayer.util.Diag.w("PMP_DIAG", "DriveOAuth.fetchAccessTokenBlocking failed", e)
+            com.powermediaplayer.util.Diag.w("PMP_DIAG", "DriveOAuth.getToken failed for $scopeSpec", e)
             null
         }
     }
@@ -238,7 +245,7 @@ class DriveOAuthProvider @Inject constructor(
                     val url = "https://www.googleapis.com/drive/v3/files?" +
                         "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
                         "&fields=nextPageToken,files(id,name)&orderBy=name&pageSize=1000" +
-                        (pageToken?.let { "&pageToken=$it" } ?: "")
+                        (pageToken?.let { "&pageToken=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: "")
                     http.newCall(Request.Builder().url(url)
                         .addHeader("Authorization", "Bearer $token").build()).execute().use { resp ->
                         if (!resp.isSuccessful)
@@ -513,7 +520,7 @@ class DriveOAuthProvider @Inject constructor(
         content: String,
         mimeType: String = "application/json"
     ): Result<String> = withContext(Dispatchers.IO) {
-        val token = fetchAccessTokenBlocking()
+        val token = fetchWriteTokenBlocking()
             ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
         runCatching {
             val boundary = "pmp" + java.util.UUID.randomUUID().toString().replace("-", "")
@@ -549,7 +556,7 @@ class DriveOAuthProvider @Inject constructor(
         content: String,
         mimeType: String = "application/json"
     ): Result<String> = withContext(Dispatchers.IO) {
-        val token = fetchAccessTokenBlocking()
+        val token = fetchWriteTokenBlocking()
             ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
         runCatching {
             val req = Request.Builder()
@@ -583,7 +590,7 @@ class DriveOAuthProvider @Inject constructor(
 
     /** M3 restore — full text content of a (small) Drive file by id. */
     suspend fun downloadTextFile(fileId: String): Result<String> = withContext(Dispatchers.IO) {
-        val token = fetchAccessTokenBlocking()
+        val token = fetchWriteTokenBlocking()
             ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
         runCatching {
             val req = Request.Builder()
