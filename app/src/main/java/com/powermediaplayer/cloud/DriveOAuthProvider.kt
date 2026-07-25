@@ -34,7 +34,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Google Drive integration via Google Sign-In + drive.file scope.
+ * Google Drive integration via Google Sign-In + drive.readonly (read)
+ * and drive.file (backup write) scopes.
  *
  * Flow on first run:
  *   1. User taps "Pick Drive folder" → [buildSignInIntent] launches the
@@ -47,12 +48,22 @@ import javax.inject.Singleton
  *
  * Flow on subsequent launches: cached account + token refresh, no UI.
  *
- * Why drive.file (not drive.readonly): drive.file is **non-sensitive**
- * — Google verification is not required, and other users can sign in
- * without a 100-tester whitelist or 4–6-week CASA wait. The cost is
- * that the app can only see files/folders the user explicitly grants
- * via Picker (or that the app itself created). That matches a media
- * player's "pick the folder where my music lives" UX exactly.
+ * SCOPE HISTORY — why drive.readonly now (was drive.file):
+ * The app originally used drive.file (non-sensitive, no verification).
+ * drive.file grants per-file access to files the user explicitly picks
+ * or the app creates. Google then RESTRICTED drive.file folder-selection
+ * so picking a FOLDER no longer grants its pre-existing files — only the
+ * folder resource itself. Device-verified 2026-07-25 on a fresh install
+ * (Oppo WebView 150 AND emulator WebView 133, both OAuth clients):
+ *   FOLDER.get 200, every child files.get 404, files.list → 0 of 5.
+ * vc46 (2026-07-03) used the identical drive.file + Picker + REST path
+ * and worked only because older grants were honoured (grandfathered);
+ * fresh picks after the restriction return nothing. drive.readonly reads
+ * the user's Drive unconditionally, so a freshly-picked folder's files
+ * are listable/downloadable at once. Cost: drive.readonly is SENSITIVE
+ * → Google verification needed to remove the "unverified app" screen for
+ * the public + lift the 100-user cap. drive.file is KEPT alongside for
+ * the backup UPLOAD path (readonly cannot write).
  */
 @Singleton
 class DriveOAuthProvider @Inject constructor(
@@ -81,7 +92,16 @@ class DriveOAuthProvider @Inject constructor(
     private val signInOptions: GoogleSignInOptions = GoogleSignInOptions
         .Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestEmail()
-        .requestScopes(Scope("https://www.googleapis.com/auth/drive.file"))
+        // drive.readonly: full READ of the user's Drive. Required because Google
+        // restricted drive.file folder-selection so a picked folder no longer
+        // grants its pre-existing files (device-verified 2026-07-25: FOLDER.get
+        // 200 but every child files.get 404). readonly reads the picked folder's
+        // contents directly. drive.file is KEPT for the backup UPLOAD path (the
+        // app writes its own backup file; readonly cannot write).
+        .requestScopes(
+            Scope(SCOPE_DRIVE_READONLY),
+            Scope(SCOPE_DRIVE_FILE)
+        )
         .build()
 
     private val signInClient: GoogleSignInClient by lazy {
@@ -105,6 +125,18 @@ class DriveOAuthProvider @Inject constructor(
     }
 
     fun buildSignInIntent(): Intent = signInClient.signInIntent
+
+    /**
+     * True when signed in but the account has NOT yet granted
+     * drive.readonly — e.g. a returning user last authorised under the
+     * old drive.file-only scope. The Cloud UI surfaces a "grant read
+     * access" re-connect prompt; re-running [buildSignInIntent]
+     * incrementally adds the scope and keeps the picked folders.
+     */
+    fun needsReadConsent(): Boolean {
+        val acc = account ?: return false
+        return !GoogleSignIn.hasPermissions(acc, Scope(SCOPE_DRIVE_READONLY))
+    }
 
     /**
      * Process the Google Sign-In activity result. On success, primes
@@ -154,12 +186,13 @@ class DriveOAuthProvider @Inject constructor(
         return try {
             // GoogleAuthUtil is part of play-services-auth and returns
             // the OAuth access token synchronously, refreshing if
-            // needed. The "oauth2:" prefix on the scope is required by
-            // the older API surface; the scope itself is drive.file.
+            // needed. The "oauth2:" prefix is required by the older API
+            // surface; multiple scopes are space-separated. readonly reads
+            // the user's Drive; drive.file covers the backup upload.
             com.google.android.gms.auth.GoogleAuthUtil.getToken(
                 context,
                 acc.account ?: return null,
-                "oauth2:https://www.googleapis.com/auth/drive.file"
+                "oauth2:$SCOPE_DRIVE_READONLY $SCOPE_DRIVE_FILE"
             )
         } catch (e: Exception) {
             com.powermediaplayer.util.Diag.w("PMP_DIAG", "DriveOAuth.fetchAccessTokenBlocking failed", e)
@@ -187,7 +220,7 @@ class DriveOAuthProvider @Inject constructor(
      */
     fun currentAccountEmail(): String? = account?.email
 
-    // ── Drive REST (drive.file scope — only picker-granted files visible) ──
+    // ── Drive REST (drive.readonly — reads the user's whole Drive) ──
 
     /**
      * List children of [folderId]. When [folderId] is null, surface
@@ -608,5 +641,7 @@ class DriveOAuthProvider @Inject constructor(
 
     companion object {
         private const val MIME_FOLDER = "application/vnd.google-apps.folder"
+        const val SCOPE_DRIVE_READONLY = "https://www.googleapis.com/auth/drive.readonly"
+        const val SCOPE_DRIVE_FILE = "https://www.googleapis.com/auth/drive.file"
     }
 }

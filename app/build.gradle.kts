@@ -65,27 +65,6 @@ android {
     // `bundleRelease` builds an unsigned AAB instead of failing — useful in CI
     // and for contributors who don't have the keystore.
     signingConfigs {
-        // 2026-07-25: dedicated key for the `.test` debug build so its signing
-        // fingerprint is UNIQUE. The DEFAULT debug key's SHA-1 is ALSO registered
-        // under the base package `com.powermediaplayer` (OAuth client "Power Media
-        // Player"), so drive.file Picker grants made by the `.test` build collided
-        // by fingerprint onto that older base-package client, and the `.test`
-        // build's own Drive API calls 404'd ("File not found") — proven on device
-        // (fresh pick → files.get 404, token aud = the .test client). A unique key
-        // ends the collision; its SHA-1 must be registered for
-        // `com.powermediaplayer.test` in the Cloud console.
-        // Created only when the key is present (it is git-ignored, kept on the
-        // dev machine); absent on fresh checkouts, which then fall back to the
-        // default debug key below — everything but the .test Drive picker works.
-        val testKeystore = file("pmp-test-debug.jks")
-        if (testKeystore.exists()) {
-            create("testdebug") {
-                storeFile = testKeystore
-                storePassword = "pmptest123"
-                keyAlias = "pmptest"
-                keyPassword = "pmptest123"
-            }
-        }
         val storeFilePath = localProp("RELEASE_STORE_FILE")
         if (storeFilePath.isNotBlank()) {
             create("release") {
@@ -117,17 +96,17 @@ android {
         }
         debug {
             isMinifyEnabled = false
-            // "Power Test" side-by-side build (2026-07-05): own package so it
-            // installs ALONGSIDE the Play Store app instead of replacing it.
-            // Fresh, separate data (DataStore/DB/files).
-            applicationIdSuffix = ".test"
+            // 2026-07-25: BASE-PACKAGE debug build (NO .test suffix) signed with the
+            // DEFAULT debug key (SHA-1 BD:78…). This gives it the SAME app identity
+            // as the OAuth client "Power Media Player" (com.powermediaplayer + debug
+            // SHA-1), so the embedded Drive Picker accepts its token and grants file
+            // access. The .test package could NOT: the Picker binds file grants to
+            // the project's base package, so a different-package build's picks never
+            // grant (device-proven — token aud = the .test client, files.get 404 even
+            // after a dedicated unique signing key). This build REPLACES the Play app
+            // on the device (same package); per user request it is the standard test
+            // build from now on. Fresh, separate data on install.
             versionNameSuffix = "-test"
-            // Sign with the DEDICATED test key (unique SHA-1) so Drive Picker
-            // grants attach to the `.test` OAuth client instead of colliding onto
-            // the base-package client (see signingConfigs testdebug above). Its
-            // SHA-1 E1:AC:FD:99:6C:90:A2:BB:01:47:8A:55:3C:7E:05:FD:50:BF:41:2B is
-            // registered for com.powermediaplayer.test in the Cloud console.
-            signingConfigs.findByName("testdebug")?.let { signingConfig = it }
         }
     }
 
