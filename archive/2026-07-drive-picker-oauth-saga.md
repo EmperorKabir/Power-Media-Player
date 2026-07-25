@@ -1,19 +1,81 @@
-# Google Drive Picker + OAuth saga — full findings (2026-07-22 → 2026-07-24)
+# Google Drive Picker + OAuth saga — full findings (2026-07-22 → 2026-07-25)
 
 **Purpose:** a self-contained, richly detailed record of the multi-day Google Drive
 picker / OAuth investigation, so that after any context loss the whole thing can be
-understood without re-deriving it. Reading priority: the **TL;DR** and **"The
-correct model"** first; the **"Wrong theories"** section documents every dead end
-and *why* it was wrong (the user explicitly asked for this — the same wrong turns
-were reached repeatedly and must not be repeated).
+understood without re-deriving it. Reading priority: **§0-NEW (2026-07-25 resolved
+truth) FIRST** — it supersedes the old §0 TL;DR and §3. The **"Wrong theories"**
+section (§4) documents every dead end and *why* it was wrong (the user explicitly
+asked for this); note §4 itself has been corrected on 2026-07-25 where the earlier
+"why wrong" was itself wrong.
 
-Current state at time of writing: **vc55 / 1.5.0** cut and signed
-(`dist/PowerMediaPlayer-release.aab`), embedded Drive picker restored as the
-add-folder path, cold-start scaling fixed, consent screen published to production.
+Current state: **RESOLVED 2026-07-25.** Root cause is a Google-side restriction of
+`drive.file` folder-grants; fix shipped is a switch to **`drive.readonly`** (commit
+`c047004`), emulator-verified end to end. The **2026-07-24 conclusion below (§0-OLD,
+§3) was WRONG** — it blamed the `.test` OAuth client; this session proved the
+base-package client #3 (the friend's exact client) *also* 404s on fresh picks.
 
 ---
 
-## 0. TL;DR (the resolved truth)
+## 0-NEW. RESOLVED TRUTH (2026-07-25) — supersedes §0-OLD and §3
+
+- **Root cause (device-verified):** Google RESTRICTED the `drive.file` scope's
+  folder-selection. Picking a FOLDER now grants access to the **folder resource only,
+  NOT its pre-existing files.** A decisive probe (real file IDs, the user's account)
+  on **both** the Oppo (WebView 150) **and** a fresh emulator (WebView 133), under
+  **both** OAuth clients (.test #1 AND base-package #3 = the friend's exact client):
+  - `files.get` on the picked FOLDER → **HTTP 200** (folder reachable)
+  - `files.get` on a real child `.m4b` → **HTTP 404**
+  - `files.list('<folderId>' in parents)` → **0 of 5** real children (raw
+    `driveReturned=0`)
+  - `+ supportsAllDrives/includeItemsFromAllDrives/corpora=allDrives` → still
+    `{"files":[]}` (it is My Drive — chain owned by the user, no `driveId`)
+  - re-check **25 min** after the pick → still 404 (not slow grant propagation)
+- **`FOLDER.get 200` is the key fact** — it rules out phone, WebView version, OAuth
+  client, `appId`, signing, and the "WebView web-session/cookie" theory in one shot.
+  The grant works; Google just no longer includes the folder's existing files.
+- **This DEMOLISHES the old §0/§3 conclusion.** The old doc said the 404s were a
+  `.test`-client artifact and that client #3 "holds the grants and works". Reality:
+  client #3 (base-package, the friend's client) **also 404s on a FRESH pick**. What
+  actually works for the friend (and the old Fold) is **grandfathered older grants** —
+  `drive.file` grants persist per file, and folders picked *before* the restriction
+  keep the broader access. Fresh picks after it get folder-only.
+- **vc46 (2026-07-03) used the IDENTICAL path** (same `drive.file` scope, same
+  `DrivePickerActivity` WebView Picker, same `files/{id}?alt=media` download —
+  git-proven byte-identical picker config) and "worked" only via those grandfathered
+  grants. Same code returns 404 on any fresh pick now. Google's exact change date
+  could NOT be pinned from public docs; the mechanism is proven by identical-code-
+  worked-then-404s + grandfathering, not a changelog line.
+- **FIX (shipped, commit `c047004`):** request **`drive.readonly`** (reads the user's
+  Drive unconditionally, independent of per-folder grants) so a freshly-picked
+  folder's files list/download at once. **Keep `drive.file` alongside** for the backup
+  UPLOAD path (readonly cannot write). Added `DriveOAuthProvider.needsReadConsent()`
+  so returning users (old drive.file-only grant) re-consent once. Constants
+  `SCOPE_DRIVE_READONLY`/`SCOPE_DRIVE_FILE` in `DriveOAuthProvider.kt`.
+  **Emulator-verified:** after granting readonly, `listFiles driveReturned=5` (was 0),
+  the `.m4b` shows with a Download button, download runs (~7 MB/s).
+- **Cost of the fix:** `drive.readonly` is a **sensitive** scope → Google OAuth
+  verification is needed to clear the "unverified app" screen + lift the 100-user cap
+  for PUBLIC release. For the owner + friend it works now by tapping through the
+  unverified screen once. Add `drive.readonly` to the OAuth consent screen scopes
+  (console step; via Claude-for-Chrome or the user). This REVERSES the old §2 note
+  that the app could stay verification-free — that was true only for `drive.file`.
+- **The 2nd sign-in (§6) and cold-start scaling (§5) are SEPARATE** fresh-install
+  WebView-Picker artifacts, not the files cause; they merely surfaced together because
+  a fresh install triggers all three. On the 2026-07-25 emulator run, after readonly
+  consent the Picker opened straight to folders with **no** 2nd sign-in and **no**
+  scaling — may be moot now. Because readonly makes the WebView Picker unnecessary for
+  ACCESS (only for folder CHOICE), replacing it with a native in-app folder list would
+  remove both permanently (deferred pending the user seeing whether they recur).
+
+---
+
+## 0-OLD. TL;DR — **SUPERSEDED / WRONG (believed 2026-07-24, disproved 2026-07-25 — see §0-NEW)**
+
+> The bullets below were the 2026-07-24 conclusion. They are preserved as part of the
+> "what was believed and why it was wrong" record the user asked for. **Do not act on
+> them** — the base-package client #3 was later proven to 404 on fresh picks too, so
+> "it's a `.test`-client artifact" is false; the true cause is the `drive.file`
+> folder-grant restriction (§0-NEW).
 
 - The app has **two independent Drive access paths**. Only one was ever the point of
   confusion:
@@ -24,20 +86,17 @@ add-folder path, cold-start scaling fixed, consent screen published to productio
      Picker in a WebView, `drive.file` OAuth scope → stores
      `…/files/{id}?alt=media` → streamed via the Drive REST API. The "in-app,
      double sign-in" picker the user likes.
-- **The embedded `drive.file` picker DOES work** and DOES grant access to a picked
-  folder's existing files. Proven by: (a) the user's friend downloading the user's
-  shared files through the real app on a Samsung; (b) the Google Cloud OAuth client
-  `com.powermediaplayer` + debug-SHA-1 ("client #3") showing **2138 auth calls in 30
-  days** — an active, working install fleet.
-- **Every "it can't work / 404" conclusion during the investigation was a testing
-  artifact of the `.test` debug build**, which is a *different OAuth client*
-  (`com.powermediaplayer.test`, "client #1") with no accumulated `drive.file` grants,
-  and which additionally shares the debug SHA-1 with the live client #3 (a
-  fingerprint collision that mis-attributes its picks' grants to #3). Real builds
-  (Play `com.powermediaplayer`+`C8:FE`, or sideloaded base-package
-  `com.powermediaplayer`+debug) use clients that hold the grants and work fine.
-- No recent Google change caused any of this. No Google Cloud change was needed or
-  made — in particular **client #3 must NOT be deleted** (it is live traffic).
+- ~~**The embedded `drive.file` picker DOES work** and DOES grant access to a picked
+  folder's existing files.~~ **WRONG** — it grants the folder only; fresh picks 404 on
+  the files (§0-NEW). The friend/Fold worked via grandfathered grants, not because the
+  client is special.
+- ~~**Every "it can't work / 404" conclusion was a `.test` debug build artifact.**~~
+  **WRONG** — client #3 (base-package, the friend's exact client) also 404s on fresh
+  picks. The 404 is `drive.file` behaviour, not a client identity problem.
+- ~~No recent Google change caused any of this.~~ **WRONG in spirit** — the cause IS a
+  Google-side `drive.file` folder-grant restriction (date unpinned). No Google *Cloud
+  console* change was needed for the diagnosis, and **client #3 must still NOT be
+  deleted** (it is live traffic) — that part stands.
 
 ---
 
@@ -106,54 +165,61 @@ folders are Drive ids (`driveOauthPickedFolders`). `DriveOfflineResolver` /
 
 ---
 
-## 3. The correct model (what is actually true)
+## 3. The "correct model" — **SUPERSEDED / WRONG (see §0-NEW)**
 
-1. **`drive.file` + Picker folder-pick grants access to the folder's existing files.**
-   Picking a folder records a per-(OAuth-client, user, folder-tree) grant;
-   `files.list('<id>' in parents)` and `files.get(fileId)` then succeed for that
-   client. This contradicts some online dev lore ("drive.file only sees files your
-   app created") and Google's terse scope doc — but the friend's working downloads
-   and client #3's live traffic prove it.
-2. **Grants are per OAuth client_id, not per device and not per project.** A grant
-   accumulated by client #3 is invisible to client #1 (`.test`). This is the whole
-   reason the `.test` build 404s while real builds work.
-3. **The `.test` build is a different app to Google** (`com.powermediaplayer.test`).
-   Never conclude a Drive capability is impossible from it. It also *shares the debug
-   SHA-1 with the older live client #3*, so its own picks likely register grants
-   against #3 (fingerprint-based attribution), leaving client #1 with nothing → 404.
+> Preserved as the 2026-07-24 belief. **Points 1–3 and 5 are FALSE** (2026-07-25
+> proof in §0-NEW): `drive.file` folder-pick grants the folder only, not its existing
+> files; the 404 is NOT a per-client artifact (client #3 also 404s on fresh picks);
+> and a Google-side `drive.file` folder-grant restriction IS responsible. Point 4
+> (SAF also works) stands. Corrected model is §0-NEW.
+
+1. ~~`drive.file` + Picker folder-pick grants access to the folder's existing files.~~
+   **FALSE.** Fresh picks: `FOLDER.get 200`, child `files.get 404`, list `0-of-5`.
+2. ~~Grants are per OAuth client_id… the `.test` client is why it 404s.~~ **FALSE** as
+   the explanation — client #3 (not `.test`) 404s on fresh picks too. Grants ARE
+   per-client and persistent, which is why *grandfathered old* picks work; but a fresh
+   pick on ANY client gets folder-only.
+3. ~~Never conclude a capability is impossible from the `.test` build.~~ Good general
+   caution, but here the base-package build reproduced the same 404 — so it was NOT a
+   `.test` artifact.
 4. **The system (SAF) picker also works** and needs no OAuth/verification, but looks
    like the system UI (the "opens the Google Drive app" the user disliked) and adds a
-   "USE THIS FOLDER" tap.
-5. **No recent Google change is responsible.** The Fold 7 ("SM-F966B", Android 16,
-   One UI 8.5.0) that "worked" was the same OS as the Oppo (Android 16); the working
-   path there was a real client (base-package build → client #3, or SAF), never the
-   `.test` identity.
+   "USE THIS FOLDER" tap. *(Still true.)*
+5. ~~No recent Google change is responsible.~~ **FALSE** — a `drive.file` folder-grant
+   restriction is the cause (date unpinned).
 
 ---
 
 ## 4. Wrong theories and WHY each was wrong (the dead ends)
 
-Documented deliberately — these were each reached with apparent confidence and were
-each wrong. The recurring root error: **testing the Drive picker through the `.test`
-debug build and treating its OAuth-client-specific 404 as a property of `drive.file`
-or of the app.**
+Documented deliberately — these were each reached with apparent confidence. **NOTE
+(2026-07-25): the §4 framing itself was wrong.** The recurring error was NOT "testing
+through the `.test` build" — it was the OPPOSITE over-correction: after the `.test`
+theory, the investigation wrongly concluded the 404 was *only* a client artifact and
+that `drive.file` folder-pick works. It doesn't. Theories #1 and #2 below, marked
+"wrong" on 2026-07-24, were **actually RIGHT** (with refinements). Verdicts corrected
+inline.
 
 1. **"`drive.file` fundamentally cannot list/read a picked folder's existing files
-   (files.get → 404, files.list → [])."**
-   - Evidence cited at the time: on-device `files.get` on a user-owned `.m4b` →
-     `HTTP 404 "File not found"`; every list form → `"files": []`; Google's scope doc
-     says "files you open… or that the user shares" (read as per-file, no folder
-     cascade); a dev forum thread said drive.file needs `drive.readonly` for folders.
-   - **Why wrong:** all of that was measured on the `.test` client (#1) which holds no
-     grants. The friend's real client downloads the same files fine. `drive.file`
-     folder-pick *does* grant folder contents for a client that made the pick.
-2. **"A recent Google change (last few weeks) broke it."**
-   - Investigated by web-searching Google's own sources. Findings: the Feb-2025→
-     Feb-2026 "limited/expansive access" overhaul is about *human user sharing
-     permissions*, explicitly not OAuth apps / `drive.file` / the Picker. Google's
-     embedded-WebView OAuth block (2023) and third-party-cookie deprecation (2024) are
-     years old. **No recent change explains it.** (This conclusion still stands — it
-     was never a Google-side change.)
+   (files.get → 404, files.list → [])."** — **VERDICT CORRECTED 2026-07-25: this was
+   RIGHT.**
+   - Evidence at the time: `files.get` on a user-owned `.m4b` → `HTTP 404`; every list
+     form → `"files": []`; Google's scope doc says per-file access; a dev forum thread
+     said drive.file needs `drive.readonly` for folders. **All correct.**
+   - The 2026-07-24 rebuttal ("just the `.test` client with no grants") was itself
+     wrong: the base-package client #3 (the friend's exact client) *also* 404s on a
+     FRESH pick, and `FOLDER.get 200` proves the grant registered. `drive.file`
+     folder-pick grants the folder resource only. The friend downloads fine via
+     **grandfathered older grants**, not because his client can read fresh picks.
+2. **"A recent Google change broke it."** — **VERDICT CORRECTED 2026-07-25: RIGHT in
+   substance.**
+   - The specific mechanism is a restriction of `drive.file` **folder-selection**
+     (picked folder no longer grants descendants). The Feb-2025 "limited/expansive
+     access" blog is indeed about human sharing (that part of the old note was fine),
+     so the exact Google announcement/date for the `drive.file` folder change could
+     NOT be pinned from public docs — but the behaviour change is proven by identical
+     vc46 code working then and 404ing now on fresh picks (§0-NEW). Do NOT restate "no
+     Google change" as fact.
 3. **"It's a `drive.file` shared-folder limitation" / "the files are owned by someone
    else."**
    - **Why wrong:** the Google Drive connector (full access) confirmed every file
@@ -170,12 +236,15 @@ or of the app.**
 5. **"This Inevitable Ruin worked because it was recently *opened* → it has a per-file
    grant that Jurassic Park lacks."**
    - Tested head-to-head with one token: `files.get` on both → **both 404**. The
-     `viewedByMeTime` difference (2026-07-23 vs 2025-02-15) was irrelevant.
-   - **Why wrong:** same `.test` client, neither had a grant.
+     `viewedByMeTime` difference was irrelevant. *(Result correct.)*
+   - **Corrected reason (2026-07-25):** not "same `.test` client" — folder-pick grants
+     neither file (folder-only), on ANY client. Confirmed on client #3.
 6. **"Picking the *direct parent* book folder (not an ancestor) will grant the
    files."**
    - Tested: picked "This Inevitable Ruin" itself → still `driveReturned=0`, files
-     still 404. **Why wrong:** still the `.test` client.
+     still 404. *(Result correct.)*
+   - **Corrected reason (2026-07-25):** direct-parent vs ancestor is irrelevant —
+     `drive.file` folder-pick never grants a folder's pre-existing descendants.
 7. **"The `.test` package is missing its OAuth client — create one."**
    - Console audit: client #1 for `com.powermediaplayer.test` + debug SHA-1 **already
      exists**. Nothing to create.
@@ -186,10 +255,14 @@ or of the app.**
      sideloaded installs (the friend's working app). **Deleting it would break real
      users.** Cancelled. **DO NOT DELETE client #3.**
 
-Meta-lesson: the user's direct evidence (empty folders on first open; the Fold 7;
-"my friend downloads fine"; the 2138-uses warning) corrected the course every time,
-against confidently-wrong technical conclusions drawn from a flawed test harness.
-Trust real-world evidence over a `.test`-build measurement.
+Meta-lesson (corrected 2026-07-25): the danger cut **both** ways. First the `.test`
+404 was dismissed as "the app can't do it"; then it over-corrected to "the 404 is only
+a `.test`-client artifact, so the picker works" — which the friend's real downloads
+seemed to confirm but actually MISLED, because his access is **grandfathered** (old
+grants), not proof fresh picks work. The reliable test is the one finally run: probe
+`files.get` on the FOLDER vs a CHILD, on the **same client, freshly**, and distinguish
+fresh grants from grandfathered ones. "It works for X" is not proof a fresh install
+will — ask *when* X's access was granted.
 
 ---
 
@@ -300,26 +373,35 @@ Trust real-world evidence over a `.test`-build measurement.
 
 ---
 
-## 10. Open / unverified items
+## 10. Open / unverified items (updated 2026-07-25)
 
-- **The download itself is NOT verified by us on a Play-signed build** — only by the
-  friend's real-world use and client #3's live traffic. Before a wide Play rollout,
-  ship vc55 to an **internal/closed track** and confirm a download on the user's own
-  device from the Play-signed build (client #2), which has not itself been exercised
-  with the embedded picker (the live Play app used SAF).
-- If `.test` on-device Drive testing is wanted, do the dedicated-`.test`-client setup
-  (§7).
+- **DONE:** fresh-pick download now verified on the emulator with the `drive.readonly`
+  build (base package, client #3): `driveReturned=5`, `.m4b` downloads (~7 MB/s).
+- **Google verification for `drive.readonly` (sensitive scope):** to remove the
+  "unverified app" screen and 100-user cap for public release, add `drive.readonly` to
+  the OAuth consent-screen scopes and submit for verification (console step). Owner +
+  test users work now by tapping through the unverified screen.
+- **Native folder list (optional):** since readonly no longer needs the JS Picker for
+  ACCESS, replacing the WebView Picker with a native folder browser would remove the
+  2nd sign-in + scaling for good. Pending the user seeing whether either recurs.
+- **`.aax` handling:** `MediaClassifier` keeps `.m4b` and drops `.aax` (Audible DRM).
+  Books that exist ONLY as `.aax` won't list — revisit if it affects the library.
 
 ---
 
-## 11. One-line rules to carry forward
+## 11. One-line rules to carry forward (updated 2026-07-25)
 
+- **Scope is now `drive.readonly` (read) + `drive.file` (backup write).** `drive.file`
+  folder-pick grants the folder ONLY, not its existing files — do NOT rely on it for
+  library access. readonly is the access path (commit `c047004`).
 - **Do NOT delete OAuth client #3** (`184142114356-hgjp9crjfabivu0e8t99abub2tilm2f7`);
-  it is live (2138 calls/30 days).
-- **Do NOT judge Drive file access on the `.test` build** — wrong OAuth client.
-- `drive.file` folder-pick **does** grant the folder's existing files (for a client
-  that made the pick).
-- Consent screen is **in production**; keep the **logo blank** to stay
-  verification-free; the 100-user cap is inert for non-sensitive scopes.
-- The embedded picker's **second sign-in is one-time and inherent**; its **cold-start
-  scaling is fixed** as of vc55.
+  it is live (2138 calls/30 days). *(Still holds — but note client #3 also 404s on
+  FRESH drive.file folder-picks; its live traffic is grandfathered/auth calls.)*
+- **`drive.readonly` is SENSITIVE** → needs Google verification for public (unverified
+  screen + 100-user cap until approved). Reverses the old "keep the logo blank to stay
+  verification-free" rule, which applied only to the all-`drive.file` config.
+- When testing Drive access, probe FOLDER.get vs CHILD.get on the **same client,
+  freshly**; do NOT infer "it works" from a friend/old install (grandfathered grants).
+- The embedded picker's **second sign-in** and **cold-start scaling** are separate
+  fresh-install WebView-Picker artifacts (scaling patched `1c1b581`), not the files
+  cause; both may vanish once the WebView Picker is dropped in favour of a native list.
