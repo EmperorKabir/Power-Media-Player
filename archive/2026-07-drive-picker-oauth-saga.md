@@ -408,3 +408,49 @@ will — ask *when* X's access was granted.
 - The embedded picker's **second sign-in** and **cold-start scaling** are separate
   fresh-install WebView-Picker artifacts (scaling patched `1c1b581`), not the files
   cause; both may vanish once the WebView Picker is dropped in favour of a native list.
+
+---
+
+## 12. Continuation — Drive/OAuth evolution after the readonly fix (vc57 → vc63, 2026-07-26)
+
+The saga above ends at vc56 (native browser introduced). The Drive sign-on kept
+evolving; recorded here so the history is complete.
+
+- **vc57/1.5.2 (`a86c52a`) — audit of the readonly + native-browser work.** Code-review
+  hardening of the migration; no scope change.
+
+- **vc62/1.5.7 (`84eb33d`) — sparse-metadata + BACKUP-TOKEN audit (skill: android-efficiency-audit).**
+  Drive-sign-on-relevant finding = the **backup token split was inconsistent**: after the
+  readonly migration, `findNewestFileByName` (restore FIND) had silently flipped to the
+  readonly token (Drive-wide) while `downloadTextFile`/`upload`/`update` used `drive.file`.
+  A same-named file elsewhere in the user's Drive could false-match, then 404 on the
+  drive.file download. **Fix: the WHOLE backup triad now uses `fetchWriteTokenBlocking`
+  (`drive.file`)** — find + restore-read + upload + update share ONE app-created corpus, so
+  no Drive-wide false-match and backup/restore no longer depends on the sensitive readonly
+  grant. **Rule: reads = `drive.readonly` (`fetchAccessTokenBlocking`); the backup triad =
+  `drive.file` (`fetchWriteTokenBlocking`). Do not cross them.**
+
+- **vc63/1.5.8 (`89b5994` + audit `fd6e075`) — Shared Drives + Shared-with-me + readonly re-consent.**
+  - **U7 (non-negotiable):** the native browser was My-Drive-only (a parity regression vs
+    the removed WebView Picker). Now `listSubFolders` opens on a **location chooser** — My
+    Drive, **Shared with me** (`q: sharedWithMe = true and mimeType = folder`), and each
+    **Shared Drive** (`GET /drive/v3/drives` = `drives.list`). Shared items resolve via
+    **`supportsAllDrives=true&includeItemsFromAllDrives=true`** on the folder/file queries
+    (`listSubFolders`/`listFiles`/`searchOneFolder`) and **`supportsAllDrives=true`** on the
+    by-id GETs (`getFileMetadata`/`fetchFileName`/download URL). **Deliberately NOT
+    `corpora=allDrives`** — that broadens a `'<id>' in parents` query and was removed on
+    2026-07-24; the two flags above do NOT change a My-Drive parent's children (device-verified
+    unregressed). Context7-verified against the Drive v3 reference.
+  - **U8:** the Drive browse entry points (`onSelectDrive`/`onBrowseDrive`) now gate on
+    `driveReadyForBrowse()` and fall back to `launchDriveOAuth()` (incremental re-consent) when
+    a returning `drive.file`-only user lacks the readonly grant — instead of browsing blind and
+    failing on a null token. `signInOptions` requests readonly at sign-in.
+  - **Emulator-verified (real account):** chooser shows My Drive + Shared with me; My Drive
+    lists real folders (no regression); Shared with me lists real shared folders; adding a
+    Shared-with-me folder → `listFiles driveReturned=60`; playing a shared file → PLAYING with
+    metadata. **Shared DRIVE (team drive) happy path is UNVERIFIED** — the test account belongs
+    to no shared drive (`drives.list` returned empty, graceful); needs a team-drive account.
+
+- **Carry-forward rules (superset the §11 ones):** do NOT re-introduce the WebView Picker; do
+  NOT narrow media reads back to `drive.file`; keep the read/backup token split; keep
+  `supportsAllDrives`+`includeItemsFromAllDrives` (never `corpora=allDrives`) for shared content.

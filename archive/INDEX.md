@@ -2,8 +2,9 @@
 
 Archived 2026-06-26 from `docs/superpowers/` to keep fresh-context load lean. Nothing deleted; read a file on demand. Live tasks: `/TASKS.md`. Closed task history: `docs/archive/TASKS-history.md`.
 
-## saga writeups (1)
-- `archive/2026-07-drive-picker-oauth-saga.md` — **FULL Drive picker + OAuth investigation (2026-07-22→24).** Read on ANY Drive/OAuth question. Covers: two access paths (SAF vs embedded drive.file); the correct model (drive.file DOES grant a picked folder's files; grants are per OAuth-client); the OAuth client table (do NOT delete client #3, it's live); every wrong theory + why; cold-start scaling fix; the one-time in-WebView second sign-in; why the `.test` build can't test Drive.
+## saga writeups (2)
+- `archive/2026-07-drive-picker-oauth-saga.md` — **FULL Drive picker + OAuth investigation (2026-07-22 → 26).** Read on ANY Drive/OAuth question. RESOLVED TRUTH (§0-NEW): Google restricted `drive.file` folder-grants — a picked folder does NOT grant its pre-existing files (child `files.get` 404) — so the fix is **`drive.readonly`** for reads + `drive.file` for the backup write; the WebView Picker was removed for a native browser. (The old "drive.file DOES grant a picked folder's files" model is a DISPROVEN theory documented in §4.) Also covers: the OAuth client table (do NOT delete client #3, live); why the `.test` build can't test Drive. **§12 continuation** = the token-split consolidation (whole backup triad → drive.file, vc62) + Shared Drives + Shared-with-me browsing (`drives.list`/`sharedWithMe`, supportsAllDrives, NOT corpora=allDrives) + readonly re-consent (U7/U8, vc63).
+- `archive/webview-drive-picker-REMOVED-2026-07-25.md` — the removed WebView Google Picker (`DrivePickerActivity` + `drive_picker.html`) retained for reference; superseded by the native `DriveFolderBrowser`. Do NOT re-introduce it (it was the broken drive.file path).
 
 ## audits (2)
 - `docs/archive/superpowers/audits/2026-05-06-cast-controls-matrix.md` — Cast-controls matrix — what each control does WHILE casting is active

@@ -8,7 +8,7 @@
 > Live task ledger: `/TASKS.md` (slim — live items only). Closed history: `archive/`.
 > Deeper detail pointers: §8.
 >
-> *Last refreshed 2026-06-26 at versionCode 39 / versionName 1.3.5. When a fact here drifts
+> *Last refreshed 2026-07-26 at versionCode 63 / versionName 1.5.8. When a fact here drifts
 > from code, fix the code-derived fact here in the same turn.*
 
 ---
@@ -23,8 +23,10 @@
 
 ## 2. Current build coordinates (verify against `app/build.gradle.kts`)
 
-- **versionCode 55 / versionName 1.5.0.** `54/1.4.9` is already published — next Play upload MUST be
-  a higher versionCode. Each release gets a distinct versionName.
+- **versionCode 63 / versionName 1.5.8** — current, staged in `dist/PowerMediaPlayer-release.aab`
+  (upload-key signed). Each Play upload MUST be a higher versionCode than whatever is live, and a
+  distinct versionName. (Drive-work version trail: vc56 native browser, vc57 audit, vc59 tail-sparse,
+  vc62 sparse/backup audit, vc63 Shared Drives + Shared-with-me + readonly re-consent.)
 - minSdk 30, targetSdk 36, compileSdk 36. `applicationId = com.powermediaplayer`.
   (targetSdk 36 since vc50 — Play policy deadline 31 Aug 2026.)
 - **Media3 (ExoPlayer) 1.6.0** — do not bump casually; the custom audio chain + tests are tuned to it.
@@ -65,8 +67,13 @@
 episode** (global toggle, default ON; queues the show from the tapped episode forward).
 
 **Cloud**
-- Google Drive: OAuth `drive.file` (non-sensitive, no Google verification) via OkHttp REST + WebView
-  JS Picker. **READ-ONLY today** (GET/list; no `files.create`).
+- Google Drive: TWO OAuth scopes — **`drive.readonly`** (SENSITIVE; reads the user's whole Drive) for
+  browse / list / stream / download, and **`drive.file`** (non-sensitive) for the app's own
+  settings-backup file only. **No WebView** — a **native in-app folder browser** (`DriveFolderBrowser`
+  + `listSubFolders`) opens on a location chooser: My Drive, Shared with me (`sharedWithMe=true`), and
+  Shared Drives (`drives.list`), reached via `supportsAllDrives`+`includeItemsFromAllDrives` (never
+  `corpora=allDrives`). Reads flow through OkHttp REST. `drive.readonly` being sensitive means a PUBLIC
+  consent screen needs Google verification (the ≤100-user closed test does not).
 - Spotify: Web API + Connect (PKCE via AppAuth, Premium full playback, LRCLib synced lyrics,
   auto-launch + bounce-back on cold-start). Artist → top-tracks + albums/singles views.
 - SAF retained for OneDrive / USB / phone storage.
@@ -101,15 +108,28 @@ episode → show → global) via the Tune popup; see §4.
 
 ## 5. Delicate interactions / do-NOT-break (highest-value contingencies)
 
-- **Google Drive picker + OAuth — read `archive/2026-07-drive-picker-oauth-saga.md`
-  before touching anything Drive/OAuth.** Key do-NOT-break facts: the app has TWO
-  Drive paths (SAF `content://` = full access; embedded `drive.file` picker = the
-  in-app one). The embedded picker DOES work and grants a picked folder's existing
-  files (grants are per OAuth-client). **Do NOT delete Google Cloud OAuth client #3**
-  (`184142114356-hgjp9crjfabivu0e8t99abub2tilm2f7`, `com.powermediaplayer`+debug
-  SHA-1) — it is live (2138 calls/30 days). **Do NOT judge Drive file access on the
-  `.test` build** — it's a different OAuth client with no grants (404s by design).
-  Consent screen is in production (keep the logo blank to stay verification-free).
+- **Google Drive OAuth + native browser — read `archive/2026-07-drive-picker-oauth-saga.md`
+  before touching anything Drive/OAuth.** Current design (post the 2026-07 drive.file break):
+  - **Why `drive.readonly`:** Google restricted `drive.file` folder-grants — a picked folder no
+    longer grants its pre-existing files (child `files.get` 404, list 0-of-N; device-proven, the
+    parent FOLDER.get still 200). So the old `drive.file` WebView Picker BROKE for existing files.
+    `drive.readonly` (reads the whole Drive) restored access. **Do NOT narrow reads back to
+    `drive.file`, and do NOT re-introduce the WebView Picker** — those are the broken thing.
+  - Read paths: SAF `content://` (full access) + the native `DriveFolderBrowser` on `drive.readonly`.
+    The WebView Picker (`DrivePickerActivity` + `drive_picker.html`) was REMOVED (archived at
+    `archive/webview-drive-picker-REMOVED-2026-07-25.md`).
+  - **Token split:** `fetchAccessTokenBlocking` = `drive.readonly` (ALL media reads — list, stream,
+    download); `fetchWriteTokenBlocking` = `drive.file` for the WHOLE backup triad
+    (find + restore-read + upload + update — one app-created corpus, so no Drive-wide false-match and
+    no readonly dependency for backup). Keep these consistent; don't cross the scopes.
+  - **Do NOT delete Google Cloud OAuth client #3** (`184142114356-hgjp9crjfabivu0e8t99abub2tilm2f7`,
+    `com.powermediaplayer`+debug SHA-1) — live.
+  - **The `.test` build (`com.powermediaplayer.test`) CANNOT complete Drive OAuth** (package-bound
+    token exchange refuses it) — never judge Drive access on `.test`; the regular debug is
+    real-package (`com.powermediaplayer`) and works.
+  - `drive.readonly` is SENSITIVE → a public consent screen needs Google verification (keep the logo
+    blank; the ≤100-user closed test does not require it). U8: browse entry points re-consent for
+    readonly when a returning `drive.file`-only user lacks it.
 
 - **Audio effects are LOCAL-pipeline only.** They work over Bluetooth / wired / phone speaker but NOT
   over Spotify Connect or Chromecast (remote routes decode on the receiver — our PCM chain never runs).
