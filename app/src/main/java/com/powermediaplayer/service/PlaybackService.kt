@@ -784,10 +784,25 @@ class PlaybackService : MediaSessionService() {
                 }
             }
         }.getOrNull() ?: false
+        // Extension-decoder mode. Default = ON (FALLBACK-ONLY): platform
+        // MediaCodec decoders are tried FIRST for every track; a bundled software
+        // extension (e.g. FfmpegAudioRenderer) is used ONLY when no platform
+        // decoder supports the format. So anything that already plays is
+        // byte-for-byte unchanged — same hardware decoder, same battery — and there
+        // is no per-file slowdown: the mode only affects one-time renderer SELECTION
+        // (which ExoPlayer already performs), never the per-sample decode path.
+        // The "Prefer software decoding" setting escalates to PREFER (extension wins
+        // for any format it supports). NB: no extension decoder is BUNDLED yet —
+        // media3-decoder-ffmpeg needs a local NDK build of the native .so libraries
+        // (see app/build.gradle.kts) — so until that is added, ON behaves exactly
+        // like OFF: DefaultRenderersFactory reflectively looks for the extension
+        // class, finds none, and adds no extra renderer. This is confined to THIS
+        // (main) player; the crossfade second player uses the default factory and is
+        // untouched.
         val rendererMode = if (swPreferred)
             DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
         else
-            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF
+            DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
             "PlaybackService renderer mode swPreferred=$swPreferred extMode=$rendererMode"

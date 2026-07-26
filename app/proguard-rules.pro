@@ -42,3 +42,14 @@
 # Cast — Google Play Services Cast framework reflection
 -keep class com.google.android.gms.cast.** { *; }
 -dontwarn com.google.android.gms.cast.**
+
+# Media3 FFmpeg extension (fallback-only, EXTENSION_RENDERER_MODE_ON).
+# DefaultRenderersFactory loads FfmpegAudioRenderer by REFLECTION, so its
+# constructor must survive minification. Harmless while the extension is not
+# bundled (R8 ignores a keep for an absent class); active once the native
+# media3-decoder-ffmpeg .so libraries are added via a local NDK build.
+-dontnote androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
+-keepclassmembers class androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer {
+    <init>(android.os.Handler, androidx.media3.exoplayer.audio.AudioRendererEventListener, androidx.media3.exoplayer.audio.AudioSink);
+}
+-dontwarn androidx.media3.decoder.ffmpeg.**
