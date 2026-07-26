@@ -167,8 +167,16 @@ class DriveTagEnricher @Inject constructor(
                 // needs a complete MP4 structure"). Marked COMPLETE only when it yields
                 // valid CHAPTERS (proof the moov+samples were inside the window); any
                 // other outcome falls through to the unchanged full download.
+                // MP4-family only: the sparse-moov trick relies on an ISO-BMFF moov
+                // box (m4b/m4a/mp4/m4v/mov). Other containers store metadata
+                // differently (mp3 ID3, FLAC/Ogg headers up front, Matroska/AVI), so
+                // a splice can't be parsed — those go straight to the full download
+                // (no wasted tail fetch). moov-at-front MP4s already got everything
+                // from the head, so `!found` here means it's a moov-at-end candidate.
+                val ext = item.name.substringAfterLast('.', "").lowercase()
+                val mp4Family = ext in setOf("m4b", "m4a", "mp4", "m4v", "mov")
                 if (!found && !completeParsed && !meteredBlocked && !isSaf &&
-                    temp != null && item.size > SPARSE_MIN_BYTES) {
+                    mp4Family && temp != null && item.size > SPARSE_MIN_BYTES) {
                     val sparse = runCatching { buildHeadTailSparse(item, temp!!) }.getOrNull()
                     if (sparse != null) {
                         found = parseAndApply(item, android.net.Uri.fromFile(sparse), stableKey)
