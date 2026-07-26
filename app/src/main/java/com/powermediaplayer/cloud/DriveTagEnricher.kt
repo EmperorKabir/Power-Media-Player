@@ -47,6 +47,13 @@ class DriveTagEnricher @Inject constructor(
         /** Size of the head-range attempt (mirrors downloadToCache): a file at or
          *  under this was parsed IN FULL by the head attempt. */
         const val HEAD_WINDOW_BYTES = 32L * 1024 * 1024
+        /** Tail window spliced in for the moov-at-end sparse pass. The moov
+         *  (cover+tags+chapters) + its chapter-text samples sit at the very end of
+         *  Audible/iTunes .m4b; 64 MB covers them with generous margin. */
+        const val TAIL_META_BYTES = 64L * 1024 * 1024
+        /** Only attempt the head+tail splice when the full download it avoids is
+         *  meaningfully bigger than head+tail (else just download the whole thing). */
+        const val SPARSE_MIN_BYTES = (HEAD_WINDOW_BYTES + TAIL_META_BYTES) * 3 / 2 // 144 MB
     }
 
     fun cached(id: String): LocalMetadataOverride? = cache[id]
@@ -146,8 +153,38 @@ class DriveTagEnricher @Inject constructor(
                     found = parseAndApply(item, android.net.Uri.fromFile(temp), stableKey)
                     // The head window IS the whole file for anything at or under it.
                     if (item.size in 1..HEAD_WINDOW_BYTES) completeParsed = true
-                    runCatching { temp.delete() }
+                    // NB: DON'T delete `temp` yet — the tail-sparse pass reuses the head.
                 }
+                // TAIL-SPARSE metadata pass (Drive moov-at-end .m4b). The moov —
+                // cover, tags AND chapters — lives at the END of Audible/iTunes M4Bs,
+                // so the 32 MB head found nothing. Rather than downloading the whole
+                // 1-2 GB file (the historical "stuck on Updating" cost), splice the
+                // head + a 64 MB tail into a SPARSE file at their REAL byte offsets:
+                // the moov + its chapter-text samples land at the exact positions the
+                // parsers expect, the audio mdat in between is a zero-filled hole MMR
+                // never reads for metadata, and disk use is only head+tail. This is
+                // what the abandoned 2026-05-02 tail-ONLY attempt couldn't do ("MMR
+                // needs a complete MP4 structure"). Marked COMPLETE only when it yields
+                // valid CHAPTERS (proof the moov+samples were inside the window); any
+                // other outcome falls through to the unchanged full download.
+                if (!found && !completeParsed && !meteredBlocked && !isSaf &&
+                    temp != null && item.size > SPARSE_MIN_BYTES) {
+                    val sparse = runCatching { buildHeadTailSparse(item, temp!!) }.getOrNull()
+                    if (sparse != null) {
+                        found = parseAndApply(item, android.net.Uri.fromFile(sparse), stableKey)
+                        if (chaptersValid(stableKey)) {
+                            completeParsed = true
+                            com.powermediaplayer.util.Diag.i(
+                                "PowerMediaPlayer",
+                                "DriveTagEnricher: tail-sparse metadata complete " +
+                                    "(cover+tags+chapters from ${TAIL_META_BYTES / 1024 / 1024}MB tail, " +
+                                    "skipped full download of ${item.size / 1024 / 1024}MB)"
+                            )
+                        }
+                        runCatching { sparse.delete() }
+                    }
+                }
+                runCatching { temp?.delete() }
                 if (!found && !completeParsed && !meteredBlocked) {
                     temp = try {
                         if (isSaf) driveProvider.downloadFullToCache(item)
@@ -189,6 +226,79 @@ class DriveTagEnricher @Inject constructor(
             onDone?.invoke()
           }
         }
+    }
+
+    /**
+     * Splice the 32 MB head + a [TAIL_META_BYTES] tail of [item] into a SPARSE cache
+     * file the size of the whole file, at their real byte offsets. The gap between is
+     * a filesystem hole (reads as zeros, costs no disk). For a moov-at-end .m4b this
+     * hands MediaMetadataRetriever / M4bChapterParser a complete-enough MP4 (ftyp +
+     * mdat header in the head so the box-walk reaches the moov; moov + chapter-text
+     * samples in the tail at their correct offsets). Returns the sparse file, or null
+     * on any failure (caller then falls back to the full download). Reuses the
+     * already-fetched [headFile] so only the tail is an extra transfer.
+     */
+    private suspend fun buildHeadTailSparse(
+        item: CloudMediaItem,
+        headFile: java.io.File
+    ): java.io.File? {
+        val size = item.size
+        if (size <= SPARSE_MIN_BYTES) return null
+        val tailLen = minOf(TAIL_META_BYTES, size)
+        val tailStart = size - tailLen
+        val tailFile = driveOAuthProvider.downloadRangeToCache(
+            item, tailStart, size - 1, "metatail"
+        ) ?: return null
+        return try {
+            val out = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_sparse")
+            java.io.RandomAccessFile(out, "rw").use { raf ->
+                raf.setLength(size) // sparse: the middle stays an unallocated hole
+                raf.seek(0)
+                spliceInto(raf, headFile)
+                raf.seek(tailStart)
+                spliceInto(raf, tailFile)
+            }
+            // Confirm the middle really is a HOLE (st_blocks = actual disk, not the
+            // logical length): the file must never cost more than head+tail on disk.
+            runCatching {
+                val diskBytes = android.system.Os.stat(out.path).st_blocks * 512L
+                com.powermediaplayer.util.Diag.i(
+                    "PowerMediaPlayer",
+                    "buildHeadTailSparse: logical=${out.length()} disk=$diskBytes " +
+                        "(hole spared ${(size - diskBytes) / 1024 / 1024}MB)"
+                )
+            }
+            out
+        } catch (_: Throwable) {
+            null
+        } finally {
+            runCatching { tailFile.delete() }
+        }
+    }
+
+    /** Stream [src] into [raf] at its current position in 64 KB chunks (never holds a
+     *  whole 32/64 MB range in RAM). */
+    private fun spliceInto(raf: java.io.RandomAccessFile, src: java.io.File) {
+        src.inputStream().buffered().use { ins ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = ins.read(buf)
+                if (n < 0) break
+                raf.write(buf, 0, n)
+            }
+        }
+    }
+
+    /** True when the chapters cached under [stableKey] exist AND every title is
+     *  non-blank — proof the tail window actually held the moov + chapter samples (a
+     *  truncated/partial parse yields 0 or blank-titled chapters). Only then may the
+     *  tail-sparse pass be treated as COMPLETE and the full download skipped. */
+    private fun chaptersValid(stableKey: String): Boolean {
+        val b = runCatching { ChapterCache.shared.get(stableKey, "?") }.getOrNull() ?: return false
+        val n = b.getInt("chapter_count", 0)
+        if (n <= 0) return false
+        for (i in 0 until n) if (b.getString("chapter_title_$i").isNullOrBlank()) return false
+        return true
     }
 
     /**
