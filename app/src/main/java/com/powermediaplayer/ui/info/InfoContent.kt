@@ -177,7 +177,7 @@ val cloudInfo: InfoSheetData = InfoSheetData(
             bullets = listOf(
                 "Drive: sign in with Google, then use the in-app folder list to add the folders you want. The app requests read access to your Drive (Google now requires this to list a folder's contents); it only shows and downloads the folders you add, and never modifies or deletes your files. It also saves its own small settings-backup file.",
                 "Spotify: sign in with your Spotify account. Premium is recommended for full track playback. Free accounts only get 30-second previews. Catalogue search is available from the search bar (tracks, albums, artists, playlists, shows, episodes). Sessions older than 6 months (Spotify's new refresh-token policy) prompt a quick re-sign-in.",
-                "Adding Drive folders: after signing in, a folder list opens inside the app (no web page, no second sign-in). Tap into the folder that holds your books or music and choose 'Add this folder'. Add as many as you like; remove them later from the Cloud tab."
+                "Adding Drive folders: after signing in, a folder list opens inside the app (no web page, no second sign-in). It starts on a chooser for My Drive, Shared with me, and any Shared Drives you belong to, so you can add folders shared with you or from a team drive, not just your own. Tap into the folder that holds your books or music and choose 'Add this folder'. Add as many as you like; remove them later from the Cloud tab."
             )
         ),
         InfoSection(

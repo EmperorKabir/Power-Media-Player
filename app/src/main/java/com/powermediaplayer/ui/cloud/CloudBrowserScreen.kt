@@ -433,7 +433,11 @@ fun CloudBrowserScreen(
             driveLoggedIn = uiState.driveLoggedIn,
             spotifyLoggedIn = uiState.spotifyLoggedIn,
             onSelectDrive = {
-                if (uiState.driveLoggedIn) viewModel.browseDrive(null, "Root")
+                // U8: signed in but the sensitive readonly scope not yet granted
+                // (returning drive.file-only user) → ASK for it rather than browse
+                // blind (a null token would fail silently). launchDriveOAuth re-consents.
+                if (uiState.driveLoggedIn && viewModel.driveReadyForBrowse())
+                    viewModel.browseDrive(null, "Root")
                 else launchDriveOAuth()
             },
             onSelectSpotify = {
@@ -453,7 +457,12 @@ fun CloudBrowserScreen(
                         spotifyLoggedIn = uiState.spotifyLoggedIn,
                         onConnectDrive = { launchDriveOAuth() },
                         onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
-                        onBrowseDrive = { viewModel.browseDrive(null, "Root") },
+                        // U8: re-consent for readonly if it's missing, rather than
+                        // browsing blind and failing silently on a null token.
+                        onBrowseDrive = {
+                            if (viewModel.driveReadyForBrowse()) viewModel.browseDrive(null, "Root")
+                            else launchDriveOAuth()
+                        },
                         onBrowseSpotify = { viewModel.browseSpotify() },
                         onSignOutDrive = { viewModel.signOutDrive() },
                         onSignOutSpotify = { viewModel.signOutSpotify() }
@@ -1989,7 +1998,12 @@ private fun DriveFolderBrowser(
     onAdd: (String, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val stack = remember { mutableStateListOf("root" to "My Drive") }
+    // Start at the location chooser: My Drive, Shared with me, and each Shared
+    // Drive (U7). These three virtual roots can't themselves be added as a picked
+    // folder (you can't add "all of My Drive" or an aggregate) — only real folders
+    // inside them. Mirrors DriveOAuthProvider LOC_ROOT/MY_DRIVE_ID/SHARED_WITH_ME_ID.
+    val nonAddable = setOf("locations", "root", "sharedWithMe")
+    val stack = remember { mutableStateListOf("locations" to "Google Drive") }
     val current = stack.last()
     var folders by remember { mutableStateOf<List<com.powermediaplayer.cloud.CloudMediaItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -2039,12 +2053,14 @@ private fun DriveFolderBrowser(
                     ) { CircularProgressIndicator(color = TealAccent) }
                     error != null -> Text("Couldn't load folders: $error", color = TextPrimary)
                     folders.isEmpty() -> Text(
-                        // At My Drive root "Add this folder" is disabled (you
-                        // can't add all of Drive), so don't tell them to tap it.
-                        if (current.first == "root")
-                            "No folders in My Drive. Open a folder to add it."
-                        else
-                            "No sub-folders here. Tap “Add this folder” to add “${current.second}”.",
+                        // A virtual root ("Add this folder" disabled) must not tell the
+                        // user to tap it; a real folder should.
+                        when (current.first) {
+                            "root" -> "No folders in My Drive. Open a folder to add it."
+                            "sharedWithMe" -> "Nothing has been shared with you yet."
+                            "locations" -> "No Drive locations found."
+                            else -> "No sub-folders here. Tap “Add this folder” to add “${current.second}”."
+                        },
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -2073,14 +2089,14 @@ private fun DriveFolderBrowser(
         },
         confirmButton = {
             TextButton(
-                enabled = current.first != "root",
+                enabled = current.first !in nonAddable,
                 onClick = { onAdd(current.first, current.second) },
                 modifier = Modifier.defaultMinSize(minWidth = 120.dp, minHeight = 56.dp),
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 Text(
                     "Add this folder",
-                    color = if (current.first != "root") TealAccent else TextPrimary.copy(alpha = 0.4f)
+                    color = if (current.first !in nonAddable) TealAccent else TextPrimary.copy(alpha = 0.4f)
                 )
             }
         },

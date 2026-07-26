@@ -227,10 +227,16 @@ class DriveOAuthProvider @Inject constructor(
     fun currentAccountEmail(): String? = account?.email
 
     /**
-     * Native folder-browser support: list ONLY the sub-folders of
-     * [parentId] ("root" = My Drive top level), for the in-app folder
-     * browser that replaces the WebView Picker. drive.readonly reads the
-     * whole Drive, so this needs no per-folder grant. Access still flows
+     * Native folder-browser support: list the sub-folders under [parentId].
+     *
+     * Virtual roots: [LOC_ROOT] "locations" = the top chooser (My Drive +
+     * Shared with me + each Shared Drive); [MY_DRIVE_ID] "root" = My Drive top;
+     * [SHARED_WITH_ME_ID] "sharedWithMe" = folders others shared with you. Any
+     * other id is a real folder (in My Drive, a Shared Drive, or shared with you)
+     * whose children come from `'<id>' in parents`. drive.readonly reads the whole
+     * Drive; Shared-Drive items additionally need supportsAllDrives +
+     * includeItemsFromAllDrives (added in [folderQuery]) — NOT corpora=allDrives,
+     * which would needlessly broaden a parent-scoped query. Access still flows
      * through [listFiles]/download after a folder is added.
      */
     suspend fun listSubFolders(parentId: String): Result<List<CloudMediaItem>> =
@@ -238,43 +244,105 @@ class DriveOAuthProvider @Inject constructor(
             try {
                 val token = fetchAccessTokenBlocking()
                     ?: return@withContext Result.failure(IllegalStateException("Not authenticated"))
-                val q = "mimeType = '$MIME_FOLDER' and '$parentId' in parents and trashed = false"
-                val out = mutableListOf<CloudMediaItem>()
-                var pageToken: String? = null
-                do {
-                    val url = "https://www.googleapis.com/drive/v3/files?" +
-                        "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
-                        "&fields=nextPageToken,files(id,name)&orderBy=name&pageSize=1000" +
-                        (pageToken?.let { "&pageToken=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: "")
-                    http.newCall(Request.Builder().url(url)
-                        .addHeader("Authorization", "Bearer $token").build()).execute().use { resp ->
-                        if (!resp.isSuccessful)
-                            return@withContext Result.failure(
-                                IllegalStateException("Drive folders HTTP ${resp.code}"))
-                        val json = JSONObject(resp.body?.string().orEmpty())
-                        json.optJSONArray("files")?.let { files ->
-                            for (i in 0 until files.length()) {
-                                val f = files.getJSONObject(i)
-                                out += CloudMediaItem(
-                                    id = f.getString("id"),
-                                    name = f.optString("name"),
-                                    mimeType = MIME_FOLDER,
-                                    size = 0L,
-                                    downloadUrl = "",
-                                    sourceProvider = CloudProviderType.GOOGLE_DRIVE,
-                                    isFolder = true,
-                                    parentId = parentId
-                                )
-                            }
-                        }
-                        pageToken = json.optString("nextPageToken").ifBlank { null }
+                when (parentId) {
+                    LOC_ROOT -> {
+                        // Top-level location chooser: My Drive, Shared with me, then
+                        // each Shared Drive the user belongs to (drives.list).
+                        val out = mutableListOf<CloudMediaItem>()
+                        out += virtualFolder(MY_DRIVE_ID, "My Drive", LOC_ROOT)
+                        out += virtualFolder(SHARED_WITH_ME_ID, "Shared with me", LOC_ROOT)
+                        out += listSharedDrives(token)
+                        Result.success(out)
                     }
-                } while (pageToken != null)
-                Result.success(out)
+                    SHARED_WITH_ME_ID -> folderQuery(
+                        token,
+                        "mimeType = '$MIME_FOLDER' and sharedWithMe = true and trashed = false",
+                        parentId
+                    )
+                    else -> folderQuery(
+                        token,
+                        "mimeType = '$MIME_FOLDER' and '$parentId' in parents and trashed = false",
+                        parentId
+                    )
+                }
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+
+    /** Build a navigable folder [CloudMediaItem] (browser + location entries). */
+    private fun virtualFolder(id: String, name: String, parentId: String? = null): CloudMediaItem =
+        CloudMediaItem(
+            id = id,
+            name = name,
+            mimeType = MIME_FOLDER,
+            size = 0L,
+            downloadUrl = "",
+            sourceProvider = CloudProviderType.GOOGLE_DRIVE,
+            isFolder = true,
+            parentId = parentId
+        )
+
+    /** Paginate a folder-only files.list [q] into folder items. supportsAllDrives +
+     *  includeItemsFromAllDrives make Shared-Drive folders resolve; both are harmless
+     *  for My Drive / shared-with-me queries (a My-Drive parent has no Shared-Drive
+     *  children, so its result set is unchanged). Blocking HTTP — call on IO. */
+    private fun folderQuery(token: String, q: String, parentId: String): Result<List<CloudMediaItem>> {
+        val out = mutableListOf<CloudMediaItem>()
+        var pageToken: String? = null
+        do {
+            val url = "https://www.googleapis.com/drive/v3/files?" +
+                "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
+                "&fields=nextPageToken,files(id,name)&orderBy=name&pageSize=1000" +
+                "&supportsAllDrives=true&includeItemsFromAllDrives=true" +
+                (pageToken?.let { "&pageToken=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: "")
+            http.newCall(Request.Builder().url(url)
+                .addHeader("Authorization", "Bearer $token").build()).execute().use { resp ->
+                if (!resp.isSuccessful)
+                    return Result.failure(IllegalStateException("Drive folders HTTP ${resp.code}"))
+                val json = JSONObject(resp.body?.string().orEmpty())
+                json.optJSONArray("files")?.let { files ->
+                    for (i in 0 until files.length()) {
+                        val f = files.getJSONObject(i)
+                        out += virtualFolder(f.getString("id"), f.optString("name"), parentId)
+                    }
+                }
+                pageToken = json.optString("nextPageToken").ifBlank { null }
+            }
+        } while (pageToken != null)
+        return Result.success(out)
+    }
+
+    /** Enumerate the user's Shared Drives (team drives) via drives.list, each as a
+     *  navigable folder whose id IS the driveId (also the drive's root folder id, so
+     *  `'<driveId>' in parents` lists its top-level contents). Empty on none/error so
+     *  the location chooser still shows My Drive + Shared with me. Blocking HTTP — IO. */
+    private fun listSharedDrives(token: String): List<CloudMediaItem> {
+        val out = mutableListOf<CloudMediaItem>()
+        var pageToken: String? = null
+        do {
+            val url = "https://www.googleapis.com/drive/v3/drives?" +
+                "pageSize=100&fields=nextPageToken,drives(id,name)" +
+                (pageToken?.let { "&pageToken=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: "")
+            val more = runCatching {
+                http.newCall(Request.Builder().url(url)
+                    .addHeader("Authorization", "Bearer $token").build()).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use false
+                    val json = JSONObject(resp.body?.string().orEmpty())
+                    json.optJSONArray("drives")?.let { drives ->
+                        for (i in 0 until drives.length()) {
+                            val d = drives.getJSONObject(i)
+                            out += virtualFolder(d.getString("id"), d.optString("name"), LOC_ROOT)
+                        }
+                    }
+                    pageToken = json.optString("nextPageToken").ifBlank { null }
+                    pageToken != null
+                }
+            }.getOrDefault(false)
+            if (!more) break
+        } while (true)
+        return out
+    }
 
     // ── Drive REST (drive.readonly — reads the user's whole Drive) ──
 
@@ -309,18 +377,18 @@ class DriveOAuthProvider @Inject constructor(
                 // application/octet-stream — notably .m4b audiobooks. List all
                 // non-trashed children and filter client-side by name OR mime.
                 val q = "'$folderId' in parents and trashed = false"
-                // 2026-07-24: keep this query at vc46 scope — the DEFAULT corpus
-                // (NO corpora=allDrives / includeItemsFromAllDrives). vc46 listed the
-                // user's My Drive folders fine on the default corpus; corpora=allDrives
-                // was a speculative addition this session, unnecessary here (the default
-                // corpus already spans My Drive + shared-with-me, which is all this
-                // picker deals in) and it risks altering "'<id>' in parents" results for
-                // ordinary My Drive folders. Only the pagination + fields below are
-                // additive over vc46 (the 1000-entry page cap was a real truncation).
+                // supportsAllDrives + includeItemsFromAllDrives so a picked SHARED-DRIVE
+                // folder's files list (U7). These do NOT change a My-Drive folder's
+                // children (a My-Drive parent has no Shared-Drive children), and
+                // shared-with-me already resolved on the default corpus. Deliberately
+                // NOT corpora=allDrives — that broadens a parent-scoped query and was the
+                // thing removed 2026-07-24; only the capability + include flags are added.
+                // Pagination follows the 1000-entry page cap to completion.
                 val base = "https://www.googleapis.com/drive/v3/files?" +
                     "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
                     "&fields=nextPageToken,files(id,name,mimeType,size,parents,thumbnailLink)" +
-                    "&pageSize=1000"
+                    "&pageSize=1000" +
+                    "&supportsAllDrives=true&includeItemsFromAllDrives=true"
                 // Drive caps a page at 1000 entries and returns nextPageToken for
                 // the rest. A single un-paged request therefore TRUNCATED any
                 // folder holding more than a page of files, with no error — the
@@ -437,7 +505,8 @@ class DriveOAuthProvider @Inject constructor(
         val q = "'$folderId' in parents and trashed = false"
         val url = "https://www.googleapis.com/drive/v3/files?" +
             "q=" + java.net.URLEncoder.encode(q, "UTF-8") +
-            "&fields=files(id,name,mimeType,size,parents,thumbnailLink)&pageSize=200"
+            "&fields=files(id,name,mimeType,size,parents,thumbnailLink)&pageSize=200" +
+            "&supportsAllDrives=true&includeItemsFromAllDrives=true"
         val req = Request.Builder().url(url)
             .addHeader("Authorization", "Bearer $token").build()
         runCatching {
@@ -469,7 +538,7 @@ class DriveOAuthProvider @Inject constructor(
     suspend fun fetchFileName(fileId: String): String? = withContext(Dispatchers.IO) {
         val token = fetchAccessTokenBlocking() ?: return@withContext null
         val req = Request.Builder()
-            .url("https://www.googleapis.com/drive/v3/files/$fileId?fields=name")
+            .url("https://www.googleapis.com/drive/v3/files/$fileId?fields=name&supportsAllDrives=true")
             .addHeader("Authorization", "Bearer $token")
             .build()
         runCatching {
@@ -493,7 +562,7 @@ class DriveOAuthProvider @Inject constructor(
     suspend fun getFileMetadata(id: String): CloudMediaItem? = withContext(Dispatchers.IO) {
         val token = fetchAccessTokenBlocking() ?: return@withContext null
         val url = "https://www.googleapis.com/drive/v3/files/$id?" +
-            "fields=id,name,mimeType,size,parents,thumbnailLink"
+            "fields=id,name,mimeType,size,parents,thumbnailLink&supportsAllDrives=true"
         val req = Request.Builder().url(url)
             .addHeader("Authorization", "Bearer $token").build()
         try {
@@ -685,7 +754,7 @@ class DriveOAuthProvider @Inject constructor(
             name = name,
             mimeType = mime,
             size = size,
-            downloadUrl = "https://www.googleapis.com/drive/v3/files/$id?alt=media",
+            downloadUrl = "https://www.googleapis.com/drive/v3/files/$id?alt=media&supportsAllDrives=true",
             sourceProvider = CloudProviderType.GOOGLE_DRIVE,
             isFolder = isFolder,
             parentId = parentId,
@@ -704,5 +773,9 @@ class DriveOAuthProvider @Inject constructor(
         private const val MIME_FOLDER = "application/vnd.google-apps.folder"
         const val SCOPE_DRIVE_READONLY = "https://www.googleapis.com/auth/drive.readonly"
         const val SCOPE_DRIVE_FILE = "https://www.googleapis.com/auth/drive.file"
+        // Folder-browser virtual roots (also the non-addable set the UI gates on).
+        const val LOC_ROOT = "locations"
+        const val MY_DRIVE_ID = "root"
+        const val SHARED_WITH_ME_ID = "sharedWithMe"
     }
 }
