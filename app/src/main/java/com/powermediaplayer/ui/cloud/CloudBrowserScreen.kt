@@ -2002,8 +2002,14 @@ private fun DriveFolderBrowser(
     // Drive (U7). These three virtual roots can't themselves be added as a picked
     // folder (you can't add "all of My Drive" or an aggregate) — only real folders
     // inside them. Mirrors DriveOAuthProvider LOC_ROOT/MY_DRIVE_ID/SHARED_WITH_ME_ID.
-    val nonAddable = setOf("locations", "root", "sharedWithMe")
-    val stack = remember { mutableStateListOf("locations" to "Google Drive") }
+    // Virtual-root ids single-sourced from the provider so the browser and
+    // listSubFolders can't drift: a missed literal would let a synthetic root be
+    // "added" as a bogus picked folder that 404s in listFiles.
+    val locRoot = com.powermediaplayer.cloud.DriveOAuthProvider.LOC_ROOT
+    val myDriveId = com.powermediaplayer.cloud.DriveOAuthProvider.MY_DRIVE_ID
+    val sharedWithMeId = com.powermediaplayer.cloud.DriveOAuthProvider.SHARED_WITH_ME_ID
+    val nonAddable = remember { setOf(locRoot, myDriveId, sharedWithMeId) }
+    val stack = remember { mutableStateListOf(locRoot to "Google Drive") }
     val current = stack.last()
     var folders by remember { mutableStateOf<List<com.powermediaplayer.cloud.CloudMediaItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -2056,9 +2062,9 @@ private fun DriveFolderBrowser(
                         // A virtual root ("Add this folder" disabled) must not tell the
                         // user to tap it; a real folder should.
                         when (current.first) {
-                            "root" -> "No folders in My Drive. Open a folder to add it."
-                            "sharedWithMe" -> "Nothing has been shared with you yet."
-                            "locations" -> "No Drive locations found."
+                            myDriveId -> "No folders in My Drive. Open a folder to add it."
+                            sharedWithMeId -> "Nothing has been shared with you yet."
+                            locRoot -> "No Drive locations found."
                             else -> "No sub-folders here. Tap “Add this folder” to add “${current.second}”."
                         },
                         color = TextPrimary,

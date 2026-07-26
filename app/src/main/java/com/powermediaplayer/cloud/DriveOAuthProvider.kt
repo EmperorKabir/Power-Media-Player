@@ -327,7 +327,16 @@ class DriveOAuthProvider @Inject constructor(
             val more = runCatching {
                 http.newCall(Request.Builder().url(url)
                     .addHeader("Authorization", "Bearer $token").build()).execute().use { resp ->
-                    if (!resp.isSuccessful) return@use false
+                    if (!resp.isSuccessful) {
+                        // Degrade gracefully (chooser still shows My Drive + Shared with
+                        // me) but log so a "my Shared Drive is missing" report is
+                        // diagnosable rather than a silent empty list.
+                        com.powermediaplayer.util.Diag.w(
+                            "PMP_DIAG",
+                            "DriveOAuth.listSharedDrives HTTP ${resp.code} — Shared Drives hidden"
+                        )
+                        return@use false
+                    }
                     val json = JSONObject(resp.body?.string().orEmpty())
                     json.optJSONArray("drives")?.let { drives ->
                         for (i in 0 until drives.length()) {
@@ -338,7 +347,10 @@ class DriveOAuthProvider @Inject constructor(
                     pageToken = json.optString("nextPageToken").ifBlank { null }
                     pageToken != null
                 }
-            }.getOrDefault(false)
+            }.getOrElse {
+                com.powermediaplayer.util.Diag.w("PMP_DIAG", "DriveOAuth.listSharedDrives failed", it)
+                false
+            }
             if (!more) break
         } while (true)
         return out
