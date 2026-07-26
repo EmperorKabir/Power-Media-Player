@@ -572,9 +572,14 @@ class DriveOAuthProvider @Inject constructor(
         }
     }
 
-    /** M3 restore — newest app-created file with this exact name, or null. */
+    /** M3 restore — newest app-created file with this exact name, or null. Uses the
+     *  drive.file (WRITE) token so the whole backup triad (find/download/upload/update)
+     *  shares ONE app-created corpus: the search sees only files THIS app created, never
+     *  a same-named file elsewhere in the user's Drive (which the readonly token would
+     *  Drive-wide false-match, then 404 on the drive.file download), and backup/restore
+     *  works even when the user declined the sensitive readonly grant. */
     suspend fun findNewestFileByName(name: String): String? = withContext(Dispatchers.IO) {
-        val token = fetchAccessTokenBlocking() ?: return@withContext null
+        val token = fetchWriteTokenBlocking() ?: return@withContext null
         runCatching {
             val q = java.net.URLEncoder.encode("name = '$name' and trashed = false", "UTF-8")
             val url = "https://www.googleapis.com/drive/v3/files?q=$q" +

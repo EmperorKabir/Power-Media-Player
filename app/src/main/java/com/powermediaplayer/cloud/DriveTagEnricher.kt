@@ -103,6 +103,18 @@ class DriveTagEnricher @Inject constructor(
             try {
                 if (!silent) playbackConnection.setCloudFetchInProgress(true)
                 val isSaf = item.id.startsWith("content://")
+                // Auto-resume (PlaybackSessionCoordinator) and Last Played synthesise
+                // CloudMediaItem(size = 0L). Without the true size the tail-sparse gate
+                // (size > SPARSE_MIN_BYTES) is always false AND the head-window complete
+                // check (size in 1..HEAD) never fires, so a moov-at-end .m4b full-downloads
+                // the whole 1-2 GB (and a small file downloads twice) on the play/resume
+                // path. Resolve the real size ONCE (cheap metadata GET) so the sparse
+                // optimisation applies uniformly, not only to the Cloud-tab tap.
+                val item = if (!isSaf && item.size <= 0L) {
+                    runCatching { driveOAuthProvider.getFileMetadata(item.id) }
+                        .getOrNull()?.takeIf { it.size > 0L }
+                        ?.let { item.copy(size = it.size) } ?: item
+                } else item
                 var found = false
                 // Evidence grade: the durable PROVIDER_DRIVE_FULL / NO_ART verdict
                 // may be written ONLY after a COMPLETE copy was parsed (offline
@@ -179,8 +191,20 @@ class DriveTagEnricher @Inject constructor(
                     mp4Family && temp != null && item.size > SPARSE_MIN_BYTES) {
                     val sparse = runCatching { buildHeadTailSparse(item, temp!!) }.getOrNull()
                     if (sparse != null) {
-                        found = parseAndApply(item, android.net.Uri.fromFile(sparse), stableKey)
-                        if (chaptersValid(stableKey)) {
+                        // parseAndApply runs for its side effects (painting a valid cover
+                        // fast is a win), but its return MUST NOT be propagated to `found`
+                        // unless the pass yielded VALID CHAPTERS. A cover-only tail (art in
+                        // the 64 MB window, chapter samples still in the mdat hole) returns
+                        // found=true yet chaptersValid=false; propagating it would make the
+                        // gate below (!found) SKIP the full download and lose the chapters
+                        // forever. Mark found/complete only on a complete parse — an
+                        // art-only tail falls through to the full download that recovers the
+                        // chapters (which re-applies the same cover).
+                        val sparseComplete =
+                            parseAndApply(item, android.net.Uri.fromFile(sparse), stableKey) &&
+                                chaptersValid(stableKey)
+                        if (sparseComplete) {
+                            found = true
                             completeParsed = true
                             com.powermediaplayer.util.Diag.i(
                                 "PowerMediaPlayer",
@@ -257,8 +281,8 @@ class DriveTagEnricher @Inject constructor(
         val tailFile = driveOAuthProvider.downloadRangeToCache(
             item, tailStart, size - 1, "metatail"
         ) ?: return null
+        val out = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_sparse")
         return try {
-            val out = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_sparse")
             java.io.RandomAccessFile(out, "rw").use { raf ->
                 raf.setLength(size) // sparse: the middle stays an unallocated hole
                 raf.seek(0)
@@ -278,6 +302,9 @@ class DriveTagEnricher @Inject constructor(
             }
             out
         } catch (_: Throwable) {
+            // Delete the partially-written sparse file: the caller only cleans up a
+            // NON-null return, so a throw mid-splice would otherwise leak it in cacheDir.
+            runCatching { out.delete() }
             null
         } finally {
             runCatching { tailFile.delete() }
@@ -305,7 +332,13 @@ class DriveTagEnricher @Inject constructor(
         val b = runCatching { ChapterCache.shared.get(stableKey, "?") }.getOrNull() ?: return false
         val n = b.getInt("chapter_count", 0)
         if (n <= 0) return false
-        for (i in 0 until n) if (b.getString("chapter_title_$i").isNullOrBlank()) return false
+        for (i in 0 until n) {
+            val t = b.getString("chapter_title_$i")
+            // Blank rejects a truncated parse; the control/NUL-only check additionally
+            // rejects a title read straight from the sparse HOLE (zero bytes →  …),
+            // which is NOT isBlank() (NUL is not whitespace) yet is not a real title.
+            if (t.isNullOrBlank() || t.all { it.isISOControl() }) return false
+        }
         return true
     }
 

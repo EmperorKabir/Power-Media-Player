@@ -2005,7 +2005,10 @@ private fun DriveFolderBrowser(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        // System-back / scrim-tap goes UP one folder when navigated in, dismissing the
+        // browser only at the root — mirrors the in-title back arrow, so back no longer
+        // discards the whole navigation depth. The Cancel button always dismisses.
+        onDismissRequest = { if (stack.size > 1) stack.removeAt(stack.lastIndex) else onDismiss() },
         containerColor = OledBlack,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
