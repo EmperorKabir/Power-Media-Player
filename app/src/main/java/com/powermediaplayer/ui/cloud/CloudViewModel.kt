@@ -265,62 +265,9 @@ class CloudViewModel @Inject constructor(
         }
     }
 
-    /**
-     * §C28/Part 4.3 — if the user picked ONE global Drive offline folder, copy
-     * the freshly-cached file into it (SAF) and return the content:// doc uri +
-     * size; otherwise keep the app-cache path. Single global location, single
-     * account — no per-account fan-out.
-     */
-    private suspend fun relocateDriveOffline(
-        item: CloudMediaItem,
-        cacheFile: java.io.File
-    ): Pair<String, Long> {
-        // No SAF folder (or the move fails) → move into persistent filesDir/offline,
-        // NOT cacheDir: cacheDir is OS-evicted AND shares the enricher's temp name
-        // (drive_<hash>_full, deleted after tag-read), so a cache-stored offline copy
-        // silently disappears and playback falls back to slow re-streaming.
-        suspend fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
-        val tree = settingsDataStore.driveOfflineTreeUri.first().ifBlank { null }
-            ?.let { runCatching { android.net.Uri.parse(it) }.getOrNull() }
-            ?: return durable()
-        if (!com.powermediaplayer.util.SafStorage.hasWriteAccess(context, tree)) return durable()
-        val dir = com.powermediaplayer.util.SafStorage.resolveDir(
-            context, tree, "PowerMediaPlayer", "drive"
-        ) ?: return durable()
-        val name = item.name.ifBlank { cacheFile.name }
-        val child = com.powermediaplayer.util.SafStorage.createChild(
-            dir, name, mimeForName(name)
-        ) ?: return durable()
-        val bytes = runCatching {
-            cacheFile.inputStream().use {
-                com.powermediaplayer.util.SafStorage.writeStream(context, child.uri, it)
-            }
-        }.getOrDefault(0L)
-        if (bytes <= 0L) {
-            // Empty write (revoked grant / provider error mid-copy) — clean up the
-            // stub child so it can't orphan in the user's folder, keep a durable copy.
-            com.powermediaplayer.util.Diag.w(
-                "PMP_DIAG", "C28 relocate wrote 0 bytes for ${item.name}; kept durable copy"
-            )
-            runCatching { child.delete() }
-            return durable()
-        }
-        runCatching { cacheFile.delete() }   // moved into the user's folder
-        return child.uri.toString() to bytes
-    }
-
-    private fun mimeForName(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
-        "mp3" -> "audio/mpeg"
-        "m4a", "aac" -> "audio/mp4"
-        "flac" -> "audio/flac"
-        "ogg", "oga" -> "audio/ogg"
-        "opus" -> "audio/opus"
-        "wav" -> "audio/wav"
-        "mp4", "m4v" -> "video/mp4"
-        "mkv" -> "video/x-matroska"
-        "webm" -> "video/webm"
-        else -> "application/octet-stream"
-    }
+    // P4/P5.1 — relocateDriveOffline + mimeForName removed: downloads now run through
+    // OfflineDownloadWorker → OfflineMediaManager (which owns the identical relocate +
+    // SAF logic), so these CloudViewModel copies are dead.
 
     /** §C28/Part 3.2 — set of currently-pinned offline driveFileIds (reactive). */
     val starredOfflineIds: kotlinx.coroutines.flow.StateFlow<Set<String>> =
@@ -413,25 +360,8 @@ class CloudViewModel @Inject constructor(
         }
     }
 
-    private suspend fun evictOfflineLruIfOverLimit() {
-        val limit = settingsDataStore.offlineStorageLimitBytes.first()
-        if (limit <= 0) return
-        var total = offlineCopyDao.totalBytes()
-        if (total <= limit) return
-        val lru = offlineCopyDao.lruSnapshot()
-        for (row in lru) {
-            if (total <= limit) break
-            if (row.isStarred) continue
-            deleteOfflinePath(row.localPath)
-            offlineCopyDao.delete(row.driveFileId)
-            settingsDataStore.removeOfflineDrive(row.driveFileId)
-            total -= row.byteSize
-            com.powermediaplayer.util.Diag.i(
-                "PMP_DIAG",
-                "C28 LRU evicted id=${row.driveFileId} freed=${row.byteSize}B"
-            )
-        }
-    }
+    // P4/P5.1 — evictOfflineLruIfOverLimit moved to OfflineMediaManager.evictLruIfOverLimit
+    // so every download path (Cloud, Player, Last Played, worker) enforces the cap.
 
     private fun recordCloudPlay(item: CloudMediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
