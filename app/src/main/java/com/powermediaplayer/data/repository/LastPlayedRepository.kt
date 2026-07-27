@@ -197,6 +197,35 @@ class LastPlayedRepository @Inject constructor(
     }
 
     /**
+     * P1.3 one-time heal for the vc63 Drive URL re-key. A Drive book played under
+     * vc63/vc64 stored a `…?alt=media&supportsAllDrives=true` mediaUri; after the P1
+     * revert (which stores the param-free key), the same book appears as TWO
+     * distinct-uri Recents rows. This: (1) normalises every param-carrying Drive
+     * mediaUri to the stable param-free form, then (2) collapses rows that now
+     * collide — keeping ONE row per uri with the FURTHEST resume position (max
+     * lastPositionMs) so no progress is lost. Idempotent; run once behind a marker.
+     * Returns the number of duplicate rows merged away.
+     */
+    suspend fun healRekeyedDriveRows(): Int {
+        // 1) normalise param-carrying Drive uris to the stored (param-free) key.
+        for (r in historyDao.snapshot()) {
+            val norm = com.powermediaplayer.util.DriveKeys.canonicalStoredUrl(r.mediaUri)
+            if (norm != r.mediaUri) historyDao.updateMediaUri(r.id, norm)
+        }
+        // 2) collapse duplicates that now share a uri, keeping the furthest position.
+        var deleted = 0
+        historyDao.snapshot().groupBy { it.mediaUri }.forEach { (_, group) ->
+            if (group.size <= 1) return@forEach
+            val maxPos = group.maxOf { it.lastPositionMs }
+            val keep = group.maxByOrNull { it.lastPlayedAt } ?: return@forEach
+            if (keep.lastPositionMs < maxPos) historyDao.updatePosition(keep.id, maxPos)
+            historyDao.deleteMany(group.filter { it.id != keep.id }.map { it.id })
+            deleted += group.size - 1
+        }
+        return deleted
+    }
+
+    /**
      * Adopt an existing history row as the current session so subsequent
      * Player-tab bookmark adds mirror into ITS snapshot table — without
      * creating a duplicate Recents row. Used by:

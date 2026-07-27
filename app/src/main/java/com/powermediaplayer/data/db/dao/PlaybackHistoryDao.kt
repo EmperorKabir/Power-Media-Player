@@ -79,6 +79,11 @@ interface PlaybackHistoryDao {
     )
     suspend fun updateArtworkByUri(uri: String, artworkUri: String)
 
+    /** P1.3 heal — rewrite a row's mediaUri (fold a re-keyed Drive url back onto the
+     *  stable param-free key). */
+    @Query("UPDATE playback_history SET mediaUri = :newUri WHERE id = :id")
+    suspend fun updateMediaUri(id: Long, newUri: String)
+
     @Query("DELETE FROM playback_history WHERE id = :id")
     suspend fun delete(id: Long)
 

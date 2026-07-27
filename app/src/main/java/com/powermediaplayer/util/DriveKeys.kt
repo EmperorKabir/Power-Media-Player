@@ -36,6 +36,19 @@ object DriveKeys {
     }
 
     /**
+     * Normalise a Drive files URL to the STORED, param-free key form
+     * `https://www.googleapis.com/drive/v3/files/{id}?alt=media` (strips
+     * supportsAllDrives + any extra query). Used by the P1.3 heal to fold a vc63/vc64
+     * `…&supportsAllDrives=true` mediaUri back onto the stable key. Non-Drive uris
+     * (content://, spotify:) are returned unchanged.
+     */
+    fun canonicalStoredUrl(uri: String?): String {
+        if (uri.isNullOrEmpty()) return uri ?: ""
+        val m = FILE_ID.find(uri) ?: return uri
+        return "https://www.googleapis.com/drive/v3/files/${m.groupValues[1]}?alt=media"
+    }
+
+    /**
      * Ensure a Drive files URL carries `supportsAllDrives=true` before it is fetched
      * (Shared-Drive items 404 without it). No-op for non-Drive URLs and idempotent for
      * URLs that already carry the param.

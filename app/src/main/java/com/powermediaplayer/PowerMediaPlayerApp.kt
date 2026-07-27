@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -34,6 +35,7 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider,
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var settingsDataStore: SettingsDataStore
+    @Inject lateinit var lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override val workManagerConfiguration: Configuration
@@ -137,6 +139,19 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider,
             Thread {
                 runCatching { PodcastSyncWorker.enqueueIfNeeded(this) }
             }.start()
+            // P1.3 — one-time heal of the vc63 Drive-URL re-key: fold duplicate,
+            // param-keyed Drive Recents rows back onto the stable key (keeping the
+            // furthest resume position). Runs once behind a DataStore marker; DB access
+            // is safe here because this whole block is gated on isUserUnlocked.
+            appScope.launch {
+                runCatching {
+                    if (!settingsDataStore.driveRekeyHealDone.first()) {
+                        val n = lastPlayedRepo.healRekeyedDriveRows()
+                        settingsDataStore.markDriveRekeyHealDone()
+                        DiagLog.lifecycle("P1.3 heal: merged $n re-keyed Drive Recents row(s)")
+                    }
+                }
+            }
         } else {
             DiagLog.lifecycle(
                 "onCreate: user locked (direct boot) — skipped WorkManager enqueue; " +

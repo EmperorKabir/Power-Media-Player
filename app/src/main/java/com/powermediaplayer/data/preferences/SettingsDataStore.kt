@@ -376,6 +376,7 @@ class SettingsDataStore @Inject constructor(
         // the first time the user taps the "I understand" button on
         // the warning dialog; never reset.
         val DRIVE_FIRST_PICK_WARNING_SEEN = booleanPreferencesKey("drive_first_pick_warning_seen")
+        val DRIVE_REKEY_HEAL_DONE = booleanPreferencesKey("drive_rekey_heal_done")
     }
 
     // ── Drive OAuth picked folders (drive.file via JS Picker) ─────
@@ -419,6 +420,14 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun markDriveFirstPickWarningSeen() {
         context.dataStore.edit { it[Keys.DRIVE_FIRST_PICK_WARNING_SEEN] = true }
+    }
+
+    /** P1.3 — one-time "the vc63 Drive-URL-rekey heal has run" marker. */
+    val driveRekeyHealDone: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.DRIVE_REKEY_HEAL_DONE] ?: false
+    }
+    suspend fun markDriveRekeyHealDone() {
+        context.dataStore.edit { it[Keys.DRIVE_REKEY_HEAL_DONE] = true }
     }
 
     // ── Drive (SAF) picked roots ────────────────────────────────

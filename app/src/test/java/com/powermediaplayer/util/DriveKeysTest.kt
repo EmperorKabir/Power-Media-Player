@@ -41,6 +41,15 @@ class DriveKeysTest {
     }
 
     @Test
+    fun `canonicalStoredUrl folds a param-carrying drive url back to the stored key`() {
+        assertEquals(oldUrl, DriveKeys.canonicalStoredUrl(vc63Url))
+        assertEquals(oldUrl, DriveKeys.canonicalStoredUrl(oldUrl))
+        // non-drive uris unchanged
+        assertEquals("content://x/1", DriveKeys.canonicalStoredUrl("content://x/1"))
+        assertEquals("spotify:track:z", DriveKeys.canonicalStoredUrl("spotify:track:z"))
+    }
+
+    @Test
     fun `ensureFetchParams is idempotent and leaves non-drive urls alone`() {
         assertEquals(vc63Url, DriveKeys.ensureFetchParams(vc63Url))
         assertEquals("content://x", DriveKeys.ensureFetchParams("content://x"))
