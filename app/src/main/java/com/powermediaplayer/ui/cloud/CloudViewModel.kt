@@ -161,45 +161,34 @@ class CloudViewModel @Inject constructor(
                 }
                 return@launch
             }
-            _savingOffline.update { it + item.id }
-            com.powermediaplayer.util.DownloadProgressBus.label(item.id, item.name)
-          try {
-            val file: java.io.File? = runCatching {
-                if (item.id.startsWith("content://"))
-                    driveProvider.downloadFullToCache(item, progressId = item.id)
-                else driveOAuthProvider.downloadFullToCache(item, progressId = item.id)
-            }.getOrNull()
-            if (file != null && file.exists()) {
-                // §C28/Part 4.3 — relocate into the user's single global Drive
-                // folder when one is set (else keep the app-cache path).
-                val (storedPath, storedSize) = relocateDriveOffline(item, file)
-                settingsDataStore.upsertOfflineDrive(item.id, storedPath)
-                offlineCopyDao.upsert(
-                    com.powermediaplayer.data.db.entity.OfflineCopyEntity(
-                        driveFileId = item.id,
-                        localPath = storedPath,
-                        byteSize = storedSize,
-                        displayName = item.name
-                    )
-                )
-                evictOfflineLruIfOverLimit()
-                _uiState.update {
-                    it.copy(errorMessage = "Saved offline: ${item.name}")
-                }
-                com.powermediaplayer.util.Diag.i(
-                    "PMP_DIAG",
-                    "C28 saved offline id=${item.id} path=$storedPath size=$storedSize"
-                )
-            } else {
-                val msg = if (com.powermediaplayer.util.DownloadProgressBus.isCancelled(item.id))
-                    "Download cancelled: ${item.name}"
-                else "Couldn't save offline, try again on Wi-Fi."
-                _uiState.update { it.copy(errorMessage = msg) }
+            if (hasOfflineCopy(item.id)) {
+                _uiState.update { it.copy(errorMessage = "Already saved offline: ${item.name}") }
+                return@launch
             }
-          } finally {
+            // P4 — run the download in a FOREGROUND WorkManager worker so it survives
+            // leaving the tab / backgrounding the app / process death (was a
+            // viewModelScope job the OS cancelled on tab-pop, silently dropping the
+            // download and orphaning its cacheDir staging file). The worker reuses the
+            // proven OfflineMediaManager.download path + DownloadProgressBus, and posts a
+            // progress + completion/failure notification.
+            _savingOffline.update { it + item.id }
+            val uniqueName = "offline-dl:${item.downloadUrl}"
+            com.powermediaplayer.offline.OfflineDownloadWorker.enqueue(context, item.downloadUrl, item.name)
+            _uiState.update { it.copy(errorMessage = "Saving offline: ${item.name}") }
+            // Await the worker's terminal state to clear the row spinner + surface a
+            // status. If this VM is cleared first (tab switch), the download still
+            // finishes in the worker and the offline chip appears on return.
+            val terminal = runCatching {
+                androidx.work.WorkManager.getInstance(context)
+                    .getWorkInfosForUniqueWorkFlow(uniqueName)
+                    .first { list -> list.any { it.state.isFinished } }
+            }.getOrNull()
             _savingOffline.update { it - item.id }
-            com.powermediaplayer.util.DownloadProgressBus.clear(item.id)
-          }
+            val ok = terminal?.any { it.state == androidx.work.WorkInfo.State.SUCCEEDED } == true
+            _uiState.update {
+                it.copy(errorMessage = if (ok) "Saved offline: ${item.name}"
+                    else "Couldn't save offline: ${item.name}")
+            }
         }
     }
 

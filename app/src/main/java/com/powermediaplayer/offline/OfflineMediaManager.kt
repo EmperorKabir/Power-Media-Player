@@ -133,6 +133,23 @@ class OfflineMediaManager @Inject constructor(
         return null
     }
 
+    /**
+     * P4 — enqueue [download] as a FOREGROUND WorkManager worker (survives leaving the
+     * tab, backgrounding the app, and process death) and suspend until it finishes,
+     * returning whether it succeeded. Deduped by uri. If the calling coroutine is
+     * cancelled (its screen goes away), the worker keeps running to completion + posts
+     * its own notification; the offline chip appears on return.
+     */
+    suspend fun downloadForeground(uri: String, title: String): Boolean {
+        OfflineDownloadWorker.enqueue(context, uri, title)
+        val terminal = runCatching {
+            androidx.work.WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWorkFlow("offline-dl:$uri")
+                .first { list -> list.any { it.state.isFinished } }
+        }.getOrNull()
+        return terminal?.any { it.state == androidx.work.WorkInfo.State.SUCCEEDED } == true
+    }
+
     /** Download the media at [uri] for offline use. [title] names the stored file. */
     suspend fun download(uri: String, title: String): Result<Unit> = withContext(Dispatchers.IO) {
         // The failure message is surfaced verbatim by the Player/Last Played
@@ -206,9 +223,28 @@ class OfflineMediaManager @Inject constructor(
             offlineCopyDao.upsert(
                 OfflineCopyEntity(driveFileId = driveId, localPath = path, byteSize = size, displayName = title)
             )
+            evictLruIfOverLimit()
             return Result.success(Unit)
         } finally {
             com.powermediaplayer.util.DownloadProgressBus.clear(driveId)
+        }
+    }
+
+    /** P4 — enforce the offline-storage limit after a save (moved here from
+     *  CloudViewModel so EVERY download path — Cloud, Player, Last Played, and the
+     *  worker — evicts oldest non-starred copies over the cap). */
+    suspend fun evictLruIfOverLimit() {
+        val limit = settingsDataStore.offlineStorageLimitBytes.first()
+        if (limit <= 0) return
+        var total = offlineCopyDao.totalBytes()
+        if (total <= limit) return
+        for (row in offlineCopyDao.lruSnapshot()) {
+            if (total <= limit) break
+            if (row.isStarred) continue
+            deleteOfflinePath(row.localPath)
+            offlineCopyDao.delete(row.driveFileId)
+            settingsDataStore.removeOfflineDrive(row.driveFileId)
+            total -= row.byteSize
         }
     }
 

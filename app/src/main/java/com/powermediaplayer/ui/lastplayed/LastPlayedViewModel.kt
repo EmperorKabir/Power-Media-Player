@@ -79,10 +79,10 @@ class LastPlayedViewModel @Inject constructor(
             if (pid != null) _downloadingIds.value = _downloadingIds.value + (item.mediaUri to pid)
             _offlineStatus.tryEmit("Downloading: ${item.title}…")
             try {
-                val r = offlineMediaManager.download(item.mediaUri, item.title)
+                // P4 — foreground worker: survives leaving the tab / backgrounding.
+                val ok = offlineMediaManager.downloadForeground(item.mediaUri, item.title)
                 _offlineStatus.tryEmit(
-                    if (r.isSuccess) "Saved offline: ${item.title}"
-                    else r.exceptionOrNull()?.message ?: "Download failed"
+                    if (ok) "Saved offline: ${item.title}" else "Download failed: ${item.title}"
                 )
             } finally {
                 _downloadingIds.value = _downloadingIds.value - item.mediaUri
