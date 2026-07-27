@@ -143,6 +143,41 @@ class CloudViewModel @Inject constructor(
                 emptyMap()
             )
 
+    /** A downloaded (offline) Drive file surfaced in the Cloud §1 "Drive favourites
+     *  & downloads" section — title/subtext joined from the enrichment cache. */
+    data class DownloadedDriveItem(
+        val driveFileId: String,
+        val driveUri: String,
+        val title: String,
+        val subtext: String
+    )
+
+    /** Offline Drive copies (for Cloud §1 "& downloads"). Mirrors the Library
+     *  Downloaded join so the same file reads identically in both surfaces. */
+    val downloadedDriveItems: kotlinx.coroutines.flow.StateFlow<List<DownloadedDriveItem>> =
+        kotlinx.coroutines.flow.combine(
+            offlineCopyDao.observeAll(),
+            enrichmentCacheDao.observeEnriched()
+        ) { rows, enriched ->
+            val meta = enriched.associateBy { it.cacheKey }
+            rows.map { r ->
+                val driveUri = if (r.driveFileId.startsWith("content://")) r.driveFileId
+                    else "https://www.googleapis.com/drive/v3/files/${r.driveFileId}?alt=media"
+                val rawName = r.displayName.ifBlank {
+                    java.io.File(r.localPath).name.ifBlank { "Drive file" }
+                }
+                val m = meta[r.driveFileId]
+                val kind = com.powermediaplayer.util.MediaClassifier
+                    .classifyAudioSubKind(rawName, hasChapters = false, isPodcast = false)
+                val d = com.powermediaplayer.util.MediaRowText.of(
+                    title = m?.title, artist = m?.artist, album = m?.album,
+                    fileName = rawName, kind = kind
+                )
+                DownloadedDriveItem(r.driveFileId, driveUri, d.primary, d.subtext)
+            }
+        }.flowOn(Dispatchers.IO)
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), emptyList())
+
     /** Enriched title/artist/album for a Drive item, keyed by its cacheKey (==
      *  CloudMediaItem.id / DriveFavourite.id). Lets a Drive row show the real
      *  Title + "Artist, Album, Filename" subtext instead of the raw filename. */

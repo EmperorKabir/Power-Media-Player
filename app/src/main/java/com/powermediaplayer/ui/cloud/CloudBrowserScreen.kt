@@ -81,6 +81,8 @@ fun CloudBrowserScreen(
     val enrichedCovers by viewModel.enrichedCovers.collectAsStateWithLifecycle()
     // Enriched Title/Artist/Album for Drive rows (else the row shows the filename).
     val enrichedMeta by viewModel.enrichedMeta.collectAsStateWithLifecycle()
+    // Downloaded Drive files for the §1 "& downloads" list.
+    val downloadedDriveItems by viewModel.downloadedDriveItems.collectAsStateWithLifecycle()
     val savingOffline by viewModel.savingOffline.collectAsStateWithLifecycle()
     // Favourite-cover reconciliation: converge every favourite to "covered or
     // confirmed artless" on Cloud entry (self-heals failed/interrupted/evicted
@@ -475,19 +477,23 @@ fun CloudBrowserScreen(
                         onSignOutSpotify = { viewModel.signOutSpotify() }
                     )
                 }
-                // P7 §1 — Drive favourites + downloads (under Google). Header
-                // only shown when there is content; expand state persisted so
-                // it survives cold relaunch (DataStore, not rememberSaveable).
+                // P7 §1 — Drive favourites + downloads (under Google). Shown
+                // whenever Drive is signed in (a persistent, collapsible section),
+                // NOT only when there are favourites — so the section is always
+                // discoverable and downloaded files appear here too. Expand state
+                // persisted (DataStore, survives cold relaunch).
                 val driveFavFolders = uiState.driveFavourites
                 val driveFavTracks = uiState.driveFavouriteTracks
-                if (driveFavFolders.isNotEmpty() || driveFavTracks.isNotEmpty()) {
+                val favTrackIdSet = driveFavTracks.mapTo(HashSet()) { it.id }
+                val driveDownloads = downloadedDriveItems.filter { it.driveFileId !in favTrackIdSet }
+                if (uiState.driveLoggedIn) {
                     item(key = "drive_fav_header") {
                         androidx.compose.material3.HorizontalDivider(
                             color = DisabledGrey, modifier = Modifier.padding(vertical = 8.dp)
                         )
                         CloudSectionHeader(
                             title = "Drive favourites & downloads",
-                            count = driveFavFolders.size + driveFavTracks.size,
+                            count = driveFavFolders.size + driveFavTracks.size + driveDownloads.size,
                             accent = TealAccent,
                             expanded = driveSectionExpanded,
                             onToggle = { viewModel.setCloudSectionExpanded("drive", !driveSectionExpanded) }
@@ -547,13 +553,43 @@ fun CloudBrowserScreen(
                                 }
                             )
                         }
+                        // Downloaded Drive files not already shown as favourites.
+                        items(driveDownloads, key = { "l_dl_${it.driveFileId}" }) { dl ->
+                            DownloadedDriveRow(
+                                title = dl.title,
+                                subtext = dl.subtext,
+                                onClick = {
+                                    viewModel.openItem(
+                                        CloudMediaItem(
+                                            id = dl.driveFileId, name = dl.title, mimeType = "",
+                                            size = 0L, downloadUrl = dl.driveUri,
+                                            sourceProvider = CloudProviderType.GOOGLE_DRIVE, isFolder = false
+                                        ),
+                                        onPlaybackStarted = onNavigateToPlayer
+                                    )
+                                },
+                                onRemove = { viewModel.removeDriveOffline(dl.driveFileId) }
+                            )
+                        }
+                        if (driveFavFolders.isEmpty() && driveFavTracks.isEmpty() && driveDownloads.isEmpty()) {
+                            item(key = "drive_empty_hint") {
+                                Text(
+                                    "Long-press a Drive file to star it here, or download one — it'll show here too.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextTertiary,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 // P7 §2 — Spotify favourites (under Spotify). Persisted collapse.
                 val spFavT = uiState.spotifyFavTracks
                 val spFavA = uiState.spotifyFavAlbums
                 val spFavP = uiState.spotifyFavPodcasts
-                if (spFavT.isNotEmpty() || spFavA.isNotEmpty() || spFavP.isNotEmpty()) {
+                // Shown whenever Spotify is signed in (a persistent collapsible
+                // section), not only when favourites exist.
+                if (uiState.spotifyLoggedIn) {
                     item(key = "spotify_fav_header") {
                         androidx.compose.material3.HorizontalDivider(
                             color = DisabledGrey, modifier = Modifier.padding(vertical = 8.dp)
@@ -587,6 +623,16 @@ fun CloudBrowserScreen(
                                 onClick = { viewModel.openSpotifyContainer(fav.id, fav.name) },
                                 onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
                             )
+                        }
+                        if (spFavT.isEmpty() && spFavA.isEmpty() && spFavP.isEmpty()) {
+                            item(key = "spotify_empty_hint") {
+                                Text(
+                                    "Star tracks, albums or podcasts in Spotify browse to see them here.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextTertiary,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -2084,6 +2130,66 @@ private fun CloudSectionHeader(
             contentDescription = if (expanded) "Collapse" else "Expand",
             tint = accent
         )
+    }
+}
+
+// P7 §1 — a downloaded (offline) Drive file that isn't a favourite. Title in the
+// accent colour + Artist/Album/Filename subtext; tap plays, trash removes the copy.
+@Composable
+private fun DownloadedDriveRow(
+    title: String,
+    subtext: String,
+    onClick: () -> Unit,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Teal800),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.DownloadDone,
+                contentDescription = "Downloaded",
+                tint = TealAccent,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TealAccent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (subtext.isNotBlank()) {
+                Text(
+                    text = subtext,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.DeleteOutline,
+                contentDescription = "Remove offline copy",
+                tint = TealAccent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 

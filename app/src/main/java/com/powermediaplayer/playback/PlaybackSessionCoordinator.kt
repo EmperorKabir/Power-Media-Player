@@ -369,7 +369,12 @@ class PlaybackSessionCoordinator @Inject constructor(
                 // Audit B4-CO-1: every persisted datum below requires something to
                 // be PLAYING; wake 6x less often while fully idle (the onStop saver
                 // independently covers the close-time position).
+                // Consult the LIVE controller too — playerState (the pushed flow)
+                // can lag the actual play state, which would drop the tick to the
+                // 30s idle cadence while the user is really listening, so a short
+                // item ends before its position ever persists (Last Played froze).
                 val anyPlaying = playbackConnection.playerState.value.isPlaying ||
+                    playbackConnection.getPlayer()?.isPlaying == true ||
                     spotifyProvider.spotifyState.value?.isPlaying == true
                 delay(if (anyPlaying) 5_000 else 30_000)
                 // vc32: during a Spotify mirror the LOCAL player is
@@ -379,7 +384,13 @@ class PlaybackSessionCoordinator @Inject constructor(
                 // mediaUri (spotify:track:… — matchable by
                 // updatePositionByUri) instead.
                 val spot = spotifyProvider.spotifyState.value
-                if (spot != null) {
+                // Only the Spotify branch when Spotify is ACTUALLY playing. A
+                // lingering/paused mirror (spot != null but !isPlaying, e.g. after
+                // the user played a Spotify track then switched to a Drive/local
+                // item) must NOT block the local player's position persist — the
+                // old `if (spot != null) … continue` swallowed every local tick,
+                // so Last Played positions/timestamps stopped updating.
+                if (spot != null && spot.isPlaying) {
                     if (spot.isPlaying && spot.trackUri.isNotBlank()) {
                         // The Spotify cover lives on the live mirror state, not
                         // on the row (the row may have been created by the cold-
@@ -440,6 +451,10 @@ class PlaybackSessionCoordinator @Inject constructor(
                 val artist = item.mediaMetadata.artist?.toString()
                 val artwork = item.mediaMetadata.artworkUri?.toString()
                 val duration = player.duration.coerceAtLeast(0L)
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "posTick persist uri=$mediaUri pos=${pos}ms dur=${duration}ms playing=$playing"
+                )
                 launch(Dispatchers.IO) {
                     runCatching { lastPlayedRepo.updatePositionByUri(mediaUri, pos) }
                     if (lastPlayedRepo.currentSessionId.value == null) {
