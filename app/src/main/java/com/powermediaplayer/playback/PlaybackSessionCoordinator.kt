@@ -370,13 +370,22 @@ class PlaybackSessionCoordinator @Inject constructor(
                 // be PLAYING; wake 6x less often while fully idle (the onStop saver
                 // independently covers the close-time position).
                 // Consult the LIVE controller too — playerState (the pushed flow)
-                // can lag the actual play state, which would drop the tick to the
-                // 30s idle cadence while the user is really listening, so a short
-                // item ends before its position ever persists (Last Played froze).
+                // can lag the actual play state.
                 val anyPlaying = playbackConnection.playerState.value.isPlaying ||
                     playbackConnection.getPlayer()?.isPlaying == true ||
                     spotifyProvider.spotifyState.value?.isPlaying == true
-                delay(if (anyPlaying) 5_000 else 30_000)
+                if (anyPlaying) {
+                    delay(5_000)
+                } else {
+                    // Idle: wake after 30s OR THE MOMENT playback starts (whichever
+                    // first). Previously a fixed delay(30_000) meant that starting
+                    // playback mid-sleep left the first position persist up to 30s
+                    // late — and a short item (e.g. a partial download) ended before
+                    // ANY tick fired, so Last Played never updated its position.
+                    kotlinx.coroutines.withTimeoutOrNull(30_000) {
+                        playbackConnection.playerState.first { it.isPlaying }
+                    }
+                }
                 // vc32: during a Spotify mirror the LOCAL player is
                 // paused on a stale item — Spotify rows never got their
                 // position persisted at all.
@@ -451,10 +460,6 @@ class PlaybackSessionCoordinator @Inject constructor(
                 val artist = item.mediaMetadata.artist?.toString()
                 val artwork = item.mediaMetadata.artworkUri?.toString()
                 val duration = player.duration.coerceAtLeast(0L)
-                com.powermediaplayer.util.Diag.i(
-                    "PMP_DIAG",
-                    "posTick persist uri=$mediaUri pos=${pos}ms dur=${duration}ms playing=$playing"
-                )
                 launch(Dispatchers.IO) {
                     runCatching { lastPlayedRepo.updatePositionByUri(mediaUri, pos) }
                     if (lastPlayedRepo.currentSessionId.value == null) {
