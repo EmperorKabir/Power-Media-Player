@@ -235,7 +235,7 @@ open class CastRelayServer(
             ?: return newFixedLengthResponse(
                 Response.Status.UNAUTHORIZED, "text/plain", "drive token unavailable"
             )
-        val url = "https://www.googleapis.com/drive/v3/files/${item.fileId}?alt=media"
+        val url = "https://www.googleapis.com/drive/v3/files/${item.fileId}?alt=media&supportsAllDrives=true"
         val reqBuilder = Request.Builder().url(url).header("Authorization", "Bearer $token")
         if (rangeHeader != null) reqBuilder.header("Range", rangeHeader)
         val resp = http.newCall(reqBuilder.build()).execute()
@@ -385,7 +385,7 @@ open class CastRelayServer(
      *  (parsed from Content-Range). For the small head-prep reads only. */
     private fun driveRangeBytes(fileId: String, start: Long, end: Long): Pair<ByteArray, Long>? {
         val token = driveOAuthProvider.fetchAccessTokenBlocking() ?: return null
-        val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
+        val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media&supportsAllDrives=true"
         val req = Request.Builder().url(url)
             .header("Authorization", "Bearer $token")
             .header("Range", "bytes=$start-$end")
@@ -406,7 +406,7 @@ open class CastRelayServer(
     private fun driveRangeStream(fileId: String, start: Long, end: Long): InputStream {
         val token = driveOAuthProvider.fetchAccessTokenBlocking()
             ?: throw java.io.IOException("drive token unavailable")
-        val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media"
+        val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media&supportsAllDrives=true"
         val req = Request.Builder().url(url)
             .header("Authorization", "Bearer $token")
             .header("Range", "bytes=$start-$end")

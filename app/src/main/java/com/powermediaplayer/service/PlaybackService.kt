@@ -1214,12 +1214,19 @@ class PlaybackService : MediaSessionService() {
                 // provider (drive.file scope); the SAF provider returns
                 // content:// URIs that bypass HTTP entirely.
                 val token = driveOAuthProvider.fetchAccessTokenBlocking()
+                // P1: the stored mediaUri is the param-free key; re-add
+                // supportsAllDrives here so a Shared-Drive stream resolves.
+                val fetchUri = com.powermediaplayer.util.DriveKeys
+                    .ensureFetchParams(spec.uri.toString())
+                var out = if (fetchUri != spec.uri.toString())
+                    spec.buildUpon().setUri(android.net.Uri.parse(fetchUri)).build() else spec
                 if (token != null) {
-                    val newHeaders = spec.httpRequestHeaders.toMutableMap().apply {
+                    val newHeaders = out.httpRequestHeaders.toMutableMap().apply {
                         put("Authorization", "Bearer $token")
                     }
-                    spec.buildUpon().setHttpRequestHeaders(newHeaders).build()
-                } else spec
+                    out = out.buildUpon().setHttpRequestHeaders(newHeaders).build()
+                }
+                out
             } else spec
         }
         val dataSourceFactory = DefaultDataSource.Factory(this, resolvingHttpFactory)

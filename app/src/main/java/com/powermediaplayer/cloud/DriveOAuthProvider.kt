@@ -709,7 +709,9 @@ class DriveOAuthProvider @Inject constructor(
         val rangeHeader = "bytes=${rangeStart ?: ""}-${rangeEnd ?: ""}"
         try {
             val req = Request.Builder()
-                .url(item.downloadUrl)
+                // P1: re-add supportsAllDrives at fetch time (Shared-Drive files 404
+                // without it); the STORED downloadUrl stays param-free as the stable key.
+                .url(com.powermediaplayer.util.DriveKeys.ensureFetchParams(item.downloadUrl))
                 .addHeader("Authorization", "Bearer $token")
                 .addHeader("Range", rangeHeader)
                 .build()
@@ -766,7 +768,12 @@ class DriveOAuthProvider @Inject constructor(
             name = name,
             mimeType = mime,
             size = size,
-            downloadUrl = "https://www.googleapis.com/drive/v3/files/$id?alt=media&supportsAllDrives=true",
+            // P1: keep the STORED url param-free (`?alt=media`) — this string is the
+            // stable key for the Last-Played mediaUri + chapter/cover/sender caches, so
+            // it MUST NOT change across app updates (vc63 broke this by baking in
+            // &supportsAllDrives). `supportsAllDrives=true` is re-added only at the fetch
+            // sites via DriveKeys.ensureFetchParams (stream resolver, range download, cast).
+            downloadUrl = "https://www.googleapis.com/drive/v3/files/$id?alt=media",
             sourceProvider = CloudProviderType.GOOGLE_DRIVE,
             isFolder = isFolder,
             parentId = parentId,
