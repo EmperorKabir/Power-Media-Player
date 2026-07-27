@@ -19,6 +19,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.launch
 
 /**
  * P4 — run a "download for offline use" as a WorkManager FOREGROUND worker so it
@@ -45,7 +46,31 @@ class OfflineDownloadWorker @AssistedInject constructor(
         val uri = inputData.getString(KEY_URI) ?: return androidx.work.ListenableWorker.Result.failure()
         val title = inputData.getString(KEY_TITLE) ?: "file"
         runCatching { setForeground(getForegroundInfo()) }
-        val r = offlineMediaManager.download(uri, title)
+        // Mirror the live byte progress onto the foreground notification so the
+        // user can see HOW FAR the download got, even with the app closed — was
+        // an indeterminate spinner that gave no "part downloaded" feedback.
+        val r = kotlinx.coroutines.coroutineScope {
+            val progressId = runCatching { offlineMediaManager.progressIdFor(uri) }.getOrNull()
+            val pj = if (progressId != null) launch {
+                var lastPct = -1
+                com.powermediaplayer.util.DownloadProgressBus.progressFor(progressId).collect { p ->
+                    if (p != null && p.total > 0L) {
+                        val pct = (p.fraction * 100).toInt()
+                        if (pct != lastPct) {
+                            lastPct = pct
+                            runCatching {
+                                setForeground(
+                                    OfflineDownloadNotifier.progressForeground(appContext, uri, title, pct)
+                                )
+                            }
+                        }
+                    }
+                }
+            } else null
+            val result = offlineMediaManager.download(uri, title)
+            pj?.cancel()
+            result
+        }
         return if (r.isSuccess) {
             OfflineDownloadNotifier.completed(appContext, uri, title)
             androidx.work.ListenableWorker.Result.success()
@@ -96,16 +121,19 @@ object OfflineDownloadNotifier {
         }
     }
 
-    fun progressForeground(context: Context, uri: String, title: String): ForegroundInfo {
+    fun progressForeground(context: Context, uri: String, title: String, pct: Int? = null): ForegroundInfo {
         ensureChannel(context)
-        val n: Notification = NotificationCompat.Builder(context, CHANNEL)
+        val builder = NotificationCompat.Builder(context, CHANNEL)
             .setContentTitle("Saving offline")
-            .setContentText(title)
+            .setContentText(if (pct != null) "$title  ·  $pct%" else title)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
-            .setProgress(0, 0, true)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
+        // Determinate bar once we know the size, so the user sees HOW FAR the
+        // download got (survives leaving/closing the app); indeterminate until then.
+        if (pct != null) builder.setProgress(100, pct.coerceIn(0, 100), false)
+        else builder.setProgress(0, 0, true)
+        val n: Notification = builder.build()
         val id = notifId(PROGRESS_BASE, uri)
         return if (Build.VERSION.SDK_INT >= 34)
             ForegroundInfo(id, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
