@@ -469,10 +469,14 @@ class CloudViewModel @Inject constructor(
                 val title = cleanRow?.title
                     ?: com.powermediaplayer.util.TextNormalizer.cleanFileTitle(item.name)
                 // Carry the clean author too (the source label is only a pre-enrich
-                // placeholder); a clean sibling already has the real author.
-                val subtitle = cleanRow?.subtitle?.takeIf {
-                    it.isNotBlank() && it != source
-                } ?: source
+                // placeholder). P3.2 — for SPOTIFY, use the item's own subtitle (the
+                // artist Spotify already resolves) so the Recents row shows the artist
+                // instead of the bare "SPOTIFY" label. Scoped to Spotify so the Drive
+                // path is byte-identical to before (Drive item.subtitle is blank at play
+                // time and is healed by the enricher, which must not change).
+                val subtitle = cleanRow?.subtitle?.takeIf { it.isNotBlank() && it != source }
+                    ?: if (item.sourceProvider == CloudProviderType.SPOTIFY)
+                        item.subtitle.ifBlank { source } else source
                 lastPlayedRepo.recordPlay(
                     com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
                         mediaUri = uri,
