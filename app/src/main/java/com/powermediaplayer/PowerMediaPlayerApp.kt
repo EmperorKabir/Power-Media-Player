@@ -113,19 +113,35 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider,
             )
             previous?.uncaughtException(thread, throwable)
         }
-        // A4 — guard the WorkManager `no_backup/androidx.work.workdb` crash
-        // (SQLITE_CANTOPEN: "no_backup doesn't exist", logcat 06-17). The dir is
-        // normally framework-created, but was missing on one device; touching
-        // noBackupFilesDir creates it, so WorkManager's WorkDatabase open (which
-        // runs on WorkManager's OWN thread, outside the enqueue runCatching
-        // below) can't fail with ENOENT.
-        runCatching { applicationContext.noBackupFilesDir }
-        // §C10 / F6 fix — kick off periodic feed refresh on a worker
-        // thread so the synchronous WorkManager.getInstance() call
-        // doesn't sit on Application.onCreate's main-thread budget on
-        // slower devices.
-        Thread {
-            runCatching { PodcastSyncWorker.enqueueIfNeeded(this) }
-        }.start()
+        // DIRECT-BOOT GUARD (crash fix — dropbox: com.powermediaplayer v58 crashed
+        // ×4 on 2026-07-26 00:47-01:16 with "WorkManager can't be accessed from
+        // direct boot"). The directBootAware BootCompletedReceiver fires
+        // LOCKED_BOOT_COMPLETED BEFORE first unlock, which starts THIS process while
+        // credential-encrypted storage — where WorkManager's
+        // no_backup/androidx.work.workdb lives — is not yet mounted. Touching
+        // WorkManager then throws on its OWN thread (outside the runCatching below)
+        // and the app dies straight to the home screen on the first reboot. When the
+        // user is still locked, skip WorkManager entirely: its periodic work is
+        // already persisted (the framework reschedules it post-unlock) and any normal
+        // post-unlock app open re-enqueues here. Mirrors BootCompletedReceiver's guard.
+        val userManager = getSystemService(android.os.UserManager::class.java)
+        if (userManager == null || userManager.isUserUnlocked) {
+            // A4 — the no_backup dir is normally framework-created but was missing on
+            // one device; touching noBackupFilesDir creates it so WorkManager's
+            // WorkDatabase open can't fail with ENOENT. Only meaningful once storage
+            // is mounted (guarded above).
+            runCatching { applicationContext.noBackupFilesDir }
+            // §C10 / F6 — kick periodic feed refresh off the main thread so the
+            // synchronous WorkManager.getInstance() call doesn't sit on onCreate's
+            // main-thread budget on slower devices.
+            Thread {
+                runCatching { PodcastSyncWorker.enqueueIfNeeded(this) }
+            }.start()
+        } else {
+            DiagLog.lifecycle(
+                "onCreate: user locked (direct boot) — skipped WorkManager enqueue; " +
+                    "re-armed on the next post-unlock app open"
+            )
+        }
     }
 }
