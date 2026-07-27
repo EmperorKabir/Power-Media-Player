@@ -349,7 +349,14 @@ class LastPlayedRepository @Inject constructor(
             favDao.observeAll()
         ) { hist, favs ->
             val pinnedUris = favs.map { it.mediaUri }.toSet()
-            hist.take(20).map { e ->
+            // P3.3 — collapse duplicate Recents rows for the same item. Each PLAY
+            // inserts a new session row (insertSession), so replaying a track —
+            // most visibly a Spotify track tapped twice — showed two identical
+            // Recents entries. hist is ordered lastPlayedAt DESC, so distinctBy
+            // keeps the MOST-RECENT row per uri and drops older dups. A recents
+            // list should never show the same item twice; no-op when there is no
+            // dup (resume updates the existing row in place, not a new one).
+            hist.distinctBy { it.mediaUri }.take(20).map { e ->
                 HistoryItem(
                     id = e.id,
                     mediaUri = e.mediaUri,

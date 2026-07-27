@@ -363,6 +363,8 @@ class PlaybackSessionCoordinator @Inject constructor(
             // Track the uri whose cover we've already written so we update the
             // Last Played row's artwork once per track, not every 5s tick.
             var lastArtTrack: String? = null
+            // P3.2 — same one-per-track guard for the artist/title heal below.
+            var lastDisplayTrack: String? = null
             while (isActive) {
                 // Audit B4-CO-1: every persisted datum below requires something to
                 // be PLAYING; wake 6x less often while fully idle (the onStop saver
@@ -386,6 +388,22 @@ class PlaybackSessionCoordinator @Inject constructor(
                         val art = spot.artworkUrl?.takeIf { it.isNotBlank() }
                         val writeArt = art != null && spot.trackUri != lastArtTrack
                         if (writeArt) lastArtTrack = spot.trackUri
+                        // P3.2 — heal the ARTIST/title onto the Spotify row. The
+                        // record (recordCloudPlay from the favourites strip / a
+                        // Recents replay) wrote only the bare "SPOTIFY" subtitle
+                        // because the tapped item carried no artist; the live
+                        // mirror resolves the real artist + title once playback
+                        // starts. Write both once per track (guarded like the art),
+                        // only when BOTH are resolved so a momentary blank can never
+                        // clobber the good title. updateDisplayByUri keeps the
+                        // existing subtitle when passed blank, and updates every row
+                        // for the uri. Additive: reads the mirror, writes history —
+                        // never touches the mirror/polling/playback path.
+                        val mArtist = spot.artist.takeIf { it.isNotBlank() }
+                        val mTitle = spot.title.takeIf { it.isNotBlank() }
+                        val writeDisplay = mArtist != null && mTitle != null &&
+                            spot.trackUri != lastDisplayTrack
+                        if (writeDisplay) lastDisplayTrack = spot.trackUri
                         launch(Dispatchers.IO) {
                             runCatching {
                                 lastPlayedRepo.updatePositionByUri(
@@ -393,6 +411,11 @@ class PlaybackSessionCoordinator @Inject constructor(
                                 )
                                 if (writeArt) {
                                     lastPlayedRepo.updateArtworkByUri(spot.trackUri, art!!)
+                                }
+                                if (writeDisplay) {
+                                    lastPlayedRepo.updateDisplayByUri(
+                                        spot.trackUri, mTitle!!, mArtist!!
+                                    )
                                 }
                             }
                         }
