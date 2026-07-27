@@ -94,7 +94,8 @@ class CloudViewModel @Inject constructor(
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     private val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao,
-    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao
 ) : ViewModel() {
 
     // #16 — favourite-time enrich: dedup guard + a non-blocking "enriching…"
@@ -137,6 +138,30 @@ class CloudViewModel @Inject constructor(
                 kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000) /* audit B2#3: was Eagerly */,
                 emptyMap()
             )
+
+    // P7 — persisted expand/collapse of the Cloud-tab favourites/downloads sections.
+    val cloudDriveSectionExpanded: kotlinx.coroutines.flow.StateFlow<Boolean> =
+        settingsDataStore.cloudDriveSectionExpanded
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+    val cloudSpotifySectionExpanded: kotlinx.coroutines.flow.StateFlow<Boolean> =
+        settingsDataStore.cloudSpotifySectionExpanded
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+    val cloudPodcastSectionExpanded: kotlinx.coroutines.flow.StateFlow<Boolean> =
+        settingsDataStore.cloudPodcastSectionExpanded
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+    fun setCloudSectionExpanded(which: String, expanded: Boolean) {
+        viewModelScope.launch { settingsDataStore.setCloudSectionExpanded(which, expanded) }
+    }
+
+    // P7 §3 — downloaded-podcast titles for the collapsible Downloads preview
+    // below the Podcasts area. Read-only preview; playback/management stays in
+    // the dedicated Downloads manager (DownloadsScreen), which already owns the
+    // podcast resume/position wiring — nothing duplicated here.
+    val downloadedPodcastTitles: kotlinx.coroutines.flow.StateFlow<List<String>> =
+        podcastDao.observeDownloaded()
+            .map { rows -> rows.map { it.title } }
+            .flowOn(Dispatchers.IO)
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun hasOfflineCopy(driveId: String): Boolean = offlineDrivePairs.value.containsKey(driveId)
 

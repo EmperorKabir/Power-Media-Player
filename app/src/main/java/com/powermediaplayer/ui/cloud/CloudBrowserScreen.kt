@@ -87,6 +87,11 @@ fun CloudBrowserScreen(
     // #16 D6 — Drive items being background-enriched after a favourite. Purely
     // informational; never blocks taps/scroll/playback.
     val enrichingIds by viewModel.enrichingIds.collectAsStateWithLifecycle()
+    // P7 — persisted expand/collapse state of the three Cloud-landing sections.
+    val driveSectionExpanded by viewModel.cloudDriveSectionExpanded.collectAsStateWithLifecycle()
+    val spotifySectionExpanded by viewModel.cloudSpotifySectionExpanded.collectAsStateWithLifecycle()
+    val podcastSectionExpanded by viewModel.cloudPodcastSectionExpanded.collectAsStateWithLifecycle()
+    val downloadedPodcastTitles by viewModel.downloadedPodcastTitles.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<CloudMediaItem?>(null) }
@@ -468,6 +473,120 @@ fun CloudBrowserScreen(
                         onSignOutSpotify = { viewModel.signOutSpotify() }
                     )
                 }
+                // P7 §1 — Drive favourites + downloads (under Google). Header
+                // only shown when there is content; expand state persisted so
+                // it survives cold relaunch (DataStore, not rememberSaveable).
+                val driveFavFolders = uiState.driveFavourites
+                val driveFavTracks = uiState.driveFavouriteTracks
+                if (driveFavFolders.isNotEmpty() || driveFavTracks.isNotEmpty()) {
+                    item(key = "drive_fav_header") {
+                        androidx.compose.material3.HorizontalDivider(
+                            color = DisabledGrey, modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        CloudSectionHeader(
+                            title = "Drive favourites & downloads",
+                            count = driveFavFolders.size + driveFavTracks.size,
+                            accent = TealAccent,
+                            expanded = driveSectionExpanded,
+                            onToggle = { viewModel.setCloudSectionExpanded("drive", !driveSectionExpanded) }
+                        )
+                    }
+                    if (driveSectionExpanded) {
+                        items(driveFavFolders, key = { "l_favfolder_${it.id}" }) { fav ->
+                            FavouriteFolderRow(
+                                fav = fav,
+                                onClick = { viewModel.openDriveFavourite(fav) },
+                                onUnstar = {
+                                    viewModel.toggleDriveFavourite(
+                                        CloudMediaItem(
+                                            id = fav.id, name = fav.name,
+                                            mimeType = "application/vnd.google-apps.folder",
+                                            size = 0L, downloadUrl = "",
+                                            sourceProvider = CloudProviderType.GOOGLE_DRIVE, isFolder = true
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                        items(driveFavTracks, key = { "l_favtrack_${it.id}" }) { fav ->
+                            val favItem = CloudMediaItem(
+                                id = fav.id, name = fav.name, mimeType = "", size = 0L,
+                                downloadUrl = if (fav.id.startsWith("content://")) fav.id
+                                    else "https://www.googleapis.com/drive/v3/files/${fav.id}?alt=media",
+                                sourceProvider = CloudProviderType.GOOGLE_DRIVE, isFolder = false
+                            )
+                            FavouriteTrackRow(
+                                fav = fav,
+                                isOffline = offlineIds.containsKey(fav.id),
+                                localThumbnailUri = offlineIds[fav.id]?.let { p ->
+                                    if (p.startsWith("content://")) android.net.Uri.parse(p)
+                                    else android.net.Uri.fromFile(java.io.File(p))
+                                },
+                                enrichedCoverUri = enrichedCovers[fav.id]?.let { android.net.Uri.parse(it) },
+                                isSaving = fav.id in savingOffline,
+                                isEnriching = fav.id in enrichingIds,
+                                onSaveOffline = { viewModel.saveDriveOffline(favItem) },
+                                onRemoveOffline = { viewModel.removeDriveOffline(fav.id) },
+                                onCancelOffline = { viewModel.cancelDownload(fav.id) },
+                                onClick = {
+                                    viewModel.playDriveFavouriteTrack(
+                                        fav.id, fav.name, onPlaybackStarted = onNavigateToPlayer
+                                    )
+                                },
+                                onUnstar = {
+                                    viewModel.toggleDriveFavouriteTrack(
+                                        CloudMediaItem(
+                                            id = fav.id, name = fav.name, mimeType = "", size = 0L,
+                                            downloadUrl = "",
+                                            sourceProvider = CloudProviderType.GOOGLE_DRIVE, isFolder = false
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+                // P7 §2 — Spotify favourites (under Spotify). Persisted collapse.
+                val spFavT = uiState.spotifyFavTracks
+                val spFavA = uiState.spotifyFavAlbums
+                val spFavP = uiState.spotifyFavPodcasts
+                if (spFavT.isNotEmpty() || spFavA.isNotEmpty() || spFavP.isNotEmpty()) {
+                    item(key = "spotify_fav_header") {
+                        androidx.compose.material3.HorizontalDivider(
+                            color = DisabledGrey, modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                        CloudSectionHeader(
+                            title = "Spotify favourites",
+                            count = spFavT.size + spFavA.size + spFavP.size,
+                            accent = SpotifyGreen,
+                            expanded = spotifySectionExpanded,
+                            onToggle = { viewModel.setCloudSectionExpanded("spotify", !spotifySectionExpanded) }
+                        )
+                    }
+                    if (spotifySectionExpanded) {
+                        items(spFavT, key = { "l_spfavt_${it.id}" }) { fav ->
+                            SpotifyFavRow(
+                                fav = fav, kindIcon = Icons.Filled.MusicNote,
+                                onClick = { viewModel.playSpotifyFavourite(fav.id, fav.name, "track", onNavigateToPlayer) },
+                                onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
+                            )
+                        }
+                        items(spFavA, key = { "l_spfava_${it.id}" }) { fav ->
+                            SpotifyFavRow(
+                                fav = fav, kindIcon = Icons.Filled.Album,
+                                onClick = { viewModel.openSpotifyContainer(fav.id, fav.name) },
+                                onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
+                            )
+                        }
+                        items(spFavP, key = { "l_spfavp_${it.id}" }) { fav ->
+                            SpotifyFavRow(
+                                fav = fav, kindIcon = Icons.Filled.Podcasts,
+                                onClick = { viewModel.openSpotifyContainer(fav.id, fav.name) },
+                                onUnstar = { viewModel.unstarSpotifyFavourite(fav.id) }
+                            )
+                        }
+                    }
+                }
                 // §C10 LOCKED — "New section in Cloud tab below Spotify
                 // favourites." Surfaced here as a peer of the provider
                 // cards. Tapping into a podcast row opens the inline
@@ -479,27 +598,67 @@ fun CloudBrowserScreen(
                     )
                     com.powermediaplayer.ui.podcast.PodcastsSection()
                 }
-                // Part 3.3 — unified Downloads manager (podcasts + Drive offline).
-                item(key = "downloads_entry") {
+                // P7 §3 — Downloads (below Podcasts). Persisted collapse. Header
+                // always present so the manager is reachable; expanded body
+                // previews downloaded podcast episodes + keeps the full-manager
+                // action. Podcast playback stays in DownloadsScreen (which owns
+                // the resume/position wiring) — nothing duplicated here.
+                item(key = "downloads_header") {
                     androidx.compose.material3.HorizontalDivider(
                         color = DisabledGrey, modifier = Modifier.padding(vertical = 8.dp)
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenDownloads() }
-                            .padding(horizontal = 24.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.Download, contentDescription = null, tint = TealAccent)
-                        Spacer(Modifier.width(16.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Manage downloads", color = TextPrimary,
-                                style = MaterialTheme.typography.titleSmall)
-                            Text("Podcasts + offline Drive files · storage usage",
-                                color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+                    CloudSectionHeader(
+                        title = "Downloads",
+                        count = downloadedPodcastTitles.size,
+                        accent = TealAccent,
+                        expanded = podcastSectionExpanded,
+                        onToggle = { viewModel.setCloudSectionExpanded("podcast", !podcastSectionExpanded) }
+                    )
+                }
+                if (podcastSectionExpanded) {
+                    itemsIndexed(
+                        downloadedPodcastTitles.take(8),
+                        key = { idx, _ -> "dl_ep_$idx" }
+                    ) { _, title ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenDownloads() }
+                                .padding(start = 24.dp, end = 24.dp, top = 6.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.Podcasts, contentDescription = null,
+                                tint = TextSecondary, modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                title, color = TextSecondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
                         }
-                        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextSecondary)
+                    }
+                    // Part 3.3 — unified Downloads manager (podcasts + Drive offline).
+                    item(key = "downloads_entry") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onOpenDownloads() }
+                                .padding(horizontal = 24.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Download, contentDescription = null, tint = TealAccent)
+                            Spacer(Modifier.width(16.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Manage downloads", color = TextPrimary,
+                                    style = MaterialTheme.typography.titleSmall)
+                                Text("Podcasts + offline Drive files · storage usage",
+                                    color = TextTertiary, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextSecondary)
+                        }
                     }
                 }
             }
@@ -1848,6 +2007,43 @@ private fun EnrichingHint() {
             "Updating…",
             color = TextSecondary,
             style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
+// P7 — reusable collapsible-section header for the Cloud landing. Tapping the
+// whole row toggles the section; the chevron mirrors the persisted state.
+@Composable
+private fun CloudSectionHeader(
+    title: String,
+    count: Int,
+    accent: androidx.compose.ui.graphics.Color,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle() }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = accent,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "$count",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextTertiary
+        )
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            contentDescription = if (expanded) "Collapse" else "Expand",
+            tint = accent
         )
     }
 }

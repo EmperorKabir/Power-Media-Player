@@ -379,6 +379,10 @@ class SettingsDataStore @Inject constructor(
         val DRIVE_REKEY_HEAL_DONE = booleanPreferencesKey("drive_rekey_heal_done")
         val DRIVE_BACKUP_FOLDER_ID = stringPreferencesKey("drive_backup_folder_id")
         val DRIVE_BACKUP_FOLDER_NAME = stringPreferencesKey("drive_backup_folder_name")
+        // P7 — persisted expand/collapse of the Cloud-tab favourites/downloads sections.
+        val CLOUD_DRIVE_SECTION_EXPANDED = booleanPreferencesKey("cloud_drive_section_expanded")
+        val CLOUD_SPOTIFY_SECTION_EXPANDED = booleanPreferencesKey("cloud_spotify_section_expanded")
+        val CLOUD_PODCAST_SECTION_EXPANDED = booleanPreferencesKey("cloud_podcast_section_expanded")
     }
 
     // ── Drive OAuth picked folders (drive.file via JS Picker) ─────
@@ -445,6 +449,22 @@ class SettingsDataStore @Inject constructor(
             it[Keys.DRIVE_BACKUP_FOLDER_ID] = id
             it[Keys.DRIVE_BACKUP_FOLDER_NAME] = name
         }
+    }
+
+    // P7 — Cloud-tab collapsible-section expand state (default expanded).
+    val cloudDriveSectionExpanded: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.CLOUD_DRIVE_SECTION_EXPANDED] ?: true }
+    val cloudSpotifySectionExpanded: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.CLOUD_SPOTIFY_SECTION_EXPANDED] ?: true }
+    val cloudPodcastSectionExpanded: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.CLOUD_PODCAST_SECTION_EXPANDED] ?: true }
+    suspend fun setCloudSectionExpanded(which: String, expanded: Boolean) {
+        val key = when (which) {
+            "drive" -> Keys.CLOUD_DRIVE_SECTION_EXPANDED
+            "spotify" -> Keys.CLOUD_SPOTIFY_SECTION_EXPANDED
+            else -> Keys.CLOUD_PODCAST_SECTION_EXPANDED
+        }
+        context.dataStore.edit { it[key] = expanded }
     }
 
     // ── Drive (SAF) picked roots ────────────────────────────────
