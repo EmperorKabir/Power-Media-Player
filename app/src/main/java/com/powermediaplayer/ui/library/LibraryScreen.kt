@@ -719,15 +719,22 @@ fun LibraryScreen(
                                     Text(
                                         book.title,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = TextPrimary,
+                                        color = TealAccent,
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
-                                    Text(
+                                    // Title / Artist·Album·Filename subtext; falls back to
+                                    // the size when the file carries no descriptive tags.
+                                    val sub = book.subtext.ifBlank {
                                         android.text.format.Formatter
-                                            .formatShortFileSize(context, book.bytes) + " · Offline",
+                                            .formatShortFileSize(context, book.bytes) + " · Offline"
+                                    }
+                                    Text(
+                                        sub,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary
+                                        color = TextSecondary,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                 }
                             }

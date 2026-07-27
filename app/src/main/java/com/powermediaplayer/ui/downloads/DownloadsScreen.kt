@@ -70,12 +70,14 @@ class DownloadsViewModel @Inject constructor(
     @param:ApplicationContext private val appContext: Context,
     private val podcastDao: PodcastDao,
     private val offlineCopyDao: OfflineCopyDao,
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
     private val settings: SettingsDataStore
 ) : ViewModel() {
 
     data class DownloadRow(
         val key: String,
         val title: String,
+        val subtext: String,
         val isPodcast: Boolean,
         val bytes: Long,
         val podcastGuid: String? = null,
@@ -94,22 +96,34 @@ class DownloadsViewModel @Inject constructor(
     val state: StateFlow<DownloadsState> = combine(
         podcastDao.observeDownloaded(),
         offlineCopyDao.observeAll(),
+        enrichmentCacheDao.observeEnriched(),
         settings.offlineStorageLimitBytes
-    ) { podcasts, drive, limit ->
+    ) { podcasts, drive, enriched, limit ->
         val pRows = podcasts.map { e ->
             DownloadRow(
                 key = "pod_${e.guid}",
                 title = e.title,
+                subtext = "",
                 isPodcast = true,
                 bytes = e.localBytes,
                 podcastGuid = e.guid,
                 podcastPath = e.localPath
             )
         }
+        val metaByKey = enriched.associateBy { it.cacheKey }
         val dRows = drive.map { r ->
+            val rawName = r.displayName.ifBlank { nameFromPath(r.localPath) }
+            val m = metaByKey[r.driveFileId]
+            val kind = com.powermediaplayer.util.MediaClassifier
+                .classifyAudioSubKind(rawName, hasChapters = false, isPodcast = false)
+            val d = com.powermediaplayer.util.MediaRowText.of(
+                title = m?.title, artist = m?.artist, album = m?.album,
+                fileName = rawName, kind = kind
+            )
             DownloadRow(
                 key = "drv_${r.driveFileId}",
-                title = r.displayName.ifBlank { nameFromPath(r.localPath) },
+                title = d.primary,
+                subtext = d.subtext,
                 isPodcast = false,
                 bytes = r.byteSize,
                 driveId = r.driveFileId
@@ -424,12 +438,16 @@ private fun DownloadRowView(
         Column(Modifier.weight(1f)) {
             Text(
                 row.title,
-                color = TextPrimary,
+                color = TealAccent,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(formatBytes(row.bytes), color = TextTertiary, style = MaterialTheme.typography.labelSmall)
+            // Artist·Album·Filename subtext (Drive) + the size; podcasts show size only.
+            val line = if (row.subtext.isNotBlank()) "${row.subtext} · ${formatBytes(row.bytes)}"
+                else formatBytes(row.bytes)
+            Text(line, color = TextTertiary, style = MaterialTheme.typography.labelSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.DeleteOutline, "Delete", tint = ErrorRed)

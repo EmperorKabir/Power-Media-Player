@@ -81,6 +81,9 @@ data class CloudUiState(
     val spotifyIsPlaying: Boolean = false
 )
 
+/** Enriched display fields for a media row (Title + Artist/Album subtext). */
+data class RowMeta(val title: String?, val artist: String?, val album: String?)
+
 @HiltViewModel
 class CloudViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
@@ -137,6 +140,19 @@ class CloudViewModel @Inject constructor(
             .stateIn(
                 viewModelScope,
                 kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000) /* audit B2#3: was Eagerly */,
+                emptyMap()
+            )
+
+    /** Enriched title/artist/album for a Drive item, keyed by its cacheKey (==
+     *  CloudMediaItem.id / DriveFavourite.id). Lets a Drive row show the real
+     *  Title + "Artist, Album, Filename" subtext instead of the raw filename. */
+    val enrichedMeta: kotlinx.coroutines.flow.StateFlow<Map<String, RowMeta>> =
+        enrichmentCacheDao.observeEnriched()
+            .map { rows -> rows.associate { it.cacheKey to RowMeta(it.title, it.artist, it.album) } }
+            .flowOn(Dispatchers.IO)
+            .stateIn(
+                viewModelScope,
+                kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000),
                 emptyMap()
             )
 

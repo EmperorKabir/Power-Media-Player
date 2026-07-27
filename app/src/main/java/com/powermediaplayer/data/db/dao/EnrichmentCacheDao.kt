@@ -29,6 +29,11 @@ interface EnrichmentCacheDao {
     )
     fun observeCovered(): kotlinx.coroutines.flow.Flow<List<EnrichmentCacheEntity>>
 
+    /** Every row that carries an enriched TITLE (regardless of artwork), so a Drive
+     *  row can display Title + Artist/Album subtext instead of the raw filename. */
+    @Query("SELECT * FROM enrichment_cache WHERE title IS NOT NULL AND title != ''")
+    fun observeEnriched(): kotlinx.coroutines.flow.Flow<List<EnrichmentCacheEntity>>
+
     /** #16 — search the full enriched field set (title/artist/album/genre) so an
      *  author (artist), series (album) or narrator/genre search all hit. */
     @Query(

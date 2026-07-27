@@ -124,7 +124,8 @@ class LibraryViewModel @Inject constructor(
     // Cloud/LastPlayed paths do (shared singletons — no duplicated logic).
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver,
-    private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher
+    private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao
 ) : ViewModel() {
 
     /** §C25 / A9 — write a per-file tag override. */
@@ -582,9 +583,12 @@ class LibraryViewModel @Inject constructor(
      * folders work as expected.
      */
     // ── P6 — downloaded Drive books surfaced in the Library ──────────────
+    /** [title] = the display primary (enriched Title, or cleaned filename); [subtext]
+     *  = the "Author/Artist, Album, Filename" line (blanks dropped). */
     data class DownloadedBook(
         val driveFileId: String,
         val title: String,
+        val subtext: String,
         val driveUri: String,
         val localPath: String,
         val bytes: Long
@@ -594,26 +598,38 @@ class LibraryViewModel @Inject constructor(
      * P6 — offline Drive copies as synthetic Library rows. The Drive key is
      * reconstructed to the SAME canonical form `DriveOAuthProvider.toCloudItem`
      * stores, so a play here shares the Cloud/Recents row (the DRIVE Recents
-     * query dedups by mediaUri) instead of forking it.
+     * query dedups by mediaUri) instead of forking it. Joined with the enrichment
+     * cache so the row shows the real Title + Artist/Album subtext, not the filename.
      */
     val downloadedBooks: StateFlow<List<DownloadedBook>> =
-        offlineCopyDao.observeAll()
-            .map { rows ->
-                rows.map { r ->
-                    val driveUri = if (r.driveFileId.startsWith("content://")) r.driveFileId
-                        else "https://www.googleapis.com/drive/v3/files/${r.driveFileId}?alt=media"
-                    val raw = r.displayName.ifBlank {
-                        java.io.File(r.localPath).name.ifBlank { "Drive file" }
-                    }
-                    DownloadedBook(
-                        driveFileId = r.driveFileId,
-                        title = com.powermediaplayer.util.TextNormalizer.cleanFileTitle(raw),
-                        driveUri = driveUri,
-                        localPath = r.localPath,
-                        bytes = r.byteSize
-                    )
+        kotlinx.coroutines.flow.combine(
+            offlineCopyDao.observeAll(),
+            enrichmentCacheDao.observeEnriched()
+        ) { rows, enriched ->
+            val metaByKey = enriched.associateBy { it.cacheKey }
+            rows.map { r ->
+                val driveUri = if (r.driveFileId.startsWith("content://")) r.driveFileId
+                    else "https://www.googleapis.com/drive/v3/files/${r.driveFileId}?alt=media"
+                val rawName = r.displayName.ifBlank {
+                    java.io.File(r.localPath).name.ifBlank { "Drive file" }
                 }
+                val m = metaByKey[r.driveFileId]
+                val kind = com.powermediaplayer.util.MediaClassifier
+                    .classifyAudioSubKind(rawName, hasChapters = false, isPodcast = false)
+                val d = com.powermediaplayer.util.MediaRowText.of(
+                    title = m?.title, artist = m?.artist, album = m?.album,
+                    fileName = rawName, kind = kind
+                )
+                DownloadedBook(
+                    driveFileId = r.driveFileId,
+                    title = d.primary,
+                    subtext = d.subtext,
+                    driveUri = driveUri,
+                    localPath = r.localPath,
+                    bytes = r.byteSize
+                )
             }
+        }
             .flowOn(Dispatchers.IO)
             .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
 

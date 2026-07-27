@@ -79,6 +79,8 @@ fun CloudBrowserScreen(
     }
     val offlineIds by viewModel.offlineDrivePairs.collectAsStateWithLifecycle()
     val enrichedCovers by viewModel.enrichedCovers.collectAsStateWithLifecycle()
+    // Enriched Title/Artist/Album for Drive rows (else the row shows the filename).
+    val enrichedMeta by viewModel.enrichedMeta.collectAsStateWithLifecycle()
     val savingOffline by viewModel.savingOffline.collectAsStateWithLifecycle()
     // Favourite-cover reconciliation: converge every favourite to "covered or
     // confirmed artless" on Cloud entry (self-heals failed/interrupted/evicted
@@ -523,6 +525,7 @@ fun CloudBrowserScreen(
                                     else android.net.Uri.fromFile(java.io.File(p))
                                 },
                                 enrichedCoverUri = enrichedCovers[fav.id]?.let { android.net.Uri.parse(it) },
+                                meta = enrichedMeta[fav.id],
                                 isSaving = fav.id in savingOffline,
                                 isEnriching = fav.id in enrichingIds,
                                 onSaveOffline = { viewModel.saveDriveOffline(favItem) },
@@ -891,6 +894,7 @@ fun CloudBrowserScreen(
                                 else android.net.Uri.fromFile(java.io.File(p))
                             },
                             enrichedCoverUri = enrichedCovers[item.id]?.let { android.net.Uri.parse(it) },
+                            meta = enrichedMeta[item.id],
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             isEnriching = item.id in enrichingIds,
@@ -999,6 +1003,7 @@ fun CloudBrowserScreen(
                                     else android.net.Uri.fromFile(java.io.File(p))
                                 },
                                 enrichedCoverUri = enrichedCovers[fav.id]?.let { android.net.Uri.parse(it) },
+                                meta = enrichedMeta[fav.id],
                                 isSaving = fav.id in savingOffline,
                                 isEnriching = fav.id in enrichingIds,
                                 onSaveOffline = { viewModel.saveDriveOffline(favItem) },
@@ -1285,6 +1290,7 @@ fun CloudBrowserScreen(
                                 else android.net.Uri.fromFile(java.io.File(p))
                             },
                             enrichedCoverUri = enrichedCovers[item.id]?.let { android.net.Uri.parse(it) },
+                            meta = enrichedMeta[item.id],
                             canManageOffline = isDriveTrack,
                             isSavingOffline = item.id in savingOffline,
                             isEnriching = item.id in enrichingIds,
@@ -1741,6 +1747,8 @@ private fun CloudItemRow(
     localThumbnailUri: android.net.Uri? = null,
     // Cover extracted at favourite time (before a full download) — shown ahead of Drive's thumbnail.
     enrichedCoverUri: android.net.Uri? = null,
+    // Enriched Title/Artist/Album for a Drive file (else the row shows its filename).
+    meta: RowMeta? = null,
     canManageOffline: Boolean = false,
     isSavingOffline: Boolean = false,
     isEnriching: Boolean = false,
@@ -1797,6 +1805,36 @@ private fun CloudItemRow(
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
+            // Drive files: show the enriched Title (accent colour) + "Artist, Album,
+            // Filename" subtext instead of the raw filename. Spotify rows keep their
+            // proper name + type-tag + artist line untouched.
+            val isDriveFile = item.sourceProvider == CloudProviderType.GOOGLE_DRIVE && !item.isFolder
+            if (isDriveFile) {
+                val d = com.powermediaplayer.util.MediaRowText.of(
+                    title = meta?.title,
+                    artist = meta?.artist,
+                    album = meta?.album,
+                    fileName = item.name,
+                    kind = com.powermediaplayer.util.MediaClassifier
+                        .classifyAudioSubKind(item.name, hasChapters = false, isPodcast = false)
+                )
+                Text(
+                    text = d.primary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = TealAccent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (d.subtext.isNotBlank()) {
+                    Text(
+                        text = d.subtext,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else {
             Text(
                 text = item.name,
                 style = MaterialTheme.typography.bodyLarge,
@@ -1839,6 +1877,7 @@ private fun CloudItemRow(
                         )
                     }
                 }
+            }
             }
         }
         if (isEnriching) EnrichingHint()
@@ -2058,6 +2097,7 @@ private fun FavouriteTrackRow(
     enrichedCoverUri: android.net.Uri? = null,
     isSaving: Boolean = false,
     isEnriching: Boolean = false,
+    meta: RowMeta? = null,
     onSaveOffline: () -> Unit = {},
     onRemoveOffline: () -> Unit = {},
     onCancelOffline: () -> Unit = {}
@@ -2097,14 +2137,32 @@ private fun FavouriteTrackRow(
             }
         }
         Spacer(Modifier.width(12.dp))
-        Text(
-            text = fav.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+        val favDisplay = com.powermediaplayer.util.MediaRowText.of(
+            title = meta?.title,
+            artist = meta?.artist,
+            album = meta?.album,
+            fileName = fav.name,
+            kind = com.powermediaplayer.util.MediaClassifier
+                .classifyAudioSubKind(fav.name, hasChapters = false, isPodcast = false)
         )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = favDisplay.primary,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TealAccent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (favDisplay.subtext.isNotBlank()) {
+                Text(
+                    text = favDisplay.subtext,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
         if (isEnriching) EnrichingHint()
         // Visible download / remove-offline (favourite Drive tracks had none).
         when {
