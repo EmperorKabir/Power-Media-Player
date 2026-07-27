@@ -217,8 +217,11 @@ class PlayerViewModel @Inject constructor(
                 com.powermediaplayer.offline.OfflineState.DOWNLOADABLE -> {
                     _offlineStatus.tryEmit("Downloading…")
                     // P4 — foreground worker: survives leaving the tab / backgrounding.
-                    val ok = offlineMediaManager.downloadForeground(uri, title)
-                    _offlineStatus.tryEmit(if (ok) "Saved offline" else "Download failed")
+                    _offlineStatus.tryEmit(when (val o = offlineMediaManager.downloadForeground(uri, title)) {
+                        is com.powermediaplayer.offline.OfflineDownloadOutcome.Success -> "Saved offline"
+                        is com.powermediaplayer.offline.OfflineDownloadOutcome.Background -> "Downloading in the background"
+                        is com.powermediaplayer.offline.OfflineDownloadOutcome.Failed -> o.message
+                    })
                 }
                 else -> {}
             }

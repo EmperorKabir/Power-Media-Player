@@ -80,10 +80,11 @@ class LastPlayedViewModel @Inject constructor(
             _offlineStatus.tryEmit("Downloading: ${item.title}…")
             try {
                 // P4 — foreground worker: survives leaving the tab / backgrounding.
-                val ok = offlineMediaManager.downloadForeground(item.mediaUri, item.title)
-                _offlineStatus.tryEmit(
-                    if (ok) "Saved offline: ${item.title}" else "Download failed: ${item.title}"
-                )
+                _offlineStatus.tryEmit(when (val o = offlineMediaManager.downloadForeground(item.mediaUri, item.title)) {
+                    is com.powermediaplayer.offline.OfflineDownloadOutcome.Success -> "Saved offline: ${item.title}"
+                    is com.powermediaplayer.offline.OfflineDownloadOutcome.Background -> "Downloading in the background: ${item.title}"
+                    is com.powermediaplayer.offline.OfflineDownloadOutcome.Failed -> o.message
+                })
             } finally {
                 _downloadingIds.value = _downloadingIds.value - item.mediaUri
             }
@@ -313,9 +314,12 @@ class LastPlayedViewModel @Inject constructor(
      * position. Spotify rows route through SpotifyProvider so they
      * resume on the user's Connect device.
      *
-     * Each tap creates a NEW play session row in playback_history so
-     * the Recents list reflects the user's actual sequence (A → B → A
-     * produces three rows).
+     * Each tap creates a NEW play session row in playback_history (so
+     * per-session bookmarks stay session-scoped). NOTE: since P3.3 the
+     * Recents LIST dedups by mediaUri (LastPlayedRepository.observeDynamic),
+     * so A → B → A now DISPLAYS as [A, B] (most-recent row per item) even
+     * though three physical rows exist — the table is unchanged, only the
+     * projection collapses visual duplicates.
      */
     fun playLocalAt(
         item: LastPlayedRepository.HistoryItem,
@@ -701,9 +705,9 @@ class LastPlayedViewModel @Inject constructor(
                 )
             }
         }
-        // Record a NEW session so the Recents list reflects this play
-        // as its own row (the user-visible "A → B → A produces three
-        // rows" contract).
+        // Record a NEW session row (session-scoped bookmarks depend on it).
+        // Since P3.3 the Recents LIST dedups by mediaUri, so a replay updates the
+        // visible row's position rather than adding a second visible entry.
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 // Consistency with the Cloud + cold-start paths: never re-record a

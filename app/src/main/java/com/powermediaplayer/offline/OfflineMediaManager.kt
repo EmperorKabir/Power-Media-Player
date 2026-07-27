@@ -15,14 +15,30 @@ import com.powermediaplayer.util.SafStorage
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Whether the currently-resolved media can be taken offline / is already local. */
 enum class OfflineState { NOT_APPLICABLE, DOWNLOADABLE, DOWNLOADED }
+
+/** Terminal outcome of [OfflineMediaManager.downloadForeground] — carries the
+ *  specific reason so callers surface WHY (audit P4/MED-2), and distinguishes a
+ *  still-running background download from a real failure (audit P4-1). */
+sealed interface OfflineDownloadOutcome {
+    data object Success : OfflineDownloadOutcome
+    /** The worker is still running (offline/slow); it continues + notifies, and
+     *  the offline chip appears reactively when it lands. */
+    data object Background : OfflineDownloadOutcome
+    data class Failed(val message: String) : OfflineDownloadOutcome
+}
 
 /** OAuth Drive download url → file id. Hoisted so [OfflineMediaManager.driveIdOf]
  *  (called per offline-state evaluation) does not recompile the pattern each call. */
@@ -44,6 +60,19 @@ class OfflineMediaManager @Inject constructor(
     private val driveOAuthProvider: DriveOAuthProvider,
     private val settingsDataStore: SettingsDataStore
 ) {
+    private companion object {
+        /** Max wait for the worker to reach RUNNING before we treat it as blocked
+         *  on the network constraint and let it continue in the background. */
+        const val START_GRACE_MS = 15_000L
+        /** Upper bound on the in-screen await of a RUNNING download; beyond this the
+         *  worker still continues + notifies (offline chip appears reactively). */
+        const val RUN_TIMEOUT_MS = 900_000L
+    }
+
+    /** Serialises [evictLruIfOverLimit] so concurrent per-download evictions can't
+     *  each observe over-limit and over-evict user copies (audit MED-3). */
+    private val evictMutex = Mutex()
+
     /** Reactive set of keys that are currently downloaded: Drive file ids +
      *  podcast audio urls. UIs combine this with the current URI to show the
      *  right action (download vs delete) without a per-frame DB query. */
@@ -135,19 +164,55 @@ class OfflineMediaManager @Inject constructor(
 
     /**
      * P4 — enqueue [download] as a FOREGROUND WorkManager worker (survives leaving the
-     * tab, backgrounding the app, and process death) and suspend until it finishes,
-     * returning whether it succeeded. Deduped by uri. If the calling coroutine is
-     * cancelled (its screen goes away), the worker keeps running to completion + posts
-     * its own notification; the offline chip appears on return.
+     * tab, backgrounding the app, and process death) and suspend until it finishes.
+     * Deduped by uri (ExistingWorkPolicy.KEEP). If the calling coroutine is cancelled
+     * (its screen goes away), the worker keeps running to completion + posts its own
+     * notification; the offline chip appears reactively.
+     *
+     * Audit-hardened await:
+     *  - Pre-checks the mobile-data policy so a blocked save never spins up a doomed
+     *    foreground service, and surfaces the SPECIFIC reason (MED-2/LOW-6).
+     *  - Ignores any terminal WorkInfo that already existed for this unique name
+     *    BEFORE this enqueue, so a stale SUCCEEDED/FAILED from a prior run (the
+     *    download→delete→re-download / retry-after-fail window) can't satisfy the
+     *    await before THIS run finishes (P4-2 stale-terminal race).
+     *  - Bounds the in-screen wait: the CONNECTED constraint holds the work ENQUEUED
+     *    forever when offline, so an unbounded await would hang the spinner (P4-1). If
+     *    the worker hasn't started within a short grace it is left running in the
+     *    background (Background); once RUNNING it is awaited to its terminal state.
      */
-    suspend fun downloadForeground(uri: String, title: String): Boolean {
+    suspend fun downloadForeground(uri: String, title: String): OfflineDownloadOutcome {
+        if (com.powermediaplayer.util.MobileDataPolicy.downloadsBlocked(context, settingsDataStore)) {
+            return OfflineDownloadOutcome.Failed(com.powermediaplayer.util.MobileDataPolicy.BLOCKED_MESSAGE)
+        }
+        val wm = WorkManager.getInstance(context)
+        val name = "offline-dl:$uri"
+        val staleTerminalIds = runCatching {
+            wm.getWorkInfosForUniqueWorkFlow(name).first()
+                .filter { it.state.isFinished }.map { it.id }.toSet()
+        }.getOrDefault(emptySet())
         OfflineDownloadWorker.enqueue(context, uri, title)
-        val terminal = runCatching {
-            androidx.work.WorkManager.getInstance(context)
-                .getWorkInfosForUniqueWorkFlow("offline-dl:$uri")
-                .first { list -> list.any { it.state.isFinished } }
-        }.getOrNull()
-        return terminal?.any { it.state == androidx.work.WorkInfo.State.SUCCEEDED } == true
+        val flow = wm.getWorkInfosForUniqueWorkFlow(name)
+        fun freshTerminal(list: List<WorkInfo>): WorkInfo? =
+            list.firstOrNull { it.state.isFinished && it.id !in staleTerminalIds }
+        fun outcomeOf(info: WorkInfo): OfflineDownloadOutcome =
+            if (info.state == WorkInfo.State.SUCCEEDED) OfflineDownloadOutcome.Success
+            else OfflineDownloadOutcome.Failed("Download failed, try again on Wi-Fi")
+        // Phase 1 — wait for the worker to START (or already finish). Still ENQUEUED
+        // past the grace ⇒ blocked on the network constraint ⇒ continue in background.
+        val startedOrDone = withTimeoutOrNull(START_GRACE_MS) {
+            flow.first { list ->
+                list.any { it.state == WorkInfo.State.RUNNING } || freshTerminal(list) != null
+            }
+        } ?: return OfflineDownloadOutcome.Background
+        freshTerminal(startedOrDone)?.let { return outcomeOf(it) }
+        // Phase 2 — it's RUNNING; await its fresh terminal state (real download in flight).
+        val fresh = withTimeoutOrNull(RUN_TIMEOUT_MS) {
+            var found: WorkInfo? = null
+            flow.first { list -> found = freshTerminal(list); found != null }
+            found
+        } ?: return OfflineDownloadOutcome.Background
+        return outcomeOf(fresh)
     }
 
     /** Download the media at [uri] for offline use. [title] names the stored file. */
@@ -233,11 +298,11 @@ class OfflineMediaManager @Inject constructor(
     /** P4 — enforce the offline-storage limit after a save (moved here from
      *  CloudViewModel so EVERY download path — Cloud, Player, Last Played, and the
      *  worker — evicts oldest non-starred copies over the cap). */
-    suspend fun evictLruIfOverLimit() {
+    suspend fun evictLruIfOverLimit() = evictMutex.withLock {
         val limit = settingsDataStore.offlineStorageLimitBytes.first()
-        if (limit <= 0) return
+        if (limit <= 0) return@withLock
         var total = offlineCopyDao.totalBytes()
-        if (total <= limit) return
+        if (total <= limit) return@withLock
         for (row in offlineCopyDao.lruSnapshot()) {
             if (total <= limit) break
             if (row.isStarred) continue

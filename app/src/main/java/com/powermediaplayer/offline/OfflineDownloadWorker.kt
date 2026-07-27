@@ -78,10 +78,13 @@ class OfflineDownloadWorker @AssistedInject constructor(
  *  downloading (visible outside the app) + a terminal saved/failed notification. */
 object OfflineDownloadNotifier {
     private const val CHANNEL = "offline_downloads"
-    private const val PROGRESS_BASE = 47000
-    private const val DONE_BASE = 48000
+    // Bases 100k apart with a 16-bit slot mask so the progress range
+    // (100000..165535) and the done range (200000..265535) can NEVER overlap, and
+    // concurrent same-type downloads collide only 1/65536 vs the old 1/4096 (audit P4-3).
+    private const val PROGRESS_BASE = 100000
+    private const val DONE_BASE = 200000
 
-    private fun notifId(base: Int, uri: String): Int = base + (uri.hashCode() and 0x0FFF)
+    private fun notifId(base: Int, uri: String): Int = base + (uri.hashCode() and 0xFFFF)
 
     private fun ensureChannel(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java) ?: return

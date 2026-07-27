@@ -95,7 +95,8 @@ class CloudViewModel @Inject constructor(
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     private val playbackHistoryDao: com.powermediaplayer.data.db.dao.PlaybackHistoryDao,
     private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
-    private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao
+    private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
+    private val offlineMediaManager: com.powermediaplayer.offline.OfflineMediaManager
 ) : ViewModel() {
 
     // #16 — favourite-time enrich: dedup guard + a non-blocking "enriching…"
@@ -140,15 +141,18 @@ class CloudViewModel @Inject constructor(
             )
 
     // P7 — persisted expand/collapse of the Cloud-tab favourites/downloads sections.
+    // WhileSubscribed: these are only observed while the Cloud tab is on-screen;
+    // initialValue=true already equals the DataStore default, so there is no
+    // first-frame flash to protect against with Eagerly (audit D2).
     val cloudDriveSectionExpanded: kotlinx.coroutines.flow.StateFlow<Boolean> =
         settingsDataStore.cloudDriveSectionExpanded
-            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), true)
     val cloudSpotifySectionExpanded: kotlinx.coroutines.flow.StateFlow<Boolean> =
         settingsDataStore.cloudSpotifySectionExpanded
-            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), true)
     val cloudPodcastSectionExpanded: kotlinx.coroutines.flow.StateFlow<Boolean> =
         settingsDataStore.cloudPodcastSectionExpanded
-            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), true)
     fun setCloudSectionExpanded(which: String, expanded: Boolean) {
         viewModelScope.launch { settingsDataStore.setCloudSectionExpanded(which, expanded) }
     }
@@ -180,39 +184,27 @@ class CloudViewModel @Inject constructor(
 
     fun saveDriveOffline(item: CloudMediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
-            if (com.powermediaplayer.util.MobileDataPolicy.downloadsBlocked(context, settingsDataStore)) {
-                _uiState.update {
-                    it.copy(errorMessage = com.powermediaplayer.util.MobileDataPolicy.BLOCKED_MESSAGE)
-                }
-                return@launch
-            }
             if (hasOfflineCopy(item.id)) {
                 _uiState.update { it.copy(errorMessage = "Already saved offline: ${item.name}") }
                 return@launch
             }
             // P4 — run the download in a FOREGROUND WorkManager worker so it survives
-            // leaving the tab / backgrounding the app / process death (was a
-            // viewModelScope job the OS cancelled on tab-pop, silently dropping the
-            // download and orphaning its cacheDir staging file). The worker reuses the
-            // proven OfflineMediaManager.download path + DownloadProgressBus, and posts a
-            // progress + completion/failure notification.
+            // leaving the tab / backgrounding the app / process death. Single source of
+            // truth: OfflineMediaManager.downloadForeground owns the mobile-data
+            // pre-check, the stale-terminal-safe await, and the offline-hang bound.
             _savingOffline.update { it + item.id }
-            val uniqueName = "offline-dl:${item.downloadUrl}"
-            com.powermediaplayer.offline.OfflineDownloadWorker.enqueue(context, item.downloadUrl, item.name)
             _uiState.update { it.copy(errorMessage = "Saving offline: ${item.name}") }
-            // Await the worker's terminal state to clear the row spinner + surface a
-            // status. If this VM is cleared first (tab switch), the download still
-            // finishes in the worker and the offline chip appears on return.
-            val terminal = runCatching {
-                androidx.work.WorkManager.getInstance(context)
-                    .getWorkInfosForUniqueWorkFlow(uniqueName)
-                    .first { list -> list.any { it.state.isFinished } }
-            }.getOrNull()
+            val outcome = offlineMediaManager.downloadForeground(item.downloadUrl, item.name)
             _savingOffline.update { it - item.id }
-            val ok = terminal?.any { it.state == androidx.work.WorkInfo.State.SUCCEEDED } == true
             _uiState.update {
-                it.copy(errorMessage = if (ok) "Saved offline: ${item.name}"
-                    else "Couldn't save offline: ${item.name}")
+                it.copy(errorMessage = when (outcome) {
+                    is com.powermediaplayer.offline.OfflineDownloadOutcome.Success ->
+                        "Saved offline: ${item.name}"
+                    is com.powermediaplayer.offline.OfflineDownloadOutcome.Background ->
+                        "Downloading in the background: ${item.name}"
+                    is com.powermediaplayer.offline.OfflineDownloadOutcome.Failed ->
+                        outcome.message
+                })
             }
         }
     }

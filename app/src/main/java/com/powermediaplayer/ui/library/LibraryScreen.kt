@@ -58,6 +58,12 @@ fun LibraryScreen(
     // P6 — downloaded Drive books surfaced as a synthetic Library section.
     val downloadedBooks by viewModel.downloadedBooks.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // P6 (audit MED-5) — a tapped download whose file has vanished surfaces a clean toast.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.downloadedPlayError.collect { msg ->
+            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<MediaFileInfo?>(null) }

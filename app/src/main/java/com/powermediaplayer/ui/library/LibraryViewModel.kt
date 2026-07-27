@@ -20,7 +20,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -612,7 +614,13 @@ class LibraryViewModel @Inject constructor(
                     )
                 }
             }
+            .flowOn(Dispatchers.IO)
             .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** P6 — one-shot message when a tapped download's file has vanished (audit MED-5). */
+    private val _downloadedPlayError = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val downloadedPlayError: kotlinx.coroutines.flow.SharedFlow<String> =
+        _downloadedPlayError.asSharedFlow()
 
     /**
      * P6 — play a downloaded Drive book from the Library. Plays the LOCAL file
@@ -628,8 +636,13 @@ class LibraryViewModel @Inject constructor(
             playbackConnection.setCloudFetchInProgress(true)
             try {
                 val item = withContext(Dispatchers.IO) {
+                    // localUriFor already verifies the copy EXISTS and is readable
+                    // (SAF fd probe / File.canRead), returning null when it's gone.
+                    // Do NOT fall back to Uri.fromFile(File(localPath)) — a content://
+                    // localPath would become a garbage file:// URI → FILE_NOT_FOUND
+                    // (audit MED-5). null ⇒ surface a clean message, don't play garbage.
                     val local = driveOfflineResolver.localUriFor(book.driveUri)
-                        ?: android.net.Uri.fromFile(java.io.File(book.localPath))
+                        ?: return@withContext null
                     val extras = runCatching {
                         com.powermediaplayer.util.M4bChapterParser
                             .extractChaptersAsBundle(context, local)
@@ -649,6 +662,13 @@ class LibraryViewModel @Inject constructor(
                                 .build()
                         )
                         .build()
+                } ?: run {
+                    com.powermediaplayer.util.Diag.w(
+                        "PowerMediaPlayer",
+                        "playDownloadedBook: offline copy missing for ${book.title}"
+                    )
+                    _downloadedPlayError.tryEmit("This download is no longer available: ${book.title}")
+                    return@launch
                 }
                 playbackConnection.setMediaItems(listOf(item), 0)
                 playbackConnection.setVideoModeHint(false)
@@ -658,8 +678,10 @@ class LibraryViewModel @Inject constructor(
                     com.powermediaplayer.cloud.CloudMediaItem(
                         id = book.driveFileId,
                         name = book.title,
+                        // Known size ⇒ the enricher skips its size<=0 metadata GET
+                        // and goes straight to the local offline copy (audit P6-2).
                         mimeType = "audio/mp4",
-                        size = 0L,
+                        size = book.bytes,
                         downloadUrl = book.driveUri,
                         sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
                     ),
