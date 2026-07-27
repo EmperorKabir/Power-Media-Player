@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
@@ -114,7 +115,14 @@ class LibraryViewModel @Inject constructor(
     private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
-    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
+    // P6 — surface downloaded Drive books in the Library. offlineCopyDao is the
+    // source of truth for offline copies; driveOfflineResolver maps the Drive
+    // key → local file; driveTagEnricher lights up cover/tags exactly as the
+    // Cloud/LastPlayed paths do (shared singletons — no duplicated logic).
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
+    private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver,
+    private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher
 ) : ViewModel() {
 
     /** §C25 / A9 — write a per-file tag override. */
@@ -571,6 +579,122 @@ class LibraryViewModel @Inject constructor(
      * X / N counter. Audio still uses [playFiles] so albums and audiobook
      * folders work as expected.
      */
+    // ── P6 — downloaded Drive books surfaced in the Library ──────────────
+    data class DownloadedBook(
+        val driveFileId: String,
+        val title: String,
+        val driveUri: String,
+        val localPath: String,
+        val bytes: Long
+    )
+
+    /**
+     * P6 — offline Drive copies as synthetic Library rows. The Drive key is
+     * reconstructed to the SAME canonical form `DriveOAuthProvider.toCloudItem`
+     * stores, so a play here shares the Cloud/Recents row (the DRIVE Recents
+     * query dedups by mediaUri) instead of forking it.
+     */
+    val downloadedBooks: StateFlow<List<DownloadedBook>> =
+        offlineCopyDao.observeAll()
+            .map { rows ->
+                rows.map { r ->
+                    val driveUri = if (r.driveFileId.startsWith("content://")) r.driveFileId
+                        else "https://www.googleapis.com/drive/v3/files/${r.driveFileId}?alt=media"
+                    val raw = r.displayName.ifBlank {
+                        java.io.File(r.localPath).name.ifBlank { "Drive file" }
+                    }
+                    DownloadedBook(
+                        driveFileId = r.driveFileId,
+                        title = com.powermediaplayer.util.TextNormalizer.cleanFileTitle(raw),
+                        driveUri = driveUri,
+                        localPath = r.localPath,
+                        bytes = r.byteSize
+                    )
+                }
+            }
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * P6 — play a downloaded Drive book from the Library. Plays the LOCAL file
+     * but keeps `mediaId` = the Drive key so Recents + resume stay unified with
+     * the Cloud path (no forked row). Records + enriches exactly like the Cloud
+     * path's recordCloudPlay (shared enricher; keyed on the Drive uri).
+     */
+    fun playDownloadedBook(book: DownloadedBook) {
+        recordSearchIfActive()
+        stopSpotifyMirrorIfActive()
+        com.powermediaplayer.playback.ResumeGate.end(com.powermediaplayer.playback.ResumeGate.begin())
+        viewModelScope.launch {
+            playbackConnection.setCloudFetchInProgress(true)
+            try {
+                val item = withContext(Dispatchers.IO) {
+                    val local = driveOfflineResolver.localUriFor(book.driveUri)
+                        ?: android.net.Uri.fromFile(java.io.File(book.localPath))
+                    val extras = runCatching {
+                        com.powermediaplayer.util.M4bChapterParser
+                            .extractChaptersAsBundle(context, local)
+                    }.getOrDefault(android.os.Bundle())
+                    extras.putBoolean("is_video_hint", false)
+                    MediaItem.Builder()
+                        .setMediaId(book.driveUri)
+                        .setUri(local)
+                        .setRequestMetadata(
+                            MediaItem.RequestMetadata.Builder()
+                                .setMediaUri(android.net.Uri.parse(book.driveUri)).build()
+                        )
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(book.title)
+                                .setExtras(extras)
+                                .build()
+                        )
+                        .build()
+                }
+                playbackConnection.setMediaItems(listOf(item), 0)
+                playbackConnection.setVideoModeHint(false)
+                recordDownloadedPlay(book)
+                driveTagEnricher.enrich(
+                    viewModelScope,
+                    com.powermediaplayer.cloud.CloudMediaItem(
+                        id = book.driveFileId,
+                        name = book.title,
+                        mimeType = "audio/mp4",
+                        size = 0L,
+                        downloadUrl = book.driveUri,
+                        sourceProvider = com.powermediaplayer.cloud.CloudProviderType.GOOGLE_DRIVE
+                    ),
+                    book.driveUri,
+                    writeSearchCache = true
+                )
+            } catch (t: Throwable) {
+                com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "playDownloadedBook failed", t)
+            } finally {
+                playbackConnection.setCloudFetchInProgress(false)
+            }
+        }
+    }
+
+    private fun recordDownloadedPlay(book: DownloadedBook) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val cleanRow = lastPlayedRepo.cleanRowForUri(book.driveUri)
+                lastPlayedRepo.recordPlay(
+                    com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                        mediaUri = book.driveUri,
+                        title = cleanRow?.title ?: book.title,
+                        subtitle = cleanRow?.subtitle?.takeIf { it.isNotBlank() && it != "DRIVE" } ?: "DRIVE",
+                        artworkUri = cleanRow?.artworkUri,
+                        source = "DRIVE",
+                        mediaKindOrdinal = 0,
+                        lastPositionMs = 0L,
+                        durationMs = 0L,
+                        lastPlayedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+    }
+
     fun playSingle(file: MediaFileInfo) {
         recordSearchIfActive()
         stopSpotifyMirrorIfActive()

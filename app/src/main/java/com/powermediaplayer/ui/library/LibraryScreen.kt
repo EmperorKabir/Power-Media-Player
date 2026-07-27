@@ -55,6 +55,8 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val multiSelectMode by viewModel.multiSelectMode.collectAsStateWithLifecycle()
     val selectedUris by viewModel.selectedUris.collectAsStateWithLifecycle()
+    // P6 — downloaded Drive books surfaced as a synthetic Library section.
+    val downloadedBooks by viewModel.downloadedBooks.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var showInfoSheet by remember { mutableStateOf(false) }
@@ -663,6 +665,66 @@ fun LibraryScreen(
                     // sits next to the rail in the Library tab per the locked
                     // spec, replacing the prior Settings-tab placement.
                     com.powermediaplayer.ui.smartplaylists.SmartPlaylistsSection()
+                        }
+                    }
+                    // P6 — Downloaded (offline Drive books). These live in
+                    // app-private storage so the MediaStore scan never sees them;
+                    // surfaced here as synthetic rows. Tapping plays the LOCAL file
+                    // but keeps the Drive key, so Recents/resume stay unified.
+                    if (downloadedBooks.isNotEmpty()) {
+                        item(key = "downloaded_header", span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                text = "Downloaded (${downloadedBooks.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TealAccent,
+                                modifier = Modifier.padding(
+                                    start = 16.dp, top = 4.dp, bottom = 4.dp
+                                )
+                            )
+                        }
+                        itemsIndexed(
+                            downloadedBooks,
+                            key = { _, b -> "dl_${b.driveFileId}" }
+                        ) { _, book ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.playDownloadedBook(book)
+                                        onNavigateToPlayer()
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.DownloadDone,
+                                    contentDescription = null,
+                                    tint = TealAccent,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(16.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        book.title,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = TextPrimary,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        android.text.format.Formatter
+                                            .formatShortFileSize(context, book.bytes) + " · Offline",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                        item(key = "downloaded_divider", span = { GridItemSpan(maxLineSpan) }) {
+                            HorizontalDivider(
+                                color = SurfaceElevated,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
                         }
                     }
                     if (favouriteFiles.isNotEmpty()) {
