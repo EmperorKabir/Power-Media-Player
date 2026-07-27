@@ -377,6 +377,8 @@ class SettingsDataStore @Inject constructor(
         // the warning dialog; never reset.
         val DRIVE_FIRST_PICK_WARNING_SEEN = booleanPreferencesKey("drive_first_pick_warning_seen")
         val DRIVE_REKEY_HEAL_DONE = booleanPreferencesKey("drive_rekey_heal_done")
+        val DRIVE_BACKUP_FOLDER_ID = stringPreferencesKey("drive_backup_folder_id")
+        val DRIVE_BACKUP_FOLDER_NAME = stringPreferencesKey("drive_backup_folder_name")
     }
 
     // ── Drive OAuth picked folders (drive.file via JS Picker) ─────
@@ -428,6 +430,21 @@ class SettingsDataStore @Inject constructor(
     }
     suspend fun markDriveRekeyHealDone() {
         context.dataStore.edit { it[Keys.DRIVE_REKEY_HEAL_DONE] = true }
+    }
+
+    /** P2.5 — the Drive folder the settings backup is written into ("" / "root" =
+     *  My Drive root, the default). */
+    val driveBackupFolderId: Flow<String> = context.dataStore.data.map {
+        it[Keys.DRIVE_BACKUP_FOLDER_ID] ?: ""
+    }
+    val driveBackupFolderName: Flow<String> = context.dataStore.data.map {
+        it[Keys.DRIVE_BACKUP_FOLDER_NAME] ?: ""
+    }
+    suspend fun setDriveBackupFolder(id: String, name: String) {
+        context.dataStore.edit {
+            it[Keys.DRIVE_BACKUP_FOLDER_ID] = id
+            it[Keys.DRIVE_BACKUP_FOLDER_NAME] = name
+        }
     }
 
     // ── Drive (SAF) picked roots ────────────────────────────────

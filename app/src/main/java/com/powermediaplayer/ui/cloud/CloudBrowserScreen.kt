@@ -1993,10 +1993,13 @@ private fun FavouriteFolderRow(
  * CURRENT folder to the picked list. "root" is Drive's My-Drive-top alias.
  */
 @Composable
-private fun DriveFolderBrowser(
+internal fun DriveFolderBrowser(
     listSubFolders: suspend (String) -> Result<List<com.powermediaplayer.cloud.CloudMediaItem>>,
     onAdd: (String, String) -> Unit,
     onDismiss: () -> Unit,
+    // P2.5 — the confirm-button label; the Settings backup-folder picker passes
+    // "Save backups here" while the Cloud folder-add flow keeps the default.
+    addLabel: String = "Add this folder",
 ) {
     // Start at the location chooser: My Drive, Shared with me, and each Shared
     // Drive (U7). These three virtual roots can't themselves be added as a picked
@@ -2101,7 +2104,7 @@ private fun DriveFolderBrowser(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
             ) {
                 Text(
-                    "Add this folder",
+                    addLabel,
                     color = if (current.first !in nonAddable) TealAccent else TextPrimary.copy(alpha = 0.4f)
                 )
             }

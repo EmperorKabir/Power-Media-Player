@@ -15,6 +15,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -31,6 +34,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -44,13 +49,26 @@ import javax.inject.Inject
 class BackupViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val backupManager: BackupManager,
-    private val drive: DriveOAuthProvider
+    private val drive: DriveOAuthProvider,
+    private val settings: com.powermediaplayer.data.preferences.SettingsDataStore
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<String?>(null)
     val status: StateFlow<String?> = _status.asStateFlow()
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+
+    /** P2.5 — the display name of the Drive folder backups are written to
+     *  ("" = My Drive root). */
+    val backupFolderName: StateFlow<String> = settings.driveBackupFolderName
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, "")
+
+    fun setBackupFolder(id: String, name: String) {
+        viewModelScope.launch { settings.setDriveBackupFolder(id, name) }
+    }
+
+    /** P2.5 folder picker — sub-folders of [parentId] (reuses the Drive browser). */
+    suspend fun listBackupFolders(parentId: String) = drive.listSubFolders(parentId)
 
     fun suggestedFileName(): String = "PowerMediaPlayer-backup-${stamp("yyyyMMdd-HHmmss")}.json"
 
@@ -71,20 +89,71 @@ class BackupViewModel @Inject constructor(
         backupManager.restoreFromJson(json).getOrThrow()
     }
 
-    fun backupToDrive() = launchBusy("Backed up to Drive.", "Drive backup failed") {
-        val json = backupManager.buildBackupJson(stampIso())
-        // Overwrite the existing backup file if present, else create one — keeps
-        // a single restorable copy instead of accumulating duplicates.
-        val existing = drive.findNewestFileByName(DRIVE_BACKUP_NAME)
-        if (existing != null) drive.updateTextFile(existing, json).getOrThrow()
-        else drive.uploadTextFile(DRIVE_BACKUP_NAME, json).getOrThrow()
-        0
+    fun backupToDrive() {
+        _busy.value = true
+        viewModelScope.launch {
+            val r = runCatching {
+                val json = backupManager.buildBackupJson(stampIso())
+                val folderId = settings.driveBackupFolderId.first().ifBlank { "root" }
+                // Overwrite the existing backup file if present, else create one in the
+                // chosen folder — keeps a single restorable copy, no duplicates.
+                val existing = drive.findNewestFileByName(DRIVE_BACKUP_NAME)
+                val id = if (existing != null) {
+                    drive.updateTextFile(existing, json).getOrThrow(); existing
+                } else {
+                    drive.uploadTextFile(DRIVE_BACKUP_NAME, json, parentFolderId = folderId).getOrThrow()
+                }
+                // Relocate into the chosen folder if needed (best-effort; drive.file can
+                // refuse a move into an arbitrary user folder).
+                if (folderId != "root") drive.moveFileToFolder(id, folderId) else true
+            }
+            _status.value = when {
+                r.isFailure -> "Drive backup failed: ${r.exceptionOrNull()?.message}"
+                r.getOrNull() == false ->
+                    "Backed up to Drive (in My Drive root — Google wouldn't let the app move it into that folder)."
+                else -> "Backed up to Drive."
+            }
+            _busy.value = false
+        }
     }
 
     fun restoreFromDrive() = launchBusy("Restored", "Drive restore failed", restore = true) {
-        val id = drive.findNewestFileByName(DRIVE_BACKUP_NAME) ?: error("No Drive backup found")
+        // Gated on sign-in by the UI, so reaching here means an account is attached and
+        // "no backup" is truthful (was previously indistinguishable from "not signed in").
+        val id = drive.findNewestFileByName(DRIVE_BACKUP_NAME)
+            ?: error("No backup file found in your Google Drive yet")
         val json = drive.downloadTextFile(id).getOrThrow()
         backupManager.restoreFromJson(json).getOrThrow()
+    }
+
+    /** P2 — delete the app's backup file from Google Drive (user-initiated, confirmed
+     *  in the UI). */
+    fun deleteDriveBackup() {
+        _busy.value = true
+        viewModelScope.launch {
+            val r = runCatching {
+                val id = drive.findNewestFileByName(DRIVE_BACKUP_NAME)
+                    ?: error("No backup file found in your Google Drive")
+                drive.deleteFile(id).getOrThrow()
+            }
+            _status.value = if (r.isSuccess) "Deleted the Drive backup."
+                else "Delete failed: ${r.exceptionOrNull()?.message}"
+            _busy.value = false
+        }
+    }
+
+    // ── Drive sign-in gating (P2) — the backup/restore buttons must trigger the SAME
+    // Google sign-in the Cloud tab uses when no account is attached (a fresh install
+    // otherwise failed with a misleading "no backup found"). Shares the singleton
+    // DriveOAuthProvider, so signing in here also readies the Cloud tab. ──
+    fun isDriveSignedIn(): Boolean = drive.currentAccountEmail() != null
+    fun buildDriveSignInIntent(): android.content.Intent = drive.buildSignInIntent()
+    /** Handle the sign-in result; on success run [onSignedIn] (the queued backup/restore). */
+    fun completeDriveSignIn(data: android.content.Intent?, onSignedIn: () -> Unit) {
+        viewModelScope.launch {
+            if (drive.handleSignInResult(data).isSuccess) onSignedIn()
+            else _status.value = "Google sign-in was cancelled or failed"
+        }
     }
 
     fun clearStatus() { _status.value = null }
@@ -123,6 +192,57 @@ fun BackupRestoreSection(vm: BackupViewModel = hiltViewModel()) {
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { vm.importFromLocal(it) } }
 
+    // P2: a queued Drive action (backup or restore) to run once sign-in completes, and
+    // the Google sign-in launcher itself. When no account is attached, the Drive buttons
+    // launch sign-in first (mirroring the Cloud tab) then auto-run the action.
+    var pendingDriveAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showBackupFolderPicker by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val backupFolderName by vm.backupFolderName.collectAsStateWithLifecycle()
+    val driveSignInLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        vm.completeDriveSignIn(result.data) {
+            pendingDriveAction?.invoke(); pendingDriveAction = null
+        }
+    }
+    fun runDriveOrSignIn(action: () -> Unit) {
+        if (vm.isDriveSignedIn()) action()
+        else { pendingDriveAction = action; driveSignInLauncher.launch(vm.buildDriveSignInIntent()) }
+    }
+
+    if (showBackupFolderPicker) {
+        com.powermediaplayer.ui.cloud.DriveFolderBrowser(
+            listSubFolders = { pid -> vm.listBackupFolders(pid) },
+            onAdd = { id, name -> vm.setBackupFolder(id, name); showBackupFolderPicker = false },
+            onDismiss = { showBackupFolderPicker = false },
+            addLabel = "Save backups here"
+        )
+    }
+    if (showDeleteConfirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Drive backup?") },
+            text = {
+                Text(
+                    "This permanently removes the Power Media Player backup file from your " +
+                        "Google Drive. Your local settings are not affected."
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    showDeleteConfirm = false
+                    if (!busy) runDriveOrSignIn { vm.deleteDriveBackup() }
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showDeleteConfirm = false }
+                ) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
         Text(
             text = "Save everything except your actual media files, settings, per-file " +
@@ -148,13 +268,44 @@ fun BackupRestoreSection(vm: BackupViewModel = hiltViewModel()) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
-                onClick = { if (!busy) vm.backupToDrive() },
+                onClick = { if (!busy) runDriveOrSignIn { vm.backupToDrive() } },
                 enabled = !busy, modifier = Modifier.weight(1f)
             ) { Text("Back up to Drive") }
             OutlinedButton(
-                onClick = { if (!busy) vm.restoreFromDrive() },
+                onClick = { if (!busy) runDriveOrSignIn { vm.restoreFromDrive() } },
                 enabled = !busy, modifier = Modifier.weight(1f)
             ) { Text("Restore from Drive") }
+        }
+        // P2.5 — where in Drive the backup is stored (default My Drive root). "Change"
+        // opens the same native folder browser the Cloud tab uses.
+        Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Drive backup folder: " +
+                    backupFolderName.ifBlank { "My Drive (default)" },
+                style = MaterialTheme.typography.bodySmall,
+                color = TextTertiary,
+                modifier = Modifier.weight(1f)
+            )
+            androidx.compose.material3.TextButton(
+                onClick = { if (!busy) runDriveOrSignIn { showBackupFolderPicker = true } },
+                enabled = !busy
+            ) { Text("Change") }
+            if (backupFolderName.isNotBlank()) {
+                androidx.compose.material3.TextButton(
+                    onClick = { if (!busy) vm.setBackupFolder("", "") },
+                    enabled = !busy
+                ) { Text("Reset") }
+            }
+        }
+        // P2 — remove the backup file from Drive (confirmed).
+        androidx.compose.material3.TextButton(
+            onClick = { if (!busy) showDeleteConfirm = true },
+            enabled = !busy
+        ) {
+            Text("Delete Drive backup", color = MaterialTheme.colorScheme.error)
         }
         status?.let {
             Text(

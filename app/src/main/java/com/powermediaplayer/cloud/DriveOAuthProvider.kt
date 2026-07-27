@@ -599,13 +599,20 @@ class DriveOAuthProvider @Inject constructor(
     suspend fun uploadTextFile(
         fileName: String,
         content: String,
-        mimeType: String = "application/json"
+        mimeType: String = "application/json",
+        // P2.5 — optional Drive folder to create the backup in. "root"/blank = the
+        // default (My Drive root). drive.file can create in a folder the user granted;
+        // if Google refuses (403) the caller retries without a parent.
+        parentFolderId: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         val token = fetchWriteTokenBlocking()
             ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
         runCatching {
             val boundary = "pmp" + java.util.UUID.randomUUID().toString().replace("-", "")
-            val meta = JSONObject().put("name", fileName).put("mimeType", mimeType).toString()
+            val metaObj = JSONObject().put("name", fileName).put("mimeType", mimeType)
+            if (!parentFolderId.isNullOrBlank() && parentFolderId != "root")
+                metaObj.put("parents", org.json.JSONArray().put(parentFolderId))
+            val meta = metaObj.toString()
             val payload = buildString {
                 append("--").append(boundary).append("\r\n")
                 append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
@@ -617,7 +624,7 @@ class DriveOAuthProvider @Inject constructor(
             }
             val reqBody = payload.toRequestBody("multipart/related; boundary=$boundary".toMediaType())
             val req = Request.Builder()
-                .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id")
+                .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true")
                 .addHeader("Authorization", "Bearer $token")
                 .post(reqBody)
                 .build()
@@ -650,6 +657,56 @@ class DriveOAuthProvider @Inject constructor(
                 if (!resp.isSuccessful) error("Drive update HTTP ${resp.code}: $s")
                 JSONObject(s).optString("id").ifBlank { fileId }
             }
+        }
+    }
+
+    /** P2.5 — move the (app-created) backup file into [folderId] if not already there.
+     *  Blank / "root" = leave in My-Drive root. Returns true if the file is in the target
+     *  folder afterwards, false if the move was refused (drive.file cannot always write
+     *  into an arbitrary user folder) — the caller keeps the backup where it is + tells
+     *  the user. */
+    suspend fun moveFileToFolder(fileId: String, folderId: String?): Boolean =
+        withContext(Dispatchers.IO) {
+            if (folderId.isNullOrBlank() || folderId == "root") return@withContext true
+            val token = fetchWriteTokenBlocking() ?: return@withContext false
+            runCatching {
+                val getUrl = "https://www.googleapis.com/drive/v3/files/$fileId" +
+                    "?fields=parents&supportsAllDrives=true"
+                val current = http.newCall(Request.Builder().url(getUrl)
+                    .addHeader("Authorization", "Bearer $token").build()).execute().use { resp ->
+                    if (!resp.isSuccessful) return@use emptyList<String>()
+                    val arr = JSONObject(resp.body?.string().orEmpty()).optJSONArray("parents")
+                    (0 until (arr?.length() ?: 0)).map { arr!!.getString(it) }
+                }
+                if (current.contains(folderId)) return@runCatching true
+                val patchUrl = "https://www.googleapis.com/drive/v3/files/$fileId" +
+                    "?addParents=$folderId" +
+                    (if (current.isNotEmpty()) "&removeParents=${current.joinToString(",")}" else "") +
+                    "&supportsAllDrives=true&fields=id"
+                http.newCall(Request.Builder().url(patchUrl)
+                    .addHeader("Authorization", "Bearer $token")
+                    .patch("{}".toRequestBody("application/json".toMediaType())).build())
+                    .execute().use { resp -> resp.isSuccessful }
+            }.getOrDefault(false)
+        }
+
+    /** P2 — permanently delete an app-created Drive file (the settings backup). The
+     *  drive.file scope can delete files the app created. 404 (already gone) counts as
+     *  success. */
+    suspend fun deleteFile(fileId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = fetchWriteTokenBlocking()
+            ?: return@withContext Result.failure(IllegalStateException("Drive sign-in required"))
+        runCatching {
+            val req = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/files/$fileId?supportsAllDrives=true")
+                .addHeader("Authorization", "Bearer $token")
+                .delete()
+                .build()
+            http.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful && resp.code != 404)
+                    error("Drive delete HTTP ${resp.code}")
+            }
+            Unit
         }
     }
 
