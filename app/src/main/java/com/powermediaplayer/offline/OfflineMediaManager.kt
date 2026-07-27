@@ -58,8 +58,16 @@ class OfflineMediaManager @Inject constructor(
     private val podcastDao: PodcastDao,
     private val driveProvider: GoogleDriveProvider,
     private val driveOAuthProvider: DriveOAuthProvider,
-    private val settingsDataStore: SettingsDataStore
+    private val settingsDataStore: SettingsDataStore,
+    // Enrich-on-download: after a Drive file lands offline, read its tags from the
+    // LOCAL copy (no re-download) so its Title/Artist/Album subtext appears on the
+    // Cloud + Library + Downloads rows even if it was never favourited/played.
+    private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher
 ) {
+    /** App-lifetime scope for fire-and-forget post-download enrichment — must
+     *  outlive the worker's coroutine (which ends when doWork returns). */
+    private val enrichScope =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
     private companion object {
         /** Max wait for the worker to reach RUNNING before we treat it as blocked
          *  on the network constraint and let it continue in the background. */
@@ -278,17 +286,44 @@ class OfflineMediaManager @Inject constructor(
                 downloadUrl = uri,
                 sourceProvider = CloudProviderType.GOOGLE_DRIVE
             )
+            val dlT0 = System.currentTimeMillis()
             val cache = try {
                 if (uri.startsWith("content://")) driveProvider.downloadFullToCache(item, progressId = driveId)
                 else driveOAuthProvider.downloadFullToCache(item, progressId = driveId)
             } catch (_: Throwable) { null }
                 ?: return Result.failure(IllegalStateException("Download failed, try again on Wi-Fi"))
-            val (path, size) = relocate(item, cache)
+            // Issue D — the "stuck at 100%" the user hit is a POST-100% phase (bytes
+            // are done, the bar/notification still show 100%). Time each phase so a
+            // device repro shows exactly which one hangs (usually a SAF relocate copy).
+            com.powermediaplayer.util.Diag.i(
+                "PowerMediaPlayer",
+                "dlPhase bytesDone id=$driveId bytes=${cache.length()} inMs=${System.currentTimeMillis() - dlT0}"
+            )
+            val relT0 = System.currentTimeMillis()
+            val (path, size) = relocate(item, cache, driveId)
+            com.powermediaplayer.util.Diag.i(
+                "PowerMediaPlayer",
+                "dlPhase relocated id=$driveId path=$path inMs=${System.currentTimeMillis() - relT0}"
+            )
             settingsDataStore.upsertOfflineDrive(driveId, path)
             offlineCopyDao.upsert(
                 OfflineCopyEntity(driveFileId = driveId, localPath = path, byteSize = size, displayName = title)
             )
+            // Populate the enrichment cache from the just-downloaded LOCAL file so
+            // the row shows Title/Artist/Album subtext (enrich reuses the offline
+            // copy via offlineCopyDao.get → no re-download; internal dedup no-ops if
+            // a favourite-time enrich already ran). Fire-and-forget on enrichScope.
+            if (driveTagEnricher.cached(driveId) == null) {
+                driveTagEnricher.enrich(
+                    enrichScope, item, uri, silent = true, writeSearchCache = true
+                )
+            }
+            val evT0 = System.currentTimeMillis()
             evictLruIfOverLimit()
+            com.powermediaplayer.util.Diag.i(
+                "PowerMediaPlayer",
+                "dlPhase evicted id=$driveId inMs=${System.currentTimeMillis() - evT0}"
+            )
             return Result.success(Unit)
         } finally {
             com.powermediaplayer.util.DownloadProgressBus.clear(driveId)
@@ -330,11 +365,16 @@ class OfflineMediaManager @Inject constructor(
 
     // ── Drive relocate into the user's single global offline folder (mirrors
     //    CloudViewModel.relocateDriveOffline) ─────────────────────────────────
-    private suspend fun relocate(item: CloudMediaItem, cacheFile: java.io.File): Pair<String, Long> {
-        // No SAF folder (or the move fails) → DON'T leave the copy in cacheDir: the
-        // OS evicts it AND the enricher's same-named temp (drive_<hash>_full) deletes
-        // it, so a cache-stored "offline" file silently vanishes → slow re-streaming.
-        // Move it into persistent filesDir/offline instead.
+    private suspend fun relocate(
+        item: CloudMediaItem,
+        cacheFile: java.io.File,
+        progressId: String? = null
+    ): Pair<String, Long> {
+        // The default (no SAF folder) path is an instant same-volume renameTo into
+        // filesDir/offline — no copy, no pin. A SAF folder forces a full byte re-copy
+        // into the user's tree; that copy is what pinned the bar at 100% "for ages"
+        // (issue D), so drive the progress bar through it (ProgressInputStream) instead
+        // of leaving it dead at 100%.
         suspend fun durable() = com.powermediaplayer.util.OfflineStorage.toDurable(context, cacheFile, item.id, item.name)
         val tree = settingsDataStore.driveOfflineTreeUri.first().ifBlank { null }
             ?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return durable()
@@ -342,8 +382,12 @@ class OfflineMediaManager @Inject constructor(
         val dir = SafStorage.resolveDir(context, tree, "PowerMediaPlayer", "drive") ?: return durable()
         val name = item.name.ifBlank { cacheFile.name }
         val child = SafStorage.createChild(dir, name, mimeForName(name)) ?: return durable()
+        val total = cacheFile.length()
         val bytes = runCatching {
-            cacheFile.inputStream().use { SafStorage.writeStream(context, child.uri, it) }
+            val raw = cacheFile.inputStream()
+            val input = if (progressId != null)
+                com.powermediaplayer.util.ProgressInputStream(raw, progressId, total) else raw
+            input.use { SafStorage.writeStream(context, child.uri, it) }
         }.getOrDefault(0L)
         if (bytes <= 0L) {
             runCatching { child.delete() }

@@ -151,6 +151,14 @@ class PowerMediaPlayerApp : Application(), Configuration.Provider,
                         DiagLog.lifecycle("P1.3 heal: merged $n re-keyed Drive Recents row(s)")
                     }
                 }
+                // Issue 5 — offline downloads now stage in filesDir/offline/tmp (not
+                // cacheDir, which the OS would auto-evict). A process death mid-download
+                // would orphan a partial there forever, so sweep it at startup — no
+                // download is in flight this early, so deleting every staging file is safe.
+                runCatching {
+                    java.io.File(applicationContext.filesDir, "offline/tmp")
+                        .listFiles()?.forEach { it.delete() }
+                }
             }
         } else {
             DiagLog.lifecycle(

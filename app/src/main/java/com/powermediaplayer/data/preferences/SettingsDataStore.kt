@@ -1470,21 +1470,59 @@ class SettingsDataStore @Inject constructor(
     val spotifyFavouritePodcasts: Flow<List<SpotifyFavourite>> =
         spotifyFavSet(Keys.SPOTIFY_FAVOURITE_PODCASTS)
 
-    suspend fun toggleSpotifyFavouriteTrack(uri: String, name: String) =
-        toggleSetEntry(Keys.SPOTIFY_FAVOURITE_TRACKS, uri, name)
-    suspend fun toggleSpotifyFavouriteAlbum(uri: String, name: String) =
-        toggleSetEntry(Keys.SPOTIFY_FAVOURITE_ALBUMS, uri, name)
-    suspend fun toggleSpotifyFavouritePodcast(uri: String, name: String) =
-        toggleSetEntry(Keys.SPOTIFY_FAVOURITE_PODCASTS, uri, name)
+    suspend fun toggleSpotifyFavouriteTrack(
+        uri: String, name: String, artist: String = "", album: String = "", imageUrl: String = ""
+    ) = toggleSpotifyEntry(Keys.SPOTIFY_FAVOURITE_TRACKS, uri, name, artist, album, imageUrl)
+    suspend fun toggleSpotifyFavouriteAlbum(
+        uri: String, name: String, artist: String = "", album: String = "", imageUrl: String = ""
+    ) = toggleSpotifyEntry(Keys.SPOTIFY_FAVOURITE_ALBUMS, uri, name, artist, album, imageUrl)
+    suspend fun toggleSpotifyFavouritePodcast(
+        uri: String, name: String, artist: String = "", album: String = "", imageUrl: String = ""
+    ) = toggleSpotifyEntry(Keys.SPOTIFY_FAVOURITE_PODCASTS, uri, name, artist, album, imageUrl)
 
+    // Packed entry: `id|name` (legacy, 2 fields) OR `id|name\u0001artist\u0001album\u0001imageUrl`
+    // (new, additive). The first '|' splits id from the rest; the rest is \u0001-split so
+    // OLD 2-field entries parse unchanged (extra fields absent → blank). \u0001 (SOH) can't
+    // occur in a Spotify name/artist, so it's a safe internal delimiter.
     private fun spotifyFavSet(key: Preferences.Key<Set<String>>): Flow<List<SpotifyFavourite>> =
         context.dataStore.data.map { prefs ->
             (prefs[key] ?: emptySet()).mapNotNull { entry ->
                 val sep = entry.indexOf('|')
-                if (sep <= 0) null
-                else SpotifyFavourite(entry.substring(0, sep), entry.substring(sep + 1))
+                if (sep <= 0) return@mapNotNull null
+                val id = entry.substring(0, sep)
+                val parts = entry.substring(sep + 1).split('\u0001')
+                SpotifyFavourite(
+                    id = id,
+                    name = parts.getOrNull(0).orEmpty(),
+                    artist = parts.getOrNull(1)?.takeIf { it.isNotBlank() }.orEmpty(),
+                    album = parts.getOrNull(2)?.takeIf { it.isNotBlank() }.orEmpty(),
+                    imageUrl = parts.getOrNull(3)?.takeIf { it.isNotBlank() }.orEmpty()
+                )
             }.sortedBy { it.name.lowercase() }
         }
+
+    /** Spotify favourite toggle that PACKS optional artist/album/imageUrl alongside
+     *  id|name (backward-compatible with legacy 2-field entries). Separate from the
+     *  Drive [toggleSetEntry] so the Drive `id|name` format is never disturbed.
+     *  @return true if now present (added), false if removed. */
+    private suspend fun toggleSpotifyEntry(
+        key: Preferences.Key<Set<String>>,
+        id: String, name: String, artist: String, album: String, imageUrl: String
+    ): Boolean {
+        var added = false
+        context.dataStore.edit { prefs ->
+            val current = (prefs[key] ?: emptySet()).toMutableSet()
+            val existing = current.firstOrNull { it.startsWith("$id|") }
+            if (existing != null) {
+                current.remove(existing); added = false
+            } else {
+                val tail = listOf(name, artist, album, imageUrl).joinToString("\u0001")
+                current.add("$id|$tail"); added = true
+            }
+            prefs[key] = current
+        }
+        return added
+    }
 
     /** @return true if the entry is now present (added), false if removed. */
     private suspend fun toggleSetEntry(
@@ -1656,8 +1694,16 @@ data class DrivePickedRoot(val treeUri: String, val name: String)
 /**
  * Persisted reference to a Spotify URI the user has starred.
  * id is the spotify:track:..., spotify:album:..., or spotify:show:...
+ * artist/album/imageUrl are optional (blank for legacy 2-field entries) and drive
+ * the Cloud favourite row's subtext + cover art.
  */
-data class SpotifyFavourite(val id: String, val name: String)
+data class SpotifyFavourite(
+    val id: String,
+    val name: String,
+    val artist: String = "",
+    val album: String = "",
+    val imageUrl: String = ""
+)
 
 /**
  * Per-kind Bluetooth media-button mapping unit (one next/prev/skip set).

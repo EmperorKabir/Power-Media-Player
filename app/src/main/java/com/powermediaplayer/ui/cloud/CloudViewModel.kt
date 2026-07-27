@@ -1026,14 +1026,18 @@ class CloudViewModel @Inject constructor(
         if (item.sourceProvider != CloudProviderType.SPOTIFY) return
         val uri = if (item.downloadUrl.startsWith("spotify:")) item.downloadUrl
             else "spotify:${if (item.isFolder) item.mimeType.substringAfter("application/spotify-") else "track"}:${item.id}"
+        // Capture the artist (subtitle) + cover (thumbnailUri) at star time so the
+        // favourite row shows them without a live Spotify session (metadata feature).
+        val artist = item.subtitle
+        val cover = item.thumbnailUri?.toString().orEmpty()
         viewModelScope.launch(Dispatchers.IO) {
             when {
                 uri.startsWith("spotify:track") ->
-                    settingsDataStore.toggleSpotifyFavouriteTrack(uri, item.name)
+                    settingsDataStore.toggleSpotifyFavouriteTrack(uri, item.name, artist = artist, imageUrl = cover)
                 uri.startsWith("spotify:album") ->
-                    settingsDataStore.toggleSpotifyFavouriteAlbum(uri, item.name)
+                    settingsDataStore.toggleSpotifyFavouriteAlbum(uri, item.name, artist = artist, imageUrl = cover)
                 uri.startsWith("spotify:show") || uri.startsWith("spotify:episode") ->
-                    settingsDataStore.toggleSpotifyFavouritePodcast(uri, item.name)
+                    settingsDataStore.toggleSpotifyFavouritePodcast(uri, item.name, artist = artist, imageUrl = cover)
                 else -> {}
             }
         }

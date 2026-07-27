@@ -10,17 +10,14 @@ import java.security.MessageDigest
  * Durable home for "Download for offline use" copies when the user has NOT
  * configured a SAF offline folder.
  *
- * The download paths fetch into the app **cache** (`cacheDir/drive_<id.hashCode()>_full`).
- * Leaving an offline copy there is a trap on two counts:
- *   1. `cacheDir` is cleared by Android under storage pressure → the "downloaded"
- *      file silently disappears and playback falls back to slow re-streaming.
- *   2. The Drive metadata enricher's temp download for the SAME file uses the
- *      IDENTICAL name (`drive_<id.hashCode()>_full`) and DELETES it after reading
- *      the tags — so enriching a cache-stored offline copy destroys it.
- *
- * [toDurable] moves the finished download into `filesDir/offline/` — persistent
- * (never OS-evicted) and a different directory + name than the enricher's temp,
- * so the offline copy survives both hazards.
+ * Issue 5 (2026-07-28): the FULL offline download now stages into
+ * `filesDir/offline/tmp/drive_<id.hashCode()>_full` (persistent) rather than
+ * `cacheDir`, so a cache-wipe app or OS cache pressure can't destroy an in-flight
+ * or finished partial. [toDurable] then renameTo-moves the finished staging file
+ * into `filesDir/offline/<sha256(id)>.ext` — the stable, collision-safe home the
+ * DB row points at. Both dirs are on the internal volume, so the rename is atomic
+ * and instant (no multi-GB copy). A different dir + name than the enricher's
+ * `cacheDir/drive_<id.hashCode()>_full` temp, so enrichment never deletes it.
  */
 object OfflineStorage {
 

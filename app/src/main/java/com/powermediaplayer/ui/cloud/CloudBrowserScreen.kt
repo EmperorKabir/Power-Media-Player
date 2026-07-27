@@ -97,6 +97,23 @@ fun CloudBrowserScreen(
     val podcastSectionExpanded by viewModel.cloudPodcastSectionExpanded.collectAsStateWithLifecycle()
     val downloadedPodcastTitles by viewModel.downloadedPodcastTitles.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
+    // Issue 4 — offline downloads post progress/complete/failed notifications, but on
+    // Android 13+ they are SILENTLY invisible without the runtime POST_NOTIFICATIONS
+    // grant (the user saw "no notification" on a failed/backgrounded download). The
+    // Cloud tab is where Drive downloads start, so ask once here; launching when
+    // already granted (or on <33) is a no-op.
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     var showInfoSheet by remember { mutableStateOf(false) }
     var contextItem by remember { mutableStateOf<CloudMediaItem?>(null) }
     if (showInfoSheet) {
@@ -1694,47 +1711,6 @@ private fun ProviderTab(
 }
 
 @Composable
-private fun ProviderCards(
-    driveLoggedIn: Boolean,
-    spotifyLoggedIn: Boolean,
-    onConnectDrive: () -> Unit,
-    onConnectSpotify: () -> Unit,
-    onBrowseDrive: () -> Unit,
-    onBrowseSpotify: () -> Unit,
-    onSignOutDrive: () -> Unit,
-    onSignOutSpotify: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        ProviderCard(
-            name = "Cloud / external folders",
-            description = "Pick a folder from Google Drive, OneDrive, Dropbox, " +
-                "or your phone's storage. Browse and play media inside it. " +
-                "Add as many folders as you like.",
-            loggedIn = driveLoggedIn,
-            onConnect = onConnectDrive,
-            onBrowse = onBrowseDrive,
-            onSignOut = onSignOutDrive,
-            connectLabel = "Pick a folder",
-            signOutLabel = "Forget all folders",
-            addAnotherLabel = "Add folder"
-        )
-        ProviderCard(
-            name = "Spotify",
-            description = "Browse your saved tracks, albums, and playlists. Full-track playback requires Spotify Premium (preview clips only on free tier).",
-            loggedIn = spotifyLoggedIn,
-            onConnect = onConnectSpotify,
-            onBrowse = onBrowseSpotify,
-            onSignOut = onSignOutSpotify
-        )
-    }
-}
-
-@Composable
 private fun ProviderCard(
     name: String,
     description: String,
@@ -2048,22 +2024,45 @@ private fun SpotifyFavRow(
                 .background(SpotifyGreen.copy(alpha = 0.2f)),
             contentAlignment = Alignment.Center
         ) {
+            // Icon behind; the starred cover (captured at favourite time) draws over
+            // it when present, else the kind icon shows (metadata feature).
             Icon(
                 kindIcon,
                 contentDescription = null,
                 tint = SpotifyGreen,
                 modifier = Modifier.size(18.dp)
             )
+            if (fav.imageUrl.isNotBlank()) {
+                coil3.compose.AsyncImage(
+                    model = fav.imageUrl,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
-        Text(
-            text = fav.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        // Title in accent + "Artist, Album" subtext (blank fields dropped, no stray
+        // commas). Matches the Drive favourite/downloaded row treatment.
+        val subtext = listOf(fav.artist, fav.album).filter { it.isNotBlank() }.joinToString(", ")
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = fav.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TealAccent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (subtext.isNotBlank()) {
+                Text(
+                    text = subtext,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
         IconButton(onClick = onUnstar, modifier = Modifier.size(36.dp)) {
             Icon(
                 imageVector = Icons.Filled.Star,

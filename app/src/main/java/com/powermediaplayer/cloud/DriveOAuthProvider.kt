@@ -753,16 +753,22 @@ class DriveOAuthProvider @Inject constructor(
         rangeStart: Long?,
         rangeEnd: Long?,
         suffix: String = "tmp",
-        progressId: String? = null
+        progressId: String? = null,
+        // Issue 5: a FULL offline download stages into filesDir (persistent) so a
+        // cache-wipe app (or the enricher's same-named cacheDir temp) can't destroy
+        // an in-flight 1.5 GB partial mid-download. Small head/tail metadata reads
+        // stay in cacheDir (transient, deleted after parsing). null → cacheDir.
+        destDir: java.io.File? = null
     ): java.io.File? = withContext(Dispatchers.IO) {
         val tag = "PowerMediaPlayer"
         val token = fetchAccessTokenBlocking() ?: run {
             com.powermediaplayer.util.Diag.e(tag, "Drive download: no access token (signed out?)")
             return@withContext null
         }
-        // Hash the id for the cache filename (the raw id can contain unsafe
+        // Hash the id for the staging filename (the raw id can contain unsafe
         // path chars, and a stable hash avoids collisions across the id space).
-        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_$suffix")
+        val baseDir = (destDir ?: context.cacheDir).apply { runCatching { mkdirs() } }
+        val cacheFile = java.io.File(baseDir, "drive_${item.id.hashCode()}_$suffix")
         val rangeHeader = "bytes=${rangeStart ?: ""}-${rangeEnd ?: ""}"
         try {
             val req = Request.Builder()
@@ -815,7 +821,11 @@ class DriveOAuthProvider @Inject constructor(
     suspend fun downloadFullToCache(item: CloudMediaItem, progressId: String? = null): java.io.File? {
         val cap = 4L * 1024 * 1024 * 1024
         if (item.size > cap) return null
-        return downloadRangeToCache(item, 0L, null, "full", progressId)
+        // Issue 5: stage the full download in filesDir/offline/tmp, NOT cacheDir, so
+        // a mid-download cache-wipe can't lose the partial. relocate() renameTo into
+        // filesDir/offline stays same-volume + instant.
+        val stageDir = java.io.File(context.filesDir, "offline/tmp")
+        return downloadRangeToCache(item, 0L, null, "full", progressId, destDir = stageDir)
     }
 
     private fun toCloudItem(f: JsonObject, parentId: String?): CloudMediaItem? {

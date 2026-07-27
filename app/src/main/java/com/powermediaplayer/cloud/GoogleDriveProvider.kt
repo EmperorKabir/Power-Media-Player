@@ -391,7 +391,11 @@ class GoogleDriveProvider @Inject constructor(
         rangeStart: Long?,
         rangeEnd: Long?,
         suffix: String = "tmp",
-        progressId: String? = null
+        progressId: String? = null,
+        // Issue 5: a FULL offline download stages into filesDir (persistent) so a
+        // cache-wipe app can't destroy an in-flight partial. head/tail metadata
+        // reads stay in cacheDir. null → cacheDir.
+        destDir: java.io.File? = null
     ): java.io.File? = withContext(Dispatchers.IO) {
         val tag = "PowerMediaPlayer"
         val sourceUri = runCatching { Uri.parse(item.downloadUrl) }.getOrNull()
@@ -400,7 +404,8 @@ class GoogleDriveProvider @Inject constructor(
         // only OS cache pressure ever reclaimed them; an audiobook-folder
         // binge could park hundreds of MB. LRU-trim before each download.
         trimDriveCache()
-        val cacheFile = java.io.File(context.cacheDir, "drive_${item.id.hashCode()}_$suffix")
+        val baseDir = (destDir ?: context.cacheDir).apply { runCatching { mkdirs() } }
+        val cacheFile = java.io.File(baseDir, "drive_${item.id.hashCode()}_$suffix")
         val start = rangeStart ?: 0L
         val end = rangeEnd ?: Long.MAX_VALUE
         com.powermediaplayer.util.Diag.i(
@@ -493,7 +498,9 @@ class GoogleDriveProvider @Inject constructor(
             )
             return null
         }
-        return downloadRangeToCache(item, 0L, null, "full", progressId)
+        // Issue 5: stage the full download in filesDir/offline/tmp (persistent), not cacheDir.
+        val stageDir = java.io.File(context.filesDir, "offline/tmp")
+        return downloadRangeToCache(item, 0L, null, "full", progressId, destDir = stageDir)
     }
 
     // ── Helpers ─────────────────────────────────────────────────
