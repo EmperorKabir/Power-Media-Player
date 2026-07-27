@@ -578,8 +578,14 @@ fun LibraryScreen(
             }
         } else {
             val files = if (uiState.selectedTab == 0) uiState.audioFiles else uiState.videoFiles
+            // P6 — downloaded Drive books are a SEPARATE source from the MediaStore
+            // scan (app-private storage), so a user with only downloads and no local
+            // audio must still see them. Show the grid (which carries the Downloaded
+            // section) on the Audio tab whenever there are downloads, even if the
+            // MediaStore audio list is empty.
+            val hasDownloads = uiState.selectedTab == 0 && downloadedBooks.isNotEmpty()
 
-            if (files.isEmpty()) {
+            if (files.isEmpty() && !hasDownloads) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -671,7 +677,7 @@ fun LibraryScreen(
                     // app-private storage so the MediaStore scan never sees them;
                     // surfaced here as synthetic rows. Tapping plays the LOCAL file
                     // but keeps the Drive key, so Recents/resume stay unified.
-                    if (downloadedBooks.isNotEmpty()) {
+                    if (uiState.selectedTab == 0 && downloadedBooks.isNotEmpty()) {
                         item(key = "downloaded_header", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 text = "Downloaded (${downloadedBooks.size})",
