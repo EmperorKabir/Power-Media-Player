@@ -780,6 +780,11 @@ class DriveOAuthProvider @Inject constructor(
                     return@withContext null
                 }
                 val total = resp.body?.contentLength()?.takeIf { it > 0 } ?: item.size
+                com.powermediaplayer.util.Diag.i(
+                    tag,
+                    "dlStart http=${resp.code} contentLength=${resp.body?.contentLength()} " +
+                        "total=$total itemSize=${item.size} range=$rangeHeader id=$progressId"
+                )
                 resp.body?.byteStream()?.use { raw ->
                     val input = if (progressId != null)
                         com.powermediaplayer.util.ProgressInputStream(raw, progressId, total) else raw

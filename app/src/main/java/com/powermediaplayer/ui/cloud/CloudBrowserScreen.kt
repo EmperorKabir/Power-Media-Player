@@ -460,22 +460,29 @@ fun CloudBrowserScreen(
             androidx.compose.foundation.lazy.LazyColumn(
                 modifier = Modifier.fillMaxSize()
             ) {
-                item(key = "providers") {
-                    ProviderCards(
-                        driveLoggedIn = uiState.driveLoggedIn,
-                        spotifyLoggedIn = uiState.spotifyLoggedIn,
-                        onConnectDrive = { launchDriveOAuth() },
-                        onConnectSpotify = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
-                        // U8: re-consent for readonly if it's missing, rather than
-                        // browsing blind and failing silently on a null token.
-                        onBrowseDrive = {
-                            if (viewModel.driveReadyForBrowse()) viewModel.browseDrive(null, "Root")
-                            else launchDriveOAuth()
-                        },
-                        onBrowseSpotify = { viewModel.browseSpotify() },
-                        onSignOutDrive = { viewModel.signOutDrive() },
-                        onSignOutSpotify = { viewModel.signOutSpotify() }
-                    )
+                // Drive box FIRST, then §1 Drive favourites directly under it
+                // (user spec: Drive favourites sit under the Cloud/external-folders
+                // box, not below Spotify). The Spotify box + §2 follow below.
+                item(key = "drive_card") {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
+                        ProviderCard(
+                            name = "Cloud / external folders",
+                            description = "Pick a folder from Google Drive, OneDrive, Dropbox, " +
+                                "or your phone's storage. Browse and play media inside it. " +
+                                "Add as many folders as you like.",
+                            loggedIn = uiState.driveLoggedIn,
+                            onConnect = { launchDriveOAuth() },
+                            // U8: re-consent for readonly if it's missing.
+                            onBrowse = {
+                                if (viewModel.driveReadyForBrowse()) viewModel.browseDrive(null, "Root")
+                                else launchDriveOAuth()
+                            },
+                            onSignOut = { viewModel.signOutDrive() },
+                            connectLabel = "Pick a folder",
+                            signOutLabel = "Forget all folders",
+                            addAnotherLabel = "Add folder"
+                        )
+                    }
                 }
                 // P7 §1 — Drive favourites + downloads (under Google). Shown
                 // whenever Drive is signed in (a persistent, collapsible section),
@@ -555,9 +562,15 @@ fun CloudBrowserScreen(
                         }
                         // Downloaded Drive files not already shown as favourites.
                         items(driveDownloads, key = { "l_dl_${it.driveFileId}" }) { dl ->
+                            val dlCover: Any? = offlineIds[dl.driveFileId]?.let { p ->
+                                val u = if (p.startsWith("content://")) android.net.Uri.parse(p)
+                                    else android.net.Uri.fromFile(java.io.File(p))
+                                com.powermediaplayer.util.MediaThumbnailRequest(u)
+                            } ?: enrichedCovers[dl.driveFileId]?.let { android.net.Uri.parse(it) }
                             DownloadedDriveRow(
                                 title = dl.title,
                                 subtext = dl.subtext,
+                                coverModel = dlCover,
                                 onClick = {
                                     viewModel.openItem(
                                         CloudMediaItem(
@@ -581,6 +594,21 @@ fun CloudBrowserScreen(
                                 )
                             }
                         }
+                    }
+                }
+                // Spotify box — sits BELOW the Drive box + Drive favourites, with
+                // §2 Spotify favourites directly under it.
+                item(key = "spotify_card") {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                        ProviderCard(
+                            name = "Spotify",
+                            description = "Browse your saved tracks, albums, and playlists. " +
+                                "Full-track playback requires Spotify Premium (preview clips only on free tier).",
+                            loggedIn = uiState.spotifyLoggedIn,
+                            onConnect = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
+                            onBrowse = { viewModel.browseSpotify() },
+                            onSignOut = { viewModel.signOutSpotify() }
+                        )
                     }
                 }
                 // P7 §2 — Spotify favourites (under Spotify). Persisted collapse.
@@ -2139,6 +2167,7 @@ private fun CloudSectionHeader(
 private fun DownloadedDriveRow(
     title: String,
     subtext: String,
+    coverModel: Any? = null,
     onClick: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -2156,12 +2185,22 @@ private fun DownloadedDriveRow(
                 .background(Teal800),
             contentAlignment = Alignment.Center
         ) {
+            // Show the book's embedded cover / enriched art; the tick is only the
+            // fallback when no cover has been extracted yet.
             Icon(
                 Icons.Filled.DownloadDone,
                 contentDescription = "Downloaded",
                 tint = TealAccent,
                 modifier = Modifier.size(18.dp)
             )
+            coverModel?.let { model ->
+                coil3.compose.AsyncImage(
+                    model = model,
+                    contentDescription = "Downloaded",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {

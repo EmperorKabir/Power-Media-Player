@@ -708,12 +708,31 @@ fun LibraryScreen(
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    Icons.Filled.DownloadDone,
-                                    contentDescription = null,
-                                    tint = TealAccent,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Filled.DownloadDone,
+                                        contentDescription = null,
+                                        tint = TealAccent,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    // The downloaded book's embedded cover (read from
+                                    // the local file) instead of a bare tick icon.
+                                    coil3.compose.AsyncImage(
+                                        model = com.powermediaplayer.util.MediaThumbnailRequest(
+                                            if (book.localPath.startsWith("content://"))
+                                                android.net.Uri.parse(book.localPath)
+                                            else android.net.Uri.fromFile(java.io.File(book.localPath))
+                                        ),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                    )
+                                }
                                 Spacer(Modifier.width(16.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
