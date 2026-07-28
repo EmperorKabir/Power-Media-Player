@@ -374,6 +374,10 @@ private fun BandInputCell(
                 style = MaterialTheme.typography.labelSmall,
                 color = TealAccent,
                 textAlign = TextAlign.Center,
+                // Always reserve 2 lines: some labels ("708 Hz to 1414 Hz") fit on one
+                // line while their row-mates wrap to two, which made that cell shorter
+                // than the rest. Fixing the line count keeps every band cell equal height.
+                minLines = 2,
                 maxLines = 2,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
