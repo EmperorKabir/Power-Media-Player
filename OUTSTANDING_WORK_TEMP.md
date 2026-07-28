@@ -30,7 +30,8 @@ Device gotchas: `MSYS_NO_PATHCONV=1` for /sdcard paths; ColorOS re-dozes → `sc
 - [~] Issue 2 caveats — Cloud card badge still waits for a first folder-pick to read "signed in" (no re-prompt; cosmetic). Signed-out fresh-install restore path only emulator-reasoned. Low priority.
 - [ ] Issue 4-iii — resume partial bytes on retry (HTTP Range resume). Larger change; not yet done.
 - [~] Issue 6 — Library "Downloaded" section exists (surfaces downloaded books). A per-row Offline tag/badge is optional polish; confirm with user if wanted.
-- [ ] Metadata subtext NOT applied to local Library MediaStore rows / Last Played rows (both already show their own title+artist). Confirm with user if the exact "Artist, Album" subtext is wanted there.
+- [x] Metadata subtext in LAST PLAYED — DONE + device-verified (vc70). Artist/Album now renders on its own line under each row title (was crammed inline in the FlowRow). enrichedMeta wired into LastPlayedViewModel; album dropped when it restates the title (audiobook "(Unabridged)") or artist. "This Inevitable Ruin"→"Matt Dinniman", "City Hall…"→"Tenacious D".
+- [ ] Metadata subtext NOT applied to local Library MediaStore rows (they already show title + artist from MediaStore). Confirm with user if the exact "Artist, Album" subtext is wanted there too.
 
 =====================================================================
 ## VERSION / RELEASE

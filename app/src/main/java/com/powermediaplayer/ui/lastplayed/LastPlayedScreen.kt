@@ -68,6 +68,26 @@ fun LastPlayedScreen(
     val pinnedAlbums by viewModel.pinnedAlbums.collectAsStateWithLifecycle()
     val dynamic by viewModel.dynamic.collectAsStateWithLifecycle()
     val downloadingIds by viewModel.downloadingIds.collectAsStateWithLifecycle()
+    // Enriched Artist/Album per Drive file id → the "Artist, Album" subtext line
+    // under each row's title (matches the Cloud/Library metadata rows). Artist falls
+    // back to the row's stored subtitle; album is dropped when it duplicates the
+    // title/artist (audiobooks whose album tag == the book title).
+    val enrichedMeta by viewModel.enrichedMeta.collectAsStateWithLifecycle()
+    val metaSubtextOf: (HistoryItem) -> String = { hItem ->
+        val enriched = com.powermediaplayer.util.DriveKeys.canonicalKey(hItem.mediaUri)
+            .takeIf { it.startsWith("drive:") }?.removePrefix("drive:")
+            ?.let { enrichedMeta[it] }
+        val artist = (enriched?.artist?.takeIf { it.isNotBlank() } ?: hItem.subtitle)
+            .takeIf { it.isNotBlank() && it != hItem.source.name }
+        // Drop the album when it just restates the title (audiobooks tag album =
+        // "<Book> (Unabridged)") or the artist — otherwise the subtext reads redundant.
+        val album = enriched?.album?.takeIf { a ->
+            a.isNotBlank() && !a.equals(artist, ignoreCase = true) &&
+                !a.contains(hItem.title, ignoreCase = true) &&
+                !hItem.title.contains(a, ignoreCase = true)
+        }
+        listOfNotNull(artist, album).joinToString(", ")
+    }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     // Surface VM-side play-failure messages (e.g. Spotify Connect has no
@@ -308,6 +328,7 @@ fun LastPlayedScreen(
                         )
                         ReorderablePinnedList(
                             items = pinned,
+                            metaSubtextOf = metaSubtextOf,
                             offlineUrls = offlineDownloadedKeys,
                             downloadingIds = downloadingIds,
                             livePositionProvider = { viewModel.livePosition(it) },
@@ -361,6 +382,7 @@ fun LastPlayedScreen(
                     ) {
                         HistoryRowWithBookmarks(
                             item = item,
+                            metaSubtext = metaSubtextOf(item),
                             bookmarkCap = RECENT_BOOKMARK_CAP,
                             isOffline = offlineDownloadedKeys.contains(item.mediaUri),
                             bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
@@ -650,7 +672,8 @@ private fun ReorderablePinnedList(
     onLongClick: (HistoryItem) -> Unit = {},
     offlineUrls: Set<String> = emptySet(),
     downloadingIds: Map<String, String> = emptyMap(),
-    livePositionProvider: ((String) -> Flow<Long?>)? = null
+    livePositionProvider: ((String) -> Flow<Long?>)? = null,
+    metaSubtextOf: (HistoryItem) -> String = { "" }
 ) {
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
@@ -666,6 +689,7 @@ private fun ReorderablePinnedList(
             ReorderableItem(reorderState, key = "pin_${item.id}") { dragging ->
                 HistoryRowWithBookmarks(
                     item = item,
+                    metaSubtext = metaSubtextOf(item),
                     bookmarkCap = Int.MAX_VALUE, // pinned: unlimited
                     isOffline = offlineUrls.contains(item.mediaUri),
                     pinResumeTag = item.followLive, // #19 — show Resume-live/Hold-position tag
@@ -725,6 +749,7 @@ private fun ReorderablePinnedList(
 @Composable
 private fun HistoryRowWithBookmarks(
     item: HistoryItem,
+    metaSubtext: String = "",
     bookmarkCap: Int,
     bookmarkProvider: () -> Flow<List<LastPlayedViewModel.BookmarkRow>>,
     onTap: () -> Unit,
@@ -760,6 +785,7 @@ private fun HistoryRowWithBookmarks(
         Column(modifier = Modifier.fillMaxWidth()) {
             HistoryHeaderRow(
                 item = item,
+                metaSubtext = metaSubtext,
                 bookmarkCount = bookmarks.size,
                 expandable = bookmarks.isNotEmpty(),
                 expanded = expanded,
@@ -817,6 +843,7 @@ private fun HistoryRowWithBookmarks(
 @Composable
 private fun HistoryHeaderRow(
     item: HistoryItem,
+    metaSubtext: String = "",
     bookmarkCount: Int,
     expandable: Boolean,
     expanded: Boolean,
@@ -904,6 +931,14 @@ private fun HistoryHeaderRow(
             Text(item.title,
                 style = MaterialTheme.typography.labelLarge,
                 color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Metadata subtext ("Artist, Album" / audiobook Author) on its OWN line
+            // under the title — matches the Cloud/Library rows. The source pill +
+            // position + badges stay on the FlowRow below.
+            if (metaSubtext.isNotBlank()) {
+                Text(metaSubtext,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             // FlowRow (not Row): under high font scaling the source pill + tags +
             // Offline badge + @time overflowed a single line and CLIPPED the time.
             // Flowing wraps the overflow onto a second line instead — robust at any
@@ -935,15 +970,7 @@ private fun HistoryHeaderRow(
                 if (isOffline) {
                     OfflineBadge()
                 }
-                if (item.subtitle.isNotBlank() && item.subtitle != item.source.name) {
-                    // Capped width so a long publisher name ellipsises instead of
-                    // pushing everything else off; the time + badges keep their room
-                    // and overflow wraps to the next line.
-                    Text(item.subtitle,
-                        modifier = Modifier.widthIn(max = 220.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                // (Artist/subtitle now renders on its own line under the title above.)
                 if (displayPosMs > 0L) {
                     // maxLines=1 + softWrap=false → the time never wraps to one
                     // character per line; FlowRow moves it to the next line if needed.
