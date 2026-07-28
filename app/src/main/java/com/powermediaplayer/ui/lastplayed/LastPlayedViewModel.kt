@@ -38,6 +38,7 @@ class LastPlayedViewModel @Inject constructor(
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
     private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     private val podcastOfflineResolver: com.powermediaplayer.podcast.PodcastOfflineResolver,
     private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver,
     private val offlineMediaManager: com.powermediaplayer.offline.OfflineMediaManager,
@@ -61,6 +62,17 @@ class LastPlayedViewModel @Inject constructor(
     val enrichedMeta: kotlinx.coroutines.flow.StateFlow<Map<String, com.powermediaplayer.data.db.entity.EnrichmentCacheEntity>> =
         enrichmentCacheDao.observeEnriched()
             .map { rows -> rows.associateBy { it.cacheKey } }
+            .stateIn(
+                viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyMap()
+            )
+
+    /** Drive file id → the downloaded file's displayName (the raw Drive filename),
+     *  so a Last Played row can feed the SAME filename into MediaRowText the Cloud
+     *  rows use → identical "Artist, Album, Filename" subtext. Blank for streamed
+     *  (never-downloaded) items, which then show "Artist, Album" only. */
+    val driveDisplayNames: kotlinx.coroutines.flow.StateFlow<Map<String, String>> =
+        offlineCopyDao.observeAll()
+            .map { rows -> rows.associate { it.driveFileId to it.displayName } }
             .stateIn(
                 viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyMap()
             )

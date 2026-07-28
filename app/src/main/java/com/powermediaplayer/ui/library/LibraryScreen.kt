@@ -737,7 +737,7 @@ fun LibraryScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text(
                                         book.title,
-                                        style = MaterialTheme.typography.bodyLarge,
+                                        style = MaterialTheme.typography.labelLarge,
                                         color = TealAccent,
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
@@ -750,7 +750,7 @@ fun LibraryScreen(
                                     }
                                     Text(
                                         sub,
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MaterialTheme.typography.labelSmall,
                                         color = TextSecondary,
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis

@@ -649,13 +649,22 @@ class SpotifyProvider @Inject constructor(
             ?.get("url")?.takeIf { !it.isJsonNull }?.asString
         // Secondary line so result rows read "Title · Artist" rather than a
         // bare title (the reported quality defect). Source varies by type.
+        fun artistNames() = obj.arrOrNull("artists")
+            ?.mapNotNull { el ->
+                el.takeIf { it.isJsonObject }?.asJsonObject
+                    ?.get("name")?.takeIf { !it.isJsonNull }?.asString
+            }
+            ?.joinToString(", ").orEmpty()
         val subtitle = when (type) {
-            "track", "album" -> obj.arrOrNull("artists")
-                ?.mapNotNull { el ->
-                    el.takeIf { it.isJsonObject }?.asJsonObject
-                        ?.get("name")?.takeIf { !it.isJsonNull }?.asString
-                }
-                ?.joinToString(", ").orEmpty()
+            // A track carries its album; fold the album name in ("Artist, Album") so
+            // the row subtext matches the Drive "Artist, Album, …" convention. An
+            // ALBUM row IS the album (its name is the title), so keep artists only.
+            "track" -> {
+                val albumName = obj.objOrNull("album")
+                    ?.get("name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                listOf(artistNames(), albumName).filter { it.isNotBlank() }.joinToString(", ")
+            }
+            "album" -> artistNames()
             "show" -> obj.get("publisher")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
             "episode" -> obj.objOrNull("show")
                 ?.get("name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()

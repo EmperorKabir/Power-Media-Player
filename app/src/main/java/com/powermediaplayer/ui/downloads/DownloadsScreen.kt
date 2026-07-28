@@ -439,7 +439,7 @@ private fun DownloadRowView(
             Text(
                 row.title,
                 color = TealAccent,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelLarge,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )

@@ -559,7 +559,10 @@ class CloudViewModel @Inject constructor(
                             com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
                                 mediaUri = s.trackUri,
                                 title = s.title.ifBlank { "Spotify" },
-                                subtitle = s.artist.ifBlank { s.album },
+                                // "Artist, Album" to match the browse/favourite subtext.
+                                subtitle = listOf(s.artist, s.album)
+                                    .filter { it.isNotBlank() }.joinToString(", ")
+                                    .ifBlank { s.album },
                                 artworkUri = s.artworkUrl,
                                 source = "SPOTIFY",
                                 mediaKindOrdinal = 0,

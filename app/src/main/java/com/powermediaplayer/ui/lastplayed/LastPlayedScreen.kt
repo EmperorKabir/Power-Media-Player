@@ -73,20 +73,31 @@ fun LastPlayedScreen(
     // back to the row's stored subtitle; album is dropped when it duplicates the
     // title/artist (audiobooks whose album tag == the book title).
     val enrichedMeta by viewModel.enrichedMeta.collectAsStateWithLifecycle()
+    val driveDisplayNames by viewModel.driveDisplayNames.collectAsStateWithLifecycle()
+    // Build the SAME "Artist, Album, Filename" subtext the Cloud rows use, so every
+    // tab reads consistently. Drive rows go through MediaRowText (filename from the
+    // downloaded copy; kind classified from it → .m4b audiobook drops album, keeps
+    // filename); Spotify/local rows use their stored subtitle, which already carries
+    // "Artist, Album".
     val metaSubtextOf: (HistoryItem) -> String = { hItem ->
-        val enriched = com.powermediaplayer.util.DriveKeys.canonicalKey(hItem.mediaUri)
+        val driveId = com.powermediaplayer.util.DriveKeys.canonicalKey(hItem.mediaUri)
             .takeIf { it.startsWith("drive:") }?.removePrefix("drive:")
-            ?.let { enrichedMeta[it] }
-        val artist = (enriched?.artist?.takeIf { it.isNotBlank() } ?: hItem.subtitle)
-            .takeIf { it.isNotBlank() && it != hItem.source.name }
-        // Drop the album when it just restates the title (audiobooks tag album =
-        // "<Book> (Unabridged)") or the artist — otherwise the subtext reads redundant.
-        val album = enriched?.album?.takeIf { a ->
-            a.isNotBlank() && !a.equals(artist, ignoreCase = true) &&
-                !a.contains(hItem.title, ignoreCase = true) &&
-                !hItem.title.contains(a, ignoreCase = true)
+        if (driveId != null) {
+            val enriched = enrichedMeta[driveId]
+            val fileName = driveDisplayNames[driveId]
+            val kind = com.powermediaplayer.util.MediaClassifier.classifyAudioSubKind(
+                fileName ?: hItem.title, hasChapters = false, isPodcast = false
+            )
+            com.powermediaplayer.util.MediaRowText.of(
+                title = enriched?.title ?: hItem.title,
+                artist = enriched?.artist ?: hItem.subtitle.takeIf { it != hItem.source.name },
+                album = enriched?.album,
+                fileName = fileName,
+                kind = kind
+            ).subtext
+        } else {
+            hItem.subtitle.takeIf { it.isNotBlank() && it != hItem.source.name }.orEmpty()
         }
-        listOfNotNull(artist, album).joinToString(", ")
     }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()

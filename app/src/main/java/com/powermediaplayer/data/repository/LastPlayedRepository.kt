@@ -389,17 +389,33 @@ class LastPlayedRepository @Inject constructor(
      * Recents and Pinned ids as separate ID spaces.
      */
     fun observePinned(): Flow<List<HistoryItem>> =
-        favDao.observeAll().map { favs ->
+        kotlinx.coroutines.flow.combine(
+            favDao.observeAll(),
+            historyDao.observeAll()
+        ) { favs, hist ->
+            // A pin is a FROZEN snapshot in history_favourites; the Spotify artist-heal
+            // (updateDisplayByUri) only writes playback_history, so a row pinned before
+            // its artist arrived keeps a blank/"SPOTIFY" subtitle. Borrow the (healed)
+            // Recents subtitle for the same uri as a display-time fallback — fixes
+            // already-pinned rows with no migration and inherits every future heal.
             favs.sortedBy { it.pinOrder }.map { f ->
+                val src = sourceOf(f.source)
+                val ownSub = com.powermediaplayer.util.TextNormalizer.fixMojibake(f.subtitle)
+                val subtitle = ownSub.takeIf { it.isNotBlank() && it != src.name && it != f.source }
+                    ?: hist.firstOrNull {
+                        it.mediaUri == f.mediaUri &&
+                            it.subtitle.isNotBlank() && it.subtitle != f.source
+                    }?.let { com.powermediaplayer.util.TextNormalizer.fixMojibake(it.subtitle) }
+                    ?: ownSub
                 HistoryItem(
                     id = f.id,
                     mediaUri = f.mediaUri,
                     title = com.powermediaplayer.util.TextNormalizer.cleanFileTitle(
                         com.powermediaplayer.util.TextNormalizer.fixMojibake(f.title)
                     ),
-                    subtitle = com.powermediaplayer.util.TextNormalizer.fixMojibake(f.subtitle),
+                    subtitle = subtitle,
                     artworkUri = f.artworkUri,
-                    source = sourceOf(f.source),
+                    source = src,
                     mediaKindOrdinal = f.mediaKindOrdinal,
                     lastPositionMs = f.lastPositionMs,
                     durationMs = f.durationMs,

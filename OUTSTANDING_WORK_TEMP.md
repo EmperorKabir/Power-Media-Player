@@ -34,6 +34,15 @@ Device gotchas: `MSYS_NO_PATHCONV=1` for /sdcard paths; ColorOS re-dozes → `sc
 - [ ] Metadata subtext NOT applied to local Library MediaStore rows (they already show title + artist from MediaStore). Confirm with user if the exact "Artist, Album" subtext is wanted there too.
 
 =====================================================================
+## CROSS-TAB CONSISTENCY PASS (vc71) — all device-verified
+=====================================================================
+- [x] Pinned rows showed no subtext — pins are frozen snapshots in history_favourites; the artist-heal only writes playback_history. observePinned() now borrows the healed Recents subtitle for the same uri when the pin's own is blank. Verified: pinned "I Wish I Could Go Back to College" shows the artist.
+- [x] Last Played subtext now FULL (matches Cloud) — uses the same MediaRowText.of() with filename (offlineCopyDao.displayName) + kind. Verified: "This Inevitable Ruin" → "Matt Dinniman, This Inevitable Ruin: Dungeon Crawler Carl, Book 7 [B0DK…].m4b".
+- [x] Spotify subtext shows album — SpotifyProvider folded album.name into the track subtitle ("Artist, Album"); mirror auto-record too. Verified: Player shows "Avenue Q (Original Broadway Cast Recording)". Existing favourites/recents captured earlier stay artist-only until replayed.
+- [x] Cloud (+ Library Downloaded + Downloads) row fonts → labelLarge/labelSmall to match Last Played (were bodyLarge/bodySmall); CloudItemRow padding 10→8dp. Respects system font scaling.
+- NOTE (open, minor): the regular Library MediaStore rows (main music list) still use bodyLarge and were left unchanged (separate context, not the metadata-download rows). Confirm if the user wants those shrunk too.
+
+=====================================================================
 ## VERSION / RELEASE
 =====================================================================
 - vc69/1.5.14 (build.gradle.kts). AAB rebuild after enrich-on-download lands → dist/PowerMediaPlayer-release.aab.

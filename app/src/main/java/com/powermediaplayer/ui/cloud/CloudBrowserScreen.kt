@@ -1812,7 +1812,7 @@ private fun CloudItemRow(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1870,7 +1870,7 @@ private fun CloudItemRow(
                 )
                 Text(
                     text = d.primary,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.labelLarge,
                     color = TealAccent,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1878,7 +1878,7 @@ private fun CloudItemRow(
                 if (d.subtext.isNotBlank()) {
                     Text(
                         text = d.subtext,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -1887,7 +1887,7 @@ private fun CloudItemRow(
             } else {
             Text(
                 text = item.name,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.labelLarge,
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1920,7 +1920,7 @@ private fun CloudItemRow(
                     if (item.subtitle.isNotBlank()) {
                         Text(
                             text = item.subtitle,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.labelSmall,
                             color = TextSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -2048,7 +2048,7 @@ private fun SpotifyFavRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = fav.name,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.labelLarge,
                 color = TealAccent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2056,7 +2056,7 @@ private fun SpotifyFavRow(
             if (subtext.isNotBlank()) {
                 Text(
                     text = subtext,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -2205,7 +2205,7 @@ private fun DownloadedDriveRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.labelLarge,
                 color = TealAccent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2213,7 +2213,7 @@ private fun DownloadedDriveRow(
             if (subtext.isNotBlank()) {
                 Text(
                     text = subtext,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -2292,7 +2292,7 @@ private fun FavouriteTrackRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = favDisplay.primary,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.labelLarge,
                 color = TealAccent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2300,7 +2300,7 @@ private fun FavouriteTrackRow(
             if (favDisplay.subtext.isNotBlank()) {
                 Text(
                     text = favDisplay.subtext,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = TextTertiary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -2366,7 +2366,7 @@ private fun FavouriteFolderRow(
         Spacer(Modifier.width(12.dp))
         Text(
             text = fav.name,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.labelLarge,
             color = TextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
