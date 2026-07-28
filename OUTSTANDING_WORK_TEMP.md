@@ -40,7 +40,8 @@ Device gotchas: `MSYS_NO_PATHCONV=1` for /sdcard paths; ColorOS re-dozes → `sc
 - [x] Last Played subtext now FULL (matches Cloud) — uses the same MediaRowText.of() with filename (offlineCopyDao.displayName) + kind. Verified: "This Inevitable Ruin" → "Matt Dinniman, This Inevitable Ruin: Dungeon Crawler Carl, Book 7 [B0DK…].m4b".
 - [x] Spotify subtext shows album — SpotifyProvider folded album.name into the track subtitle ("Artist, Album"); mirror auto-record too. Verified: Player shows "Avenue Q (Original Broadway Cast Recording)". Existing favourites/recents captured earlier stay artist-only until replayed.
 - [x] Cloud (+ Library Downloaded + Downloads) row fonts → labelLarge/labelSmall to match Last Played (were bodyLarge/bodySmall); CloudItemRow padding 10→8dp. Respects system font scaling.
-- NOTE (open, minor): the regular Library MediaStore rows (main music list) still use bodyLarge and were left unchanged (separate context, not the metadata-download rows). Confirm if the user wants those shrunk too.
+- [x] (vc72) Pinned rows missing ARTWORK — same frozen-snapshot cause as the subtitle. observePinned() now borrows the Recents artworkUri for the same uri when the pin's is blank. Verified: pinned "I Wish I Could Go Back to College" now shows the Avenue Q cover (was a music-note). (A genuinely artless local file like "Facebook Pop" correctly stays a music-note.)
+- [x] (vc72) EVERYTHING consistent size — user confirmed. The regular Library MediaStore rows (MediaFileItem) also went bodyLarge/bodySmall → labelLarge/labelSmall. All file/track rows across Library/Cloud/Last Played/Downloads now share labelLarge title / labelSmall subtext. (Dialog + nested pinned-album-track text left as-is: distinct contexts, ~1sp diff.)
 
 =====================================================================
 ## VERSION / RELEASE

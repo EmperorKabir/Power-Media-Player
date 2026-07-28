@@ -407,6 +407,13 @@ class LastPlayedRepository @Inject constructor(
                             it.subtitle.isNotBlank() && it.subtitle != f.source
                     }?.let { com.powermediaplayer.util.TextNormalizer.fixMojibake(it.subtitle) }
                     ?: ownSub
+                // Same frozen-snapshot problem hits the cover: a row pinned before its
+                // artwork resolved keeps a blank artworkUri (music-note placeholder) while
+                // the Recents row for the same uri got the real cover. Borrow it.
+                val artworkUri = f.artworkUri?.takeIf { it.isNotBlank() }
+                    ?: hist.firstOrNull {
+                        it.mediaUri == f.mediaUri && !it.artworkUri.isNullOrBlank()
+                    }?.artworkUri
                 HistoryItem(
                     id = f.id,
                     mediaUri = f.mediaUri,
@@ -414,7 +421,7 @@ class LastPlayedRepository @Inject constructor(
                         com.powermediaplayer.util.TextNormalizer.fixMojibake(f.title)
                     ),
                     subtitle = subtitle,
-                    artworkUri = f.artworkUri,
+                    artworkUri = artworkUri,
                     source = src,
                     mediaKindOrdinal = f.mediaKindOrdinal,
                     lastPositionMs = f.lastPositionMs,

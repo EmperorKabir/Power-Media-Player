@@ -940,7 +940,7 @@ private fun MediaFileItem(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = file.title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.labelLarge,
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -949,7 +949,7 @@ private fun MediaFileItem(
                 if (file.artist.isNotEmpty() && file.artist != "Unknown Artist") {
                     Text(
                         text = file.artist,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = TextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -963,7 +963,7 @@ private fun MediaFileItem(
         if (file.duration > 0) {
             Text(
                 text = TimeFormatter.formatDuration(file.duration),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelSmall,
                 color = TextTertiary
             )
         }
