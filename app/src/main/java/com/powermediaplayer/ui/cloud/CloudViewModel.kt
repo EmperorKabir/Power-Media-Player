@@ -1065,21 +1065,51 @@ class CloudViewModel @Inject constructor(
     }
 
     fun buildDriveSignInIntent(): Intent = driveProvider.buildSignInIntent()
-    fun buildSpotifyAuthIntent(): Intent {
+
+    // I2 sticky-sign-in fixes. See buildSpotifyAuthIntent.
+    @Volatile private var lastSpotifyAuthLaunchMs: Long = 0L
+    private var spotifyAuthTimerJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Returns the Spotify AppAuth intent to launch, or NULL when a launch is
+     * already in flight and the tap is a rapid repeat (I2 sticky-fix a): the
+     * ColorOS Custom Tab takes ~1 s to appear, so a user who taps again — thinking
+     * nothing happened — used to launch a SECOND AppAuth flow that CANCELS the
+     * first, and the cancelled one returns "User cancelled flow" → the sign-in
+     * silently aborts. The caller must null-guard: `...()?.let { launcher.launch(it) }`.
+     */
+    fun buildSpotifyAuthIntent(): Intent? {
+        val now = android.os.SystemClock.elapsedRealtime()
+        // (a) De-bounce rapid re-taps while a launch is genuinely in flight.
+        if (com.powermediaplayer.service.PlaybackService.oauthInFlight &&
+            now - lastSpotifyAuthLaunchMs < 4000L
+        ) {
+            com.powermediaplayer.diag.DiagLog.event(
+                "SPOTIFYAUTH",
+                "re-tap IGNORED (flow already launching ${now - lastSpotifyAuthLaunchMs}ms ago) — prevents cancel-storm"
+            )
+            return null
+        }
+        lastSpotifyAuthLaunchMs = now
         // Bug fix (user-reported "Spotify sign-in resumes playback"):
         // mark OAuth in-flight so PlaybackService.handleAudioFocusChange
         // ignores the loss-then-gain pair caused by the browser Custom
         // Tab stealing audio focus. Cleared in handleSpotifyResult or
-        // by the 60s safety timer below.
+        // by the safety timer below.
         com.powermediaplayer.service.PlaybackService.oauthInFlight = true
         com.powermediaplayer.diag.DiagLog.event(
-            "SPOTIFYAUTH", "UI tap → launch auth intent, oauthInFlight=true (60s safety armed)"
+            "SPOTIFYAUTH", "UI tap → launch auth intent, oauthInFlight=true (5min safety armed)"
         )
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(60_000)
+        // (b) The safety timer that clears oauthInFlight was 60 s — far shorter than
+        // a real login (email + password + Agree can take minutes), so it tore down
+        // the in-flight state mid-sign-in. Extend to 5 min and cancel any prior
+        // timer so successive launches don't stack overlapping timers.
+        spotifyAuthTimerJob?.cancel()
+        spotifyAuthTimerJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(300_000)
             if (com.powermediaplayer.service.PlaybackService.oauthInFlight) {
                 com.powermediaplayer.diag.DiagLog.event(
-                    "SPOTIFYAUTH", "60s SAFETY TIMER fired — result never returned (stuck sign-in)"
+                    "SPOTIFYAUTH", "5min SAFETY TIMER fired — result never returned (dropped callback)"
                 )
             }
             com.powermediaplayer.service.PlaybackService.oauthInFlight = false
@@ -1210,7 +1240,10 @@ class CloudViewModel @Inject constructor(
         )
         // Clear the OAuth-in-flight flag immediately on result so
         // AudioFocus handling resumes its normal pause/duck/ignore
-        // policy starting from the next focus event.
+        // policy starting from the next focus event. Also cancel the safety
+        // timer (I2) so a stale 5-min timer can't clear a FRESH re-launch's
+        // in-flight state later.
+        spotifyAuthTimerJob?.cancel()
         com.powermediaplayer.service.PlaybackService.oauthInFlight = false
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }

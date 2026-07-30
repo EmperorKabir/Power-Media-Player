@@ -468,7 +468,8 @@ fun CloudBrowserScreen(
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
-                else spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent())
+                // I2: null = a rapid re-tap while a launch is already in flight — ignore it.
+                else viewModel.buildSpotifyAuthIntent()?.let { spotifyLauncher.launch(it) }
             }
         )
 
@@ -622,7 +623,7 @@ fun CloudBrowserScreen(
                             description = "Browse your saved tracks, albums, and playlists. " +
                                 "Full-track playback requires Spotify Premium (preview clips only on free tier).",
                             loggedIn = uiState.spotifyLoggedIn,
-                            onConnect = { spotifyLauncher.launch(viewModel.buildSpotifyAuthIntent()) },
+                            onConnect = { viewModel.buildSpotifyAuthIntent()?.let { spotifyLauncher.launch(it) } },
                             onBrowse = { viewModel.browseSpotify() },
                             onSignOut = { viewModel.signOutSpotify() }
                         )
