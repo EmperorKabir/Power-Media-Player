@@ -988,6 +988,22 @@ class PlaybackConnection @Inject constructor(
         }
     }
 
+    /** I5a — the on-disk cover the cast relay serves, so the PHONE can render it
+     *  during cast instead of the receiver-only http relay url. Checks the relay's
+     *  castcover file (written from embedded bytes, keyed by mediaId.hashCode) then
+     *  the durable ArtworkCache (keyed by media uri / mediaId). Null if none found. */
+    private fun castCoverFileUri(mediaId: String?, mediaUri: String?): android.net.Uri? {
+        if (mediaId.isNullOrEmpty()) return null
+        val castCover = java.io.File(
+            java.io.File(context.filesDir, "castcover"), "${mediaId.hashCode()}.jpg"
+        )
+        if (castCover.exists() && castCover.length() > 0L) {
+            return android.net.Uri.fromFile(castCover)
+        }
+        return listOfNotNull(mediaUri?.takeIf { it.isNotEmpty() }, mediaId)
+            .firstNotNullOfOrNull { com.powermediaplayer.util.ArtworkCache.uriFor(context, it) }
+    }
+
     private fun pollPositionOnce() {
         controller?.let { c ->
             val currentState = _playerState.value
@@ -1177,6 +1193,19 @@ class PlaybackConnection @Inject constructor(
         val itemArtBytes = itemMetadata?.artworkData
             ?.takeUnless { it.contentEquals(lastEmbeddedArt) && embeddedArtOwnerId != rawId }
         val resolvedArtBytes = overArtworkBytes ?: ownedMetaBytes ?: itemArtBytes
+        // I5a cast-art fix: during cast, a Drive/remote item's artworkUri is the
+        // http RELAY url — fetchable by the receiver, NOT by the phone (cleartext
+        // blocked + it's the cast server). With no embedded bytes either, the phone
+        // cover went BLANK. content:// files are rescued UI-side (LocalTrackArt);
+        // this covers Drive/https items by substituting the SAME cover the relay
+        // serves, which the app already wrote to disk (castcover/<id>.jpg from
+        // embedded bytes, or the durable ArtworkCache keyed by media uri/id).
+        val resolvedArtUriCastSafe =
+            if (com.powermediaplayer.service.PlaybackService.castActiveFlow.value &&
+                resolvedArtBytes == null && resolvedArtUri?.scheme == "http"
+            ) {
+                castCoverFileUri(rawId, uriString) ?: resolvedArtUri
+            } else resolvedArtUri
 
         _playerState.value = PlayerState(
             isPlaying = c.isPlaying,
@@ -1215,7 +1244,7 @@ class PlaybackConnection @Inject constructor(
                 ?: ownMeta?.albumTitle?.toString()?.takeIf { it.isNotBlank() }
                 ?: metadata.albumTitle?.toString()?.takeIf { it.isNotBlank() && embeddedArtOwnerId == rawId }
                 ?: "",
-            artworkUri = resolvedArtUri,
+            artworkUri = resolvedArtUriCastSafe,
             artworkBytes = resolvedArtBytes,
             playbackSpeed = c.playbackParameters.speed,
             currentMediaItemIndex = c.currentMediaItemIndex,
@@ -1235,7 +1264,7 @@ class PlaybackConnection @Inject constructor(
             videoWidth = preservedVw,
             videoHeight = preservedVh,
             isPartOfPlaylist = c.mediaItemCount > 1,
-            hasCoverArt = resolvedArtUri != null || resolvedArtBytes != null,
+            hasCoverArt = resolvedArtUriCastSafe != null || resolvedArtBytes != null,
             isVideoContent = hasVideoTrack,
             isSeekable = c.isCurrentMediaItemSeekable,
             audioFormatLabel = cachedAudioFormatLabel,
