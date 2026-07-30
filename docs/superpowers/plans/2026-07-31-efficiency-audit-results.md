@@ -12,8 +12,21 @@ correctness fix, sound IO/Main dispatcher hygiene, reference-shared cachedQueue 
   (~:2781). Since I8 made that flag authoritative for the whole cast UI, leaving it stuck-true after a failed
   cast attempt (no Wi-Fi LAN) rendered "casting" while actually local. One line, error-path, definitionally correct.
 
-## FLAGGED — design-level, deliberately NOT changed (delicate paths; owner decision)
-- **F1 (IMPORTANT) — podcast autoplay entangled with music autoplay via a GLOBAL flag.**
+## F1 + F2 — FIXED (2026-07-31, vc80, after full investigation of the delicate paths)
+- **F1 FIXED + device-verified.** Podcast items now carry an `is_podcast` extra (via the shared
+  `PodcastPlayback.buildEpisodeItem`, mirroring `is_video_hint`). `PlaybackService` sets
+  `pauseAtEndOfMediaItems` PER-ITEM in a new `applyPauseAtEndForCurrentItem()` — called from
+  `onMediaItemTransition` and the music-pref collector: podcast → always `false`, else → `!musicAutoplayNext`.
+  Device log proof: with Music-autoplay OFF, `isPodcast=true → pauseAtEnd=false` (podcast advances) while
+  `isPodcast=false → pauseAtEnd=true` (music stops). The two settings are decoupled.
+- **F2 FIXED (structural).** Replaced the boolean + `viewModelScope` coroutine timer with a monotonic DEADLINE
+  on `PlaybackService.Companion` (`oauthInFlightUntilMs` + `oauthInFlight()`/`armOauthInFlight()`/`clearOauthInFlight()`).
+  A deadline self-expires with nothing to fire, so a destroyed ViewModel can no longer strand the flag true.
+  Covers BOTH arming paths (`buildSpotifyAuthIntent` 5-min + `wakeSpotifyForDeviceDiscovery` 20s). Compile +
+  unit-tests green; the original strand (dropped callback + VM death) is no longer mechanically possible.
+
+## Original flag detail (kept for context)
+- **F1 (was IMPORTANT) — podcast autoplay entangled with music autoplay via a GLOBAL flag.**
   I4a's collector does `player.pauseAtEndOfMediaItems = !musicAutoplayNext`. That flag is a single global
   ExoPlayer property. Podcast queues rely on natural advance (flag=false). So turning **Music-autoplay OFF**
   sets it true globally → a **podcast** multi-episode queue pauses after episode 1 even though Podcast-autoplay

@@ -1068,7 +1068,6 @@ class CloudViewModel @Inject constructor(
 
     // I2 sticky-sign-in fixes. See buildSpotifyAuthIntent.
     @Volatile private var lastSpotifyAuthLaunchMs: Long = 0L
-    private var spotifyAuthTimerJob: kotlinx.coroutines.Job? = null
 
     /**
      * Returns the Spotify AppAuth intent to launch, or NULL when a launch is
@@ -1081,7 +1080,7 @@ class CloudViewModel @Inject constructor(
     fun buildSpotifyAuthIntent(): Intent? {
         val now = android.os.SystemClock.elapsedRealtime()
         // (a) De-bounce rapid re-taps while a launch is genuinely in flight.
-        if (com.powermediaplayer.service.PlaybackService.oauthInFlight &&
+        if (com.powermediaplayer.service.PlaybackService.oauthInFlight() &&
             now - lastSpotifyAuthLaunchMs < 4000L
         ) {
             com.powermediaplayer.diag.DiagLog.event(
@@ -1091,29 +1090,18 @@ class CloudViewModel @Inject constructor(
             return null
         }
         lastSpotifyAuthLaunchMs = now
-        // Bug fix (user-reported "Spotify sign-in resumes playback"):
-        // mark OAuth in-flight so PlaybackService.handleAudioFocusChange
-        // ignores the loss-then-gain pair caused by the browser Custom
-        // Tab stealing audio focus. Cleared in handleSpotifyResult or
-        // by the safety timer below.
-        com.powermediaplayer.service.PlaybackService.oauthInFlight = true
+        // Bug fix (user-reported "Spotify sign-in resumes playback"): mark OAuth
+        // in-flight so PlaybackService.handleAudioFocusChange ignores the loss-then-
+        // gain pair caused by the browser Custom Tab stealing audio focus.
+        // Audit F2 — arm a 5-min DEADLINE (a real login can exceed 60 s). Deadline-
+        // based, so it self-expires even if this ViewModel is destroyed before a
+        // dropped result callback (the old viewModelScope timer could strand the
+        // flag true → permanently suppress auto-resume). Cleared early in
+        // handleSpotifyResult on the actual result.
+        com.powermediaplayer.service.PlaybackService.armOauthInFlight(300_000L)
         com.powermediaplayer.diag.DiagLog.event(
-            "SPOTIFYAUTH", "UI tap → launch auth intent, oauthInFlight=true (5min safety armed)"
+            "SPOTIFYAUTH", "UI tap → launch auth intent, oauthInFlight armed (5min deadline)"
         )
-        // (b) The safety timer that clears oauthInFlight was 60 s — far shorter than
-        // a real login (email + password + Agree can take minutes), so it tore down
-        // the in-flight state mid-sign-in. Extend to 5 min and cancel any prior
-        // timer so successive launches don't stack overlapping timers.
-        spotifyAuthTimerJob?.cancel()
-        spotifyAuthTimerJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(300_000)
-            if (com.powermediaplayer.service.PlaybackService.oauthInFlight) {
-                com.powermediaplayer.diag.DiagLog.event(
-                    "SPOTIFYAUTH", "5min SAFETY TIMER fired — result never returned (dropped callback)"
-                )
-            }
-            com.powermediaplayer.service.PlaybackService.oauthInFlight = false
-        }
         return spotifyProvider.buildAuthIntent()
     }
     fun buildDriveOAuthSignInIntent(): Intent = driveOAuthProvider.buildSignInIntent()
@@ -1238,13 +1226,10 @@ class CloudViewModel @Inject constructor(
         com.powermediaplayer.diag.DiagLog.event(
             "SPOTIFYAUTH", "UI result callback fired data=${data != null} (launcher returned)"
         )
-        // Clear the OAuth-in-flight flag immediately on result so
-        // AudioFocus handling resumes its normal pause/duck/ignore
-        // policy starting from the next focus event. Also cancel the safety
-        // timer (I2) so a stale 5-min timer can't clear a FRESH re-launch's
-        // in-flight state later.
-        spotifyAuthTimerJob?.cancel()
-        com.powermediaplayer.service.PlaybackService.oauthInFlight = false
+        // Clear the OAuth-in-flight deadline immediately on result so AudioFocus
+        // handling resumes its normal pause/duck/ignore policy from the next focus
+        // event (F2: deadline-based, so no timer to cancel).
+        com.powermediaplayer.service.PlaybackService.clearOauthInFlight()
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val result = spotifyProvider.handleAuthResponse(data)
@@ -1381,9 +1366,10 @@ class CloudViewModel @Inject constructor(
      * the user's Connect network, after which a re-fetch picks them up.
      */
     fun wakeSpotifyForDeviceDiscovery() {
-        // Suppress audio focus pause/gain across the bounce so the
-        // current playback doesn't auto-resume on return.
-        com.powermediaplayer.service.PlaybackService.oauthInFlight = true
+        // Suppress audio focus pause/gain across the bounce so the current playback
+        // doesn't auto-resume on return. F2: arm a deadline covering the ~16 s poll
+        // loop below (self-expires if this ViewModel dies mid-bounce).
+        com.powermediaplayer.service.PlaybackService.armOauthInFlight(20_000L)
         spotifyProvider.wakeSpotifyAndReturn()
         // Poll /me/player/devices every 2s for 16s after the bounce.
         // Spotify's Web API takes seconds-to-many-seconds to enumerate
@@ -1399,7 +1385,7 @@ class CloudViewModel @Inject constructor(
                     _uiState.update { it.copy(spotifyConnectDevices = devices) }
                 }
             }
-            com.powermediaplayer.service.PlaybackService.oauthInFlight = false
+            com.powermediaplayer.service.PlaybackService.clearOauthInFlight()
         }
     }
 

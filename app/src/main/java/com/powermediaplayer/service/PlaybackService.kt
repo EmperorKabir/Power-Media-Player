@@ -233,6 +233,10 @@ class PlaybackService : MediaSessionService() {
     @Volatile private var castVideoAudioOffsetMsFlag: Int = 0
     // Cast start lead-in (I5b) — see CAST_START_DELAY_MS. 0 = unchanged behaviour.
     @Volatile private var castStartDelayMsFlag: Int = 0
+    // I4a — cached "Auto-play next track" (music) pref; applied per-item by
+    // applyPauseAtEndForCurrentItem() so podcasts (is_podcast extra) are never
+    // pause-at-end'd by the MUSIC toggle (audit F1). Default ON.
+    @Volatile private var musicAutoplayNextFlag: Boolean = true
     // Audio-only cast of a video: the extracted temp .m4a we cast (small →
     // fast receiver buffer) and the extraction job, so we can cancel + delete
     // on cast-end.
@@ -499,11 +503,26 @@ class PlaybackService : MediaSessionService() {
          * Spotify OAuth Custom Tab is in the foreground so the
          * AudioFocus loss-then-gain pair caused by the browser stealing
          * focus doesn't auto-pause and then auto-resume our player.
-         * CloudViewModel toggles this when launching / completing the
-         * OAuth intent. A 60s safety timer in PlaybackService also
-         * clears it in case the user cancels OAuth without returning.
+         * CloudViewModel arms this when launching the OAuth intent and clears
+         * it on the result callback.
+         *
+         * Audit F2 — DEADLINE-based (not a coroutine timer) so it SELF-EXPIRES.
+         * The prior implementation cleared it via a `viewModelScope.launch { delay }`
+         * timer; if the CloudViewModel was destroyed (user leaves the Cloud screen)
+         * before a *dropped* result callback, that timer was cancelled and the flag
+         * stranded `true` for the rest of the process — which permanently suppressed
+         * playback auto-resume (handleAudioFocusChange GAIN also clears
+         * pausedDueToFocus while the flag is up). A monotonic deadline needs nothing
+         * to fire: it simply lapses. Read via [oauthInFlight]; set via [armOauthInFlight]
+         * / [clearOauthInFlight].
          */
-        @Volatile var oauthInFlight: Boolean = false
+        @Volatile var oauthInFlightUntilMs: Long = 0L
+        fun oauthInFlight(): Boolean =
+            android.os.SystemClock.elapsedRealtime() < oauthInFlightUntilMs
+        fun armOauthInFlight(windowMs: Long) {
+            oauthInFlightUntilMs = android.os.SystemClock.elapsedRealtime() + windowMs
+        }
+        fun clearOauthInFlight() { oauthInFlightUntilMs = 0L }
 
         /**
          * D10 fix — pushed by the Player.Listener.onMediaItemTransition
@@ -1339,11 +1358,13 @@ class PlaybackService : MediaSessionService() {
         //      player does).
         player!!.setSeekParameters(SeekParameters.PREVIOUS_SYNC)
         // I4a — "Autoplay next track": when OFF, pause at the end of each queue item
-        // instead of auto-advancing to the next (local music / album / folder queues).
-        // Default ON. Read live so toggling in Settings applies without a restart.
+        // instead of auto-advancing (local music / album / folder queues). Default ON.
+        // Read live so toggling in Settings/player applies without a restart. Audit F1:
+        // apply PER-ITEM (podcasts are exempt) rather than a blanket global write.
         serviceScope.launch {
             settingsDataStore.musicAutoplayNext.collect { on ->
-                player?.pauseAtEndOfMediaItems = !on
+                musicAutoplayNextFlag = on
+                applyPauseAtEndForCurrentItem()
             }
         }
         // Frame-rate strategy left at default. Forcing OFF on a Z Fold
@@ -1517,6 +1538,9 @@ class PlaybackService : MediaSessionService() {
                 com.powermediaplayer.diag.DiagLog.player(
                     "mediaItemTransition reason=$rname id=${com.powermediaplayer.diag.DiagLog.hash(mediaItem?.mediaId)}"
                 )
+                // Audit F1 — re-evaluate pause-at-end for the new current item so a
+                // podcast queue is never pause-at-end'd by the MUSIC autoplay pref.
+                applyPauseAtEndForCurrentItem()
                 // Webhooks: new track started. PLAYLIST_CHANGED fires on
                 // both fresh tap-to-play AND on cold-start adopt. AUTO
                 // fires on advance to next item in queue. Both count as
@@ -2302,6 +2326,27 @@ class PlaybackService : MediaSessionService() {
             (player?.videoSize?.let { it.width > 0 && it.height > 0 } == true)
     }.getOrDefault(false)
 
+    /**
+     * Audit F1 — set `pauseAtEndOfMediaItems` for the CURRENT item by content kind:
+     * a PODCAST queue must never pause-at-end (its autoplay is expressed via the
+     * queue slice + podcastAutoplayNext, relying on natural advance), so the MUSIC
+     * "Auto-play next track" pref must not entangle it. Music / album / folder /
+     * audiobook honour the pref. Read from the RAW current item's extras (Media3
+     * merge strips extras from the merged player metadata). Called on every item
+     * transition and whenever the music pref changes. No-op if no local player.
+     */
+    private fun applyPauseAtEndForCurrentItem() {
+        val p = player ?: return
+        val isPodcast = runCatching {
+            p.currentMediaItem?.mediaMetadata?.extras?.getBoolean("is_podcast", false)
+        }.getOrNull() ?: false
+        val pause = if (isPodcast) false else !musicAutoplayNextFlag
+        p.pauseAtEndOfMediaItems = pause
+        com.powermediaplayer.diag.DiagLog.player(
+            "pauseAtEnd applied isPodcast=$isPodcast musicAutoplay=$musicAutoplayNextFlag → pauseAtEnd=$pause"
+        )
+    }
+
     private fun handleAudioFocusChange(change: Int) {
         val p = player ?: return
         // Cast = REMOTE output: a phone interruption (call/notification) is local
@@ -2334,7 +2379,7 @@ class PlaybackService : MediaSessionService() {
                 // Bound the OAuth guard: only suppress the auto-RESUME during an
                 // OAuth bounce (so returning from the Spotify Custom Tab doesn't
                 // restart local audio). A loss-PAUSE is never suppressed.
-                if (Companion.oauthInFlight) {
+                if (Companion.oauthInFlight()) {
                     pausedDueToFocus = false; duckedDueToFocus = false
                     com.powermediaplayer.util.Diag.i("PMP_DIAG", "AudioFocus GAIN auto-resume suppressed (OAuth in flight)")
                     return

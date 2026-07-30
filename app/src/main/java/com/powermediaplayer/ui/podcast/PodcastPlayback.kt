@@ -72,6 +72,13 @@ object PodcastPlayback {
                     .setTitle(episode.title)
                     .setArtist(showTitle ?: "")
                     .apply { if (!artUri.isNullOrBlank()) setArtworkUri(android.net.Uri.parse(artUri)) }
+                    // Audit F1 — mark this item a podcast so the service keeps
+                    // pauseAtEndOfMediaItems=false for podcast queues regardless of
+                    // the MUSIC "Auto-play next track" pref (podcast autoplay is
+                    // expressed via its own queue-slice + podcastAutoplayNext, and
+                    // relies on natural advance). Read from the RAW item's extras on
+                    // the service side (Media3 merge strips extras from the merged copy).
+                    .setExtras(android.os.Bundle().apply { putBoolean("is_podcast", true) })
                     .build()
             )
             .build()
