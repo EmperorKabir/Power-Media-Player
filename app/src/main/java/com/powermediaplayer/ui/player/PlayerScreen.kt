@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.ui.res.painterResource
 import com.powermediaplayer.R
@@ -93,13 +94,39 @@ val LocalOpenPopupCount = compositionLocalOf<androidx.compose.runtime.MutableInt
  *  via the per-track fetcher. Non-local sources (https enrichment/Spotify art)
  *  are untouched. */
 private fun castSafeArtModel(uiState: PlayerUiState, artworkBytes: ByteArray?): Any? {
-    val uri = uiState.artworkUri ?: return null
-    return if (artworkBytes == null && uri.scheme == "http" &&
+    val uri = uiState.artworkUri
+    val useLocal = uri != null && artworkBytes == null && uri.scheme == "http" &&
         uiState.currentMediaUri.startsWith("content://")
-    ) {
+    // I5a — cast-art forensics. Logs ONCE per state-change while casting so a
+    // device test shows exactly which branch feeds the phone-side cover and
+    // whether it is phone-fetchable (an http relay URI is only reachable by the
+    // RECEIVER — if we hand it to the phone the cover goes blank).
+    if (uiState.isCasting) {
+        val sig = "u=${uri != null}|s=${uri?.scheme}|b=${artworkBytes != null}|l=$useLocal"
+        if (sig != lastCastArtSig) {
+            lastCastArtSig = sig
+            com.powermediaplayer.diag.DiagLog.event(
+                "CASTART",
+                "artUri=${uri != null} scheme=${uri?.scheme} bytes=${artworkBytes != null} " +
+                    "mediaScheme=${uiState.currentMediaUri.substringBefore(':')} → " +
+                    when {
+                        uri == null && artworkBytes == null -> "NONE (blank cover on phone)"
+                        artworkBytes != null -> "bytes (renders on phone)"
+                        useLocal -> "LocalTrackArt (read from local file)"
+                        uri?.scheme == "http" -> "http RELAY uri — phone cannot fetch → BLANK"
+                        else -> "uri ${uri?.scheme} (renders on phone)"
+                    }
+            )
+        }
+    }
+    if (uri == null) return null
+    return if (useLocal) {
         com.powermediaplayer.util.LocalTrackArt(uiState.currentMediaUri, null)
     } else uri
 }
+// Throttle key for the CASTART diag above — only re-log when the art situation
+// actually changes, so composition churn during cast doesn't flood the log.
+private var lastCastArtSig: String? = null
 
 @Composable
 private fun SpotifyAlbumTracksButton(viewModel: PlayerViewModel) {
@@ -289,6 +316,17 @@ fun PlayerScreen(
                 toastCtx, reason, android.widget.Toast.LENGTH_SHORT
             ).show()
             viewModel.clearCrossfadeAutoRevertReason()
+        }
+    }
+
+    // Mini popup for the shuffle / auto-play bottom-bar toggles (I4b/I4c).
+    // applicationContext: the collector outlives config changes.
+    val transientToastCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        viewModel.transientToast.collect {
+            android.widget.Toast.makeText(
+                transientToastCtx, it, android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -634,9 +672,9 @@ fun PlayerScreen(
             chapters = uiState.chapters,
             currentChapterIndex = uiState.currentChapterIndex,
             onChapterSelected = { index -> viewModel.seekToChapter(index) },
-            playlist = emptyList(), // playlist surfaced from LibraryViewModel in future pass
+            playlist = uiState.queue, // I3 — real queue snapshot (was hardcoded emptyList)
             currentTrackIndex = uiState.currentTrackIndex,
-            onTrackSelected = { index -> viewModel.seekToPlaylistPosition(index.toLong()) },
+            onTrackSelected = { index -> viewModel.seekToQueueIndex(index) }, // I3 — per-index seek
             onDismiss = { showChapterPicker = false }
         )
     }
@@ -1302,6 +1340,16 @@ private fun OverlayContent(
                     !uiState.isSpotifyActive,
                 onFadeNow = { viewModel.fadeNow() }
             )
+            // Auto-play next track (teal on / grey off) — before Bluetooth per I4b.
+            // Same preference as Settings › Auto-play next track; shows a mini popup.
+            val autoplayOn by viewModel.musicAutoplayNext.collectAsStateWithLifecycle()
+            IconButton(onClick = { viewModel.toggleMusicAutoplayNext() }, modifier = Modifier.size(48.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.PlaylistPlay,
+                    contentDescription = if (autoplayOn) "Auto-play on" else "Auto-play off",
+                    tint = if (autoplayOn) TealAccent else TextTertiary
+                )
+            }
             BluetoothButton(modifier = Modifier.size(48.dp))
             // Cast button — to the right of Bluetooth so the
             // wireless-output controls are grouped. Hidden when
@@ -1599,6 +1647,15 @@ private fun PlayerScreenExpanded(
                         !uiState.isSpotifyActive,
                     onFadeNow = { viewModel.fadeNow() }
                 )
+                // Auto-play next track (teal on / grey off) — before Bluetooth per I4b.
+                val autoplayOnE by viewModel.musicAutoplayNext.collectAsStateWithLifecycle()
+                IconButton(onClick = { viewModel.toggleMusicAutoplayNext() }, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.PlaylistPlay,
+                        contentDescription = if (autoplayOnE) "Auto-play on" else "Auto-play off",
+                        tint = if (autoplayOnE) TealAccent else TextTertiary
+                    )
+                }
                 BluetoothButton(modifier = Modifier.size(48.dp))
                 if (!uiState.isSpotifyActive) {
                     // Single combined Cast button (see Compact layout

@@ -77,6 +77,23 @@ class PlayerViewModel @Inject constructor(
             false
         )
 
+    /** Auto-play the next track in the queue when the current one ends. Persisted;
+     *  the service applies it to pauseAtEndOfMediaItems. Toggled from Settings AND
+     *  the player bottom-bar button (I4a/I4b). */
+    val musicAutoplayNext: kotlinx.coroutines.flow.StateFlow<Boolean> =
+        settingsDataStore.musicAutoplayNext.stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+            true
+        )
+
+    /** Transient one-line messages surfaced as a mini popup (Toast) — e.g.
+     *  "Shuffle on" / "Auto-play off". Buffered so a toggle before the collector
+     *  subscribes still shows. */
+    private val _transientToast =
+        kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 4)
+    val transientToast: kotlinx.coroutines.flow.SharedFlow<String> = _transientToast
+
     /** S3/S4: player (pill) text colour mode (0 default, 1 custom, 2 dynamic) + custom ARGB. */
     val playerTextColourMode: kotlinx.coroutines.flow.StateFlow<Int> =
         settingsDataStore.playerTextColourMode.stateIn(
@@ -105,7 +122,16 @@ class PlayerViewModel @Inject constructor(
             "PMP_DIAG",
             "VM.toggleShuffle -> $next src=${if (isSpotifyActive) "spotify" else "local"}"
         )
+        _transientToast.tryEmit(if (next) "Shuffle on" else "Shuffle off")
         viewModelScope.launch { settingsDataStore.setShuffleEnabled(next) }
+    }
+
+    /** Flip the auto-play-next preference and surface a mini popup. The service's
+     *  live collector (pauseAtEndOfMediaItems) picks up the DataStore change. */
+    fun toggleMusicAutoplayNext() {
+        val next = !musicAutoplayNext.value
+        _transientToast.tryEmit(if (next) "Auto-play on" else "Auto-play off")
+        viewModelScope.launch { settingsDataStore.setMusicAutoplayNext(next) }
     }
 
     init {
@@ -900,6 +926,8 @@ class PlayerViewModel @Inject constructor(
         else playbackConnection.previousFile()
     }
     fun seekToChapter(index: Int) = playbackConnection.seekToChapterIndex(index)
+    /** I3 — jump to a queue item by index (the now-playing Tracks picker). */
+    fun seekToQueueIndex(index: Int) = playbackConnection.seekToQueueIndex(index)
 
     fun setPlaybackSpeed(speed: Float) {
         // UI → audible latency for speed/pitch is dominated by two
@@ -1707,6 +1735,7 @@ class PlayerViewModel @Inject constructor(
             trackIndexDisplay = if (playerState.mediaItemCount > 1) {
                 "${playerState.currentMediaItemIndex + 1} / ${playerState.mediaItemCount}"
             } else "",
+            queue = playerState.queue,
             chapters = norm.chapters,
             currentChapterIndex = playerState.currentChapterIndex,
             hasChapters = playerState.hasChapters,

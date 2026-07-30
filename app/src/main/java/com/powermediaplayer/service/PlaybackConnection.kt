@@ -62,6 +62,10 @@ data class PlayerState(
     val chapters: List<ChapterInfo> = emptyList(),
     val currentChapterIndex: Int = -1,
     val hasChapters: Boolean = false,
+    // I3 — snapshot of the current play queue (title/artist/duration per item) so the
+    // now-playing "Tracks" picker can list a multi-track queue and jump to any item.
+    // Rebuilt only on timeline change (recomputeTimelineCache), not every tick.
+    val queue: List<QueueItemInfo> = emptyList(),
     // Long-form description extracted from ID3/Vorbis/MP4 metadata at runtime
     val description: String = "",
     // §C18 — embedded ReplayGain track gain (dB). NaN when this file
@@ -112,6 +116,13 @@ data class ChapterInfo(
     val index: Int
 )
 
+/** I3 — one queue item for the now-playing "Tracks" picker. */
+data class QueueItemInfo(
+    val title: String,
+    val artist: String,
+    val durationMs: Long
+)
+
 /**
  * Session-level metadata override for cases where the player's own metadata
  * is missing/incomplete (e.g. cloud streams whose tags can only be read
@@ -141,6 +152,11 @@ class PlaybackConnection @Inject constructor(
 ) {
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
+    /** I3b — a play request that arrived BEFORE the MediaController finished binding
+     *  (e.g. tapping a Library track immediately after a cold launch). Without this the
+     *  `controller?.let{}` guard silently dropped it and the user landed on an empty player.
+     *  Applied once in the connect callback. */
+    private var pendingSetMediaItems: (() -> Unit)? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var positionPollingJob: Job? = null
     private var metadataLogSeq: Int = 0
@@ -232,6 +248,9 @@ class PlaybackConnection @Inject constructor(
     private var cachedAudioFormatLabel: String = ""
     @Volatile
     private var cachedTotalPlaylistDurationMs: Long = 0L
+    /** I3 — queue snapshot rebuilt on every onTimelineChanged (not per tick). */
+    @Volatile
+    private var cachedQueue: List<QueueItemInfo> = emptyList()
     /** Cumulative window-offset table built on every onTimelineChanged.
      *  cachedWindowOffsetsMs[i] = sum of durationMs of windows 0..i-1.
      *  cachedWindowOffsetsMs[length-1] = total playlist duration. */
@@ -300,6 +319,12 @@ class PlaybackConnection @Inject constructor(
                 setupPlayerListener()
                 startPositionPolling()
                 updatePlayerState()
+                // I3b — flush a play request that raced ahead of the bind.
+                pendingSetMediaItems?.let { pending ->
+                    pendingSetMediaItems = null
+                    com.powermediaplayer.diag.DiagLog.bg("setMediaItems: applying deferred request on connect")
+                    pending()
+                }
                 com.powermediaplayer.diag.DiagLog.lifecycle(
                     "PlaybackConnection.connect() SUCCESS controller=${controller != null}"
                 )
@@ -437,10 +462,20 @@ class PlaybackConnection @Inject constructor(
         localChapters = null
         localMetadata = null
         videoModeHint = false
-        controller?.let { c ->
+        val apply: (MediaController) -> Unit = { c ->
             c.setMediaItems(items, startIndex, startPositionMs)
             c.prepare()
             if (playWhenReady) c.play() else c.pause()
+        }
+        val c = controller
+        if (c != null) {
+            pendingSetMediaItems = null
+            apply(c)
+        } else {
+            // I3b — controller not bound yet: don't drop the tap. Queue it (latest wins) and
+            // apply the instant the controller connects, so the play isn't a silent no-op.
+            com.powermediaplayer.diag.DiagLog.bg("setMediaItems deferred: controller not bound (count=${items.size})")
+            pendingSetMediaItems = { controller?.let(apply) }
         }
     }
 
@@ -1171,6 +1206,7 @@ class PlaybackConnection @Inject constructor(
             chapters = chapters,
             currentChapterIndex = currentChapter,
             hasChapters = chapters.isNotEmpty(),
+            queue = cachedQueue,
             description = preservedDescription,
             playerError = preservedError,
             cloudFetchInProgress = preservedFetch,
@@ -1319,6 +1355,26 @@ class PlaybackConnection @Inject constructor(
         offsets[n] = total
         cachedWindowOffsetsMs = offsets
         cachedTotalPlaylistDurationMs = total
+        // I3 — snapshot the queue (only when it's a real multi-item queue) for the Tracks picker.
+        cachedQueue = if (n > 1) {
+            val w = Timeline.Window()
+            (0 until n).map { i ->
+                val mm = runCatching { controller.getMediaItemAt(i).mediaMetadata }.getOrNull()
+                timeline.getWindow(i, w)
+                QueueItemInfo(
+                    title = mm?.title?.toString()?.takeIf { it.isNotBlank() } ?: "Track ${i + 1}",
+                    artist = mm?.artist?.toString().orEmpty(),
+                    durationMs = if (w.durationMs > 0) w.durationMs else 0L
+                )
+            }
+        } else emptyList()
+    }
+
+    /** I3 — jump to a specific item in the play queue (used by the Tracks picker). */
+    fun seekToQueueIndex(index: Int) {
+        controller?.let { c ->
+            if (index in 0 until c.mediaItemCount) c.seekTo(index, 0L)
+        }
     }
 
     /**

@@ -125,7 +125,12 @@ class LibraryViewModel @Inject constructor(
     private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     private val driveOfflineResolver: com.powermediaplayer.cloud.DriveOfflineResolver,
     private val driveTagEnricher: com.powermediaplayer.cloud.DriveTagEnricher,
-    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    // I6 — surface downloaded PODCAST episodes in the Library (mirrors the
+    // downloaded-Drive-books section). Reuses PodcastPlayback for byte-identical
+    // MediaItem build so a Library-launched episode shares Recents + resume with
+    // the same episode played from the Podcasts tab.
+    private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao
 ) : ViewModel() {
 
     /** §C25 / A9 — write a per-file tag override. */
@@ -379,6 +384,10 @@ class LibraryViewModel @Inject constructor(
     /** §F — first-run deep-scan prompt should show? */
     val firstRunSeen: kotlinx.coroutines.flow.StateFlow<Boolean> = settingsDataStore.firstRunSeen
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, true)
+    /** I1 — the deep-scan setting itself. The prompt must NOT show when deep scan is already
+     *  enabled (e.g. the user turned it on in Settings first) even if firstRunSeen is still false. */
+    val useDeepScan: kotlinx.coroutines.flow.StateFlow<Boolean> = settingsDataStore.useDeepScan
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, false)
     /** §F — user picked Yes to deep-scan: enable + scan + mark seen. */
     fun acceptFirstRunDeepScan() {
         viewModelScope.launch {
@@ -569,7 +578,12 @@ class LibraryViewModel @Inject constructor(
                 playbackConnection.setVideoModeHint(files.getOrNull(idx)?.isVideo == true)
                 files.getOrNull(idx)?.let { recordLocalPlay(it) }
             } catch (t: Throwable) {
+                // I3b — was swallowed with only a debug log, so a failed build looked like
+                // "tapping did nothing". Surface it to the user.
                 com.powermediaplayer.util.Diag.e("PowerMediaPlayer", "playFiles failed", t)
+                _downloadedPlayError.tryEmit(
+                    "Couldn't play ${files.getOrNull(startIndex)?.title ?: "this track"}"
+                )
             } finally {
                 playbackConnection.setCloudFetchInProgress(false)
             }
@@ -730,6 +744,102 @@ class LibraryViewModel @Inject constructor(
                     )
                 )
             }
+        }
+    }
+
+    // ── I6 — downloaded PODCAST episodes as Library rows ──────────────────────
+    /** [title] = episode title; [showTitle] = the subscription's name (subtext +
+     *  player artist); [artworkUrl] = the show's cover (episodes carry none). */
+    data class DownloadedEpisode(
+        val guid: String,
+        val title: String,
+        val showTitle: String,
+        val artworkUrl: String?,
+        val audioUrl: String,
+        val bytes: Long,
+        val durationS: Long
+    )
+
+    /**
+     * I6 — downloaded episodes surfaced in the Library, joined with their show
+     * (episode rows carry no artwork/show name of their own). Newest download
+     * first, matching PodcastDao.observeDownloaded's order.
+     */
+    val downloadedEpisodes: StateFlow<List<DownloadedEpisode>> =
+        kotlinx.coroutines.flow.combine(
+            podcastDao.observeDownloaded(),
+            podcastDao.observeShows()
+        ) { eps, shows ->
+            val showByFeed = shows.associateBy { it.feedUrl }
+            eps.map { e ->
+                val show = showByFeed[e.feedUrl]
+                DownloadedEpisode(
+                    guid = e.guid,
+                    title = e.title,
+                    showTitle = show?.title ?: "Podcast",
+                    artworkUrl = show?.artworkUrl,
+                    audioUrl = e.audioUrl,
+                    bytes = e.localBytes,
+                    durationS = e.durationS
+                )
+            }
+        }
+            .flowOn(Dispatchers.IO)
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * I6 — play a downloaded episode from the Library. Mirrors
+     * PodcastsViewModel.playEpisode EXACTLY (shared PodcastPlayback builder,
+     * same queue-slice auto-advance, same Recents record + setPlayed) so a
+     * Library launch is indistinguishable from a Podcasts-tab launch (one
+     * Recents row, one resume position).
+     */
+    fun playDownloadedEpisode(ep: DownloadedEpisode) {
+        recordSearchIfActive()
+        stopSpotifyMirrorIfActive()
+        com.powermediaplayer.playback.ResumeGate.end(com.powermediaplayer.playback.ResumeGate.begin())
+        viewModelScope.launch(Dispatchers.IO) {
+            val episode = podcastDao.getEpisode(ep.guid) ?: run {
+                _downloadedPlayError.tryEmit("This download is no longer available: ${ep.title}")
+                return@launch
+            }
+            val show = podcastDao.getShow(episode.feedUrl)
+            val artUri = show?.artworkUrl
+            val autoNext = runCatching {
+                settingsDataStore.podcastAutoplayNext.first()
+            }.getOrDefault(true)
+            val items = if (autoNext) {
+                val ordered = runCatching {
+                    podcastDao.episodesForFeedOrdered(episode.feedUrl)
+                }.getOrDefault(emptyList())
+                val slice = com.powermediaplayer.ui.podcast.episodeQueueSlice(ordered, episode.guid, episode)
+                slice.map {
+                    com.powermediaplayer.ui.podcast.PodcastPlayback
+                        .buildEpisodeItem(context, podcastDao, it, show?.title, artUri)
+                }
+            } else {
+                listOf(
+                    com.powermediaplayer.ui.podcast.PodcastPlayback
+                        .buildEpisodeItem(context, podcastDao, episode, show?.title, artUri)
+                )
+            }
+            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(items, 0) }
+            runCatching {
+                lastPlayedRepo.recordPlay(
+                    com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
+                        mediaUri = episode.audioUrl,
+                        title = episode.title,
+                        subtitle = show?.title ?: "Podcast",
+                        artworkUri = artUri,
+                        source = "LOCAL",
+                        mediaKindOrdinal = 0,
+                        lastPositionMs = 0L,
+                        durationMs = episode.durationS * 1000L,
+                        lastPlayedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+            podcastDao.setPlayed(episode.guid, true)
         }
     }
 

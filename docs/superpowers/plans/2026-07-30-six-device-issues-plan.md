@@ -22,20 +22,31 @@
 
 ## Checklist (tick only with evidence)
 
+Status legend: `[ ]` not started · `[~]` code complete + compiles/tests green, device-verify pending · `[x]` device-verified.
+
 | ID | Item | Phase | Box |
 |----|------|-------|-----|
-| I1 | Deep-scan prompt shows even when already enabled in Settings | M | [ ] |
-| I3 | Player track-list tap does nothing for local multi-track | M | [ ] |
-| I3b | Library row tap silently no-ops when the MediaController isn't bound (the "other bug") | I->M | [ ] |
-| I4a | Add "Autoplay next track" Settings toggle + info box (+ audit the existing autoplay toggles) | M | [ ] |
-| I4b | Add autoplay toggle button to player bottom bar (before Bluetooth) | M | [ ] |
-| I4c | Shuffle button shows a mini "Shuffle on/off" popup | M | [ ] |
-| I4d | Single-item plays (Cloud/downloaded/Last-Played) don't auto-advance — enqueue surrounding tracks | M | [ ] |
-| I5a | Cast metadata/artwork display on phone — INSTRUMENT (logging) + device test (poss. regressed) | I->M | [ ] |
-| I5b | Cast start cutoff: add a start-delay setting + prime the cast start (+ triple-check castVideoAudioOffsetMs) | I->M | [ ] |
-| I6 | Surface downloaded podcasts in the Library | M | [ ] |
-| I2 | Spotify sticky sign-in — log first, repro (data-clear LAST), then fix | I->M | [ ] |
+| I1 | Deep-scan prompt shows even when already enabled in Settings | M | [~] |
+| I3 | Player track-list tap does nothing for local multi-track | M | [~] |
+| I3b | Library row tap silently no-ops when the MediaController isn't bound (the "other bug") | I->M | [~] |
+| I4a | Add "Autoplay next track" Settings toggle + info box (+ audit the existing autoplay toggles) | M | [~] |
+| I4b | Add autoplay toggle button to player bottom bar (before Bluetooth) | M | [~] |
+| I4c | Shuffle button shows a mini "Shuffle on/off" popup | M | [~] |
+| I4d | Single-item plays (Cloud/downloaded/Last-Played) don't auto-advance — enqueue surrounding tracks | M | [~] |
+| I5a | Cast metadata/artwork display on phone — INSTRUMENT (logging) + device test (poss. regressed) | I->M | [~] |
+| I5b | Cast start cutoff: add a start-delay setting + prime the cast start (+ triple-check castVideoAudioOffsetMs) | I->M | [~] |
+| I6 | Surface downloaded podcasts in the Library | M | [~] |
+| I2 | Spotify sticky sign-in — log first, repro (data-clear LAST), then fix | I->M | [~] logging only; repro+fix pending |
 | GATE | Anti-skip final gate + coverage cross-check | V | [ ] |
+
+**Device-verification note (2026-07-30):** the physical Oppo Find X9 Ultra runs the
+Play Closed-test build (release-signed `f45bab3e…`, carries a Play source stamp).
+That signer ≠ the local release keystore (`3981a282…`), so a locally-built APK
+cannot `install -r` over it — installing vc74 needs an uninstall, which wipes the
+Spotify session held for the I2 data-clear. Therefore ALL physical-phone testing
+(cast I5a/I5b + real Spotify repro I2 + data-dependent checks) is consolidated into
+the FINAL authorised-wipe phase: uninstall vc73 → install debug vc74 → enable
+DiagLog → run cast + Spotify repro together. Emulator covers the rest.
 
 ---
 

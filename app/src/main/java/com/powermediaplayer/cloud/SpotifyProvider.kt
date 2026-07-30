@@ -333,6 +333,11 @@ class SpotifyProvider @Inject constructor(
      */
     fun buildAuthIntent(): Intent {
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.buildAuthIntent start")
+        // I2 — PERSISTENT breadcrumb (survives process death, unlike Diag.i logcat).
+        // The AppAuth sign-in can be killed by aggressive OEMs between consent and
+        // the result callback, so a file-backed trail is the only way to see where
+        // a stuck sign-in dies. Correlate with the CLOUDUI SPOTIFYAUTH lines.
+        com.powermediaplayer.diag.DiagLog.event("SPOTIFYAUTH", "buildAuthIntent")
         val t0 = System.currentTimeMillis()
         val request = AuthorizationRequest.Builder(
             serviceConfig,
@@ -353,11 +358,21 @@ class SpotifyProvider @Inject constructor(
      */
     suspend fun handleAuthResponse(data: Intent?): Result<Unit> = withContext(Dispatchers.IO) {
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.handleAuthResponse start data=${data != null}")
-        if (data == null) return@withContext Result.failure(IllegalStateException("No auth result data"))
+        com.powermediaplayer.diag.DiagLog.event("SPOTIFYAUTH", "handleAuthResponse start data=${data != null}")
+        if (data == null) {
+            com.powermediaplayer.diag.DiagLog.event("SPOTIFYAUTH", "ABORT no result data (dropped callback?)")
+            return@withContext Result.failure(IllegalStateException("No auth result data"))
+        }
         val resp = AuthorizationResponse.fromIntent(data)
         val ex = AuthorizationException.fromIntent(data)
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.handleAuthResponse parsed resp=${resp != null} ex=${ex?.message}")
-        if (resp == null) return@withContext Result.failure(ex ?: IllegalStateException("Auth canceled"))
+        com.powermediaplayer.diag.DiagLog.event(
+            "SPOTIFYAUTH", "parsed resp=${resp != null} ex=${ex?.error ?: ex?.message ?: "none"}"
+        )
+        if (resp == null) {
+            com.powermediaplayer.diag.DiagLog.event("SPOTIFYAUTH", "ABORT resp=null (user cancel / error)")
+            return@withContext Result.failure(ex ?: IllegalStateException("Auth canceled"))
+        }
 
         val authState = AuthState(serviceConfig).apply { update(resp, ex) }
 
@@ -367,6 +382,11 @@ class SpotifyProvider @Inject constructor(
                 com.powermediaplayer.util.Diag.i(
                     "PMP_DIAG",
                     "Spotify.tokenRequest cb ${System.currentTimeMillis() - t0}ms ok=${tokenResp != null} ex=${tokenEx?.message}"
+                )
+                com.powermediaplayer.diag.DiagLog.event(
+                    "SPOTIFYAUTH",
+                    "tokenRequest cb ${System.currentTimeMillis() - t0}ms ok=${tokenResp != null} " +
+                        "ex=${tokenEx?.error ?: tokenEx?.message ?: "none"}"
                 )
                 authState.update(tokenResp, tokenEx)
                 if (tokenResp != null) {
@@ -387,6 +407,11 @@ class SpotifyProvider @Inject constructor(
             lastSerializedAuthState = serialized
             _isLoggedIn.value = true
             com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.handleAuthResponse persisted token")
+            com.powermediaplayer.diag.DiagLog.event("SPOTIFYAUTH", "SUCCESS token persisted, isLoggedIn=true")
+        } else {
+            com.powermediaplayer.diag.DiagLog.event(
+                "SPOTIFYAUTH", "FAIL token exchange: ${result.exceptionOrNull()?.message}"
+            )
         }
         result
     }

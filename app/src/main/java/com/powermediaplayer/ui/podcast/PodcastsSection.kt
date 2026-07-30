@@ -193,55 +193,14 @@ class PodcastsViewModel @Inject constructor(
      *  else the stream; mediaId/requestMetadata kept as audioUrl so resume +
      *  per-episode/show override + Recents dedup stay keyed to the episode. All
      *  episodes of a show share its artwork (episode rows carry none). */
+    // Delegates to PodcastPlayback (shared single source of truth) so the Library's
+    // downloaded-podcasts section builds byte-identical MediaItems (I6).
     private suspend fun buildEpisodeItem(
         episode: PodcastEpisodeEntity,
         showTitle: String?,
         artUri: String?
-    ): androidx.media3.common.MediaItem {
-        val keyUri = android.net.Uri.parse(episode.audioUrl)
-        val playUri = resolvePlayableLocal(episode)
-            ?.let { android.net.Uri.parse(it) } ?: keyUri
-        return androidx.media3.common.MediaItem.Builder()
-            .setMediaId(episode.audioUrl)
-            .setUri(playUri)
-            .setRequestMetadata(
-                androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                    .setMediaUri(keyUri).build()
-            )
-            .setMediaMetadata(
-                androidx.media3.common.MediaMetadata.Builder()
-                    .setTitle(episode.title)
-                    .setArtist(showTitle ?: "")
-                    .apply { if (!artUri.isNullOrBlank()) setArtworkUri(android.net.Uri.parse(artUri)) }
-                    .build()
-            )
-            .build()
-    }
-
-    /**
-     * §C10 — returns the downloaded copy's uri string if the episode has one
-     * AND it is still readable; otherwise null. A stale localPath (file removed
-     * out from under us, or a revoked SAF grant) self-heals: the row is cleared
-     * so the "downloaded" badge disappears and playback falls back to the stream.
-     */
-    private suspend fun resolvePlayableLocal(episode: PodcastEpisodeEntity): String? {
-        val path = episode.localPath?.takeIf { it.isNotBlank() } ?: return null
-        val readable = runCatching {
-            val u = android.net.Uri.parse(path)
-            when (u.scheme) {
-                "content" ->
-                    appContext.contentResolver.openFileDescriptor(u, "r")?.use { true } ?: false
-                "file", null ->
-                    java.io.File(u.path ?: path).let { it.exists() && it.canRead() }
-                else -> java.io.File(path).exists()
-            }
-        }.getOrDefault(false)
-        if (!readable) {
-            runCatching { podcastDao.clearLocalPath(episode.guid) }
-            return null
-        }
-        return path
-    }
+    ): androidx.media3.common.MediaItem =
+        PodcastPlayback.buildEpisodeItem(appContext, podcastDao, episode, showTitle, artUri)
 
     // ── §C10 downloads — manual per-episode + per-show management ──────────
 

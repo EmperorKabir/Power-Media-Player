@@ -83,6 +83,7 @@ data class SettingsUiState(
     val diagLogEnabled: Boolean = false,
     val btVideoAudioOffsetMs: Int = 0,
     val castVideoAudioOffsetMs: Int = 0,
+    val castStartDelayMs: Int = 0,
     val reverbWetMix: Float = 1.0f,
     val audioBufferLowLatency: Boolean = false,
     val webhookUrl: String = "",
@@ -109,7 +110,8 @@ data class AutoplaySettingsUi(
     val kindVideo: Boolean = false,
     val fadeIn: Boolean = true,
     val fadeInMs: Int = 1500,
-    val podcastAutoplayNext: Boolean = true
+    val podcastAutoplayNext: Boolean = true,
+    val musicAutoplayNext: Boolean = true
 )
 
 /**
@@ -244,7 +246,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.autoplayOnLaunch,
             settingsDataStore.castVideoAudioOffsetMs,
             settingsDataStore.coverArtOnMobileData,
-            settingsDataStore.downloadFilesOnMobileData
+            settingsDataStore.downloadFilesOnMobileData,
+            settingsDataStore.castStartDelayMs
         )
     ) { v ->
         SettingsUiState(
@@ -325,7 +328,8 @@ class SettingsViewModel @Inject constructor(
             autoplayOnLaunch = v[74] as Boolean,
             castVideoAudioOffsetMs = v[75] as Int,
             coverArtOnMobileData = v[76] as Boolean,
-            downloadFilesOnMobileData = v[77] as Boolean
+            downloadFilesOnMobileData = v[77] as Boolean,
+            castStartDelayMs = v[78] as Int
         )
     }
         // vc29.26 — drop duplicate emissions + conflate rapid bursts.
@@ -353,7 +357,8 @@ class SettingsViewModel @Inject constructor(
             settingsDataStore.autoplayKindVideo,
             settingsDataStore.autoplayFadeIn,
             settingsDataStore.autoplayFadeInMs,
-            settingsDataStore.podcastAutoplayNext
+            settingsDataStore.podcastAutoplayNext,
+            settingsDataStore.musicAutoplayNext
         ) { v ->
             AutoplaySettingsUi(
                 resumeOnCast = v[0] as Boolean,
@@ -363,7 +368,8 @@ class SettingsViewModel @Inject constructor(
                 kindVideo = v[4] as Boolean,
                 fadeIn = v[5] as Boolean,
                 fadeInMs = v[6] as Int,
-                podcastAutoplayNext = v[7] as Boolean
+                podcastAutoplayNext = v[7] as Boolean,
+                musicAutoplayNext = v[8] as Boolean
             )
         }.stateIn(
             scope = viewModelScope,
@@ -373,6 +379,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setResumeOnCast(v: Boolean) = viewModelScope.launch { settingsDataStore.setResumeOnCast(v) }.let {}
     fun setPodcastAutoplayNext(v: Boolean) = viewModelScope.launch { settingsDataStore.setPodcastAutoplayNext(v) }.let {}
+    fun setMusicAutoplayNext(v: Boolean) = viewModelScope.launch { settingsDataStore.setMusicAutoplayNext(v) }.let {}
 
     /** Global voice-boost toggle (per-file override wins). Separate flow to avoid
      *  the large indexed combine. */
@@ -389,7 +396,12 @@ class SettingsViewModel @Inject constructor(
     fun setAutoplayFadeInMs(ms: Int) = viewModelScope.launch { settingsDataStore.setAutoplayFadeInMs(ms) }.let {}
 
     fun setDeepScan(enabled: Boolean) {
-        viewModelScope.launch { settingsDataStore.setDeepScan(enabled) }
+        viewModelScope.launch {
+            settingsDataStore.setDeepScan(enabled)
+            // I1 — answering the deep-scan question from Settings also settles the Library
+            // first-run prompt, so it never asks again for a setting the user already chose.
+            settingsDataStore.setFirstRunSeen()
+        }
     }
 
     fun setFontSizeScale(value: Float) {
@@ -406,6 +418,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setCastVideoAudioOffsetMs(value: Int) {
         viewModelScope.launch { settingsDataStore.setCastVideoAudioOffsetMs(value) }
+    }
+
+    fun setCastStartDelayMs(value: Int) {
+        viewModelScope.launch { settingsDataStore.setCastStartDelayMs(value) }
     }
 
     fun setReverbWetMix(value: Float) {

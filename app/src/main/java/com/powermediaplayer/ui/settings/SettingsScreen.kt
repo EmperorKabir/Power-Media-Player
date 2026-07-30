@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.BuildConfig
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 
 /**
  * §D LOCKED order (1 → 15). Each section header carries its §D-NN
@@ -310,6 +311,16 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.setAutoplayKindVideo(it) }
                 )
                 SettingsToggleItem(
+                    title = "Auto-play next track",
+                    description = "When a music or audio track ends, automatically " +
+                        "continue to the next track in the queue (the album, folder or " +
+                        "playlist you tapped). Off = play the current track then stop. " +
+                        "Also toggled live from the player bottom bar.",
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    checked = autoplay.musicAutoplayNext,
+                    onCheckedChange = { viewModel.setMusicAutoplayNext(it) }
+                )
+                SettingsToggleItem(
                     title = "Auto-play next podcast episode",
                     description = "When a podcast episode ends, automatically continue " +
                         "to the next episode in the show (queues the show from the one " +
@@ -532,6 +543,16 @@ fun SettingsScreen(
                 CastVideoAudioOffsetRow(
                     valueMs = uiState.castVideoAudioOffsetMs,
                     onValueChange = { viewModel.setCastVideoAudioOffsetMs(it) }
+                )
+            },
+            SettingsItem(
+                "cast-start-delay", "Cast start lead-in",
+                listOf("cast", "chromecast", "start", "delay", "lead", "clip",
+                    "cut", "beginning", "warm", "speaker", "google home", "prime")
+            ) {
+                CastStartDelayRow(
+                    valueMs = uiState.castStartDelayMs,
+                    onValueChange = { viewModel.setCastStartDelayMs(it) }
                 )
             }
         )),
@@ -1995,6 +2016,39 @@ fun CastVideoAudioOffsetRow(
             default = 0f,
             valueRange = -1000f..1000f,
             steps = 199, // 10 ms increments
+            valueLabel = "${valueMs} ms",
+            onValueChange = { onValueChange(it.toInt()) }
+        )
+    }
+}
+
+@Composable
+fun CastStartDelayRow(
+    valueMs: Int,
+    onValueChange: (Int) -> Unit
+) {
+    Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)) {
+        Text(
+            text = "Cast start lead-in",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary
+        )
+        Text(
+            text = "Some cast speakers and TVs clip the first fraction of a " +
+                "second when playback starts, so the very beginning of a track " +
+                "is lost. This waits the chosen time — after the receiver has " +
+                "buffered — before starting, so its audio is warmed up and the " +
+                "opening is heard in full. Raise it only if you still hear a " +
+                "clipped start; 0 keeps the old instant start. Range 0–1 second.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextTertiary
+        )
+        ResetSliderRow(
+            label = "Lead-in",
+            value = valueMs.toFloat(),
+            default = 0f,
+            valueRange = 0f..1000f,
+            steps = 99, // 10 ms increments
             valueLabel = "${valueMs} ms",
             onValueChange = { onValueChange(it.toInt()) }
         )

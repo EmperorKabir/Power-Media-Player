@@ -76,6 +76,8 @@ data class PlayerUiState(
     val currentTrackIndex: Int = 0,
     val totalTracks: Int = 0,
     val trackIndexDisplay: String = "", // "3 / 12"
+    // I3 — the queue snapshot for the now-playing "Tracks" picker.
+    val queue: List<com.powermediaplayer.service.QueueItemInfo> = emptyList(),
 
     // Chapter support
     val chapters: List<com.powermediaplayer.service.ChapterInfo> = emptyList(),

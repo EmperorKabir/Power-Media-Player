@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.powermediaplayer.service.ChapterInfo
-import com.powermediaplayer.ui.library.MediaFileInfo
+import com.powermediaplayer.service.QueueItemInfo
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.util.TimeFormatter
 
@@ -36,7 +36,7 @@ fun ChapterPickerDialog(
     currentChapterIndex: Int,
     onChapterSelected: (Int) -> Unit,
     // Track mode (playlist)
-    playlist: List<MediaFileInfo>,
+    playlist: List<QueueItemInfo>,
     currentTrackIndex: Int,
     onTrackSelected: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -104,7 +104,7 @@ fun ChapterPickerDialog(
                                 index = index + 1,
                                 title = track.title,
                                 artist = track.artist,
-                                duration = if (track.duration > 0) TimeFormatter.formatDuration(track.duration) else "",
+                                duration = if (track.durationMs > 0) TimeFormatter.formatDuration(track.durationMs) else "",
                                 isCurrent = isCurrent,
                                 onClick = {
                                     onTrackSelected(index)

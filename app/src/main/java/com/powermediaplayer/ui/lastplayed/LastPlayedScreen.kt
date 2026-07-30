@@ -318,9 +318,9 @@ fun LastPlayedScreen(
                             PinnedAlbumRow(
                                 album = album,
                                 tracksProvider = { viewModel.observePinnedAlbumTracks(album.id) },
-                                onPlayTrack = { trackUri, title ->
-                                    viewModel.playAlbumTrack(
-                                        trackUri, title, album.artist, album.title, album.artworkUri
+                                onPlayTracks = { tracks, index ->
+                                    viewModel.playAlbumTracks(
+                                        tracks, index, album.artist, album.title, album.artworkUri
                                     )
                                     onNavigateToPlayer()
                                 },
@@ -466,7 +466,7 @@ fun LastPlayedScreen(
 private fun PinnedAlbumRow(
     album: com.powermediaplayer.data.repository.LastPlayedRepository.PinnedAlbumItem,
     tracksProvider: () -> Flow<List<com.powermediaplayer.data.db.entity.PinnedAlbumTrackEntity>>,
-    onPlayTrack: (String, String) -> Unit,
+    onPlayTracks: (List<com.powermediaplayer.data.db.entity.PinnedAlbumTrackEntity>, Int) -> Unit,
     onUnpin: () -> Unit
 ) {
     var expanded by rememberSaveable(album.id) { mutableStateOf(false) }
@@ -543,12 +543,12 @@ private fun PinnedAlbumRow(
                         .fillMaxWidth()
                         .padding(start = 56.dp, end = 12.dp, bottom = 8.dp)
                 ) {
-                    tracks.forEach { t ->
+                    tracks.forEachIndexed { idx, t ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onPlayTrack(t.mediaUri, t.title) }
+                                .clickable { onPlayTracks(tracks, idx) }
                                 .padding(vertical = 4.dp)
                         ) {
                             Icon(

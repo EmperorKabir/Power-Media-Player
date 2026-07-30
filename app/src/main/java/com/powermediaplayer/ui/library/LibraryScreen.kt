@@ -57,6 +57,8 @@ fun LibraryScreen(
     val selectedUris by viewModel.selectedUris.collectAsStateWithLifecycle()
     // P6 — downloaded Drive books surfaced as a synthetic Library section.
     val downloadedBooks by viewModel.downloadedBooks.collectAsStateWithLifecycle()
+    // I6 — downloaded podcast episodes surfaced the same way, in their own section.
+    val downloadedEpisodes by viewModel.downloadedEpisodes.collectAsStateWithLifecycle()
     val context = LocalContext.current
     // P6 (audit MED-5) — a tapped download whose file has vanished surfaces a clean toast.
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -292,7 +294,11 @@ fun LibraryScreen(
     // granted, since refreshIfStale's MediaStore query already
     // requested perms by this point).
     val firstRunSeen by viewModel.firstRunSeen.collectAsStateWithLifecycle()
-    if (!firstRunSeen && hasPermission) {
+    // I1 — single source of truth: don't prompt if deep scan is ALREADY enabled (Settings-first
+    // path). The Settings toggle also marks first-run seen (SettingsViewModel.setDeepScan), so the
+    // two surfaces agree in every scenario.
+    val deepScanOn by viewModel.useDeepScan.collectAsStateWithLifecycle()
+    if (!firstRunSeen && !deepScanOn && hasPermission) {
         AlertDialog(
             onDismissRequest = { viewModel.skipFirstRunDeepScan() },
             title = {
@@ -589,7 +595,8 @@ fun LibraryScreen(
             // audio must still see them. Show the grid (which carries the Downloaded
             // section) on the Audio tab whenever there are downloads, even if the
             // MediaStore audio list is empty.
-            val hasDownloads = uiState.selectedTab == 0 && downloadedBooks.isNotEmpty()
+            val hasDownloads = uiState.selectedTab == 0 &&
+                (downloadedBooks.isNotEmpty() || downloadedEpisodes.isNotEmpty())
 
             if (files.isEmpty() && !hasDownloads) {
                 Box(
@@ -759,6 +766,96 @@ fun LibraryScreen(
                             }
                         }
                         item(key = "downloaded_divider", span = { GridItemSpan(maxLineSpan) }) {
+                            HorizontalDivider(
+                                color = SurfaceElevated,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                    // I6 — Downloaded podcast episodes. Same synthetic-row pattern as
+                    // the Drive books above (app-private storage → invisible to the
+                    // MediaStore scan). Tapping plays the LOCAL file but keeps the
+                    // episode's audioUrl as mediaId, so Recents/resume stay unified
+                    // with the Podcasts tab.
+                    if (uiState.selectedTab == 0 && downloadedEpisodes.isNotEmpty()) {
+                        item(key = "downloaded_podcasts_header", span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                text = "Downloaded podcasts (${downloadedEpisodes.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = TealAccent,
+                                modifier = Modifier.padding(
+                                    start = 16.dp, top = 4.dp, bottom = 4.dp
+                                )
+                            )
+                        }
+                        itemsIndexed(
+                            downloadedEpisodes,
+                            key = { _, e -> "dlpod_${e.guid}" }
+                        ) { _, ep ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.playDownloadedEpisode(ep)
+                                        onNavigateToPlayer()
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Filled.DownloadDone,
+                                        contentDescription = null,
+                                        tint = TealAccent,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    // The show's cover behind the tick (episodes carry none).
+                                    if (!ep.artworkUrl.isNullOrBlank()) {
+                                        coil3.compose.AsyncImage(
+                                            model = ep.artworkUrl,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(16.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        ep.title,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = TealAccent,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    // Show name · size · Offline.
+                                    val sub = buildString {
+                                        append(ep.showTitle)
+                                        if (ep.bytes > 0) {
+                                            append(" · ")
+                                            append(
+                                                android.text.format.Formatter
+                                                    .formatShortFileSize(context, ep.bytes)
+                                            )
+                                        }
+                                        append(" · Offline")
+                                    }
+                                    Text(
+                                        sub,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextSecondary,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                        item(key = "downloaded_podcasts_divider", span = { GridItemSpan(maxLineSpan) }) {
                             HorizontalDivider(
                                 color = SurfaceElevated,
                                 modifier = Modifier.padding(vertical = 8.dp)

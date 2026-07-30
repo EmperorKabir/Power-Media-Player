@@ -178,62 +178,89 @@ class LastPlayedViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) { repo.unpinAlbum(albumId) }
     }
 
-    /** Tap a pinned-album track → play that single file. Reuses the
-     *  same MediaItem build path as playLocalAt for chapters parsing. */
-    fun playAlbumTrack(
+    /** Build one MediaItem for a pinned-album track. [parseChapters] is true only
+     *  for the tapped/starting item — preserving its exact prior behaviour — so a
+     *  whole-album enqueue never pays per-track M4B chapter parse for siblings. */
+    private fun buildAlbumMediaItem(
         trackUri: String,
         title: String,
+        artist: String,
+        album: String,
+        artworkUri: String?,
+        parseChapters: Boolean
+    ): androidx.media3.common.MediaItem {
+        val uri = Uri.parse(trackUri)
+        val chapterExtras = if (parseChapters) {
+            runCatching {
+                com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, uri)
+            }.getOrDefault(android.os.Bundle())
+        } else android.os.Bundle()
+        return androidx.media3.common.MediaItem.Builder()
+            .setMediaId(trackUri)
+            .setUri(uri)
+            .setRequestMetadata(
+                androidx.media3.common.MediaItem.RequestMetadata.Builder()
+                    .setMediaUri(uri).build()
+            )
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(com.powermediaplayer.util.TextNormalizer.cleanFileTitle(title))
+                    // Carry the pinned-album artist + album + cover URI on the item's OWN
+                    // metadata so a title-only track still shows them: a bare MP3 has no
+                    // embedded cover to open the parsed-metadata gate (artist/album), and a
+                    // 2nd+ track that shares ONE byte-identical cover is indistinguishable
+                    // from Media3's sticky carry-over so its cover bytes get suppressed. An
+                    // explicit per-item URI sidesteps both without risking a sticky bleed.
+                    .apply {
+                        if (artist.isNotBlank()) setArtist(artist)
+                        if (album.isNotBlank()) setAlbumTitle(album)
+                        artworkUri?.takeIf { it.isNotBlank() }
+                            ?.let { setArtworkUri(Uri.parse(it)) }
+                    }
+                    .setExtras(chapterExtras)
+                    .build()
+            )
+            .build()
+    }
+
+    /** Tap a pinned-album track → play the WHOLE album from that track (I4d) so
+     *  auto-play-next traverses the rest of the album. The full track list is
+     *  already in memory in the row, so no extra fetch. The tapped item keeps its
+     *  exact prior build (chapters parsed); siblings are plain metadata items. */
+    fun playAlbumTracks(
+        tracks: List<com.powermediaplayer.data.db.entity.PinnedAlbumTrackEntity>,
+        startIndex: Int,
         artist: String = "",
         album: String = "",
         artworkUri: String? = null
     ) {
-        val uri = runCatching { Uri.parse(trackUri) }.getOrNull() ?: return
+        if (tracks.isEmpty()) return
+        val start = startIndex.coerceIn(0, tracks.lastIndex)
         viewModelScope.launch {
-            // vc32: parse-bearing path — token so a newer play
-            // intent supersedes it.
+            // vc32: parse-bearing path — token so a newer play intent supersedes it.
             val token = com.powermediaplayer.playback.ResumeGate.begin()
             // vc32: banner over the pre-player parse phase.
             playbackConnection.setCloudFetchInProgress(true)
             try {
-                val mediaItem = withContext(Dispatchers.IO) {
-                    val chapterExtras = runCatching {
-                        com.powermediaplayer.util.M4bChapterParser
-                            .extractChaptersAsBundle(context, uri)
-                    }.getOrDefault(android.os.Bundle())
-                    androidx.media3.common.MediaItem.Builder()
-                        .setMediaId(trackUri)
-                        .setUri(uri)
-                        .setRequestMetadata(
-                            androidx.media3.common.MediaItem.RequestMetadata.Builder()
-                                .setMediaUri(uri).build()
+                val items = withContext(Dispatchers.IO) {
+                    tracks.mapIndexed { idx, t ->
+                        buildAlbumMediaItem(
+                            trackUri = t.mediaUri,
+                            title = t.title,
+                            artist = artist,
+                            album = album,
+                            artworkUri = artworkUri,
+                            parseChapters = idx == start
                         )
-                        .setMediaMetadata(
-                            androidx.media3.common.MediaMetadata.Builder()
-                                .setTitle(com.powermediaplayer.util.TextNormalizer.cleanFileTitle(title))
-                                // Carry the pinned-album artist + album + cover URI on the item's OWN
-                                // metadata so a title-only track still shows them: a bare MP3 has no
-                                // embedded cover to open the parsed-metadata gate (artist/album), and a
-                                // 2nd+ track that shares ONE byte-identical cover is indistinguishable
-                                // from Media3's sticky carry-over so its cover bytes get suppressed. An
-                                // explicit per-item URI sidesteps both without risking a sticky bleed.
-                                .apply {
-                                    if (artist.isNotBlank()) setArtist(artist)
-                                    if (album.isNotBlank()) setAlbumTitle(album)
-                                    artworkUri?.takeIf { it.isNotBlank() }
-                                        ?.let { setArtworkUri(Uri.parse(it)) }
-                                }
-                                .setExtras(chapterExtras)
-                                .build()
-                        )
-                        .build()
+                    }
                 }
                 if (!com.powermediaplayer.playback.ResumeGate.isCurrent(token)) {
                     com.powermediaplayer.diag.DiagLog.resume(
-                        "playAlbumTrack ABORT token=$token, superseded"
+                        "playAlbumTracks ABORT token=$token, superseded"
                     )
                     return@launch
                 }
-                playbackConnection.setMediaItems(listOf(mediaItem), 0)
+                playbackConnection.setMediaItems(items, start)
             } finally {
                 playbackConnection.setCloudFetchInProgress(false)
                 com.powermediaplayer.playback.ResumeGate.end(token)

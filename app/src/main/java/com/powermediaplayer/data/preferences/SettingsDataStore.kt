@@ -42,6 +42,11 @@ class SettingsDataStore @Inject constructor(
         // target position vs the cast audio) so the user can dial lip-sync per
         // device/room. ±1000 ms, default 0.
         val CAST_VIDEO_AUDIO_OFFSET_MS = intPreferencesKey("cast_video_audio_offset_ms")
+        // Cast start lead-in (I5b) — how long to hold the receiver buffered-but-
+        // paused after it reports READY before starting play, so the Default Media
+        // Receiver's audio pipeline is warm and the first moments aren't clipped.
+        // 0..1000 ms, default 0 (byte-identical to the old immediate-play path).
+        val CAST_START_DELAY_MS = intPreferencesKey("cast_start_delay_ms")
         val REVERB_WET_MIX = floatPreferencesKey("reverb_wet_mix")
         // §C13 — per-paired-device EQ preset map. Set of "addr|presetId".
         // Address-keyed because device names aren't stable; the BT MAC
@@ -201,6 +206,7 @@ class SettingsDataStore @Inject constructor(
         val LAST_WAS_PLAYING = booleanPreferencesKey("last_was_playing")
         // Auto-advance to the next podcast episode when one ends (queue the show).
         val PODCAST_AUTOPLAY_NEXT = booleanPreferencesKey("podcast_autoplay_next")
+        val MUSIC_AUTOPLAY_NEXT = booleanPreferencesKey("music_autoplay_next")
         // Voice boost (speech-clarity presence lift). Global default; per-file
         // override wins. Local pipeline only.
         val VOICE_BOOST = booleanPreferencesKey("voice_boost")
@@ -827,6 +833,14 @@ class SettingsDataStore @Inject constructor(
     suspend fun setPodcastAutoplayNext(v: Boolean) {
         context.dataStore.edit { it[Keys.PODCAST_AUTOPLAY_NEXT] = v }
     }
+    /** I4a — auto-advance to the next TRACK in the current queue at end of a song
+     *  (local music / album / folder). Default on. OFF stops at end of track. */
+    val musicAutoplayNext: Flow<Boolean> = context.dataStore.data.map {
+        it[Keys.MUSIC_AUTOPLAY_NEXT] ?: true
+    }
+    suspend fun setMusicAutoplayNext(v: Boolean) {
+        context.dataStore.edit { it[Keys.MUSIC_AUTOPLAY_NEXT] = v }
+    }
     /** Voice boost (speech clarity). Global default; per-file override wins. */
     val voiceBoost: Flow<Boolean> = context.dataStore.data.map {
         it[Keys.VOICE_BOOST] ?: false
@@ -1172,6 +1186,17 @@ class SettingsDataStore @Inject constructor(
     suspend fun setCastVideoAudioOffsetMs(value: Int) {
         context.dataStore.edit { prefs ->
             prefs[Keys.CAST_VIDEO_AUDIO_OFFSET_MS] = value.coerceIn(-1000, 1000)
+        }
+    }
+
+    // Cast start lead-in (I5b). 0..1000 ms, default 0.
+    val castStartDelayMs: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[Keys.CAST_START_DELAY_MS] ?: 0).coerceIn(0, 1000)
+    }
+
+    suspend fun setCastStartDelayMs(value: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.CAST_START_DELAY_MS] = value.coerceIn(0, 1000)
         }
     }
 

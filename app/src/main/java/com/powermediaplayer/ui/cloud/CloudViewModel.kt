@@ -1072,8 +1072,16 @@ class CloudViewModel @Inject constructor(
         // Tab stealing audio focus. Cleared in handleSpotifyResult or
         // by the 60s safety timer below.
         com.powermediaplayer.service.PlaybackService.oauthInFlight = true
+        com.powermediaplayer.diag.DiagLog.event(
+            "SPOTIFYAUTH", "UI tap → launch auth intent, oauthInFlight=true (60s safety armed)"
+        )
         viewModelScope.launch {
             kotlinx.coroutines.delay(60_000)
+            if (com.powermediaplayer.service.PlaybackService.oauthInFlight) {
+                com.powermediaplayer.diag.DiagLog.event(
+                    "SPOTIFYAUTH", "60s SAFETY TIMER fired — result never returned (stuck sign-in)"
+                )
+            }
             com.powermediaplayer.service.PlaybackService.oauthInFlight = false
         }
         return spotifyProvider.buildAuthIntent()
@@ -1197,6 +1205,9 @@ class CloudViewModel @Inject constructor(
 
     fun handleSpotifyResult(data: Intent?) {
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Cloud.handleSpotifyResult data=${data != null}")
+        com.powermediaplayer.diag.DiagLog.event(
+            "SPOTIFYAUTH", "UI result callback fired data=${data != null} (launcher returned)"
+        )
         // Clear the OAuth-in-flight flag immediately on result so
         // AudioFocus handling resumes its normal pause/duck/ignore
         // policy starting from the next focus event.

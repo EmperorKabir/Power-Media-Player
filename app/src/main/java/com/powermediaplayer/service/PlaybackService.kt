@@ -231,6 +231,8 @@ class PlaybackService : MediaSessionService() {
     // its buffering blips — mirroring isPlaying made the picture stutter.
     @Volatile private var castInitialSyncDone: Boolean = false
     @Volatile private var castVideoAudioOffsetMsFlag: Int = 0
+    // Cast start lead-in (I5b) — see CAST_START_DELAY_MS. 0 = unchanged behaviour.
+    @Volatile private var castStartDelayMsFlag: Int = 0
     // Audio-only cast of a video: the extracted temp .m4a we cast (small →
     // fast receiver buffer) and the extraction job, so we can cancel + delete
     // on cast-end.
@@ -1020,6 +1022,11 @@ class PlaybackService : MediaSessionService() {
                 )
             }
         }
+        // Cast start lead-in (I5b) — applied on the NEXT cast switch. Immediate flag
+        // update; no re-seek needed (it only gates the initial play).
+        serviceScope.launch {
+            settingsDataStore.castStartDelayMs.collect { castStartDelayMsFlag = it }
+        }
         // …but the on-phone picture is re-seeked only AFTER the slider settles
         // (debounce). Seeking on every drag tick flooded the local player with
         // seeks — jittery rendering + file-read thrashing that starved the
@@ -1331,6 +1338,14 @@ class PlaybackService : MediaSessionService() {
         //      seconds of imprecision, which is what every other media
         //      player does).
         player!!.setSeekParameters(SeekParameters.PREVIOUS_SYNC)
+        // I4a — "Autoplay next track": when OFF, pause at the end of each queue item
+        // instead of auto-advancing to the next (local music / album / folder queues).
+        // Default ON. Read live so toggling in Settings applies without a restart.
+        serviceScope.launch {
+            settingsDataStore.musicAutoplayNext.collect { on ->
+                player?.pauseAtEndOfMediaItems = !on
+            }
+        }
         // Frame-rate strategy left at default. Forcing OFF on a Z Fold
         // 6 (1-120Hz adaptive panel) made things worse — the panel
         // can match content rate which is usually best.
@@ -2799,10 +2814,23 @@ class PlaybackService : MediaSessionService() {
             // round-trip drops it. Filter the items defensively.
             val safe = transformed.filter { it.localConfiguration != null }
             if (safe.isNotEmpty()) {
-                target.setMediaItems(safe, currentIndex.coerceIn(0, safe.size - 1), currentPosition)
-                target.playWhenReady = playWhenReady
+                val startIdx = currentIndex.coerceIn(0, safe.size - 1)
+                target.setMediaItems(safe, startIdx, currentPosition)
                 target.shuffleModeEnabled = shuffleOn
-                target.prepare()
+                val leadIn = castStartDelayMsFlag
+                if (leadIn > 0 && playWhenReady && target is CastPlayer) {
+                    // I5b — prime the cast start. Buffer paused; once the receiver
+                    // reports READY, hold `leadIn` ms so its audio pipeline is warm,
+                    // then re-assert the position and play — the first moments are no
+                    // longer clipped by the Default Media Receiver's warm-up. leadIn=0
+                    // (default) skips this entirely (unchanged immediate-play path).
+                    target.playWhenReady = false
+                    target.prepare()
+                    primeCastStart(target, startIdx, currentPosition, leadIn)
+                } else {
+                    target.playWhenReady = playWhenReady
+                    target.prepare()
+                }
             } else {
                 com.powermediaplayer.util.Diag.w(
                     "PMP_DIAG",
@@ -2831,6 +2859,40 @@ class PlaybackService : MediaSessionService() {
         // full download and NO source swap (the cast item is the faststart URL from this
         // one setMediaItems). The download+remux orchestrator is now only the rare
         // oversize-moov fallback, triggered from FaststartDrive.onOversize.
+    }
+
+    /** I5b — one-shot: when [cp] first reports READY, wait [delayMs] ms (receiver
+     *  audio pipeline warm-up) then re-assert the position and start play. Guards:
+     *  fires once; aborts if the session player is no longer this CastPlayer by the
+     *  time the delay elapses (user switched device / stopped casting mid lead-in). */
+    private fun primeCastStart(cp: CastPlayer, index: Int, positionMs: Long, delayMs: Int) {
+        val listener = object : Player.Listener {
+            private var fired = false
+            override fun onPlaybackStateChanged(state: Int) {
+                if (fired || state != Player.STATE_READY) return
+                fired = true
+                cp.removeListener(this)
+                Companion.castMainHandler.postDelayed({
+                    if (mediaSession?.player !== cp) {
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "CASTPRIME", "lead-in elapsed but player changed — skip start"
+                        )
+                        return@postDelayed
+                    }
+                    runCatching {
+                        cp.seekTo(index, positionMs)
+                        cp.playWhenReady = true
+                    }
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "CASTPRIME", "started after ${delayMs}ms lead-in idx=$index pos=${positionMs}ms"
+                    )
+                }, delayMs.toLong())
+            }
+        }
+        cp.addListener(listener)
+        com.powermediaplayer.diag.DiagLog.event(
+            "CASTPRIME", "armed lead-in=${delayMs}ms idx=$index pos=${positionMs}ms (await READY)"
+        )
     }
 
     /** True when the active cast session targets an AUDIO-ONLY device (no
