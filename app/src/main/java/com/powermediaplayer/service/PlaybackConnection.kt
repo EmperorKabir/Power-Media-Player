@@ -1008,10 +1008,14 @@ class PlaybackConnection @Inject constructor(
         controller?.let { c ->
             val currentState = _playerState.value
             val pos = c.currentPosition.coerceAtLeast(0L)
+            // Audit F4 — compute the playlist position once and reuse it for both the
+            // state copy and the cast diag, so the logged value matches the emitted
+            // state exactly (and avoids a redundant recompute).
+            val plPos = cachedPlaylistPosition(c)
             _playerState.value = currentState.copy(
                 currentPosition = pos,
                 bufferedPercentage = c.bufferedPercentage,
-                totalPlaylistPosition = cachedPlaylistPosition(c)
+                totalPlaylistPosition = plPos
             )
             // I9 diag — during cast, sample the poll (~every 2s) so a frozen slider
             // shows whether the SOURCE position advances (c.currentPosition) even
@@ -1022,7 +1026,7 @@ class PlaybackConnection @Inject constructor(
                 com.powermediaplayer.diag.DiagLog.event(
                     "CASTPOS",
                     "poll pos=${pos}ms isPlaying=${c.isPlaying} idx=${c.currentMediaItemIndex} " +
-                        "dur=${c.duration} playlistPos=${cachedPlaylistPosition(c)}"
+                        "dur=${c.duration} playlistPos=$plPos"
                 )
             }
         }

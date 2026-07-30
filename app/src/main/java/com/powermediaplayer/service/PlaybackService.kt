@@ -2778,6 +2778,12 @@ class PlaybackService : MediaSessionService() {
                         ).show()
                     }
                 }
+                // Audit F3 — castActiveFlow was optimistically set true at the top of
+                // switchPlayer, but here the relay is unavailable so we STAY LOCAL and
+                // never switch to the CastPlayer. Reset it, else the flag strands true
+                // and (since I8 made it authoritative for the whole cast UI) the player
+                // renders "casting" while actually local until the next successful cast.
+                Companion.castActiveFlow.value = false
                 return  // stay with local player; user can retry
             }
             if (adoptExistingCastMedia) {
