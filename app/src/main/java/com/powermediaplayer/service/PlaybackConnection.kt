@@ -160,6 +160,8 @@ class PlaybackConnection @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var positionPollingJob: Job? = null
     private var metadataLogSeq: Int = 0
+    // I9 diag — throttle counter for the cast position-poll breadcrumb.
+    private var castPollSeq: Int = 0
     // DIAGNOSTIC (album-art stale bug) — last mediaId we logged art sources
     // for, so the per-track art-source breakdown fires once per track, not
     // per position tick.
@@ -967,6 +969,13 @@ class PlaybackConnection @Inject constructor(
                 .map { it.isPlaying }
                 .distinctUntilChanged()
                 .collectLatest { playing ->
+                    // I9 diag — during cast, log the poll-loop gate so a frozen
+                    // slider reveals whether isPlaying dropped false (loop stops).
+                    if (com.powermediaplayer.service.PlaybackService.castActiveFlow.value) {
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "CASTPOS", "poll-loop gate playing=$playing (loop ${if (playing) "RUNS" else "STOPS"})"
+                        )
+                    }
                     if (!playing) {
                         pollPositionOnce()
                         return@collectLatest
@@ -982,11 +991,24 @@ class PlaybackConnection @Inject constructor(
     private fun pollPositionOnce() {
         controller?.let { c ->
             val currentState = _playerState.value
+            val pos = c.currentPosition.coerceAtLeast(0L)
             _playerState.value = currentState.copy(
-                currentPosition = c.currentPosition.coerceAtLeast(0L),
+                currentPosition = pos,
                 bufferedPercentage = c.bufferedPercentage,
                 totalPlaylistPosition = cachedPlaylistPosition(c)
             )
+            // I9 diag — during cast, sample the poll (~every 2s) so a frozen slider
+            // shows whether the SOURCE position advances (c.currentPosition) even
+            // while the loop runs → tells source-frozen vs loop-stopped apart.
+            if (com.powermediaplayer.service.PlaybackService.castActiveFlow.value &&
+                (castPollSeq++ and 0x3) == 0
+            ) {
+                com.powermediaplayer.diag.DiagLog.event(
+                    "CASTPOS",
+                    "poll pos=${pos}ms isPlaying=${c.isPlaying} idx=${c.currentMediaItemIndex} " +
+                        "dur=${c.duration} playlistPos=${cachedPlaylistPosition(c)}"
+                )
+            }
         }
     }
 

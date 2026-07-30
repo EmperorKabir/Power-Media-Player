@@ -610,7 +610,12 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.playerFlow,
         // Item 7 (2026-07-09): per-file display-title override — some source
         // files carry truncated/garbled embedded title tags the app cannot fix.
-        mediaOverrideRepo.activeOverride
+        mediaOverrideRepo.activeOverride,
+        // I8 — reliable reactive cast state. `playerFlow` only ever emits the
+        // MediaController (never the CastPlayer), so `activePlayer is CastPlayer`
+        // was permanently false and the whole UI never knew it was casting. This
+        // flag is flipped by the service's switchPlayer when target is CastPlayer.
+        com.powermediaplayer.service.PlaybackService.castActiveFlow
     ) { args ->
         val playerState = args[0] as PlayerState
         @Suppress("UNCHECKED_CAST")
@@ -620,7 +625,9 @@ class PlayerViewModel @Inject constructor(
         val activePlayer = args[4] as androidx.media3.common.Player?
         val customTitle = (args[5] as com.powermediaplayer.data.db.entity.MediaOverrideEntity?)
             ?.customTitle?.takeIf { it.isNotBlank() }
-        val isCasting = activePlayer is androidx.media3.cast.CastPlayer
+        // I8 — trust the service's cast flag (reactive); keep the CastPlayer
+        // identity check as a belt-and-braces fallback.
+        val isCasting = (args[6] as Boolean) || activePlayer is androidx.media3.cast.CastPlayer
         val base = mapToUiState(playerState, sleepRemaining)
         val withSpotify = if (spotify != null) overlaySpotifyState(base, spotify) else base
         val withCloudBanner = if (spotifyFetching && !withSpotify.cloudFetchInProgress) {

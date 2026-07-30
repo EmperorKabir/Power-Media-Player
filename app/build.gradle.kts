@@ -33,8 +33,8 @@ android {
         // orientation locks to trip the large-screen rule, no native .so
         // (16 KB page rule moot), WorkManager unaffected.
         targetSdk = 36
-        versionCode = 74
-        versionName = "1.5.19"
+        versionCode = 75
+        versionName = "1.5.20"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

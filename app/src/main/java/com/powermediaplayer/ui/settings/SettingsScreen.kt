@@ -35,7 +35,8 @@ import kotlinx.coroutines.launch
 import com.powermediaplayer.ui.theme.*
 import com.powermediaplayer.BuildConfig
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.ui.res.vectorResource
+import com.powermediaplayer.R
 
 /**
  * §D LOCKED order (1 → 15). Each section header carries its §D-NN
@@ -316,7 +317,7 @@ fun SettingsScreen(
                         "continue to the next track in the queue (the album, folder or " +
                         "playlist you tapped). Off = play the current track then stop. " +
                         "Also toggled live from the player bottom bar.",
-                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    icon = androidx.compose.ui.graphics.vector.ImageVector.vectorResource(R.drawable.ic_autoplay_next),
                     checked = autoplay.musicAutoplayNext,
                     onCheckedChange = { viewModel.setMusicAutoplayNext(it) }
                 )

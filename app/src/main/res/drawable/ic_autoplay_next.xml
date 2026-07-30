@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto-play-next-track icon (I4b). Visual: fast-forward-style two triangles —
+  a solid left arrow + a stretched, right-fading trailing arrow, reading as
+  "roll on automatically to the next track". Distinct from the shuffle glyph and
+  the transport next/prev controls. Tinted by Compose's Icon(tint=...): SrcIn
+  keeps the trailing arrow's alpha gradient, so it stays faded in the tint colour.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Left arrow: solid -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2,5.5 L11,12 L2,18.5 Z" />
+    <!-- Right arrow: stretched longer + flatter, fading out to the right -->
+    <path android:pathData="M9.5,7 L22.5,12 L9.5,17 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="9.5" android:startY="12"
+                android:endX="22.5" android:endY="12">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.55" android:color="#FFFFFFFF" />
+                <item android:offset="1.0" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

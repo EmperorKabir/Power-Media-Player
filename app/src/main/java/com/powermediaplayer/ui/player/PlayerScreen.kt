@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.ui.res.painterResource
 import com.powermediaplayer.R
@@ -1345,7 +1344,7 @@ private fun OverlayContent(
             val autoplayOn by viewModel.musicAutoplayNext.collectAsStateWithLifecycle()
             IconButton(onClick = { viewModel.toggleMusicAutoplayNext() }, modifier = Modifier.size(48.dp)) {
                 Icon(
-                    Icons.AutoMirrored.Filled.PlaylistPlay,
+                    painterResource(R.drawable.ic_autoplay_next),
                     contentDescription = if (autoplayOn) "Auto-play on" else "Auto-play off",
                     tint = if (autoplayOn) TealAccent else TextTertiary
                 )
@@ -1651,7 +1650,7 @@ private fun PlayerScreenExpanded(
                 val autoplayOnE by viewModel.musicAutoplayNext.collectAsStateWithLifecycle()
                 IconButton(onClick = { viewModel.toggleMusicAutoplayNext() }, modifier = Modifier.size(48.dp)) {
                     Icon(
-                        Icons.AutoMirrored.Filled.PlaylistPlay,
+                        painterResource(R.drawable.ic_autoplay_next),
                         contentDescription = if (autoplayOnE) "Auto-play on" else "Auto-play off",
                         tint = if (autoplayOnE) TealAccent else TextTertiary
                     )
