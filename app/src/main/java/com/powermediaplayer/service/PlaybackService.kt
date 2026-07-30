@@ -2828,6 +2828,9 @@ class PlaybackService : MediaSessionService() {
                 // never switch to the CastPlayer. Reset it, else the flag strands true
                 // and (since I8 made it authoritative for the whole cast UI) the player
                 // renders "casting" while actually local until the next successful cast.
+                com.powermediaplayer.diag.DiagLog.event(
+                    "CAST", "relay unavailable → reset castActiveFlow ${Companion.castActiveFlow.value}→false, staying local"
+                )
                 Companion.castActiveFlow.value = false
                 return  // stay with local player; user can retry
             }
