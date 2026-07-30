@@ -10,7 +10,8 @@
   exit / DB read). A box is ticked ONLY with that evidence pasted in the same turn.
 - **Device-first**: full control of the Oppo `3B166N000CZ00000` (run-as, debug build). Screencap
   via `shell screencap -p /sdcard/x.png` + `pull` (exec-out truncates); PIL-thumbnail before Read.
-- **Order (user directive):** do I1, I3, I4, I5a, I5b, I6 first. Do **I2 (Spotify) LAST**, and
+- **Order (user directive):** do I1, I3, I3b, I4 (a-d), I5a, I5b, I6 first. Do **I2 (Spotify)
+  LAST**, and
   **hold the app-data clear for I2 until the very end** — it wipes Drive/Spotify/downloads/history.
 - **Delicate zones (do not break):** Spotify auth handoff + bounce machinery (I2); the Cast relay
   + `switchPlayer` path (I5b) — most regression-prone code in the app (cf T295/T296). Additive,
@@ -25,11 +26,13 @@
 |----|------|-------|-----|
 | I1 | Deep-scan prompt shows even when already enabled in Settings | M | [ ] |
 | I3 | Player track-list tap does nothing for local multi-track | M | [ ] |
-| I4a | Add "Autoplay next track" Settings toggle + info box | M | [ ] |
+| I3b | Library row tap silently no-ops when the MediaController isn't bound (the "other bug") | I->M | [ ] |
+| I4a | Add "Autoplay next track" Settings toggle + info box (+ audit the existing autoplay toggles) | M | [ ] |
 | I4b | Add autoplay toggle button to player bottom bar (before Bluetooth) | M | [ ] |
 | I4c | Shuffle button shows a mini "Shuffle on/off" popup | M | [ ] |
-| I5a | Verify cast metadata still displays on the phone (regression check) | V | [ ] |
-| I5b | Cast start cutoff: add a start-delay setting + prime the cast start | I->M | [ ] |
+| I4d | Single-item plays (Cloud/downloaded/Last-Played) don't auto-advance — enqueue surrounding tracks | M | [ ] |
+| I5a | Cast metadata/artwork display on phone — INSTRUMENT (logging) + device test (poss. regressed) | I->M | [ ] |
+| I5b | Cast start cutoff: add a start-delay setting + prime the cast start (+ triple-check castVideoAudioOffsetMs) | I->M | [ ] |
 | I6 | Surface downloaded podcasts in the Library | M | [ ] |
 | I2 | Spotify sticky sign-in — log first, repro (data-clear LAST), then fix | I->M | [ ] |
 | GATE | Anti-skip final gate + coverage cross-check | V | [ ] |
@@ -70,9 +73,29 @@
   `PlayerUiState.kt`.
 - **Predicate:** play a 23-track Library queue -> tap chip -> dialog **lists 23 tracks** -> tap
   track 5 -> `media_session` active item id / title = track 5 (screenshot + dumpsys).
-  Regression: audiobook chapters still seek (device). Spotify album list (separate
-  `SpotifyAlbumTracksButton`) unaffected — verify on device if a Spotify session is available
-  (else note as separate-path, code-confirmed working).
+  Regression: audiobook chapters still seek (device).
+- **Spotify-album device test (user asked explicitly, "which you will have to do"):** with
+  Spotify signed in, play a Spotify album, open `SpotifyAlbumTracksButton` (QueueMusic), tap a
+  track -> it plays in-context. Confirm on DEVICE (code says separate/working path, but the user
+  wants it verified). Sequencing note: this needs a Spotify session — do it after I2 signs in, or
+  ask the user to sign in for this one check; do NOT let it force the I2 data-clear earlier.
+
+## I3b — Library row tap silently no-ops when the MediaController isn't bound (the "other bug")
+- **Root (evidence, agent-found):** a Library row tap ALWAYS calls `onNavigateToPlayer()` (so it
+  jumps to the Player regardless), but `playFiles -> setMediaItems` is guarded by `controller?.let{}`
+  (`PlaybackConnection.kt:440`) — if the `MediaController` hasn't bound to the service yet it is a
+  **silent no-op** (no playback, no error), and any exception in `createMediaItems` is swallowed
+  with only a debug log (`LibraryViewModel.kt:571`). So a tap can land on an empty Player and look
+  like "nothing happened". This is the SECOND, distinct bug (separate from I3's track-list); the
+  user hinted at it ("unless you have uncovered some other bug").
+- **Fix direction:** don't silently drop the play — queue/retry it once the controller binds (or
+  surface a toast). Confirm the mechanism first with a device repro + logging (unbound-controller
+  timing vs a swallowed exception) before choosing the fix (no-guesswork).
+- **Files:** `PlaybackConnection.kt` (setMediaItems guard), `LibraryViewModel.kt` (playFiles/
+  createMediaItems catch), possibly `PlaybackConnection` bind callback.
+- **Predicate:** repro the silent no-op on device (cold launch, tap a track immediately) with a
+  DiagLog line proving the controller was unbound; after the fix, an early tap plays (or shows a
+  clear message) instead of a dead empty Player.
 
 ## I4a — "Autoplay next track" Settings toggle + info box
 - **Finding:** no local-music auto-advance toggle exists (only `PODCAST_AUTOPLAY_NEXT`).
@@ -84,8 +107,26 @@
   `player.pauseAtEndOfMediaItems = !autoplayNext` (so OFF stops at end of track).
 - **Files:** `SettingsDataStore.kt`, `SettingsViewModel.kt`, `SettingsScreen.kt`,
   `PlaybackConnection.kt`/`PlaybackService.kt` (apply-on-connect + on-change).
+- **"and stuff" (audit the existing autoplay settings):** the app already has
+  autoplay-on-launch, on-Bluetooth, on-cast, kind gates (spoken/music/video), ease-in, and
+  podcast-autoplay-next. Confirm they all sit in the right Settings place with accurate info
+  boxes; add the new "Autoplay next track" toggle beside them; keep the layman grouping coherent.
 - **Predicate:** toggle OFF -> at end of a Library track, playback **stops** (does not advance);
   ON -> advances to next. Device (short tracks) + screenshot of the Settings row + info text.
+
+## I4d — Single-item plays don't auto-advance (enqueue surrounding tracks)
+- **Finding:** auto-advance only works where a real multi-item queue is built (Library album/
+  folder). Single-item paths play ONE `MediaItem` so end-of-track = stop: Cloud single tracks
+  (`CloudViewModel.kt:1842`), downloaded Drive books (`playDownloadedBook`), Last-Played resume
+  (`LastPlayedViewModel:236/641`), videos, reverse-mode audio.
+- **Fix direction (part of "autoplay ... and stuff"):** when "Autoplay next track" (I4a) is on,
+  build a queue for the single-item paths too — enqueue the surrounding items (the folder /
+  Recents context / the browsed list) so ExoPlayer can advance. Scope carefully: keep mediaId
+  keys stable (resume/Recents unaffected); Spotify/cast paths follow their own advance.
+- **Files:** `CloudViewModel.kt`, `LibraryViewModel.kt` (playDownloadedBook), `LastPlayedViewModel.kt`.
+- **Predicate:** with the toggle on, play a Cloud/downloaded track -> at end it advances to the
+  next in that context; toggle off -> it stops. Device. (Ask user first: include this, or ship
+  I4a as toggle-over-existing-queues only — flagged as an open decision.)
 
 ## I4b — Autoplay toggle button in the player bottom bar (before Bluetooth)
 - **Fix:** add an autoplay IconButton in BOTH control rows immediately before `BluetoothButton`
@@ -106,17 +147,24 @@
 - **Predicate:** tap shuffle -> Toast "Shuffle on"; tap again -> "Shuffle off" (device screenshot
   of the toast).
 
-## I5a — Cast metadata display on the phone (regression check)
-- **Finding:** the fix is **intact at HEAD** — `PlaybackService.senderMetadataByMediaId` cache
-  (populated at `:2416/2671/3778`) still feeds the phone now-playing UI during a `CastPlayer`
-  session (`PlaybackConnection.kt:1019-1160`). The vc63 re-key that could have broken it was
-  reverted (`ce6610b`) + healed (`423862d`), both ancestors of HEAD; recent metadata-subtext
-  work only touched Library/Last-Played rows. So there is likely **no code change needed**.
-- **Task (V):** cast a Drive book + a local track to **Living Area TV** or **Kabir Stereo**
-  (never Bedroom) -> confirm the phone Player still shows title/artist/artwork during cast. Set
-  cast volume to a low non-zero (~3) before any audibility check (see cast-verification memory).
-- **Predicate:** cast active -> phone now-playing populated (screenshot). If a specific item type
-  is blank, capture it (mediaId + logcat) and open a follow-up; otherwise close as verified.
+## I5a — Cast metadata/artwork display on the phone (INSTRUMENT + device test; likely regressed)
+- **User asked for LOGGING, not just a glance** ("5a obviously requires on device testing and
+  logging"), and "the problem has gone" most likely means it CAME BACK. Title/artist path
+  (`senderMetadataByMediaId`) looks intact at HEAD, BUT the specific historical fix was for
+  COVER ART on the phone during cast — `castSafeArtModel` reads local-file art directly because
+  the phone can't fetch its own cleartext http relay art URL (TASKS §R, "RESOLVED 2026-07-10").
+  That ART-bind path is the likely regression surface and was NOT separately re-verified.
+- **Step 1 (INSTRUMENT):** add DiagLog breadcrumbs on the cast art-bind path (`castSafeArtModel`
+  / the artwork resolution in `PlaybackConnection.updatePlayerState` around `:1119-1180`) logging
+  per item: mediaId, artworkUri scheme, artworkData present, resolved model, during-cast flag.
+  Debug-only (R8-stripped) — safe, no behaviour change.
+- **Step 2 (DEVICE):** cast a Drive book + a local track to **Living Area TV** / **Kabir Stereo**
+  (never Bedroom; set cast volume low non-zero ~3 per the cast-verification memory) -> read the
+  trace + screenshot -> confirm whether title/artist AND artwork populate on the phone. If
+  artwork is blank, the trace pinpoints where (cleartext-http relay URL vs local bytes) -> fix
+  that path.
+- **Predicate:** cast active -> phone now-playing shows title/artist AND cover art (screenshot +
+  DiagLog line). If blank, the logged trace names the failing bind; fix + re-verify.
 
 ## I5b — Cast start cutoff (~0.5s) + start-delay setting
 - **Root:** there is NO cast delay option (the only cast offset, `castVideoAudioOffsetMs`, is an
@@ -125,6 +173,11 @@
   second on every fresh LOAD and every seek-to-0; the app uses a plain `CastPlayer` with no
   priming (`PlaybackService.kt:1973`). Context7: Cast SDK exposes no pre-roll knob; standard
   mitigation is LOAD-paused -> wait ready -> seek 0 -> play, or a short silence lead-in.
+- **Triple-check the existing offset (user: "if the toggle does exist, triple check the coding.
+  not sure i had it on if so"):** re-read `castVideoAudioOffsetMs` end-to-end
+  (`SettingsDataStore.kt:44/1163`, `CastSwitcher.kt:231`, `PlaybackService.kt:2018/2053/2064`) and
+  confirm it is A/V-video-sync only and cannot itself clip audio start; report the read-through so
+  it is explicitly ruled in or out (in case the user had it on).
 - **Fix:** (1) add a "Cast start delay" Settings option + info box (`SliderRow` 0-1000 ms,
   mirroring "Cold-start resume backoff" `SettingsScreen.kt:265-273`); (2) prime the cast start on
   the cast-begin path (`switchPlayer`/`rebuildForCast`): load paused, wait for the receiver to
@@ -178,6 +231,8 @@
   PendingIntent completion into a dedicated `SpotifyAuthCompleteActivity` (survives process
   death); OR the smaller fix of an activity-level stable-key launcher. Additive,
   behaviour-preserving, verified against the repro. Preserve `oauthInFlight` + the bounce path.
+  Also add an explicit timeout + surfaced failure around `performTokenRequest` so a stalled token
+  POST can't present as a silent hang (agent B's H4).
 - **Predicate:** with logging, reproduce the stuck state (trace shows the drop); after the fix,
   sign-in completes without a force-close (device). If the repro can't be induced, ship Step 1
   (logging) + the low-risk activity-level launcher and re-verify on the user's next stuck event.
@@ -192,21 +247,26 @@ unblock). Then confirm every phrase from the user's two messages maps to a task:
 - deep scan prompt when already enabled -> **I1**.
 - Spotify sign-in stuck, check logs, common issue, delicate handoff -> **I2**.
 - player suggests tracks, tapping does nothing (local); audiobook chapters work; Spotify albums
-  unsure (test) -> **I3** (+ I3 Spotify-album verify).
-- autoplay next track toggle? works? -> **I4a** (+ finding: works for Library queues only).
-- cast metadata display, fixed but "problem has gone", read project files -> **I5a**.
-- cast delay option / start cutoff -> **I5b**.
+  unsure (test) -> **I3** (track-list) + **I3b** (the "other bug": silent play no-op) + the
+  Spotify-album device test inside I3.
+- autoplay next track toggle? works? -> **I4a** (works for Library queues only) + **I4d**
+  (single-item paths can't advance).
+- cast metadata display, fixed but "problem has gone", read project files -> **I5a** (instrument
+  + device test; treats it as possibly regressed — the castSafeArtModel art path).
+- cast delay option / start cutoff -> **I5b** (+ triple-check the existing offset code).
 - podcasts in Library like Drive downloads -> **I6**.
 
 **From the plan-request message (this turn):**
 - point 1 = a fix -> **I1**.
 - point 2 = clear app data + attempt sign-in; HOLD clearing until last -> **I2** (order enforced).
-- point 3 corrected (track/chapter section; local tracks broken, chapters work, Spotify albums
-  test) -> **I3** (device-confirmed empty "Tracks" dialog).
-- point 4: autoplay toggles in Settings + info boxes -> **I4a**; shuffle mini-popup -> **I4c**;
-  autoplay button in bottom bar before Bluetooth, teal -> **I4b**.
-- point 5a: on-device testing + logging -> **I5a**.
-- point 5b: add to Settings menu + info boxes -> **I5b**.
+- point 3 corrected (track/chapter section; local tracks broken, chapters work) -> **I3**
+  (device-confirmed empty "Tracks" dialog); "unless you have uncovered some other bug" -> **I3b**;
+  "spotify albums ... testing first on device which you will have to do" -> I3 Spotify device test.
+- point 4: autoplay toggles ("and stuff") in Settings + info boxes -> **I4a** (+ audit existing
+  toggles) + **I4d**; shuffle mini-popup -> **I4c**; autoplay button in bottom bar before
+  Bluetooth, teal -> **I4b**.
+- point 5a: on-device testing AND LOGGING -> **I5a** (instrument the art-bind path + device test).
+- point 5b: add to Settings menu + info boxes; "triple check the coding" -> **I5b**.
 - point 6 (podcasts in Library) -> **I6**.
 - "full control of my phone, do all on-device testing" -> every predicate is a device test.
 - "hold clearing app data for item 2 until last" -> I2 ordered last, data-clear in Step 2.
