@@ -2001,7 +2001,25 @@ class PlaybackService : MediaSessionService() {
                         )
                         return
                     }
-                    switchPlayer(cp)
+                    // I10 — this is a NON-user-initiated session becoming available:
+                    // either an app relaunch / session resume (the receiver is still
+                    // playing our earlier cast), or a route auto-connect while idle.
+                    // If the receiver is ALREADY playing its own media, ADOPT it
+                    // (don't hijack it with our local queue); if it's idle, keep the
+                    // existing auto-cast-on-connect push so "Auto-play on Cast
+                    // connect" still works. playerState is read synchronously from
+                    // the resumed session's RemoteMediaClient.
+                    val rmcState = runCatching {
+                        castContext.sessionManager.currentCastSession?.remoteMediaClient?.playerState
+                    }.getOrNull()
+                    val receiverActive =
+                        rmcState == com.google.android.gms.cast.MediaStatus.PLAYER_STATE_PLAYING ||
+                        rmcState == com.google.android.gms.cast.MediaStatus.PLAYER_STATE_PAUSED ||
+                        rmcState == com.google.android.gms.cast.MediaStatus.PLAYER_STATE_BUFFERING
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "CAST", "session available (not user-initiated) rmcState=$rmcState receiverActive=$receiverActive → ${if (receiverActive) "ADOPT" else "push local"}"
+                    )
+                    switchPlayer(cp, adoptExistingCastMedia = receiverActive)
                 }
                 override fun onCastSessionUnavailable() {
                     // A cast ended. If it wasn't a deliberate device switch (no recent user
@@ -2644,7 +2662,7 @@ class PlaybackService : MediaSessionService() {
      * When switching back: original MediaItems are re-applied and the relay
      * is stopped.
      */
-    private fun switchPlayer(target: Player) {
+    private fun switchPlayer(target: Player, adoptExistingCastMedia: Boolean = false) {
         val ms = mediaSession ?: return
         val current = ms.player
         if (current === target) return
@@ -2762,7 +2780,22 @@ class PlaybackService : MediaSessionService() {
                 }
                 return  // stay with local player; user can retry
             }
-            items.map { rebuildForCast(it, server) }
+            if (adoptExistingCastMedia) {
+                // I10 — reconnecting to a receiver that is ALREADY playing its own
+                // media (app relaunch / session resume). Pushing our local queue
+                // here would HIJACK the receiver (the "cast plays a stale/other
+                // queue while the phone shows different content" bug, which also
+                // surfaced as the frozen-position I9 symptom). Adopt instead: leave
+                // the CastPlayer's receiver-restored timeline intact and just take
+                // over the session so the app reflects it and can pause/stop/seek.
+                // Relay is still started above so any NEW item added later relays.
+                com.powermediaplayer.diag.DiagLog.event(
+                    "CAST", "reconnect ADOPT — keep receiver media, not pushing local queue (${items.size} local items ignored)"
+                )
+                emptyList()
+            } else {
+                items.map { rebuildForCast(it, server) }
+            }
         } else {
             faststartJob?.cancel()
             stopCastRelay()
