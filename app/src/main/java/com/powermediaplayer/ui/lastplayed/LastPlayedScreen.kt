@@ -397,6 +397,10 @@ fun LastPlayedScreen(
                             bookmarkCap = RECENT_BOOKMARK_CAP,
                             isOffline = offlineDownloadedKeys.contains(item.mediaUri),
                             bookmarkProvider = { viewModel.recentsBookmarksFor(item.id) },
+                            // Live @time for the currently-playing Recents row (any
+                            // source): ticks at the player/mirror poll cadence, not
+                            // the 5s DB write. Other rows fall back to the stored value.
+                            livePositionProvider = { viewModel.livePosition(it) },
                             onTap = {
                                 viewModel.playLocalAt(item)
                                 onNavigateToPlayer()
@@ -866,10 +870,11 @@ private fun HistoryHeaderRow(
     pinResumeTag: Boolean? = null,
     livePositionProvider: ((String) -> Flow<Long?>)? = null
 ) {
-    // #19 — a "Resume live" pin DISPLAYS the live position it would resume from
-    // (updates as you play), not the snapshot frozen at pin time. Hold-position
-    // pins + Recents show the stored position.
-    val displayPosMs: Long = if (pinResumeTag == true && livePositionProvider != null) {
+    // Recents rows AND "Resume live" pins DISPLAY the live position while this
+    // item is the one currently playing (ticks at the player/mirror poll cadence,
+    // any source), else the stored position. Hold-position pins (pinResumeTag ==
+    // false) always show their frozen snapshot and never take the live path.
+    val displayPosMs: Long = if (pinResumeTag != false && livePositionProvider != null) {
         val live by remember(item.mediaUri) { livePositionProvider(item.mediaUri) }
             .collectAsStateWithLifecycle(initialValue = item.lastPositionMs)
         live ?: item.lastPositionMs

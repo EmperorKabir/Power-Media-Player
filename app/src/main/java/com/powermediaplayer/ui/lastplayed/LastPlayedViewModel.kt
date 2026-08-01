@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -272,10 +274,36 @@ class LastPlayedViewModel @Inject constructor(
     suspend fun pinSession(historyId: Long, followLive: Boolean = false): Boolean =
         repo.pinSession(historyId, followLive).isSuccess
 
-    /** #19 — live resume position for a uri, used by a "Resume live" pinned row
-     *  to DISPLAY the position it would resume from (updates as you play). */
+    /**
+     * The item CURRENTLY playing + its live position, refreshed at the source's
+     * own cadence: the player poll (~2x/sec for local / Drive / podcast) or the
+     * Spotify mirror poll (~1x/sec). Pair(mediaUri, positionMs), or null when
+     * nothing is playing. In-memory display heartbeat ONLY — the durable resume
+     * position is still persisted on the 5s tick, so this adds no DB writes.
+     */
+    private val nowPlayingPosition: StateFlow<Pair<String, Long>?> =
+        combine(
+            playbackConnection.playerState,
+            spotifyProvider.spotifyState
+        ) { ps, spot ->
+            when {
+                spot != null && spot.isPlaying && spot.trackUri.isNotBlank() ->
+                    spot.trackUri to spot.positionMs.coerceAtLeast(0L)
+                ps.isPlaying && ps.currentMediaUri.isNotBlank() ->
+                    ps.currentMediaUri to ps.currentPosition.coerceAtLeast(0L)
+                else -> null
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Live resume position for a uri. When [uri] is the item currently playing
+     *  (any source — local / Drive / podcast / Spotify) this emits its LIVE
+     *  position so a Recents / "Resume live" row's @time ticks smoothly; else it
+     *  falls back to the stored DB position (updated by the 5s persist tick).
+     *  Hold-position pins never call this (they show their frozen snapshot). */
     fun livePosition(uri: String): kotlinx.coroutines.flow.Flow<Long?> =
-        repo.observePositionFor(uri)
+        combine(nowPlayingPosition, repo.observePositionFor(uri)) { np, stored ->
+            if (np != null && np.first == uri) np.second else stored
+        }.distinctUntilChanged()
 
     fun unpin(favouriteId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
