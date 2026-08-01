@@ -1012,10 +1012,26 @@ class PlaybackConnection @Inject constructor(
             // state copy and the cast diag, so the logged value matches the emitted
             // state exactly (and avoids a redundant recompute).
             val plPos = cachedPlaylistPosition(c)
+            // Recompute the current chapter from the advancing position so the chapter
+            // chip + Track slider track CONTINUOUS playback. updatePlayerState computes
+            // the chapter only on discrete events (seek / chapter-tap / transition), so
+            // playing straight through a chapter boundary — most visibly during cast,
+            // where no such event fires — otherwise left the chapter frozen at wherever
+            // playback started while the book position advanced. Mirrors updatePlayerState's
+            // maths exactly. Within a chapter the index is unchanged, so the VM's
+            // position-stripped distinctUntilChanged suppresses it (no added UI churn); it
+            // reaches the UI only when the chapter actually changes at a boundary.
+            val chapters = currentState.chapters
+            val chapterIdx = when {
+                chapters.isEmpty() -> currentState.currentChapterIndex
+                folderChapters != null -> chapters.indexOfLast { plPos >= it.startTimeMs }
+                else -> findCurrentChapter(chapters, pos)
+            }
             _playerState.value = currentState.copy(
                 currentPosition = pos,
                 bufferedPercentage = c.bufferedPercentage,
-                totalPlaylistPosition = plPos
+                totalPlaylistPosition = plPos,
+                currentChapterIndex = chapterIdx
             )
             // I9 diag — during cast, sample the poll (~every 2s) so a frozen slider
             // shows whether the SOURCE position advances (c.currentPosition) even
