@@ -107,10 +107,27 @@ class PodcastsViewModel @Inject constructor(
     private val playbackConnection: PlaybackConnection,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
     private val settings: com.powermediaplayer.data.preferences.SettingsDataStore,
+    // AC6 — needed to tear down the Spotify mirror when a podcast starts, matching
+    // every other play path (Library/LastPlayed/Cloud). Hilt-provided @Singleton.
+    private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
     // #6 — per-episode effects via the shared override system (val so the
     // section can pass it to MediaOverridesPopup). Hilt-provided already.
     val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
 ) : ViewModel() {
+
+    /** AC6 — a podcast play must tear down an active Spotify mirror, or the
+     *  mini-player / Player tab keep showing the (paused) Spotify track while the
+     *  podcast audio plays. This was the ONE play path missing the teardown that
+     *  Library/LastPlayed/Cloud all do. Byte-for-byte the same as
+     *  LibraryViewModel.stopSpotifyMirrorIfActive. */
+    private fun stopSpotifyMirrorIfActive() {
+        if (spotifyProvider.spotifyState.value != null) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching { spotifyProvider.pause() }
+            }
+            spotifyProvider.stopPlaybackPolling()
+        }
+    }
     private val parser = RssFeedParser()
     private val downloader = com.powermediaplayer.podcast.PodcastDownloader(appContext)
 
@@ -144,6 +161,10 @@ class PodcastsViewModel @Inject constructor(
         lastPlayedRepo.observePositionFor(audioUrl)
 
     fun playEpisode(episode: PodcastEpisodeEntity) {
+        // AC6 — tear down any active Spotify mirror FIRST (matches all other play
+        // paths) so the podcast takes over the mini-player/Player instead of the UI
+        // sticking on the paused Spotify track.
+        stopSpotifyMirrorIfActive()
         viewModelScope.launch(Dispatchers.IO) {
             // Episode rows carry no artwork; resolve the show's image so the
             // player AND the Recents row both get a cover (fixes #3).

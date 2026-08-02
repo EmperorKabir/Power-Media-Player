@@ -3307,6 +3307,21 @@ class PlaybackService : MediaSessionService() {
                             com.powermediaplayer.util.ArtworkCache.uriFor(applicationContext, k)
                                 ?.path?.let { java.io.File(it) }?.takeIf { it.exists() }
                         }
+                        // AC8 — a LOCAL MediaStore/file music track carries NO art in its
+                        // MediaItem metadata (artworkData/Uri null) and isn't in ArtworkCache,
+                        // so the receiver got a blank cover while the phone showed art via its
+                        // separate LocalTrackArt fetcher. Extract the embedded picture via MMR
+                        // (the same source LocalTrackArt uses) → cache + relay-serve. content://
+                        // / file:// only; fully guarded (never crashes the cast build).
+                        ?: mediaUri?.takeIf { it.scheme == "content" || it.scheme == "file" }
+                            ?.let { localUri ->
+                                runCatching {
+                                    android.media.MediaMetadataRetriever().use { mmr ->
+                                        mmr.setDataSource(applicationContext, localUri)
+                                        mmr.embeddedPicture
+                                    }
+                                }.getOrNull()?.let { writeCastCover(item.mediaId, it) }
+                            }
                     if (f != null) { b.setArtworkUri(relay(android.net.Uri.fromFile(f))); com.powermediaplayer.diag.DiagLog.event("T302", "cast cover relay-served ${f.length()}B") }
                 }
             }
@@ -3359,8 +3374,29 @@ class PlaybackService : MediaSessionService() {
             ?: return item
         val mime = item.localConfiguration?.mimeType ?: guessMimeFromUri(originalUri)
         var castMime = mime
+        // AC7 — a public http/https stream (podcast episode, remote non-Drive media) is
+        // fetchable by the cast RECEIVER itself, so hand it the ORIGINAL url. The relay
+        // exists only for phone-local content:// / file:// the receiver can't reach;
+        // routing an https url through RelayItem.Local made serveLocal call
+        // openFileDescriptor(https) → "No content provider" → 404, so streamed podcasts
+        // never loaded on the receiver (all episodes 404'd). Drive (googleapis.com https)
+        // is EXCLUDED — it needs the OAuth-token / faststart relay below, which the
+        // receiver cannot do on its own. Mirrors the cover block, which already passes an
+        // http/https artwork uri straight to the receiver.
+        val scheme = originalUri.scheme?.lowercase()
+        val isDrive = originalUri.host?.contains("googleapis.com") == true
+        if (!isDrive && (scheme == "http" || scheme == "https")) {
+            return item.buildUpon()
+                .setUri(originalUri)
+                .setMimeType(castMime)
+                .setMediaMetadata(buildCastMetadata(item, server))
+                .setRequestMetadata(
+                    MediaItem.RequestMetadata.Builder().setMediaUri(originalUri).build()
+                )
+                .build()
+        }
         val relayItem: CastRelayServer.RelayItem = when {
-            originalUri.host?.contains("googleapis.com") == true -> {
+            isDrive -> {
                 // Drive OAuth: extract file id from /drive/v3/files/{id}
                 val fileId = originalUri.pathSegments?.getOrNull(
                     originalUri.pathSegments.indexOf("files") + 1
