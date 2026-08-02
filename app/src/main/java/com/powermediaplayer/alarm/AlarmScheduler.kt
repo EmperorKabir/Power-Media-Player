@@ -104,51 +104,10 @@ object AlarmScheduler {
         com.powermediaplayer.diag.DiagLog.bg("alarm cancelled reason=cancel id=$alarmId")
     }
 
-    /** First future time matching the alarm's weekday mask + time-of-day. */
-    private fun computeNextTriggerMs(alarm: AlarmRecord): Long {
-        val now = Calendar.getInstance()
-        // For one-shot (days == 0) the alarm fires the next time
-        // hour:minute occurs (today if still in the future, otherwise
-        // tomorrow).
-        if (alarm.days == 0) {
-            val cal = (now.clone() as Calendar).apply {
-                set(Calendar.HOUR_OF_DAY, alarm.hour)
-                set(Calendar.MINUTE, alarm.minute)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            if (cal.timeInMillis <= now.timeInMillis) {
-                cal.add(Calendar.DAY_OF_YEAR, 1)
-            }
-            return cal.timeInMillis
-        }
-        // Recurring — find the soonest weekday in the next 7 days that
-        // matches the day-mask. Calendar.MONDAY = 2 → bit 0; SUNDAY = 1
-        // → bit 6 in our mask.
-        for (i in 0 until 7) {
-            val cal = (now.clone() as Calendar).apply {
-                add(Calendar.DAY_OF_YEAR, i)
-                set(Calendar.HOUR_OF_DAY, alarm.hour)
-                set(Calendar.MINUTE, alarm.minute)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            if (cal.timeInMillis <= now.timeInMillis) continue
-            val dow = cal.get(Calendar.DAY_OF_WEEK)
-            val bit = when (dow) {
-                Calendar.MONDAY -> 1
-                Calendar.TUESDAY -> 2
-                Calendar.WEDNESDAY -> 4
-                Calendar.THURSDAY -> 8
-                Calendar.FRIDAY -> 16
-                Calendar.SATURDAY -> 32
-                Calendar.SUNDAY -> 64
-                else -> 0
-            }
-            if (alarm.days and bit != 0) return cal.timeInMillis
-        }
-        return -1L
-    }
+    /** First future time matching the alarm's weekday mask + time-of-day.
+     *  Delegates to the pure [nextAlarmTriggerMs] (testable; injects the real now). */
+    private fun computeNextTriggerMs(alarm: AlarmRecord): Long =
+        nextAlarmTriggerMs(alarm.hour, alarm.minute, alarm.days, Calendar.getInstance())
 
     private fun pendingIntent(
         context: Context,
@@ -164,4 +123,46 @@ object AlarmScheduler {
             flags or PendingIntent.FLAG_IMMUTABLE
         )
     }
+}
+
+/**
+ * Pure next-alarm-trigger computation, extracted from [AlarmScheduler] so it can be
+ * unit-tested with an injected [now] (the scheduler passes `Calendar.getInstance()`).
+ * days==0 → one-shot at the next hour:minute (today if still future, else tomorrow);
+ * else the soonest FUTURE weekday matching the mask (Mon=bit0=1 … Sun=bit6=64).
+ * Returns -1 when a recurring mask matches no day. Behaviour-identical to the original.
+ */
+internal fun nextAlarmTriggerMs(hour: Int, minute: Int, days: Int, now: Calendar): Long {
+    if (days == 0) {
+        val cal = (now.clone() as Calendar).apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (cal.timeInMillis <= now.timeInMillis) cal.add(Calendar.DAY_OF_YEAR, 1)
+        return cal.timeInMillis
+    }
+    for (i in 0 until 7) {
+        val cal = (now.clone() as Calendar).apply {
+            add(Calendar.DAY_OF_YEAR, i)
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (cal.timeInMillis <= now.timeInMillis) continue
+        val bit = when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.MONDAY -> 1
+            Calendar.TUESDAY -> 2
+            Calendar.WEDNESDAY -> 4
+            Calendar.THURSDAY -> 8
+            Calendar.FRIDAY -> 16
+            Calendar.SATURDAY -> 32
+            Calendar.SUNDAY -> 64
+            else -> 0
+        }
+        if (days and bit != 0) return cal.timeInMillis
+    }
+    return -1L
 }
