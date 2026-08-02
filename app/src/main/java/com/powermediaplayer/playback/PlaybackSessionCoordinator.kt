@@ -54,6 +54,7 @@ class PlaybackSessionCoordinator @Inject constructor(
         startReplayGainApply()
         startPositionPersistTick()
         startBackgroundPositionSave()
+        startSpotifyAutoplayGuard()
     }
 
     /**
@@ -109,6 +110,64 @@ class PlaybackSessionCoordinator @Inject constructor(
                 }
             }
         )
+    }
+
+    /**
+     * I4d (Spotify leg) — when "Autoplay next track" is OFF, also stop a Spotify
+     * album at the end of the current track. Spotify Connect runs its OWN queue,
+     * which the local player's `pauseAtEndOfMediaItems` cannot reach, so an album
+     * kept advancing with the toggle off (user report 2026-08-02). This ADDITIVE
+     * collector watches the mirror state and pauses Spotify on an AUTO-ADVANCE
+     * track boundary — it never touches the mirror poll/device-wake path (it only
+     * READS `spotifyState` and calls the existing `pause()` control), the same
+     * "additive, reads mirror, writes nothing to it" contract as the position
+     * branch above; the delicate Spotify handoff is untouched.
+     *
+     * Distinguishing an auto-advance from a deliberate user skip (both change the
+     * trackUri): an auto-advance follows the PREVIOUS track reaching its end; a
+     * user skip / track-pick happens mid-track. So we only pause when the last
+     * poll of the OLD track saw it near its end (within [AUTOPLAY_END_EPSILON_MS],
+     * generous enough to absorb the ~1 Hz mirror-poll granularity).
+     */
+    private fun startSpotifyAutoplayGuard() {
+        scope.launch {
+            var prevTrackUri: String? = null
+            var prevPositionMs = 0L
+            var prevDurationMs = 0L
+            var prevIsPlaying = false
+            spotifyProvider.spotifyState.collect { spot ->
+                if (spot == null) {
+                    prevTrackUri = null
+                    prevIsPlaying = false
+                    return@collect
+                }
+                val autoplayOff = runCatching {
+                    !settingsDataStore.musicAutoplayNext.first()
+                }.getOrDefault(false)
+                val trackChanged = prevTrackUri != null &&
+                    spot.trackUri.isNotBlank() && spot.trackUri != prevTrackUri
+                // The previous track was playing AND near its end when it flipped =
+                // an auto-advance. A user skip happens mid-track (prev pos well before
+                // the end) → left alone so manual navigation still works with the
+                // toggle off.
+                val prevWasNearEnd = prevDurationMs > 0L &&
+                    prevPositionMs >= prevDurationMs - AUTOPLAY_END_EPSILON_MS
+                if (autoplayOff && trackChanged && prevIsPlaying && prevWasNearEnd &&
+                    spot.isPlaying
+                ) {
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "AUTOPLAY",
+                        "Spotify auto-advance with autoplay OFF → pause " +
+                            "(prev ${prevPositionMs}/${prevDurationMs}ms → ${spot.trackUri})"
+                    )
+                    runCatching { spotifyProvider.pause() }
+                }
+                prevTrackUri = spot.trackUri.takeIf { it.isNotBlank() }
+                prevPositionMs = spot.positionMs
+                prevDurationMs = spot.durationMs
+                prevIsPlaying = spot.isPlaying
+            }
+        }
     }
 
     private fun startEnrichment() {
@@ -1053,6 +1112,14 @@ class PlaybackSessionCoordinator @Inject constructor(
 
 
     companion object {
+        /**
+         * I4d Spotify auto-advance guard: a track is treated as "near its end"
+         * (so a following track change is an auto-advance, not a user skip) when
+         * the last-seen position is within this window of the duration. Generous
+         * enough to absorb the ~1 Hz mirror poll landing a beat before the end.
+         */
+        private const val AUTOPLAY_END_EPSILON_MS = 4000L
+
         /**
          * Process-global single-fire guard for the cold-start resume
          * coroutine (moved with the restore block; PlaybackConnection
