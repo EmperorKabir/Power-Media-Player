@@ -264,9 +264,9 @@ fun CloudBrowserScreen(
         ActivityResultContracts.StartActivityForResult()
     ) { result -> viewModel.handleDriveResult(result.data) }
 
-    val spotifyLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result -> viewModel.handleSpotifyResult(result.data) }
+    // AC3 — Spotify sign-in no longer uses a Compose result launcher; it dispatches
+    // via AppAuth PendingIntent completion (SpotifyAuthCompleteActivity) so the result
+    // survives a full process kill mid-sign-in. See CloudViewModel.launchSpotifyAuth.
 
     // Native folder-browser visibility (replaces the WebView Picker; no
     // WebView → no second sign-in, no cold-start scaling).
@@ -468,8 +468,9 @@ fun CloudBrowserScreen(
             },
             onSelectSpotify = {
                 if (uiState.spotifyLoggedIn) viewModel.browseSpotify()
-                // I2: null = a rapid re-tap while a launch is already in flight — ignore it.
-                else viewModel.buildSpotifyAuthIntent()?.let { spotifyLauncher.launch(it) }
+                // AC3: PendingIntent-completion launch (survives process kill); the I2
+                // rapid-re-tap debounce lives inside launchSpotifyAuth.
+                else viewModel.launchSpotifyAuth()
             }
         )
 
@@ -623,7 +624,7 @@ fun CloudBrowserScreen(
                             description = "Browse your saved tracks, albums, and playlists. " +
                                 "Full-track playback requires Spotify Premium (preview clips only on free tier).",
                             loggedIn = uiState.spotifyLoggedIn,
-                            onConnect = { viewModel.buildSpotifyAuthIntent()?.let { spotifyLauncher.launch(it) } },
+                            onConnect = { viewModel.launchSpotifyAuth() },
                             onBrowse = { viewModel.browseSpotify() },
                             onSignOut = { viewModel.signOutSpotify() }
                         )

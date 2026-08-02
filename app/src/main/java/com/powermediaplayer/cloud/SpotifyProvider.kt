@@ -331,15 +331,9 @@ class SpotifyProvider @Inject constructor(
      * Builds the AppAuth authorization request. The launcher in the UI layer
      * fires this and routes the result to [handleAuthResponse].
      */
-    fun buildAuthIntent(): Intent {
-        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.buildAuthIntent start")
-        // I2 — PERSISTENT breadcrumb (survives process death, unlike Diag.i logcat).
-        // The AppAuth sign-in can be killed by aggressive OEMs between consent and
-        // the result callback, so a file-backed trail is the only way to see where
-        // a stuck sign-in dies. Correlate with the CLOUDUI SPOTIFYAUTH lines.
-        com.powermediaplayer.diag.DiagLog.event("SPOTIFYAUTH", "buildAuthIntent")
-        val t0 = System.currentTimeMillis()
-        val request = AuthorizationRequest.Builder(
+    /** The AppAuth authorization request (PKCE, Premium scopes). */
+    private fun buildAuthRequest(): AuthorizationRequest =
+        AuthorizationRequest.Builder(
             serviceConfig,
             BuildConfig.SPOTIFY_CLIENT_ID,
             ResponseTypeValues.CODE,
@@ -347,9 +341,23 @@ class SpotifyProvider @Inject constructor(
         )
             .setScope(scopes)
             .build()
-        val intent = authService.getAuthorizationRequestIntent(request)
-        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.buildAuthIntent done ${System.currentTimeMillis() - t0}ms")
-        return intent
+
+    /**
+     * AC3 fix — dispatch the auth request via PendingIntent completion (AppAuth
+     * "Approach B") instead of getAuthorizationRequestIntent + startActivityForResult.
+     * On the redirect AppAuth fires [complete] (carrying the AuthorizationResponse) →
+     * SpotifyAuthCompleteActivity, which survives a FULL process kill of this app while
+     * the Spotify Custom Tab was foreground (device-proven ColorOS failure the old
+     * in-memory result callback silently dropped). Same underlying redirect handling
+     * (RedirectUriReceiver→AuthorizationManagement) on every Android; only the result
+     * DELIVERY becomes durable, so this is strictly more robust everywhere, not a
+     * ColorOS-only path.
+     */
+    fun performAuthRequest(complete: android.app.PendingIntent, cancel: android.app.PendingIntent) {
+        com.powermediaplayer.diag.DiagLog.event(
+            "SPOTIFYAUTH", "performAuthorizationRequest (PendingIntent completion — survives process death)"
+        )
+        authService.performAuthorizationRequest(buildAuthRequest(), complete, cancel)
     }
 
     /**

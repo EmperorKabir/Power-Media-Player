@@ -1070,14 +1070,15 @@ class CloudViewModel @Inject constructor(
     @Volatile private var lastSpotifyAuthLaunchMs: Long = 0L
 
     /**
-     * Returns the Spotify AppAuth intent to launch, or NULL when a launch is
-     * already in flight and the tap is a rapid repeat (I2 sticky-fix a): the
-     * ColorOS Custom Tab takes ~1 s to appear, so a user who taps again — thinking
-     * nothing happened — used to launch a SECOND AppAuth flow that CANCELS the
-     * first, and the cancelled one returns "User cancelled flow" → the sign-in
-     * silently aborts. The caller must null-guard: `...()?.let { launcher.launch(it) }`.
+     * AC3 fix — launch Spotify sign-in via AppAuth PendingIntent completion so the
+     * result survives ColorOS hard-killing the app while the Custom Tab is up
+     * (device-proven root cause). Replaces the old buildSpotifyAuthIntent() +
+     * startActivityForResult launcher, whose in-memory callback died with the
+     * process. Keeps I2's re-tap debounce + the F2 oauth-in-flight deadline. No-ops
+     * on a rapid repeat while a launch is genuinely in flight (the ColorOS Custom
+     * Tab takes ~1 s to appear; a 2nd launch would CANCEL the first).
      */
-    fun buildSpotifyAuthIntent(): Intent? {
+    fun launchSpotifyAuth() {
         val now = android.os.SystemClock.elapsedRealtime()
         // (a) De-bounce rapid re-taps while a launch is genuinely in flight.
         if (com.powermediaplayer.service.PlaybackService.oauthInFlight() &&
@@ -1087,22 +1088,38 @@ class CloudViewModel @Inject constructor(
                 "SPOTIFYAUTH",
                 "re-tap IGNORED (flow already launching ${now - lastSpotifyAuthLaunchMs}ms ago) — prevents cancel-storm"
             )
-            return null
+            return
         }
         lastSpotifyAuthLaunchMs = now
-        // Bug fix (user-reported "Spotify sign-in resumes playback"): mark OAuth
-        // in-flight so PlaybackService.handleAudioFocusChange ignores the loss-then-
-        // gain pair caused by the browser Custom Tab stealing audio focus.
-        // Audit F2 — arm a 5-min DEADLINE (a real login can exceed 60 s). Deadline-
-        // based, so it self-expires even if this ViewModel is destroyed before a
-        // dropped result callback (the old viewModelScope timer could strand the
-        // flag true → permanently suppress auto-resume). Cleared early in
-        // handleSpotifyResult on the actual result.
+        // Arm a 5-min OAuth-in-flight DEADLINE so handleAudioFocusChange ignores the
+        // Custom Tab's focus loss/gain; deadline-based so it self-expires. Cleared by
+        // SpotifyAuthCompleteActivity on the actual result.
         com.powermediaplayer.service.PlaybackService.armOauthInFlight(300_000L)
         com.powermediaplayer.diag.DiagLog.event(
-            "SPOTIFYAUTH", "UI tap → launch auth intent, oauthInFlight armed (5min deadline)"
+            "SPOTIFYAUTH", "UI tap → performAuthorizationRequest (PendingIntent completion), oauthInFlight armed (5min deadline)"
         )
-        return spotifyProvider.buildAuthIntent()
+        // AppAuth fires these on the redirect: `complete` carries the AuthorizationResponse
+        // → SpotifyAuthCompleteActivity. MUTABLE so AppAuth can attach the response extras
+        // (required on API 31+; plain flag on 30).
+        val flags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S)
+            android.app.PendingIntent.FLAG_MUTABLE else 0
+        val target = android.content.Intent(context, com.powermediaplayer.cloud.SpotifyAuthCompleteActivity::class.java)
+        val complete = android.app.PendingIntent.getActivity(context, 0, target, flags)
+        val cancel = android.app.PendingIntent.getActivity(context, 1, target, flags)
+        // Guard: AppAuth's performAuthorizationRequest launches the browser SYNCHRONOUSLY
+        // and throws ActivityNotFoundException when the device has NO browser (bare
+        // emulator / stripped ROM). The old getAuthorizationRequestIntent+launcher path
+        // deferred that launch and failed gracefully — keep that behaviour instead of
+        // crashing, and clear the in-flight deadline so the UI isn't wedged.
+        try {
+            spotifyProvider.performAuthRequest(complete, cancel)
+        } catch (e: Exception) {
+            com.powermediaplayer.service.PlaybackService.clearOauthInFlight()
+            com.powermediaplayer.diag.DiagLog.event(
+                "SPOTIFYAUTH", "performAuthRequest failed ${e.javaClass.simpleName}: ${e.message} (no browser?)"
+            )
+            _uiState.update { it.copy(errorMessage = "Couldn't open a browser to sign in to Spotify.") }
+        }
     }
     fun buildDriveOAuthSignInIntent(): Intent = driveOAuthProvider.buildSignInIntent()
 

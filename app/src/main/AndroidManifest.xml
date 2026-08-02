@@ -149,6 +149,18 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
 
+        <!-- AC3 — AppAuth PendingIntent completion target for Spotify sign-in. Fired by
+             the app's own completion PendingIntent when the Spotify redirect returns,
+             so it completes the token exchange even after ColorOS hard-kills the app
+             mid-sign-in (the startActivityForResult path drops that result). Not
+             exported; translucent so it never flashes a blank screen. -->
+        <activity
+            android:name=".cloud.SpotifyAuthCompleteActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Media Playback Service -->
         <service
             android:name=".service.PlaybackService"
