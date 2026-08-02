@@ -117,17 +117,24 @@ class PlaybackSessionCoordinator @Inject constructor(
      * album at the end of the current track. Spotify Connect runs its OWN queue,
      * which the local player's `pauseAtEndOfMediaItems` cannot reach, so an album
      * kept advancing with the toggle off (user report 2026-08-02). This ADDITIVE
-     * collector watches the mirror state and pauses Spotify on an AUTO-ADVANCE
-     * track boundary — it never touches the mirror poll/device-wake path (it only
-     * READS `spotifyState` and calls the existing `pause()` control), the same
-     * "additive, reads mirror, writes nothing to it" contract as the position
-     * branch above; the delicate Spotify handoff is untouched.
+     * collector watches the mirror state and pauses Spotify — it never touches the
+     * mirror poll/device-wake path (it only READS `spotifyState` and calls the
+     * existing `pause()` control), the same "additive, reads mirror, writes nothing
+     * to it" contract as the position branch above; the delicate handoff is untouched.
      *
-     * Distinguishing an auto-advance from a deliberate user skip (both change the
-     * trackUri): an auto-advance follows the PREVIOUS track reaching its end; a
-     * user skip / track-pick happens mid-track. So we only pause when the last
-     * poll of the OLD track saw it near its end (within [AUTOPLAY_END_EPSILON_MS],
-     * generous enough to absorb the ~1 Hz mirror-poll granularity).
+     * PRIMARY = pre-empt: pause when the CURRENT track nears its end (within
+     * [AUTOPLAY_PREEMPT_MS]) BEFORE Spotify auto-advances, so the just-played track
+     * stays shown at its end rather than the next track loading at 0 (user follow-up
+     * 2026-08-03). The mirror polls ~1 Hz while playing (SpotifyProvider ~`delay(1000)`),
+     * so the window must exceed one poll interval to reliably land inside it. Fires
+     * once per track (`preemptedTrack`) so a deliberate resume of that near-end track
+     * isn't immediately re-paused.
+     *
+     * FALLBACK = boundary: if a poll gap let the track advance before pre-empt caught
+     * it, pause on the track change — but ONLY when the previous track was near its end
+     * (auto-advance), never on a mid-track user skip / track-pick (both change the
+     * trackUri; the near-end test is what separates them), so manual navigation still
+     * works with the toggle off.
      */
     private fun startSpotifyAutoplayGuard() {
         scope.launch {
@@ -135,10 +142,12 @@ class PlaybackSessionCoordinator @Inject constructor(
             var prevPositionMs = 0L
             var prevDurationMs = 0L
             var prevIsPlaying = false
+            var preemptedTrack: String? = null
             spotifyProvider.spotifyState.collect { spot ->
                 if (spot == null) {
                     prevTrackUri = null
                     prevIsPlaying = false
+                    preemptedTrack = null
                     return@collect
                 }
                 val autoplayOff = runCatching {
@@ -146,19 +155,36 @@ class PlaybackSessionCoordinator @Inject constructor(
                 }.getOrDefault(false)
                 val trackChanged = prevTrackUri != null &&
                     spot.trackUri.isNotBlank() && spot.trackUri != prevTrackUri
-                // The previous track was playing AND near its end when it flipped =
-                // an auto-advance. A user skip happens mid-track (prev pos well before
-                // the end) → left alone so manual navigation still works with the
-                // toggle off.
+                if (trackChanged) preemptedTrack = null
+
+                val remaining = spot.durationMs - spot.positionMs
+                // PRIMARY (pre-empt): current track nearing its end → pause now so it
+                // stays on THIS track. Guard on a real-length track (> 2× the window)
+                // so a short intro clip isn't paused at its very start.
+                val nearOwnEnd = spot.durationMs > AUTOPLAY_PREEMPT_MS * 2 &&
+                    remaining in 0..AUTOPLAY_PREEMPT_MS
+                // FALLBACK (boundary): pre-empt missed and it auto-advanced — prev track
+                // was playing AND near its end when it flipped (not a mid-track skip).
                 val prevWasNearEnd = prevDurationMs > 0L &&
                     prevPositionMs >= prevDurationMs - AUTOPLAY_END_EPSILON_MS
-                if (autoplayOff && trackChanged && prevIsPlaying && prevWasNearEnd &&
-                    spot.isPlaying
+
+                if (autoplayOff && spot.isPlaying && nearOwnEnd &&
+                    preemptedTrack != spot.trackUri
+                ) {
+                    preemptedTrack = spot.trackUri
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "AUTOPLAY",
+                        "Spotify near end + autoplay OFF → pre-empt pause " +
+                            "(${spot.positionMs}/${spot.durationMs}ms, stays on track)"
+                    )
+                    runCatching { spotifyProvider.pause() }
+                } else if (autoplayOff && trackChanged && prevIsPlaying &&
+                    prevWasNearEnd && spot.isPlaying && preemptedTrack != prevTrackUri
                 ) {
                     com.powermediaplayer.diag.DiagLog.event(
                         "AUTOPLAY",
-                        "Spotify auto-advance with autoplay OFF → pause " +
-                            "(prev ${prevPositionMs}/${prevDurationMs}ms → ${spot.trackUri})"
+                        "Spotify auto-advance slipped past pre-empt + autoplay OFF → " +
+                            "pause (prev ${prevPositionMs}/${prevDurationMs}ms → ${spot.trackUri})"
                     )
                     runCatching { spotifyProvider.pause() }
                 }
@@ -1119,6 +1145,15 @@ class PlaybackSessionCoordinator @Inject constructor(
          * enough to absorb the ~1 Hz mirror poll landing a beat before the end.
          */
         private const val AUTOPLAY_END_EPSILON_MS = 4000L
+
+        /**
+         * I4d pre-empt window: with autoplay OFF, pause a Spotify track once its
+         * remaining time drops within this window so it stops on THIS track before
+         * Spotify auto-advances. Must exceed the ~1000 ms mirror poll interval so a
+         * poll reliably lands inside the window; the trade-off is the last ~1 s of
+         * the track is not heard (accepted over the next track loading at 0).
+         */
+        private const val AUTOPLAY_PREEMPT_MS = 1500L
 
         /**
          * Process-global single-fire guard for the cold-start resume

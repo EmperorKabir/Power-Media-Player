@@ -140,6 +140,23 @@ private fun PositionSlider(
 ) {
     var isDragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableFloatStateOf(0f) }
+    // After the finger lifts, the audio seeks immediately but the incoming
+    // [position] flow lags (the Spotify mirror only polls ~1 s), so reverting the
+    // thumb to [position] on release made it SNAP BACK to the old spot for ~1 s
+    // before jumping to the seeked spot. Hold the seeked value until the real
+    // position catches up (either direction), with a safety window for a flow that
+    // never lands exactly on target. Pure display — no seek/metadata behaviour change.
+    var pendingSeek by remember { mutableStateOf<Float?>(null) }
+    androidx.compose.runtime.LaunchedEffect(position, pendingSeek) {
+        val target = pendingSeek ?: return@LaunchedEffect
+        if (kotlin.math.abs(position - target) < 0.02f) pendingSeek = null
+    }
+    androidx.compose.runtime.LaunchedEffect(pendingSeek) {
+        if (pendingSeek != null) {
+            kotlinx.coroutines.delay(2000)
+            pendingSeek = null
+        }
+    }
     // Reused across draws so the tick-rate redraw doesn't allocate.
     val abTextPaint = remember {
         android.graphics.Paint().apply {
@@ -155,13 +172,14 @@ private fun PositionSlider(
     Column(modifier = modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth()) {
         Slider(
-            value = if (isDragging) dragValue else position,
+            value = if (isDragging) dragValue else (pendingSeek ?: position),
             onValueChange = { value ->
                 isDragging = true
                 dragValue = value
             },
             onValueChangeFinished = {
                 onSeek(dragValue)
+                pendingSeek = dragValue
                 isDragging = false
             },
             enabled = enabled,

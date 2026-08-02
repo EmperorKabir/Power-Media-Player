@@ -191,6 +191,14 @@ class SpotifyProvider @Inject constructor(
     private val lyricsHttp = com.powermediaplayer.util.SharedHttp.base.newBuilder()
         .callTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
         .build()
+
+    // LRCLib sits behind Cloudflare, which as of 2026-08 returns HTTP 520 to the
+    // default `okhttp/…` User-Agent (device-proven: okhttp UA → 520, any other UA →
+    // 200). No app code changed — LRCLib's CDN started blocking the bare UA, which is
+    // why lyrics "worked before, not now". Send an identifying UA (LRCLib docs ask
+    // for one), mirroring RssFeedParser's fix for the same CDN-rejects-okhttp class.
+    private val lrclibUa =
+        "Mozilla/5.0 (Linux; Android) PowerMediaPlayer (lyrics via LRCLib)"
     private var pollJob: Job? = null
 
     // Audit 3.8/8.7 — the class doc promised a ">30s backgrounded" poll
@@ -1643,9 +1651,18 @@ class SpotifyProvider @Inject constructor(
             "&artist_name=" + java.net.URLEncoder.encode(firstArtist, "UTF-8") +
             "&album_name=" + java.net.URLEncoder.encode(album, "UTF-8") +
             "&duration=" + durSec
-        val req = Request.Builder().url(url).build()
+        val req = Request.Builder().url(url)
+            .header("User-Agent", lrclibUa)
+            .build()
         return try {
             lyricsHttp.newCall(req).execute().use { resp ->
+                // Evidence log: the EXACT album/duration the app sent + the HTTP code
+                // (the success log below never fires on a 404, hiding why a track
+                // misses). Spotify-path only; no effect on Drive/local metadata.
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Spotify.lyrics GET code=${resp.code} album='$album' durSec=$durSec url=$url"
+                )
                 if (!resp.isSuccessful) return@use null
                 val body = resp.body?.string().orEmpty()
                 val root = JsonParser.parseString(body).asJsonObject
