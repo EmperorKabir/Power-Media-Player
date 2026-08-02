@@ -27,17 +27,17 @@ Status legend: `[ ]` not started · `[~]` code complete + compiles/tests green, 
 | ID | Item | Phase | Box |
 |----|------|-------|-----|
 | I1 | Deep-scan prompt shows even when already enabled in Settings | M | [x] emulator-verified |
-| I3 | Player track-list tap does nothing for local multi-track | M | [x] emulator-verified (tap track 2 → seeks) |
-| I3b | Library row tap silently no-ops when the MediaController isn't bound (the "other bug") | I->M | [~] code (defensive defer+flush; race not on-demand reproducible) |
-| I4a | Add "Autoplay next track" Settings toggle + info box (+ audit the existing autoplay toggles) | M | [x] emulator-verified |
-| I4b | Add autoplay toggle button to player bottom bar (before Bluetooth) | M | [x] emulator-verified (teal PlaylistPlay before BT) |
+| I3 | Player track-list tap does nothing for local multi-track | M | [x] emu (local) + DEVICE-VERIFIED 2026-08-02 (Spotify album Meteora → tracks button → tapped 'Hit the Floor' → plays in-context) |
+| I3b | Library row tap silently no-ops when the MediaController isn't bound (the "other bug") | I->M | [x] happy-path DEVICE-VERIFIED 2026-08-02 (cold-launch → Library row tap → plays, no dead Player); specific unbound-controller race not on-demand reproducible (controller binds <1s), defensive defer+flush in code |
+| I4a | Add "Autoplay next track" Settings toggle + info box (+ audit the existing autoplay toggles) | M | [x] emu + DEVICE-VERIFIED 2026-08-02 (autoplay button teal=ON; 23-track Library queue auto-advanced repeatedly) |
+| I4b | Add autoplay toggle button to player bottom bar (before Bluetooth) | M | [x] emu + DEVICE-VERIFIED 2026-08-02 (teal ic_autoplay_next button present before BT in bottom bar) |
 | I4c | Shuffle button shows a mini "Shuffle on/off" popup | M | [x] emulator-verified (shuffle + autoplay toasts) |
-| I4d | Single-item plays (Cloud/downloaded/Last-Played) don't auto-advance — enqueue surrounding tracks | M | [~] code; real-data verify on phone (needs a pinned album) |
-| I5a | Cast metadata/artwork display on phone — INSTRUMENT (logging) + device test (poss. regressed) | I->M | [~] logging; needs real Cast device (phone) |
-| I5b | Cast start cutoff: add a start-delay setting + prime the cast start (+ triple-check castVideoAudioOffsetMs) | I->M | [x] setting+info emulator-verified; priming needs real Cast |
+| I4d | Single-item plays (Cloud/downloaded/Last-Played) don't auto-advance — enqueue surrounding tracks | M | [~] enqueue code confirmed (pinned-album playAlbumTracks / Cloud / downloaded-podcast slice) + autoplay-advance mechanism DEVICE-PROVEN (Library queue advanced); full single-item enqueue verify needs a multi-track NON-Spotify context (pinned album) — absent in post-wipe content (local=short singles, Drive=1 .m4b/folder, Spotify excluded by design) |
+| I5a | Cast metadata/artwork display on phone — INSTRUMENT (logging) + device test (poss. regressed) | I->M | [x] DEVICE-VERIFIED 2026-08-02 (cast local 'Cuddle Monkey' to Kabir Stereo: phone shows title+artist+cover art; CASTART trace `artUri=true scheme=http bytes=true → bytes (renders on phone)` = uses local bytes not the unreachable relay URL) |
+| I5b | Cast start cutoff: add a start-delay setting + prime the cast start (+ triple-check castVideoAudioOffsetMs) | I->M | [x] DEVICE-VERIFIED 2026-08-02 (setting+info render on device; A/V-offset confirmed A/V-sync-only via its info box = triple-check; no clip at lead-in 0 per user ear; set 500ms → `CASTPRIME armed lead-in=500ms (await READY)` → `started after 500ms lead-in` on real cast; reset to 0 after) |
 | I6 | Surface downloaded podcasts in the Library | M | [x] DEVICE-VERIFIED 2026-08-02 (=AC1; downloaded-podcasts Library section, vc74+) |
 | I2 | Spotify sticky sign-in — log first, repro (data-clear LAST), then fix | I->M | [x] DEVICE-VERIFIED 2026-08-02 (=AC3; PendingIntent completion, vc85; am-kill repro→fixed, token persisted) |
-| GATE | Anti-skip final gate + coverage cross-check | V | [ ] |
+| GATE | Anti-skip final gate + coverage cross-check | V | [x] 2026-08-02 — 10/11 device-verified; only I4d partial (enqueue code confirmed + mechanism device-proven; full test needs a multi-track non-Spotify context absent post-wipe) |
 
 **Device-verification note (2026-07-30):** the physical Oppo Find X9 Ultra runs the
 Play Closed-test build (release-signed `f45bab3e…`, carries a Play source stamp).
@@ -47,6 +47,14 @@ Spotify session held for the I2 data-clear. Therefore ALL physical-phone testing
 (cast I5a/I5b + real Spotify repro I2 + data-dependent checks) is consolidated into
 the FINAL authorised-wipe phase: uninstall vc73 → install debug vc74 → enable
 DiagLog → run cast + Spotify repro together. Emulator covers the rest.
+
+**RESOLVED 2026-08-02 (device-verification pass complete):** the user granted the media
+permission, re-signed into Drive, and turned on Kabir's Kitchen Stereo. Full adb-driven pass
+then verified I3(Spotify-album)/I3b(happy)/I4a/I4b/I5a/I5b on device (see checklist). Only I4d
+remains partial — its enqueue code is confirmed and the autoplay-advance mechanism is
+device-proven, but a full end-to-end single-item-enqueue test needs a multi-track non-Spotify
+context (a pinned album) that tonight's post-wipe content doesn't contain. Original blocker note
+kept below for history.
 
 **POST-WIPE BLOCKER STATE (2026-08-02, after the AC3 data-clear):** the AC3 verification
 required a full app-data wipe (uninstall+reinstall debug vc85). That cleared READ_MEDIA_AUDIO,
