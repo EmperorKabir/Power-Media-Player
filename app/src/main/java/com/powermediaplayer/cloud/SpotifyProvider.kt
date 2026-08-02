@@ -1819,6 +1819,9 @@ class SpotifyProvider @Inject constructor(
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Spotify session expired")
         )
+        // Evidence for the lyric-tap "starts mid-line" report: log the exact seek
+        // target so it can be compared to where the mirror position actually lands.
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.seekTo requested=${positionMs}ms")
         simplePut(token, "https://api.spotify.com/v1/me/player/seek?position_ms=$positionMs")
     }
 
