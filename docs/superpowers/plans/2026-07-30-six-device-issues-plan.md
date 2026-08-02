@@ -35,8 +35,8 @@ Status legend: `[ ]` not started · `[~]` code complete + compiles/tests green, 
 | I4d | Single-item plays (Cloud/downloaded/Last-Played) don't auto-advance — enqueue surrounding tracks | M | [~] code; real-data verify on phone (needs a pinned album) |
 | I5a | Cast metadata/artwork display on phone — INSTRUMENT (logging) + device test (poss. regressed) | I->M | [~] logging; needs real Cast device (phone) |
 | I5b | Cast start cutoff: add a start-delay setting + prime the cast start (+ triple-check castVideoAudioOffsetMs) | I->M | [x] setting+info emulator-verified; priming needs real Cast |
-| I6 | Surface downloaded podcasts in the Library | M | [~] code; real-data verify on phone (needs a downloaded episode) |
-| I2 | Spotify sticky sign-in — log first, repro (data-clear LAST), then fix | I->M | [~] logging only; repro+fix pending |
+| I6 | Surface downloaded podcasts in the Library | M | [x] DEVICE-VERIFIED 2026-08-02 (=AC1; downloaded-podcasts Library section, vc74+) |
+| I2 | Spotify sticky sign-in — log first, repro (data-clear LAST), then fix | I->M | [x] DEVICE-VERIFIED 2026-08-02 (=AC3; PendingIntent completion, vc85; am-kill repro→fixed, token persisted) |
 | GATE | Anti-skip final gate + coverage cross-check | V | [ ] |
 
 **Device-verification note (2026-07-30):** the physical Oppo Find X9 Ultra runs the
@@ -47,6 +47,22 @@ Spotify session held for the I2 data-clear. Therefore ALL physical-phone testing
 (cast I5a/I5b + real Spotify repro I2 + data-dependent checks) is consolidated into
 the FINAL authorised-wipe phase: uninstall vc73 → install debug vc74 → enable
 DiagLog → run cast + Spotify repro together. Emulator covers the rest.
+
+**POST-WIPE BLOCKER STATE (2026-08-02, after the AC3 data-clear):** the AC3 verification
+required a full app-data wipe (uninstall+reinstall debug vc85). That cleared READ_MEDIA_AUDIO,
+the Drive session, all downloads/history — only Spotify is re-signed-in (AC3). The four
+remaining `[~]` items are code-complete + in the vc85 build on the phone, but their DEVICE
+verification is now blocked on USER actions that adb cannot perform on ColorOS (`pm grant`
+throws `SecurityException: GRANT_RUNTIME_PERMISSIONS`, same lockdown as `pm clear`):
+- **I3b** (cold-launch play race) + **I4d** (single-item autoplay advance) + I3-local-tracks:
+  need the LOCAL LIBRARY → user must grant the media permission (open PMP → "Open Library" →
+  Allow → let it scan), then adb can drive the taps.
+- **I5a** (cast art on phone, Drive-book leg): needs Drive RE-SIGN-IN (user) + a cast device on.
+- **I5b** (cast start priming) + I5a (local leg): need a CAST DEVICE on (Living Area TV /
+  Kabir Stereo per [[feature_cast_test_targets]]; never Bedroom; low non-zero volume).
+- **I3 Spotify-album** device test: Spotify IS signed in → doable now (no wipe dependency).
+Once the user grants the media permission + turns on a cast device, all four are adb-drivable
+in one pass. No code work remains for the AB batch — verification only.
 
 ---
 
