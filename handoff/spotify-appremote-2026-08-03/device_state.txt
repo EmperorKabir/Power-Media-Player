@@ -1,0 +1,3 @@
+vc: versionName=1.5.37-test
+READ_MEDIA_AUDIO: READ_MEDIA_AUDIO: granted=true
+streamMusic: streamVolume:141

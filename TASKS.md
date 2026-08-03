@@ -1,5 +1,22 @@
 # TASKS.md — binding task ledger (compaction-proof)
 
+> **▶ RESUME HERE (2026-08-03) — Spotify precise stop-at-end via App Remote SDK (WIP, vc92/1.5.37).**
+> Full handoff: `handoff/spotify-appremote-2026-08-03/README.md` (+ captured phone logs).
+> GOAL: autoplay-OFF → a Spotify track plays to 0 remaining then stops, no advance, no artifact
+> (user rejected stop-early/advance/loop). PROVEN the Web-API poll (~1s stale) + cloud pause lag
+> can't hit the boundary → switched to the **Spotify App Remote SDK** (real-time local state +
+> local-IPC pause). DONE: AAR vendored (`app/libs/spotify-app-remote-release-0.8.0.aar`),
+> `SpotifyAppRemoteController`, coordinator wiring (App-Remote precise-stop for on-phone +
+> Web-API timed-pause gated to remote/cast fallback), `deviceType` added to the mirror. Compiles.
+> **BLOCKER (device-proven):** App Remote `connect failed: UserNotAuthorizedException`, no consent
+> shown — because `connect()` runs from the background app context; the `app-remote-control`
+> consent dialog needs a **foreground Activity**. FIX NEXT: connect with the foreground Activity
+> via `MainActivityHolder` (MainActivity.kt:126 already `set(this)`) — or add app-remote-control to
+> the AppAuth scopes (needs re-sign-in). Then tune `AUTOPLAY_APPREMOTE_LEAD_MS` on device. SCOPE
+> LIMIT (honest): precise stop is on-phone ONLY; cast = Web-API best-effort (no Spotify API can do
+> exact-boundary stop remotely). NOTE: media volume was left low by me earlier (→ "plays silently"
+> reports), restored to 141/160 — not an app bug. Lyrics UA fix (LRCLib 520) already shipped vc87/88.
+
 > **✓ DONE 2026-06-27 — all 7 audit misses (M1–M7) fixed + 3-lens efficiency audit
 > closeout applied.** See `REMEDIATION-2026-06-27.md` for the full record. M1 BT
 > per-file-type mappings (4 kinds), M2 BT chapter nav, M3 cloud backup/restore (local +

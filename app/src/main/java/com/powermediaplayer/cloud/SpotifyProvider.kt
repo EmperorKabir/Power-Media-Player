@@ -53,6 +53,10 @@ data class SpotifyPlaybackState(
     val isPlaying: Boolean,
     val trackUri: String,
     val deviceName: String?,
+    // Spotify Connect device type ("Smartphone", "Speaker", "CastAudio", "TV"…).
+    // Used by the I4d precise-stop to gate on-phone playback (App Remote real-time
+    // control) vs a remote/cast device (Web-API best-effort). Additive.
+    val deviceType: String? = null,
     // Plain (non-synced) lyrics fetched from LRCLib if available.
     // Spotify Web API does NOT expose lyrics — they're licensed from
     // Musixmatch and only surface inside the official Spotify clients.
@@ -1764,6 +1768,7 @@ class SpotifyProvider @Inject constructor(
                     isPlaying = root.get("is_playing")?.asBoolean ?: false,
                     trackUri = item.get("uri")?.asString.orEmpty(),
                     deviceName = device?.get("name")?.asString,
+                    deviceType = device?.get("type")?.takeIf { !it.isJsonNull }?.asString,
                     contextUri = contextUri
                 )
             }

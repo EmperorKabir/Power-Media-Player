@@ -33,8 +33,8 @@ android {
         // orientation locks to trip the large-screen rule, no native .so
         // (16 KB page rule moot), WorkManager unaffected.
         targetSdk = 36
-        versionCode = 90
-        versionName = "1.5.35"
+        versionCode = 92
+        versionName = "1.5.37"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -297,6 +297,12 @@ dependencies {
     // ── Cloud / OAuth ────────────────────────────────────────────
     // AppAuth: PKCE OAuth flows with Custom Tabs (Spotify).
     implementation("net.openid:appauth:0.11.1")
+    // Spotify App Remote SDK (I4d precise stop) — real-time local player-state
+    // subscription + local-IPC pause() to the installed Spotify app, bypassing the
+    // ~1s Web-API cloud lag so an on-phone track can be paused at the exact end
+    // without auto-advancing. Not on Maven Central (JitPack serves a broken artifact),
+    // so the official AAR is vendored in app/libs. Only transitive need is gson (above).
+    implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
     // OkHttp: Spotify + Drive REST HTTP client.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // BouncyCastle TLS — DTLS-PSK for the Philips Hue Entertainment API

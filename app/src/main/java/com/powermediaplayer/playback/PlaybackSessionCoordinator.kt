@@ -27,6 +27,7 @@ class PlaybackSessionCoordinator @Inject constructor(
     @param:com.powermediaplayer.di.ApplicationScope private val scope: CoroutineScope,
     private val playbackConnection: PlaybackConnection,
     private val spotifyProvider: SpotifyProvider,
+    private val spotifyAppRemote: com.powermediaplayer.cloud.SpotifyAppRemoteController,
     private val settingsDataStore: com.powermediaplayer.data.preferences.SettingsDataStore,
     private val lastPlayedRepo: com.powermediaplayer.data.repository.LastPlayedRepository,
     private val mediaOverrideRepo: com.powermediaplayer.data.repository.MediaOverrideRepository,
@@ -54,6 +55,8 @@ class PlaybackSessionCoordinator @Inject constructor(
         startReplayGainApply()
         startPositionPersistTick()
         startBackgroundPositionSave()
+        startSpotifyAppRemoteLifecycle()
+        startSpotifyAppRemotePreciseStop()
         startSpotifyAutoplayGuard()
     }
 
@@ -113,96 +116,178 @@ class PlaybackSessionCoordinator @Inject constructor(
     }
 
     /**
-     * I4d (Spotify leg) — when "Autoplay next track" is OFF, also stop a Spotify
-     * album at the end of the current track. Spotify Connect runs its OWN queue,
-     * which the local player's `pauseAtEndOfMediaItems` cannot reach, so an album
-     * kept advancing with the toggle off (user report 2026-08-02). This ADDITIVE
-     * collector watches the mirror state and pauses Spotify — it never touches the
-     * mirror poll/device-wake path (it only READS `spotifyState` and calls the
-     * existing `pause()` control), the same "additive, reads mirror, writes nothing
-     * to it" contract as the position branch above; the delicate handoff is untouched.
+     * I4d precise-stop — App Remote connection lifecycle. Connect the App Remote ONLY
+     * when it can help: autoplay OFF + Spotify playing on THIS phone (device type
+     * "Smartphone"). Disconnect otherwise (autoplay on, a remote/cast device, or Spotify
+     * stopped) so the binding + one-time consent only happen when the feature is in use.
+     * Emits only on the local/not-local transition (distinctUntilChanged on the decision).
+     */
+    private fun startSpotifyAppRemoteLifecycle() {
+        scope.launch {
+            kotlinx.coroutines.flow.combine(
+                spotifyProvider.spotifyState,
+                settingsDataStore.musicAutoplayNext
+            ) { spot, autoplayOn ->
+                spot != null && spot.isPlaying && !autoplayOn &&
+                    spot.deviceType == SPOTIFY_LOCAL_DEVICE_TYPE
+            }.distinctUntilChanged().collect { wantLocalPreciseStop ->
+                if (wantLocalPreciseStop) spotifyAppRemote.connect()
+                else spotifyAppRemote.disconnect()
+            }
+        }
+    }
+
+    /**
+     * I4d precise-stop (LOCAL / on-phone) — the artifact-free path. Driven by the App
+     * Remote's REAL-TIME state (pushed over local IPC, not the ~1s-stale Web-API poll).
+     * Each event carries an exact position at a known instant; extrapolate the true
+     * current position (position + elapsed × speed) and schedule `pause()` over the local
+     * IPC to LAND at ~0 remaining — fired [AUTOPLAY_APPREMOTE_LEAD_MS] early for the
+     * tens-of-ms IPC latency. Re-derived on every event, so it's robust to autoplay
+     * toggle / scrub / effects / background. Fires only while the App Remote is connected
+     * (= on-phone, per the lifecycle above), so it never overlaps the remote Web-API path.
+     */
+    private fun startSpotifyAppRemotePreciseStop() {
+        scope.launch {
+            var pauseJob: Job? = null
+            kotlinx.coroutines.flow.combine(
+                spotifyAppRemote.state,
+                settingsDataStore.musicAutoplayNext
+            ) { st, autoplayOn -> st to autoplayOn }.collect { (st, autoplayOn) ->
+                pauseJob?.cancel()
+                pauseJob = null
+                if (st == null || autoplayOn || st.isPaused || st.durationMs <= 0L) {
+                    return@collect
+                }
+                val speed = if (st.playbackSpeed > 0f) st.playbackSpeed else 1f
+                val elapsed = android.os.SystemClock.elapsedRealtime() - st.atElapsedRealtimeMs
+                val curPos = st.positionMs + (elapsed * speed).toLong()
+                val remaining = st.durationMs - curPos
+                val fireInMs = (remaining - AUTOPLAY_APPREMOTE_LEAD_MS).coerceAtLeast(0L)
+                val trackUri = st.trackUri
+                pauseJob = launch {
+                    kotlinx.coroutines.delay(fireInMs)
+                    // Re-verify against the LIVE App Remote state before pausing.
+                    val cur = spotifyAppRemote.state.value
+                    val stillOff = runCatching {
+                        !settingsDataStore.musicAutoplayNext.first()
+                    }.getOrDefault(false)
+                    if (cur != null && cur.trackUri == trackUri && !cur.isPaused && stillOff) {
+                        spotifyAppRemote.pause()
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "AUTOPLAY",
+                            "App Remote precise pause fired at end (local IPC) track=$trackUri"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * I4d (Spotify leg) — when "Autoplay next track" is OFF, stop a Spotify album at
+     * the FULL end of the current track (0 remaining) WITHOUT advancing. Spotify
+     * Connect runs its OWN queue (the local player's `pauseAtEndOfMediaItems` can't
+     * reach it) and auto-advances at the track end; its API has no "stop at end".
      *
-     * PRIMARY = pre-empt: pause when the CURRENT track nears its end (within
-     * [AUTOPLAY_PREEMPT_MS]) BEFORE Spotify auto-advances, so the just-played track
-     * stays shown at its end rather than the next track loading at 0 (user follow-up
-     * 2026-08-03). The mirror polls ~1 Hz while playing (SpotifyProvider ~`delay(1000)`),
-     * so the window must exceed one poll interval to reliably land inside it. Fires
-     * once per track (`preemptedTrack`) so a deliberate resume of that near-end track
-     * isn't immediately re-paused.
+     * A poll-based pre-empt had to stop ~1-2s EARLY to beat the advance (user rejected
+     * that as ugly, 2026-08-03). Instead this SCHEDULES the pause by wall-clock: the
+     * mirror gives the exact duration + position, so it computes when the track ends
+     * and fires `pause()` [AUTOPLAY_PAUSE_LEAD_MS] beforehand so the command LANDS at
+     * ~0 remaining — full track, no early cut, no loop, no next-track flash, UI matches
+     * the real state. Additive: only READS the mirror + calls the existing `pause()`;
+     * the delicate poll/handoff is untouched.
      *
-     * FALLBACK = boundary: if a poll gap let the track advance before pre-empt caught
-     * it, pause on the track change — but ONLY when the previous track was near its end
-     * (auto-advance), never on a mid-track user skip / track-pick (both change the
-     * trackUri; the near-end test is what separates them), so manual navigation still
-     * works with the toggle off.
+     * Robustness — it re-derives the schedule on EVERY change by combining the mirror
+     * state WITH the autoplay setting and cancelling+rescheduling each emission:
+     *  - autoplay toggled mid-track → the setting flow re-fires → cancel or reschedule;
+     *  - scrub/seek → fresh position on the next emission → reschedule;
+     *  - effects → Spotify Connect ignores speed/pitch so duration never shifts;
+     *  - background / tab switch → the timer lives on the app scope + fires by
+     *    wall-clock even while the poll sleeps, then RE-VERIFIES the live state (same
+     *    track, still playing, still autoplay-off) right before pausing; foregrounding
+     *    reschedules.
+     * FALLBACK: if a command-lag spike lets a track slip past the timed pause and
+     * auto-advance, pause the new track (only on a genuine near-end auto-advance, never
+     * a mid-track user skip) so the album can't run on.
      */
     private fun startSpotifyAutoplayGuard() {
         scope.launch {
+            var pauseJob: Job? = null
             var prevTrackUri: String? = null
             var prevPositionMs = 0L
             var prevDurationMs = 0L
             var prevIsPlaying = false
-            var preemptedTrack: String? = null
-            spotifyProvider.spotifyState.collect { spot ->
+            kotlinx.coroutines.flow.combine(
+                spotifyProvider.spotifyState,
+                settingsDataStore.musicAutoplayNext
+            ) { spot, autoplayOn -> spot to autoplayOn }.collect { (spot, autoplayOn) ->
+                // Any state change invalidates the previous schedule.
+                pauseJob?.cancel()
+                pauseJob = null
                 if (spot == null) {
                     prevTrackUri = null
                     prevIsPlaying = false
-                    preemptedTrack = null
                     return@collect
                 }
-                val autoplayOff = runCatching {
-                    !settingsDataStore.musicAutoplayNext.first()
-                }.getOrDefault(false)
+                val autoplayOff = !autoplayOn
                 val trackChanged = prevTrackUri != null &&
                     spot.trackUri.isNotBlank() && spot.trackUri != prevTrackUri
-                if (trackChanged) preemptedTrack = null
-                // Re-arm on a backward SEEK (user scrubbed back into the same track):
-                // the pre-empt fires once per track, so without this a scrub-back then
-                // play-to-end would advance unguarded (user report 2026-08-03). A big
-                // negative position jump on the same track = a seek-back, not drift.
-                else if (preemptedTrack == spot.trackUri &&
-                    spot.positionMs < prevPositionMs - AUTOPLAY_SEEKBACK_REARM_MS
-                ) {
-                    preemptedTrack = null
-                }
+                // On-phone playback is handled by the App Remote precise-stop (real-time,
+                // artifact-free). This Web-API timed pause is now ONLY the fallback for a
+                // remote/cast device — or briefly on-phone before the App Remote connects.
+                // Skip when local + connected so the two paths never overlap.
+                val handledByAppRemote = spot.deviceType == SPOTIFY_LOCAL_DEVICE_TYPE &&
+                    spotifyAppRemote.isConnected
 
-                val remaining = spot.durationMs - spot.positionMs
-                // PRIMARY (pre-empt): current track nearing its end → pause now so it
-                // stays on THIS track. The window MUST exceed the poll interval (~1s)
-                // PLUS Spotify's pause round-trip (~300-500ms) so the pause lands with
-                // margin before the track ends — firing at ~1.2s (the old 1500 window)
-                // let a track finish + auto-advance during a concurrent scrub. Guard on
-                // a real-length track (> 2× the window) so a short intro isn't paused
-                // at its very start.
-                val nearOwnEnd = spot.durationMs > AUTOPLAY_PREEMPT_MS * 2 &&
-                    remaining in 0..AUTOPLAY_PREEMPT_MS
-                // FALLBACK (boundary): pre-empt missed and it auto-advanced — prev track
-                // was playing AND near its end when it flipped (not a mid-track skip).
-                val prevWasNearEnd = prevDurationMs > 0L &&
+                // FALLBACK (rare): a track slipped past the timed pause and auto-advanced
+                // (command-lag spike) — prev was playing AND near its end when it flipped,
+                // not a mid-track user skip. Pause the new track so the album doesn't run on.
+                if (!handledByAppRemote && autoplayOff && trackChanged && prevIsPlaying &&
+                    spot.isPlaying && prevDurationMs > 0L &&
                     prevPositionMs >= prevDurationMs - AUTOPLAY_END_EPSILON_MS
-
-                if (autoplayOff && spot.isPlaying && nearOwnEnd &&
-                    preemptedTrack != spot.trackUri
-                ) {
-                    preemptedTrack = spot.trackUri
-                    val ok = runCatching { spotifyProvider.pause() }
-                        .getOrNull()?.isSuccess ?: false
-                    com.powermediaplayer.diag.DiagLog.event(
-                        "AUTOPLAY",
-                        "Spotify near end + autoplay OFF → pre-empt pause ok=$ok " +
-                            "(${spot.positionMs}/${spot.durationMs}ms, stays on track)"
-                    )
-                } else if (autoplayOff && trackChanged && prevIsPlaying &&
-                    prevWasNearEnd && spot.isPlaying && preemptedTrack != prevTrackUri
                 ) {
                     val ok = runCatching { spotifyProvider.pause() }
                         .getOrNull()?.isSuccess ?: false
                     com.powermediaplayer.diag.DiagLog.event(
                         "AUTOPLAY",
-                        "Spotify auto-advance slipped past pre-empt + autoplay OFF → " +
-                            "pause ok=$ok (prev ${prevPositionMs}/${prevDurationMs}ms → ${spot.trackUri})"
+                        "Spotify auto-advance slipped past timed pause + autoplay OFF → " +
+                            "fallback pause ok=$ok (prev ${prevPositionMs}/${prevDurationMs}ms → ${spot.trackUri})"
                     )
                 }
+
+                // PRIMARY (remote/fallback only): schedule the pause to LAND at the end.
+                if (!handledByAppRemote && autoplayOff && spot.isPlaying && spot.durationMs > 0L) {
+                    val remaining = spot.durationMs - spot.positionMs
+                    if (remaining > 0L) {
+                        val trackUri = spot.trackUri
+                        // Send the pause AUTOPLAY_PAUSE_LEAD_MS early so, after Spotify's
+                        // ~300-500ms command round-trip, it lands at ~0 remaining (just
+                        // before the auto-advance).
+                        val fireInMs = (remaining - AUTOPLAY_PAUSE_LEAD_MS).coerceAtLeast(0L)
+                        pauseJob = launch {
+                            kotlinx.coroutines.delay(fireInMs)
+                            // Re-verify against the LIVE mirror (state may have changed
+                            // while backgrounded / the poll asleep) before pausing.
+                            val cur = spotifyProvider.spotifyState.value
+                            val stillOff = runCatching {
+                                !settingsDataStore.musicAutoplayNext.first()
+                            }.getOrDefault(false)
+                            if (cur != null && cur.trackUri == trackUri &&
+                                cur.isPlaying && stillOff
+                            ) {
+                                val ok = runCatching { spotifyProvider.pause() }
+                                    .getOrNull()?.isSuccess ?: false
+                                com.powermediaplayer.diag.DiagLog.event(
+                                    "AUTOPLAY",
+                                    "Spotify timed pause fired ok=$ok at end " +
+                                        "(rem=${cur.durationMs - cur.positionMs}ms, track=$trackUri)"
+                                )
+                            }
+                        }
+                    }
+                }
+
                 prevTrackUri = spot.trackUri.takeIf { it.isNotBlank() }
                 prevPositionMs = spot.positionMs
                 prevDurationMs = spot.durationMs
@@ -1162,22 +1247,30 @@ class PlaybackSessionCoordinator @Inject constructor(
         private const val AUTOPLAY_END_EPSILON_MS = 4000L
 
         /**
-         * I4d pre-empt window: with autoplay OFF, pause a Spotify track once its
-         * remaining time drops within this window so it stops on THIS track before
-         * Spotify auto-advances. Must exceed the ~1000 ms mirror poll interval PLUS
-         * Spotify's ~300-500 ms pause round-trip so the pause lands with margin before
-         * the track ends — the old 1500 ms let a track finish + auto-advance during a
-         * concurrent scrub (fired at only ~1.2 s remaining). Trade-off: the last
-         * ~1.5-2.5 s of the track is not heard (accepted over the track advancing).
+         * I4d timed-pause lead: with autoplay OFF, the pause() for the end of a Spotify
+         * track is SENT this many ms before the computed track end, so that after
+         * Spotify's ~300-500 ms Connect command round-trip it LANDS at ~0 remaining —
+         * just before the auto-advance, without cutting the track early. Tuned so the
+         * pause lands inside the last ~0.5 s (still displays the full duration) yet
+         * ahead of the boundary; a rare command-lag spike beyond this is caught by the
+         * boundary fallback.
          */
-        private const val AUTOPLAY_PREEMPT_MS = 2500L
+        private const val AUTOPLAY_PAUSE_LEAD_MS = 400L
 
         /**
-         * A same-track backward position jump larger than this = a user seek-back
-         * (not playback drift), which re-arms the once-per-track pre-empt so a
-         * scrub-back-then-play-to-end is still caught.
+         * I4d App Remote precise-stop lead: the local-IPC `pause()` lands within tens of
+         * ms, so send it only this far before the computed track end to stop at ~0
+         * remaining (full track shown) without overshooting into the auto-advance. Tuned
+         * on device.
          */
-        private const val AUTOPLAY_SEEKBACK_REARM_MS = 5000L
+        private const val AUTOPLAY_APPREMOTE_LEAD_MS = 120L
+
+        /**
+         * Spotify Connect `device.type` for on-phone playback — the ONLY case where the
+         * App Remote gives real-time precision. Anything else (Speaker/CastAudio/TV) is a
+         * remote device that falls back to the Web-API best-effort timed pause.
+         */
+        private const val SPOTIFY_LOCAL_DEVICE_TYPE = "Smartphone"
 
         /**
          * Process-global single-fire guard for the cold-start resume
