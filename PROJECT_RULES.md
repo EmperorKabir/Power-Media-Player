@@ -8,7 +8,7 @@
 > Live task ledger: `/TASKS.md` (slim — live items only). Closed history: `archive/`.
 > Deeper detail pointers: §8.
 >
-> *Last refreshed 2026-07-26 at versionCode 63 / versionName 1.5.8. When a fact here drifts
+> *Last refreshed 2026-08-25 at versionCode 102 / versionName 1.5.47. When a fact here drifts
 > from code, fix the code-derived fact here in the same turn.*
 
 ---
@@ -23,10 +23,13 @@
 
 ## 2. Current build coordinates (verify against `app/build.gradle.kts`)
 
-- **versionCode 63 / versionName 1.5.8** — current, staged in `dist/PowerMediaPlayer-release.aab`
-  (upload-key signed). Each Play upload MUST be a higher versionCode than whatever is live, and a
-  distinct versionName. (Drive-work version trail: vc56 native browser, vc57 audit, vc59 tail-sparse,
-  vc62 sparse/backup audit, vc63 Shared Drives + Shared-with-me + readonly re-consent.)
+- **versionCode 102 / versionName 1.5.47** — current HEAD. Each Play upload MUST be a higher
+  versionCode than whatever is live, and a distinct versionName. (Recent trail: vc85 Spotify
+  sticky-sign-in PendingIntent fix; vc86-92 autoplay-off Spotify stop + App Remote scaffolding;
+  vc93-96 App Remote SDK precise on-phone stop-at-end — BLOCKED on a Spotify-dashboard package+SHA-1
+  registration, see [[reference_spotify_appremote_dashboard]] + TASKS banner; vc97 player
+  compact/expanded drift fixes; vc98 reverse-cache LRU + Spotify-SDK release proguard; vc99-102
+  metadata/recents/resume correctness fixes from a code-review sweep.)
 - minSdk 30, targetSdk 36, compileSdk 36. `applicationId = com.powermediaplayer`.
   (targetSdk 36 since vc50 — Play policy deadline 31 Aug 2026.)
 - **Media3 (ExoPlayer) 1.6.0** — do not bump casually; the custom audio chain + tests are tuned to it.
@@ -34,6 +37,11 @@
   destructive migration any more — every bump ships an `ALTER`-based `Migration` registered in `AppModule`).
 - Hilt 2.54 + KSP; Compose BOM 2025.04.00; Coil 3.1.0; OkHttp 4.12.0; AppAuth 0.11.1;
   Cast framework 21.5.0; BouncyCastle 1.78.1 (Hue DTLS); NanoHTTPD 2.3.1 (Cast relay).
+- **Spotify SDK (I4d precise stop-at-end):** App Remote AAR vendored at
+  `app/libs/spotify-app-remote-release-0.8.0.aar` + `com.spotify.android:auth:2.1.0` (Maven
+  Central). Needs proguard keep/dontwarn for `com.spotify.**` + `com.fasterxml.jackson.**`
+  (already in `proguard-rules.pro`) or R8 minifyRelease breaks. Only authorises via Spotify's
+  native SSO with the app package+SHA-1 registered in the dev dashboard (see §5 / the memory).
 - JDK: Java 17 source/target, **`kotlinOptions.jvmTarget = "17"`** pinned (Gradle runs on JDK 21;
   mismatch breaks `kspDebugKotlin` with "Inconsistent JVM-target compatibility").
 
