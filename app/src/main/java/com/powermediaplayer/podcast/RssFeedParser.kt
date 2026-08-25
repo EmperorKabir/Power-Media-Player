@@ -36,11 +36,6 @@ class RssFeedParser(
                 )
             }
             .build()
-
-        // RFC 822 — common podcast pubDate format.
-        private val RFC822 = SimpleDateFormat(
-            "EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH
-        )
     }
 
     /** Typed fetch outcome so the UI can show WHY a feed failed (403 vs not-RSS
@@ -169,9 +164,7 @@ class RssFeedParser(
         }.getOrNull()
     }
 
-    private fun parsePubDate(s: String): Long = runCatching {
-        synchronized(RFC822) { RFC822.parse(s)?.time ?: 0L }
-    }.getOrDefault(0L)
+    private fun parsePubDate(s: String): Long = parsePubDateMs(s)
 
     private fun parseDurationSec(s: String): Long {
         if (s.isBlank()) return 0L
@@ -186,4 +179,37 @@ class RssFeedParser(
             }
         }.getOrDefault(0L)
     }
+}
+
+// ── Pure pubDate parse (unit-tested: RssPubDateTest) ─────────────────────────────
+// The old single RFC-822 pattern ("EEE, dd MMM yyyy HH:mm:ss Z") returned 0L for common
+// real-feed variants — seconds omitted, ISO-8601 dates, and +00:00 colon offsets — so
+// affected feeds got all-zero timestamps → episodes lost chronological order (ORDER BY
+// publishedAt) and rendered 1970 dates (bug 2026-08-25). Try a list of formats, each
+// required to consume the WHOLE string (ParsePosition) so a mismatched pattern can't
+// partial-mis-parse; return 0L only when all fail.
+private val PUBDATE_PATTERNS = listOf(
+    "EEE, dd MMM yyyy HH:mm:ss Z",
+    "EEE, dd MMM yyyy HH:mm:ss zzz",
+    "EEE, dd MMM yyyy HH:mm Z",
+    "EEE, dd MMM yyyy HH:mm zzz",
+    "yyyy-MM-dd'T'HH:mm:ssXXX",
+    "yyyy-MM-dd'T'HH:mm:ss'Z'",
+    "yyyy-MM-dd'T'HH:mm:ssZ"
+)
+
+internal fun parsePubDateMs(s: String): Long {
+    val t = s.trim()
+    if (t.isEmpty()) return 0L
+    for (p in PUBDATE_PATTERNS) {
+        val ms = runCatching {
+            val sdf = SimpleDateFormat(p, Locale.ENGLISH)
+            val pos = java.text.ParsePosition(0)
+            val d = sdf.parse(t, pos)
+            // require the pattern to have consumed the entire string (no partial match)
+            if (d != null && pos.index == t.length) d.time else null
+        }.getOrNull()
+        if (ms != null) return ms
+    }
+    return 0L
 }

@@ -141,14 +141,23 @@ class PodcastDownloader(
         else -> "audio/*"
     }
 
-    private fun guessExt(url: String): String {
-        val pathExt = url.substringAfterLast('.', "").substringBefore('?')
-        return if (pathExt.length in 2..4) pathExt.lowercase() else "mp3"
-    }
+    private fun guessExt(url: String): String = guessAudioExt(url)
 
     private fun slug(s: String): String =
         s.lowercase()
             .replace(Regex("[^a-z0-9]+"), "-")
             .trim('-')
             .ifBlank { "untitled" }
+}
+
+/**
+ * Extension for a media URL. Strips ?query / #fragment FIRST, THEN takes the extension —
+ * the old order (ext-of-whole-url, then trim '?') picked the wrong token when the query
+ * carried a dotted value (`ep.mp3?file=name.ext` → "ext"; `ep.mp3?r=host.com` → "com";
+ * `ep.m4a?src=a.b` → fallback mp3) → wrong on-disk name + SAF MIME (bug 2026-08-25).
+ * Pure → unit-tested (PodcastGuessExtTest). Falls back to "mp3" when no 2-4 char extension.
+ */
+internal fun guessAudioExt(url: String): String {
+    val pathExt = url.substringBefore('?').substringBefore('#').substringAfterLast('.', "")
+    return if (pathExt.length in 2..4) pathExt.lowercase() else "mp3"
 }
