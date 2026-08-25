@@ -30,4 +30,23 @@ class PodcastGuessExtTest {
         assertEquals("opus", guessAudioExt("https://cdn.x/a.opus"))
         assertEquals("flac", guessAudioExt("https://cdn.x/a.flac?x=1"))
     }
+
+    // isCompleteDownload — truncated downloads must be rejected (bug 2026-08-25).
+    @Test fun completeDownload_fullLength() =
+        org.junit.Assert.assertTrue(isCompleteDownload(bytes = 1000, expectedTotal = 1000))
+
+    @Test fun truncatedDownload_rejected() =
+        org.junit.Assert.assertFalse(isCompleteDownload(bytes = 600, expectedTotal = 1000))
+
+    @Test fun zeroBytes_rejected() =
+        org.junit.Assert.assertFalse(isCompleteDownload(bytes = 0, expectedTotal = 1000))
+
+    @Test fun unknownLength_acceptsAnyPositive() {
+        org.junit.Assert.assertTrue(isCompleteDownload(bytes = 500, expectedTotal = -1))
+        org.junit.Assert.assertFalse(isCompleteDownload(bytes = 0, expectedTotal = -1))
+    }
+
+    @Test fun overLength_accepted() =
+        // bytes >= total (rare over-read / re-declared length) is still complete.
+        org.junit.Assert.assertTrue(isCompleteDownload(bytes = 1001, expectedTotal = 1000))
 }

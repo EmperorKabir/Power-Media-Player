@@ -85,10 +85,12 @@ class PodcastDownloader(
         val dir = SafStorage.resolveDir(context, treeUri, "PowerMediaPlayer", "podcasts", showSlug)
             ?: return null
         val child = SafStorage.createChild(dir, fileName, mime) ?: return null
+        var expectedTotal = -1L
         val bytes = runCatching {
             httpClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@runCatching 0L
                 val total = resp.body?.contentLength() ?: -1L
+                expectedTotal = total
                 resp.body?.byteStream()?.let { raw ->
                     com.powermediaplayer.util.ProgressInputStream(raw, id, total).use { input ->
                         SafStorage.writeStream(context, child.uri, input)
@@ -96,7 +98,10 @@ class PodcastDownloader(
                 } ?: 0L
             }
         }.getOrDefault(0L)
-        if (bytes <= 0L) {
+        // Reject a truncated download (server dropped mid-transfer without throwing →
+        // copyTo returns a partial count > 0). Recording it would resume/play a cut-off
+        // episode. When Content-Length is unknown (-1/chunked) only the >0 check applies.
+        if (!isCompleteDownload(bytes, expectedTotal)) {
             runCatching { child.delete() }
             return null
         }
@@ -113,10 +118,12 @@ class PodcastDownloader(
         val showSlug = slug(show.title.ifBlank { show.feedUrl })
         val target = File(base, "podcasts/$showSlug/$fileName")
         target.parentFile?.mkdirs()
+        var expectedTotal = -1L
         val bytes = runCatching {
             httpClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return@runCatching 0L
                 val total = resp.body?.contentLength() ?: -1L
+                expectedTotal = total
                 resp.body?.byteStream()?.let { raw ->
                     com.powermediaplayer.util.ProgressInputStream(raw, id, total).use { input ->
                         target.outputStream().use { input.copyTo(it) }
@@ -124,7 +131,8 @@ class PodcastDownloader(
                 } ?: 0L
             }
         }.getOrDefault(0L)
-        if (bytes <= 0L) {
+        // Reject a truncated download (see downloadToTree).
+        if (!isCompleteDownload(bytes, expectedTotal)) {
             runCatching { target.delete() }
             return null
         }
@@ -161,3 +169,12 @@ internal fun guessAudioExt(url: String): String {
     val pathExt = url.substringBefore('?').substringBefore('#').substringAfterLast('.', "")
     return if (pathExt.length in 2..4) pathExt.lowercase() else "mp3"
 }
+
+/**
+ * A download is complete when at least some bytes arrived AND, when the server declared a
+ * Content-Length ([expectedTotal] > 0), the whole thing arrived. A partial (`bytes < total`)
+ * from a dropped connection must be rejected so a cut-off episode isn't saved as complete.
+ * Pure → unit-tested (PodcastGuessExtTest).
+ */
+internal fun isCompleteDownload(bytes: Long, expectedTotal: Long): Boolean =
+    bytes > 0L && (expectedTotal <= 0L || bytes >= expectedTotal)
