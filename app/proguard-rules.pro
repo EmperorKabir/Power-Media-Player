@@ -43,6 +43,18 @@
 -keep class com.google.android.gms.cast.** { *; }
 -dontwarn com.google.android.gms.cast.**
 
+# Spotify App Remote + Auth SDK (I4d precise stop-at-end). The protocol layer
+# reflects over its gson/jackson mappers + connection binder; keep the SDK classes.
+# The App Remote AAR references an OPTIONAL Jackson mapper path (we ship gson, not
+# jackson) + a compile-time Spotify annotation — both absent at runtime, so dontwarn
+# them. Without these R8 fails minifyRelease (device-proven 2026-08-25: missing
+# StdDeserializer/StdSerializer/NotNull) and the Play upload build breaks.
+-keep class com.spotify.android.appremote.** { *; }
+-keep class com.spotify.protocol.** { *; }
+-keep class com.spotify.sdk.android.auth.** { *; }
+-dontwarn com.spotify.**
+-dontwarn com.fasterxml.jackson.**
+
 # Media3 FFmpeg extension (fallback-only, EXTENSION_RENDERER_MODE_ON).
 # DefaultRenderersFactory loads FfmpegAudioRenderer by REFLECTION, so its
 # constructor must survive minification. Harmless while the extension is not
