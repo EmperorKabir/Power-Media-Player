@@ -38,4 +38,21 @@ class ResumeGateTest {
         ResumeGate.end(t) // double-end must not go negative
         assertTrue(ResumeGate.activeCount() >= 0)
     }
+
+    /** Regression (bug 2026-08-25): the old counter+ended-set cleared its ended-marks
+     *  past 64 entries, so a double-end AFTER the clear decremented `active` twice and
+     *  under-reported a genuinely-live token. The live-set impl makes end() a true no-op
+     *  on an already-ended token. */
+    @Test
+    fun doubleEnd_afterManyCycles_doesNotUnderReportLiveToken() {
+        val before = ResumeGate.activeCount()
+        val t = ResumeGate.begin()
+        ResumeGate.end(t)
+        repeat(70) { ResumeGate.end(ResumeGate.begin()) } // would clear the old ended-set
+        val u = ResumeGate.begin()                        // genuinely in-flight
+        ResumeGate.end(t)                                 // double-end of an already-ended token
+        assertEquals("live token u still counted", before + 1, ResumeGate.activeCount())
+        ResumeGate.end(u)
+        assertEquals(before, ResumeGate.activeCount())
+    }
 }

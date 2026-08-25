@@ -254,8 +254,8 @@ class PlaybackSessionCoordinator @Inject constructor(
                 // (command-lag spike) — prev was playing AND near its end when it flipped,
                 // not a mid-track user skip. Pause the new track so the album doesn't run on.
                 if (!handledByAppRemote && autoplayOff && trackChanged && prevIsPlaying &&
-                    spot.isPlaying && prevDurationMs > 0L &&
-                    prevPositionMs >= prevDurationMs - AUTOPLAY_END_EPSILON_MS
+                    spot.isPlaying &&
+                    isNearEndAutoAdvance(prevPositionMs, prevDurationMs, AUTOPLAY_END_EPSILON_MS)
                 ) {
                     val ok = runCatching { spotifyProvider.pause() }
                         .getOrNull()?.isSuccess ?: false
@@ -1300,3 +1300,13 @@ class PlaybackSessionCoordinator @Inject constructor(
         }
     }
 }
+
+/**
+ * True when a Spotify track-change is a genuine near-end AUTO-ADVANCE (not a user skip):
+ * the previous track was within [epsilon] of its end. Floored at `prevDur > epsilon` so a
+ * track SHORTER than the window can't make `prevPos >= prevDur - epsilon` vacuously true
+ * (bug 2026-08-25: a <=4 s track, or a user skip in any track's final 4 s, was wrongly
+ * paused as an auto-advance). Pure → unit-tested (SpotifyAutoAdvanceTest).
+ */
+internal fun isNearEndAutoAdvance(prevPositionMs: Long, prevDurationMs: Long, epsilon: Long): Boolean =
+    prevDurationMs > epsilon && prevPositionMs >= prevDurationMs - epsilon
