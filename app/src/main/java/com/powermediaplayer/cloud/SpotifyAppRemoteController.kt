@@ -57,6 +57,12 @@ class SpotifyAppRemoteController @Inject constructor(
     private val _state = MutableStateFlow<RemoteState?>(null)
     val state: StateFlow<RemoteState?> = _state.asStateFlow()
 
+    /** True once a connect failed with UserNotAuthorizedException — the app-remote-control
+     *  scope isn't granted yet (user signed in before it was added). UI can prompt a
+     *  one-time Spotify re-sign-in. Cleared on a successful connect. */
+    private val _needsReauth = MutableStateFlow(false)
+    val needsReauth: StateFlow<Boolean> = _needsReauth.asStateFlow()
+
     @Volatile private var appRemote: SpotifyAppRemote? = null
     @Volatile private var subscription: Subscription<PlayerState>? = null
     @Volatile private var connecting = false
@@ -78,9 +84,15 @@ class SpotifyAppRemoteController @Inject constructor(
         // Foreground Activity (if any) for the consent dialog; app context otherwise
         // (backgrounded reconnect after consent was already granted).
         val ctx: Context = activity ?: context
+        // showAuthView(false): the app-remote-control grant comes from the app's AppAuth
+        // OAuth scope list (SpotifyProvider.scopes), NOT the SDK's built-in consent view
+        // (which is broken on modern Spotify apps — returns UserNotAuthorizedException with
+        // no dialog, device-proven 2026-08-25). If the grant is missing (user signed in
+        // before the scope was added), connect fails with UserNotAuthorizedException →
+        // needsReauth flips true so the UI can prompt a one-time Spotify re-sign-in.
         val params = ConnectionParams.Builder(BuildConfig.SPOTIFY_CLIENT_ID)
             .setRedirectUri(BuildConfig.SPOTIFY_REDIRECT_URI)
-            .showAuthView(true)
+            .showAuthView(false)
             .build()
         DiagLog.event(
             "APPREMOTE",
@@ -90,6 +102,7 @@ class SpotifyAppRemoteController @Inject constructor(
             override fun onConnected(remote: SpotifyAppRemote) {
                 connecting = false
                 appRemote = remote
+                _needsReauth.value = false
                 DiagLog.event("APPREMOTE", "connected")
                 subscribe(remote)
             }
@@ -98,10 +111,12 @@ class SpotifyAppRemoteController @Inject constructor(
                 connecting = false
                 appRemote = null
                 _state.value = null
-                DiagLog.event(
-                    "APPREMOTE",
-                    "connect failed: ${error.javaClass.simpleName}: ${error.message}"
-                )
+                val name = error.javaClass.simpleName
+                // UserNotAuthorizedException = app-remote-control not granted → prompt re-sign-in.
+                if (name.contains("UserNotAuthorized", ignoreCase = true)) {
+                    _needsReauth.value = true
+                }
+                DiagLog.event("APPREMOTE", "connect failed: $name: ${error.message}")
             }
         })
     }

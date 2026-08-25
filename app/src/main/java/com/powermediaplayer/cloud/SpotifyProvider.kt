@@ -336,7 +336,14 @@ class SpotifyProvider @Inject constructor(
         "playlist-read-private",
         "user-modify-playback-state",
         "user-read-playback-state",
-        "streaming"
+        "streaming",
+        // I4d precise stop-at-end: authorises the App Remote SDK (local IPC control
+        // of the on-phone Spotify app). The SDK's built-in showAuthView(true) consent
+        // is broken on modern Spotify app versions (returns UserNotAuthorizedException
+        // in ~200ms with no dialog — device-proven 2026-08-25); the documented reliable
+        // path is to grant app-remote-control via an OAuth flow, then connect with
+        // showAuthView(false). Granting it here (one re-sign-in) authorises App Remote.
+        "app-remote-control"
     ).joinToString(" ")
 
     /**
