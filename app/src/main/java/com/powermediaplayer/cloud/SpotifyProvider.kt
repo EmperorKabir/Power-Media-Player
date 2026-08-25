@@ -499,8 +499,9 @@ class SpotifyProvider @Inject constructor(
                         return@withContext fetchPerType(token)
                     }
                     val body = resp.body?.string().orEmpty()
-                    val root = JsonParser.parseString(body).asJsonObject
-                    val arr = root.getAsJsonArray("items") ?: return@withContext Result.success(items)
+                    val root = (JsonParser.parseString(body) as? com.google.gson.JsonObject)
+                        ?: return@withContext Result.success(items)
+                    val arr = root.arrOrNull("items") ?: return@withContext Result.success(items)
                     for (el in arr) {
                         val obj = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
                         val type = obj.get("type")?.asString ?: continue
@@ -651,8 +652,9 @@ class SpotifyProvider @Inject constructor(
                         http.newCall(req).execute().use { resp ->
                             if (!resp.isSuccessful) return@use
                             val body = resp.body?.string().orEmpty()
-                            val root = JsonParser.parseString(body).asJsonObject
-                            val arr = root.getAsJsonArray("items") ?: return@use
+                            val root = (JsonParser.parseString(body) as? com.google.gson.JsonObject)
+                                ?: return@use
+                            val arr = root.arrOrNull("items") ?: return@use
                             for (el in arr) {
                                 val obj = el.takeIf { it.isJsonObject }?.asJsonObject ?: continue
                                 val core = obj.objOrNull(type) ?: obj
@@ -676,10 +678,13 @@ class SpotifyProvider @Inject constructor(
         get(key)?.takeIf { it.isJsonArray }?.asJsonArray
 
     private fun jsonToCloudItem(obj: com.google.gson.JsonObject, type: String): CloudMediaItem {
-        val id = obj.get("id")?.asString ?: ""
-        val name = obj.get("name")?.asString ?: "Untitled"
+        // isJsonNull guards: a local/unavailable track can carry "id":null / "name":null —
+        // a bare ?.asString on JsonNull throws UnsupportedOperationException and (for callers
+        // that don't wrap per-item) blanks the whole section. Match the file's null-safe convention.
+        val id = obj.get("id")?.takeIf { !it.isJsonNull }?.asString ?: ""
+        val name = obj.get("name")?.takeIf { !it.isJsonNull }?.asString ?: "Untitled"
         val preview = obj.get("preview_url")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
-        val spotifyUri = obj.get("uri")?.asString.orEmpty()
+        val spotifyUri = obj.get("uri")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
         // For tracks the track's album URI gives next/previous a context
         // to traverse — without it Spotify Connect /next stops after the
         // single track. For albums and playlists the URI itself IS the
@@ -1332,7 +1337,13 @@ class SpotifyProvider @Inject constructor(
                                 val core = candidates.firstOrNull {
                                     it.has("id") && !it.get("id").isJsonNull
                                 } ?: continue
-                                val item = jsonToCloudItem(core, childType)
+                                // Derive the type from the item's OWN `type` field — a playlist
+                                // can hold podcast episodes, which the fixed container-based
+                                // childType wrongly tagged as "track" (wrong mime/subtitle +
+                                // unplayable downloadUrl). Fall back to the container default.
+                                val itemType = core.get("type")?.takeIf { !it.isJsonNull }?.asString
+                                    ?.takeIf { it.isNotBlank() } ?: childType
+                                val item = jsonToCloudItem(core, itemType)
                                 items.add(item.copy(
                                     contextUri = containerUri,
                                     thumbnailUri = item.thumbnailUri ?: containerArt
@@ -1740,44 +1751,20 @@ class SpotifyProvider @Inject constructor(
                 if (resp.code == 204 || !resp.isSuccessful) return@use null
                 val body = resp.body?.string().orEmpty()
                 if (body.isBlank()) return@use null
-                val root = JsonParser.parseString(body).asJsonObject
-                val item = root.getAsJsonObject("item") ?: return@use null
-                val artists = item.getAsJsonArray("artists")
-                    ?.joinToString(", ") { it.asJsonObject.get("name")?.asString.orEmpty() }
-                    .orEmpty()
-                val album = item.getAsJsonObject("album")
-                val artwork = album?.getAsJsonArray("images")?.firstOrNull()
-                    ?.asJsonObject?.get("url")?.asString
-                val device = root.getAsJsonObject("device")
-                val contextUri = root.getAsJsonObject("context")
-                    ?.get("uri")?.takeIf { !it.isJsonNull }?.asString
-                // ORDER TRACE (on track-change only): the track + Spotify's OWN
-                // shuffle_state. Pressing next/prev moves this; comparing the
-                // track sequence with shuffle_state=true vs false shows whether
-                // the device is actually shuffling (Spotify is the source of truth).
-                val orderUri = item.get("uri")?.asString.orEmpty()
-                if (orderUri != lastOrderUri) {
-                    lastOrderUri = orderUri
+                val root = JsonParser.parseString(body) as? com.google.gson.JsonObject
+                    ?: return@use null
+                val state = parseSpotifyPlaybackState(root) ?: return@use null
+                // ORDER TRACE (on track-change only) + shuffle_state, from the parsed state.
+                if (state.trackUri != lastOrderUri) {
+                    lastOrderUri = state.trackUri
                     com.powermediaplayer.util.Diag.i(
                         "PMP_DIAG",
-                        "SP_ORDER track='${item.get("name")?.asString.orEmpty()}' uri=$orderUri " +
+                        "SP_ORDER track='${state.title}' uri=${state.trackUri} " +
                             "spotifyShuffle=${root.get("shuffle_state")?.takeIf { !it.isJsonNull }?.asBoolean} " +
-                            "context=${contextUri ?: "null"}"
+                            "context=${state.contextUri ?: "null"}"
                     )
                 }
-                SpotifyPlaybackState(
-                    title = item.get("name")?.asString.orEmpty(),
-                    artist = artists,
-                    album = album?.get("name")?.asString.orEmpty(),
-                    artworkUrl = artwork,
-                    positionMs = root.get("progress_ms")?.takeIf { !it.isJsonNull }?.asLong ?: 0L,
-                    durationMs = item.get("duration_ms")?.asLong ?: 0L,
-                    isPlaying = root.get("is_playing")?.asBoolean ?: false,
-                    trackUri = item.get("uri")?.asString.orEmpty(),
-                    deviceName = device?.get("name")?.asString,
-                    deviceType = device?.get("type")?.takeIf { !it.isJsonNull }?.asString,
-                    contextUri = contextUri
-                )
+                state
             }
         } catch (_: Exception) { null }
     }
@@ -2040,3 +2027,42 @@ internal data class TrackResolveStep(
 
 internal fun trackResolveStep(isNewTrack: Boolean): TrackResolveStep =
     TrackResolveStep(emitState = true, clearBanner = true, fetchLyrics = isNewTrack)
+
+// ── Pure /v1/me/player parse (unit-tested: SpotifyPlaybackParseTest) ─────────────
+// Top-level + pure so it needs no SpotifyProvider instance. Spotify marks item/context/
+// device as NULLABLE and returns explicit JSON null (contextless single track / Saved
+// Episode → context:null; ad → item:null). A raw getAsJsonObject casts JsonNull→JsonObject
+// and throws → the caller's catch turned that into a dropped snap → the mirror CLEARED
+// mid-playback for podcast episodes (bug 2026-08-25). These null-safe accessors fix it.
+private fun com.google.gson.JsonObject.objOrNullTop(key: String): com.google.gson.JsonObject? =
+    get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+private fun com.google.gson.JsonObject.arrOrNullTop(key: String): com.google.gson.JsonArray? =
+    get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+private fun com.google.gson.JsonObject.strOrNull(key: String): String? =
+    get(key)?.takeIf { !it.isJsonNull }?.asString
+
+internal fun parseSpotifyPlaybackState(root: com.google.gson.JsonObject): SpotifyPlaybackState? {
+    val item = root.objOrNullTop("item") ?: return null   // absent OR JSON null (ad) → no snap
+    val artists = item.arrOrNullTop("artists")
+        ?.joinToString(", ") {
+            (it as? com.google.gson.JsonObject)?.strOrNull("name").orEmpty()
+        }
+        ?.trim()?.trim(',')?.trim().orEmpty()
+    val album = item.objOrNullTop("album")
+    val artwork = album?.arrOrNullTop("images")?.firstOrNull()
+        ?.let { it as? com.google.gson.JsonObject }?.strOrNull("url")
+    val device = root.objOrNullTop("device")
+    return SpotifyPlaybackState(
+        title = item.strOrNull("name").orEmpty(),
+        artist = artists,
+        album = album?.strOrNull("name").orEmpty(),
+        artworkUrl = artwork,
+        positionMs = root.get("progress_ms")?.takeIf { !it.isJsonNull }?.asLong ?: 0L,
+        durationMs = item.get("duration_ms")?.takeIf { !it.isJsonNull }?.asLong ?: 0L,
+        isPlaying = root.get("is_playing")?.takeIf { !it.isJsonNull }?.asBoolean ?: false,
+        trackUri = item.strOrNull("uri").orEmpty(),
+        deviceName = device?.strOrNull("name"),
+        deviceType = device?.strOrNull("type"),
+        contextUri = root.objOrNullTop("context")?.strOrNull("uri")
+    )
+}
