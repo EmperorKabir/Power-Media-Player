@@ -543,15 +543,19 @@ class LastPlayedRepository @Inject constructor(
     }
 
     /**
-     * Cap the Recents list at 20 rows. Pinned snapshots are in their
-     * own table now and never count toward the cap.
+     * Cap Recents at 20 DISTINCT items. Pinned snapshots live in their own table and
+     * never count. Bug (2026-08-25): this capped 20 RAW rows via drop(20), but each PLAY
+     * inserts a session row and the UI shows `distinctBy{uri}.take(20)` — so replaying one
+     * item accrued rows that evicted OTHER distinct items (e.g. [A×20, B] → drop(20)
+     * deleted B, so Recents showed only A). Now cap on distinct uris to match the UI: keep
+     * every row of the 20 most-recent distinct uris (preserving their session-bookmarks),
+     * delete rows of older distinct uris (bookmarks cascade). Recents rows are tiny text,
+     * so keeping a replayed item's extra rows is negligible.
      */
     private suspend fun trimToCap() {
-        val rows = historyDao.snapshot()
-        if (rows.size > 20) {
-            val toDelete = rows.drop(20).map { it.id }
-            historyDao.deleteMany(toDelete)
-        }
+        val rows = historyDao.snapshot()  // lastPlayedAt DESC
+        val toDelete = rowsBeyondDistinctCap(rows.map { it.id to it.mediaUri }, DISTINCT_RECENTS_CAP)
+        if (toDelete.isNotEmpty()) historyDao.deleteMany(toDelete)
     }
 
     private fun sourceOf(s: String): Source = when (s) {
@@ -559,6 +563,28 @@ class LastPlayedRepository @Inject constructor(
         "SPOTIFY" -> Source.SPOTIFY
         else -> Source.LOCAL
     }
+}
+
+/** Recents cap in DISTINCT items — matches observeDynamic's `distinctBy.take(20)`. */
+internal const val DISTINCT_RECENTS_CAP = 20
+
+/**
+ * Given `(rowId, mediaUri)` rows in lastPlayedAt-DESC order, return the ids of rows whose
+ * uri falls beyond the [capDistinct] most-recent DISTINCT uris (to delete). Rows of a kept
+ * uri are all retained (session-bookmark anchors); a heavily-replayed item can never push
+ * another distinct item out of Recents. Pure → unit-tested (RecentsDistinctCapTest).
+ */
+internal fun rowsBeyondDistinctCap(
+    rows: List<Pair<Long, String>>,
+    capDistinct: Int
+): List<Long> {
+    if (rows.isEmpty()) return emptyList()
+    val keep = LinkedHashSet<String>()
+    for ((_, uri) in rows) {
+        keep.add(uri)
+        if (keep.size >= capDistinct) break
+    }
+    return rows.filter { it.second !in keep }.map { it.first }
 }
 
 /**
