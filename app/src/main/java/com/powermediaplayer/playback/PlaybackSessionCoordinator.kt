@@ -643,6 +643,10 @@ class PlaybackSessionCoordinator @Inject constructor(
                 val pos = player.currentPosition.coerceAtLeast(0L)
                 val playing = player.isPlaying
                 if (!playing) continue
+                // Don't persist a spurious 0 — a tick landing in the brief window before a
+                // resume startPositionMs seek settles reads currentPosition=0 and would
+                // clobber the good saved position. Mirrors the onStop saver's `pos<=0` guard.
+                if (pos <= 0L) continue
                 // Reverse mode is ephemeral: its positions live on a
                 // MIRRORED timeline (1:00 reversed = 9:00 forward of a
                 // 10-minute file) but the row is keyed by the ORIGINAL
