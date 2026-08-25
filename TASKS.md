@@ -1,6 +1,18 @@
 # TASKS.md — binding task ledger (compaction-proof)
 
-> **▶ RESUME HERE (2026-08-03) — Spotify precise stop-at-end via App Remote SDK (WIP, vc92/1.5.37).**
+> **▶ APP REMOTE PRECISE-STOP — CODE DONE (vc96/1.5.41), BLOCKED on Spotify dashboard (2026-08-25).**
+> All code shipped: vendored app-remote AAR + `com.spotify.android:auth:2.1.0`, `SpotifyAppRemoteController`
+> (real-time state + local-IPC pause + SSO grant), coordinator lifecycle+precise-stop, MainActivity SSO
+> auto-launch/result/reconnect, connect via foreground Activity, `deviceType` gate (on-phone only; cast =
+> Web-API best-effort). BLOCKER (device-proven chain): showAuthView built-in = broken (no dialog);
+> app-remote-control via AppAuth OAuth = token has scope but App Remote still UserNotAuthorized; auth-lib
+> SSO = `AUTHENTICATION_SERVICE_UNAVAILABLE`. ROOT = the app package+SHA-1 is NOT registered in the Spotify
+> Developer Dashboard (SSO validates package+fingerprint; Web API only checks redirect URI). **USER ACTION:**
+> developer.spotify.com/dashboard → Power Media Player app → Edit Settings → Android Packages → add package
+> `com.powermediaplayer` + SHA-1 `BD:78:32:1D:87:BC:14:76:F8:F3:D6:A5:3E:22:07:7E:B6:DE:BF:AE` → save → re-test.
+> Details: [[reference_spotify_appremote_dashboard]]. Once registered, no more code changes.
+>
+> **(superseded) RESUME HERE (2026-08-03) — Spotify precise stop-at-end via App Remote SDK (WIP, vc92/1.5.37).**
 > Full handoff: `handoff/spotify-appremote-2026-08-03/README.md` (+ captured phone logs).
 > GOAL: autoplay-OFF → a Spotify track plays to 0 remaining then stops, no advance, no artifact
 > (user rejected stop-early/advance/loop). PROVEN the Web-API poll (~1s stale) + cloud pause lag
