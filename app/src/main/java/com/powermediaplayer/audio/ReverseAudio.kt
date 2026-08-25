@@ -32,6 +32,15 @@ object ReverseAudio {
      */
     private const val MAX_REMOTE_BYTES = 50L * 1024 * 1024
 
+    /**
+     * Total-size LRU cap for the reverse-cache (audit 2026-08-25). Reversed WAVs are
+     * uncompressed (a 1-hour file ≈ 600 MB), and one is kept per reversed source with no
+     * cap — reversing several files bloats cacheDir until the OS evicts unpredictably
+     * (and an OS eviction can delete the file mid-playback). Self-trim to this budget,
+     * oldest-first, always sparing the just-built file. ~1 GB ≈ two hour-long files.
+     */
+    private const val MAX_CACHE_BYTES = 1024L * 1024 * 1024
+
     private fun isRemote(uri: Uri) = uri.scheme == "http" || uri.scheme == "https"
 
     /** Compressed size of [uri], or -1 when unknowable. */
@@ -78,10 +87,34 @@ object ReverseAudio {
             val t1 = DiagLog.now()
             writeReversedWav(pcm, wav, fmt.sampleRate, fmt.channels)
             DiagLog.perf("reverse.write", DiagLog.now() - t1, "bytes=${wav.length()}")
+            // LRU-trim the cache to its budget, sparing the file we just built.
+            val freed = trimCacheToCap(dir, MAX_CACHE_BYTES, wav)
+            if (freed > 0) DiagLog.perf("reverse.trim", 0, "freed=$freed")
             wav
         } finally {
             pcm.delete()
         }
+    }
+
+    /**
+     * Trim the reverse-cache to [capBytes] total, deleting least-recently-modified `.wav`
+     * files first, never deleting [keep]. Pure file I/O — unit-tested. Returns bytes freed.
+     */
+    internal fun trimCacheToCap(dir: File, capBytes: Long, keep: File?): Long {
+        val wavs = dir.listFiles { f -> f.isFile && f.name.endsWith(".wav") }
+            ?.toMutableList() ?: return 0L
+        var total = wavs.sumOf { it.length() }
+        if (total <= capBytes) return 0L
+        wavs.sortBy { it.lastModified() }          // oldest first = LRU
+        val keepPath = keep?.absolutePath
+        var freed = 0L
+        for (f in wavs) {
+            if (total <= capBytes) break
+            if (f.absolutePath == keepPath) continue
+            val len = f.length()
+            if (f.delete()) { total -= len; freed += len }
+        }
+        return freed
     }
 
     internal data class PcmFormat(val sampleRate: Int, val channels: Int)
