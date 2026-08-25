@@ -61,9 +61,12 @@ interface PlaybackHistoryDao {
      *  the same item should agree — updating only the most-recent left older Last
      *  Played rows showing the stale filename. */
     @Query(
-        // Keep the existing subtitle (e.g. the 'DRIVE' source label) when the
-        // extracted artist is blank, rather than wiping it to ''.
-        "UPDATE playback_history SET title = :title, " +
+        // Keep the existing value when the incoming one is blank, rather than wiping
+        // it. The subtitle guard was always here; the title guard was added 2026-08-25
+        // (the DAO seam itself must not let a blank title clobber a previously-healed
+        // one, independent of caller guards).
+        "UPDATE playback_history SET " +
+            "title = CASE WHEN :title = '' THEN title ELSE :title END, " +
             "subtitle = CASE WHEN :subtitle = '' THEN subtitle ELSE :subtitle END " +
             "WHERE mediaUri = :uri"
     )

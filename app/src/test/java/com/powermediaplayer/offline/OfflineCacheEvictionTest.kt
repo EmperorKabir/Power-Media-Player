@@ -48,4 +48,19 @@ class OfflineCacheEvictionTest {
         ArtworkCache.write(ctx, "k5", big) // 5×(cap/4) = 1.25×cap → trim oldest
         assertNull("oldest cover trimmed when over cap", ArtworkCache.uriFor(ctx, "k1"))
     }
+
+    /** Bug 2026-08-25: a cover that is READ (displayed/pinned) must not be evicted as
+     *  "oldest" — uriFor touches mtime so the LRU spares in-use covers. */
+    @Test fun artwork_readTouch_sparesRecentlyUsedCoverFromTrim() {
+        val big = ByteArray((ArtworkCache.CAP_BYTES / 4).toInt()) { 2 }
+        ArtworkCache.write(ctx, "u1", big); Thread.sleep(10)  // oldest by write
+        ArtworkCache.write(ctx, "u2", big); Thread.sleep(10)
+        ArtworkCache.write(ctx, "u3", big); Thread.sleep(10)
+        ArtworkCache.write(ctx, "u4", big); Thread.sleep(10)  // total = cap, no trim yet
+        // Display u1 → its mtime is bumped to newest, so it is no longer the oldest.
+        assertNotNull(ArtworkCache.uriFor(ctx, "u1")); Thread.sleep(10)
+        ArtworkCache.write(ctx, "u5", big) // 1.25×cap → trim ONE oldest = u2 (not the read u1)
+        assertNotNull("recently-read cover survived the trim", ArtworkCache.uriFor(ctx, "u1"))
+        assertNull("the genuinely-oldest cover was trimmed", ArtworkCache.uriFor(ctx, "u2"))
+    }
 }

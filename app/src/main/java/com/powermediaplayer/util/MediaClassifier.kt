@@ -69,10 +69,16 @@ object MediaClassifier {
      */
     fun looksLikeRawMediaFilename(title: String?): Boolean {
         if (title.isNullOrBlank()) return false
+        // Take the extension FIRST, THEN strip any ?query / #fragment off it. The old
+        // order (strip ?/# first) broke a plain filename whose NAME contains a literal
+        // '#'/'?' before the dot: "Track #1.mp3".substringBefore('#') = "Track " → no dot
+        // → ext "" → wrongly "not raw" → the embedded-title heal never fired and the user
+        // saw the filename forever (bug found 2026-08-25). '#' is legal on every FS; '?'
+        // on Drive. This order still handles URL-derived names ("x.m4b?token=a#f" → "m4b").
         val ext = title.trim()
+            .substringAfterLast('.', "")
             .substringBefore('?')
             .substringBefore('#')
-            .substringAfterLast('.', "")
             .lowercase()
         return ext in RAW_MEDIA_EXTENSIONS
     }

@@ -61,7 +61,14 @@ object ArtworkCache {
     /** The file:// uri for [key] if a non-empty cache file exists, else null. */
     fun uriFor(context: Context, key: String): Uri? {
         val f = fileFor(context, key)
-        return if (f.exists() && f.length() > 0) Uri.fromFile(f) else null
+        if (!(f.exists() && f.length() > 0)) return null
+        // Touch mtime on READ so the LRU trim (oldest-by-lastModified) treats a
+        // currently-DISPLAYED cover as fresh. Without this, a long-lived pinned cover
+        // (written early = oldest mtime) was the first evicted when a big Drive-folder
+        // browse wrote hundreds of new covers — re-introducing the blank-artwork bug the
+        // durable cache exists to prevent (found 2026-08-25). Makes it a true access-LRU.
+        runCatching { f.setLastModified(System.currentTimeMillis()) }
+        return Uri.fromFile(f)
     }
 
     /** #3 — cover art was unbounded (600 KB-1 MB each, no cap). LRU-trim to this

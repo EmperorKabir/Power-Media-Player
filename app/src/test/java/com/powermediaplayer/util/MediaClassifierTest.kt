@@ -142,6 +142,24 @@ class MediaClassifierTest {
         assertFalse(MediaClassifier.looksLikeRawMediaFilename("   "))
     }
 
+    // Regression (bug 2026-08-25): a plain filename whose NAME contains a literal
+    // '#' or '?' before the dot was wrongly classified NOT-raw (extension stripped
+    // away with the '#'/'?'), so the embedded-title heal never fired.
+    @Test fun raw_filename_with_literal_hash_in_name_is_raw() {
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("Track #1.mp3"))
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("Vol #3.m4b"))
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("file#section.m4b"))
+    }
+
+    @Test fun raw_filename_with_literal_question_in_name_is_raw() =
+        assertTrue(MediaClassifier.looksLikeRawMediaFilename("Who Was Einstein?.m4b"))
+
+    @Test fun firstNonRawTitle_skips_hash_filename_and_picks_embedded() =
+        assertEquals(
+            "Real Embedded Title",
+            MediaClassifier.firstNonRawTitle(listOf("Track #1.mp3", "Real Embedded Title"))
+        )
+
     @Test fun title_with_no_extension_is_not_raw() =
         assertFalse(MediaClassifier.looksLikeRawMediaFilename("Just A Plain Title"))
 }
