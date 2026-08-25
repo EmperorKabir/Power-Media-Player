@@ -445,7 +445,11 @@ class MainActivity : FragmentActivity() {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == spotifyAppRemote.ssoRequestCode) {
-            spotifyAppRemote.handleGrantResult(resultCode, data)
+            // On a successful grant, re-attempt connect now (this Activity is foreground) —
+            // the lifecycle collector's decision boolean is unchanged so it won't re-fire.
+            if (spotifyAppRemote.handleGrantResult(resultCode, data)) {
+                spotifyAppRemote.connect(this)
+            }
         }
     }
 

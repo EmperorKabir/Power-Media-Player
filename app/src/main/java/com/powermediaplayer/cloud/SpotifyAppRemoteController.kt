@@ -173,20 +173,22 @@ class SpotifyAppRemoteController @Inject constructor(
             .createLoginActivityIntent(activity, request)
     }
 
-    /** Handle the SSO result. On success the app-remote-control grant is registered with
-     *  Spotify → clears needsReauth so the lifecycle can connect. */
-    fun handleGrantResult(resultCode: Int, data: android.content.Intent?) {
+    /** Handle the SSO result. Returns true if the app-remote-control grant succeeded (the
+     *  caller should then re-attempt connect — the lifecycle's decision boolean is
+     *  unchanged, so it won't re-fire connect on its own). Clears needsReauth on success. */
+    fun handleGrantResult(resultCode: Int, data: android.content.Intent?): Boolean {
         val resp = com.spotify.sdk.android.auth.AuthorizationClient.getResponse(resultCode, data)
-        when (resp.type) {
+        return when (resp.type) {
             com.spotify.sdk.android.auth.AuthorizationResponse.Type.TOKEN,
             com.spotify.sdk.android.auth.AuthorizationResponse.Type.CODE -> {
                 _needsReauth.value = false
                 DiagLog.event("APPREMOTE", "SSO grant OK (${resp.type}) — app-remote-control granted")
+                true
             }
-            else -> DiagLog.event(
-                "APPREMOTE",
-                "SSO grant failed type=${resp.type} error=${resp.error}"
-            )
+            else -> {
+                DiagLog.event("APPREMOTE", "SSO grant failed type=${resp.type} error=${resp.error}")
+                false
+            }
         }
     }
 
