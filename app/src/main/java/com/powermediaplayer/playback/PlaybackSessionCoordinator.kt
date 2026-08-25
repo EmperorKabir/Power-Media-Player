@@ -131,8 +131,18 @@ class PlaybackSessionCoordinator @Inject constructor(
                 spot != null && spot.isPlaying && !autoplayOn &&
                     spot.deviceType == SPOTIFY_LOCAL_DEVICE_TYPE
             }.distinctUntilChanged().collect { wantLocalPreciseStop ->
-                if (wantLocalPreciseStop) spotifyAppRemote.connect()
-                else spotifyAppRemote.disconnect()
+                if (wantLocalPreciseStop) {
+                    // The one-time app-remote-control consent dialog can ONLY be shown from
+                    // a FOREGROUND Activity (device-proven: connecting from the app context
+                    // → UserNotAuthorizedException with no dialog). Pass the live Activity
+                    // via MainActivityHolder; once consent is granted, later reconnects work
+                    // with any context (falls back to the app context when backgrounded).
+                    spotifyAppRemote.connect(
+                        com.powermediaplayer.MainActivityHolder.get()
+                    )
+                } else {
+                    spotifyAppRemote.disconnect()
+                }
             }
         }
     }

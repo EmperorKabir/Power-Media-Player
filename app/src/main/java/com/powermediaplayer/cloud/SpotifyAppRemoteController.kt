@@ -72,14 +72,20 @@ class SpotifyAppRemoteController @Inject constructor(
      * later reconnects succeed with any context (the app context default). No-op if
      * already connected or a connect is in flight.
      */
-    fun connect(ctx: Context = context) {
+    fun connect(activity: android.app.Activity? = null) {
         if (isConnected || connecting) return
         connecting = true
+        // Foreground Activity (if any) for the consent dialog; app context otherwise
+        // (backgrounded reconnect after consent was already granted).
+        val ctx: Context = activity ?: context
         val params = ConnectionParams.Builder(BuildConfig.SPOTIFY_CLIENT_ID)
             .setRedirectUri(BuildConfig.SPOTIFY_REDIRECT_URI)
             .showAuthView(true)
             .build()
-        DiagLog.event("APPREMOTE", "connect requested (ctx=${ctx.javaClass.simpleName})")
+        DiagLog.event(
+            "APPREMOTE",
+            "connect requested (ctx=${ctx.javaClass.simpleName}, foreground=${activity != null})"
+        )
         SpotifyAppRemote.connect(ctx, params, object : Connector.ConnectionListener {
             override fun onConnected(remote: SpotifyAppRemote) {
                 connecting = false
