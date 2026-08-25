@@ -1464,6 +1464,7 @@ private fun OverlayContent(
 
 // ── Expanded Layout (Tablet / Landscape Foldable) ─────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlayerScreenExpanded(
     uiState: PlayerUiState,
@@ -1565,8 +1566,20 @@ private fun PlayerScreenExpanded(
                 playbackSpeed = uiState.playbackSpeed,
                 onSpeedChange = { viewModel.setPlaybackSpeed(it) },
                 modifier = Modifier.padding(horizontal = 16.dp),
-                enabled = uiState.controls.playbackSpeed && !uiState.isCasting
+                // Drift fix (audit 2026-08-25): Compact greys speed during Spotify
+                // (Connect ignores it); Expanded was missing `!isSpotifyActive` so it
+                // stayed draggable-but-inert. Match Compact + show the same note.
+                enabled = uiState.controls.playbackSpeed && !uiState.isCasting && !uiState.isSpotifyActive
             )
+            if (uiState.isSpotifyActive) {
+                Text(
+                    text = "Speed / pitch don't apply to Spotify Connect, audio plays " +
+                        "on the Spotify device. Switch to local or Drive to use them.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
             TertiaryControls(
                 currentVolume = volumeUi.first,
@@ -1663,6 +1676,10 @@ private fun PlayerScreenExpanded(
                 }
             }
             val bookmarksE by viewModel.bookmarks.collectAsStateWithLifecycle()
+            // Drift fix (audit 2026-08-25): the Expanded layout was missing the
+            // long-press → rename that Compact has (OverlayContent) — you could seek +
+            // delete a bookmark here but not rename it. Mirror the Compact behaviour.
+            var renamingBookmarkE by remember { mutableStateOf<com.powermediaplayer.data.db.entity.BookmarkEntity?>(null) }
             if (bookmarksE.isNotEmpty()) {
                 Row(
                     modifier = Modifier
@@ -1672,21 +1689,55 @@ private fun PlayerScreenExpanded(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     bookmarksE.forEach { b ->
-                        AssistChip(
-                            onClick = { viewModel.seekToBookmark(b) },
-                            label = { Text(b.label, style = MaterialTheme.typography.labelSmall) },
-                            trailingIcon = {
-                                IconButton(
-                                    onClick = { viewModel.deleteBookmark(b) },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Filled.Close, contentDescription = "Remove",
-                                        tint = ErrorRed, modifier = Modifier.size(16.dp))
+                        Box(
+                            modifier = Modifier.combinedClickable(
+                                onClick = { viewModel.seekToBookmark(b) },
+                                onLongClick = { renamingBookmarkE = b }
+                            )
+                        ) {
+                            AssistChip(
+                                onClick = { viewModel.seekToBookmark(b) },
+                                label = { Text(b.label, style = MaterialTheme.typography.labelSmall) },
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { viewModel.deleteBookmark(b) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Filled.Close, contentDescription = "Remove",
+                                            tint = ErrorRed, modifier = Modifier.size(16.dp))
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
+            }
+            renamingBookmarkE?.let { bookmark ->
+                var label by remember(bookmark.id) { mutableStateOf(bookmark.label) }
+                AlertDialog(
+                    onDismissRequest = { renamingBookmarkE = null },
+                    title = { Text("Rename bookmark", color = TealAccent, style = MaterialTheme.typography.titleLarge) },
+                    text = {
+                        OutlinedTextField(
+                            value = label,
+                            onValueChange = { label = it },
+                            singleLine = true,
+                            label = { Text("Label") }
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.renameBookmark(bookmark, label)
+                            renamingBookmarkE = null
+                        }) { Text("Save", color = TealAccent) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { renamingBookmarkE = null }) {
+                            Text("Cancel", color = TextSecondary)
+                        }
+                    },
+                    containerColor = OledBlack
+                )
             }
         }
             // Info icon — top-right of the right control panel
