@@ -11,6 +11,7 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.powermediaplayer.service.PlaybackConnection
 import com.powermediaplayer.ui.navigation.AppNavigation
 import com.powermediaplayer.ui.theme.OledBlack
@@ -113,6 +114,12 @@ class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider
+
+    @Inject
+    lateinit var spotifyAppRemote: com.powermediaplayer.cloud.SpotifyAppRemoteController
+
+    /** Once-per-process guard so the App Remote SSO grant prompt only auto-launches once. */
+    private var spotifySsoPrompted = false
 
     /**
      * True while the system is rendering us in PiP. Drives
@@ -247,6 +254,30 @@ class MainActivity : FragmentActivity() {
             )
         )
         MainActivityHolder.set(this)
+        // I4d precise-stop — auto-launch Spotify's SSO grant for app-remote-control the
+        // first time App Remote reports it isn't authorised (a generic OAuth token carrying
+        // the scope is NOT enough for the App Remote SDK — device-proven). One-time per
+        // process; the grant is account-level so once approved it persists.
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                spotifyAppRemote.needsReauth.collect { needs ->
+                    if (needs && !spotifySsoPrompted) {
+                        spotifySsoPrompted = true
+                        runCatching {
+                            @Suppress("DEPRECATION")
+                            startActivityForResult(
+                                spotifyAppRemote.buildGrantIntent(this@MainActivity),
+                                spotifyAppRemote.ssoRequestCode
+                            )
+                        }.onFailure {
+                            com.powermediaplayer.diag.DiagLog.event(
+                                "APPREMOTE", "SSO grant launch failed: ${it.message}"
+                            )
+                        }
+                    }
+                }
+            }
+        }
         // (helpers for the deep-link lifecycle live below onCreate)
         playbackConnection.connect()
         // Playback-session side effects run exactly once per process
@@ -406,6 +437,15 @@ class MainActivity : FragmentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    @Deprecated("startActivityForResult result routing for the Spotify SSO grant")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == spotifyAppRemote.ssoRequestCode) {
+            spotifyAppRemote.handleGrantResult(resultCode, data)
         }
     }
 

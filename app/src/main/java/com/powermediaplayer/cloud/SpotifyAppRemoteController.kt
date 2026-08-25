@@ -42,6 +42,8 @@ import kotlinx.coroutines.flow.asStateFlow
 class SpotifyAppRemoteController @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
+    companion object { private const val SSO_REQUEST_CODE = 0x59A1 }
+
     /** A single real-time player-state snapshot from the local Spotify app. */
     data class RemoteState(
         val trackUri: String,
@@ -150,6 +152,46 @@ class SpotifyAppRemoteController @Inject constructor(
         runCatching { appRemote?.playerApi?.pause() }
             .onFailure { DiagLog.event("APPREMOTE", "pause failed: ${it.message}") }
     }
+
+    /**
+     * Build the Spotify SSO intent that grants the `app-remote-control` scope via
+     * Spotify's OWN native consent (auth-lib `AuthorizationClient`). This is the ONLY
+     * grant the App Remote SDK honours — a generic AppAuth token carrying the scope is
+     * NOT enough (device-proven 2026-08-25). The caller launches this with
+     * `startActivityForResult(intent, REQUEST_CODE)` from an Activity and passes the
+     * result to [handleGrantResult]. Uses TOKEN response type (the App Remote grant is
+     * account-level; we don't need the token itself).
+     */
+    fun buildGrantIntent(activity: android.app.Activity): android.content.Intent {
+        val request = com.spotify.sdk.android.auth.AuthorizationRequest.Builder(
+            BuildConfig.SPOTIFY_CLIENT_ID,
+            com.spotify.sdk.android.auth.AuthorizationResponse.Type.TOKEN,
+            BuildConfig.SPOTIFY_REDIRECT_URI
+        ).setScopes(arrayOf("app-remote-control")).build()
+        DiagLog.event("APPREMOTE", "SSO grant intent built (app-remote-control)")
+        return com.spotify.sdk.android.auth.AuthorizationClient
+            .createLoginActivityIntent(activity, request)
+    }
+
+    /** Handle the SSO result. On success the app-remote-control grant is registered with
+     *  Spotify → clears needsReauth so the lifecycle can connect. */
+    fun handleGrantResult(resultCode: Int, data: android.content.Intent?) {
+        val resp = com.spotify.sdk.android.auth.AuthorizationClient.getResponse(resultCode, data)
+        when (resp.type) {
+            com.spotify.sdk.android.auth.AuthorizationResponse.Type.TOKEN,
+            com.spotify.sdk.android.auth.AuthorizationResponse.Type.CODE -> {
+                _needsReauth.value = false
+                DiagLog.event("APPREMOTE", "SSO grant OK (${resp.type}) — app-remote-control granted")
+            }
+            else -> DiagLog.event(
+                "APPREMOTE",
+                "SSO grant failed type=${resp.type} error=${resp.error}"
+            )
+        }
+    }
+
+    /** REQUEST_CODE for the SSO grant Activity result. */
+    val ssoRequestCode: Int get() = SSO_REQUEST_CODE
 
     /** Tear down the subscription + connection. Idempotent. */
     fun disconnect() {

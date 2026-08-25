@@ -33,8 +33,8 @@ android {
         // orientation locks to trip the large-screen rule, no native .so
         // (16 KB page rule moot), WorkManager unaffected.
         targetSdk = 36
-        versionCode = 94
-        versionName = "1.5.39"
+        versionCode = 95
+        versionName = "1.5.40"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -55,6 +55,12 @@ android {
         // AppAuth needs the redirect URI scheme registered as a manifest
         // placeholder so its RedirectUriReceiverActivity can be auto-merged.
         manifestPlaceholders["appAuthRedirectScheme"] = "powermediaplayer"
+        // Spotify auth-lib (SSO) requires the redirect scheme + host as placeholders
+        // (since 2.0.0). Reuses the dashboard-registered powermediaplayer://callback;
+        // SSO returns via onActivityResult (Spotify app path), so its AuthCallbackActivity
+        // does not clash with AppAuth's receiver at runtime.
+        manifestPlaceholders["redirectSchemeName"] = "powermediaplayer"
+        manifestPlaceholders["redirectHostName"] = "callback"
     }
 
     // Release signing configured from local.properties (gitignored). When
@@ -303,6 +309,13 @@ dependencies {
     // without auto-advancing. Not on Maven Central (JitPack serves a broken artifact),
     // so the official AAR is vendored in app/libs. Only transitive need is gson (above).
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
+    // Spotify Auth library (SSO) — grants the app-remote-control scope via Spotify's OWN
+    // native consent handshake, the ONLY thing the App Remote SDK recognises (device-proven
+    // 2026-08-25: a valid app-remote-control token from the app's AppAuth OAuth flow does
+    // NOT authorise App Remote, and the built-in showAuthView consent is broken on modern
+    // Spotify apps). AuthorizationClient.createLoginActivityIntent → onActivityResult grants
+    // it; App Remote then connects with showAuthView(false).
+    implementation("com.spotify.android:auth:2.1.0")
     // OkHttp: Spotify + Drive REST HTTP client.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // BouncyCastle TLS — DTLS-PSK for the Philips Hue Entertainment API
