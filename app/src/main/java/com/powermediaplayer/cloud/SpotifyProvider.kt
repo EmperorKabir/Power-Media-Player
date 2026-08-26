@@ -127,6 +127,27 @@ class SpotifyProvider @Inject constructor(
     private val _spotifyState = MutableStateFlow<SpotifyPlaybackState?>(null)
     val spotifyState: StateFlow<SpotifyPlaybackState?> = _spotifyState.asStateFlow()
 
+    // I4d end-pin: when the App Remote precise-stop pauses a track ~2 s before its metadata
+    // duration (Spotify's gapless advance point = the real audio end), the mirror would
+    // otherwise show the track frozen at ~2 s remaining. While this holds the paused track's
+    // uri, the mirror reports positionMs = durationMs (0:00 remaining / 100%) so it reads as
+    // completed. Cleared on a track change (in the poll emit) or any user transport command.
+    @Volatile private var endPinTrackUri: String? = null
+
+    /** Hold the display at the very end for [trackUri] (see [endPinTrackUri]). */
+    fun pinPositionToEnd(trackUri: String) { endPinTrackUri = trackUri }
+
+    /** Drop the end-pin (user resumed / seeked / skipped, or the track changed). */
+    fun clearEndPin() { endPinTrackUri = null }
+
+    /** Apply the end-pin to a freshly polled snap: same track → snap position to the end;
+     *  a different track → the pin is stale, drop it and pass the snap through unchanged. */
+    private fun applyEndPin(snap: SpotifyPlaybackState): SpotifyPlaybackState {
+        val pin = endPinTrackUri ?: return snap
+        if (snap.trackUri != pin) { endPinTrackUri = null; return snap }
+        return if (snap.durationMs > 0L) snap.copy(positionMs = snap.durationMs) else snap
+    }
+
     // True while we're waiting for the first fully-resolved Spotify
     // metadata for the current track — covers (a) the gap between
     // startPlaybackPolling and the first non-null state arriving, and
@@ -1532,6 +1553,13 @@ class SpotifyProvider @Inject constructor(
                         val step = trackResolveStep(isNewTrack = snap.trackUri != lastTrackUri)
                         if (step.fetchLyrics) {
                             lastTrackUri = snap.trackUri
+                            // DIAGNOSTIC: probe audio-analysis for the new track (async, never
+                            // blocks the poll). Debug builds only — see probeAudioAnalysis.
+                            if (com.powermediaplayer.BuildConfig.DEBUG &&
+                                snap.trackUri.startsWith("spotify:track:")
+                            ) {
+                                launch { probeAudioAnalysis(snap.trackUri, snap.durationMs) }
+                            }
                             // Lyrics fetch stays ASYNC (never blocks the loop). A
                             // cache hit attaches immediately; a miss fires the async
                             // fetch AND keeps the single loading banner up (lyrics
@@ -1564,9 +1592,11 @@ class SpotifyProvider @Inject constructor(
                             }
                         }
                         if (step.emitState) {
-                            _spotifyState.value = snap.copy(
-                                lyrics = lastLyrics, syncedLyrics = lastSynced,
-                                lyricsLoading = lastLyricsLoading
+                            _spotifyState.value = applyEndPin(
+                                snap.copy(
+                                    lyrics = lastLyrics, syncedLyrics = lastSynced,
+                                    lyricsLoading = lastLyricsLoading
+                                )
                             )
                         }
                         provisionalActive = false // real data now
@@ -1741,6 +1771,59 @@ class SpotifyProvider @Inject constructor(
         com.powermediaplayer.diag.DiagLog.bg("spotify-poll stopped reason=stop gen=$pollGen")
     }
 
+    /**
+     * DIAGNOSTIC (I4d precise-stop): probe Spotify's per-track audio-analysis to learn
+     * whether it (a) is accessible for this app at all (200 vs 403 — Spotify deprecated it
+     * for newer/development-mode apps in Nov 2024) and (b) pinpoints the REAL audio end
+     * (track.duration / end_of_fade_out / last-segment end), which is where the gapless
+     * auto-advance fires. Logged against the metadata duration + the poller's observed
+     * advance point to decide whether a precise, first-play stop can be scheduled from it.
+     * Logs only — no behaviour change. Debug builds only.
+     */
+    suspend fun probeAudioAnalysis(trackUri: String, metaDurationMs: Long) =
+        withContext(Dispatchers.IO) {
+            val id = trackUri.substringAfterLast(':').takeIf { it.isNotBlank() }
+                ?: return@withContext
+            val token = currentAccessToken() ?: run {
+                com.powermediaplayer.diag.DiagLog.event("ANALYSIS", "probe skipped: no token")
+                return@withContext
+            }
+            val req = Request.Builder()
+                .url("https://api.spotify.com/v1/audio-analysis/$id")
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            runCatching {
+                http.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "ANALYSIS", "probe id=$id status=${resp.code} meta=${metaDurationMs}ms"
+                        )
+                        return@use
+                    }
+                    val body = resp.body?.string().orEmpty()
+                    val root = JsonParser.parseString(body) as? com.google.gson.JsonObject
+                    val track = root?.getAsJsonObject("track")
+                    fun d(k: String) = track?.get(k)?.takeIf { !it.isJsonNull }?.asDouble
+                    val segs = root?.getAsJsonArray("segments")
+                    val lastSeg = segs?.lastOrNull() as? com.google.gson.JsonObject
+                    val segEndMs = lastSeg?.let {
+                        (((it.get("start")?.asDouble ?: 0.0) +
+                            (it.get("duration")?.asDouble ?: 0.0)) * 1000).toLong()
+                    }
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "ANALYSIS",
+                        "probe id=$id status=200 meta=${metaDurationMs}ms " +
+                            "analysisDur=${d("duration")?.let { (it * 1000).toLong() }}ms " +
+                            "endFadeOut=${d("end_of_fade_out")?.let { (it * 1000).toLong() }}ms " +
+                            "startFadeOut=${d("start_of_fade_out")?.let { (it * 1000).toLong() }}ms " +
+                            "lastSegEnd=${segEndMs}ms segCount=${segs?.size()}"
+                    )
+                }
+            }.onFailure {
+                com.powermediaplayer.diag.DiagLog.event("ANALYSIS", "probe id=$id error=${it.message}")
+            }
+        }
+
     private fun fetchCurrentState(token: String): SpotifyPlaybackState? {
         val req = Request.Builder()
             .url("https://api.spotify.com/v1/me/player")
@@ -1770,6 +1853,7 @@ class SpotifyProvider @Inject constructor(
     }
 
     suspend fun togglePlayPause(): Result<Unit> = withContext(Dispatchers.IO) {
+        clearEndPin()   // user transport action → leave the paused-at-end display
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Spotify session expired")
         )
@@ -1801,6 +1885,7 @@ class SpotifyProvider @Inject constructor(
     }
 
     suspend fun skipNext(): Result<Unit> = withContext(Dispatchers.IO) {
+        clearEndPin()
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Spotify session expired")
         )
@@ -1808,6 +1893,7 @@ class SpotifyProvider @Inject constructor(
     }
 
     suspend fun skipPrevious(): Result<Unit> = withContext(Dispatchers.IO) {
+        clearEndPin()
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Spotify session expired")
         )
@@ -1815,6 +1901,7 @@ class SpotifyProvider @Inject constructor(
     }
 
     suspend fun seekTo(positionMs: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        clearEndPin()
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Spotify session expired")
         )
@@ -1871,6 +1958,7 @@ class SpotifyProvider @Inject constructor(
      * resumes the current item; passing a body would re-queue.
      */
     suspend fun resume(): Result<Unit> = withContext(Dispatchers.IO) {
+        clearEndPin()
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Spotify session expired")
         )

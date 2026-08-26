@@ -132,6 +132,11 @@ class SpotifyAppRemoteController @Inject constructor(
         subscription = sub
         sub.setEventCallback { ps: PlayerState ->
             val track = ps.track
+            DiagLog.event(
+                "APPREMOTE",
+                "evt track=${track?.uri?.takeLast(14)} dur=${track?.duration} " +
+                    "pos=${ps.playbackPosition} paused=${ps.isPaused} speed=${ps.playbackSpeed}"
+            )
             if (track != null && track.uri != null) {
                 _state.value = RemoteState(
                     trackUri = track.uri,
@@ -151,6 +156,37 @@ class SpotifyAppRemoteController @Inject constructor(
     fun pause() {
         runCatching { appRemote?.playerApi?.pause() }
             .onFailure { DiagLog.event("APPREMOTE", "pause failed: ${it.message}") }
+    }
+
+    /**
+     * One-shot fetch of the CURRENT player state over the local IPC. Needed for
+     * high-frequency near-end polling: `subscribeToPlayerState` only PUSHES on a state
+     * change (play/pause/seek/track-change), so it can't sample the final seconds of a
+     * track as the position climbs — but `getPlayerState()` returns the live position on
+     * demand. Returns null when not connected or on error (best-effort).
+     */
+    suspend fun fetchState(): RemoteState? {
+        val remote = appRemote ?: return null
+        return runCatching {
+            kotlinx.coroutines.suspendCancellableCoroutine<RemoteState?> { cont ->
+                remote.playerApi.playerState
+                    .setResultCallback { ps ->
+                        val track = ps.track
+                        val rs = if (track != null && track.uri != null) RemoteState(
+                            trackUri = track.uri,
+                            durationMs = track.duration,
+                            positionMs = ps.playbackPosition,
+                            playbackSpeed = ps.playbackSpeed,
+                            isPaused = ps.isPaused,
+                            atElapsedRealtimeMs = SystemClock.elapsedRealtime()
+                        ) else null
+                        if (cont.isActive) cont.resumeWith(Result.success(rs))
+                    }
+                    .setErrorCallback {
+                        if (cont.isActive) cont.resumeWith(Result.success(null))
+                    }
+            }
+        }.getOrNull()
     }
 
     /**

@@ -1,16 +1,22 @@
 # TASKS.md — binding task ledger (compaction-proof)
 
-> **▶ APP REMOTE PRECISE-STOP — CODE DONE (vc96/1.5.41), BLOCKED on Spotify dashboard (2026-08-25).**
-> All code shipped: vendored app-remote AAR + `com.spotify.android:auth:2.1.0`, `SpotifyAppRemoteController`
-> (real-time state + local-IPC pause + SSO grant), coordinator lifecycle+precise-stop, MainActivity SSO
-> auto-launch/result/reconnect, connect via foreground Activity, `deviceType` gate (on-phone only; cast =
-> Web-API best-effort). BLOCKER (device-proven chain): showAuthView built-in = broken (no dialog);
-> app-remote-control via AppAuth OAuth = token has scope but App Remote still UserNotAuthorized; auth-lib
-> SSO = `AUTHENTICATION_SERVICE_UNAVAILABLE`. ROOT = the app package+SHA-1 is NOT registered in the Spotify
-> Developer Dashboard (SSO validates package+fingerprint; Web API only checks redirect URI). **USER ACTION:**
-> developer.spotify.com/dashboard → Power Media Player app → Edit Settings → Android Packages → add package
-> `com.powermediaplayer` + SHA-1 `BD:78:32:1D:87:BC:14:76:F8:F3:D6:A5:3E:22:07:7E:B6:DE:BF:AE` → save → re-test.
-> Details: [[reference_spotify_appremote_dashboard]]. Once registered, no more code changes.
+> **▶ APP REMOTE PRECISE-STOP — DASHBOARD RESOLVED, ROOT CAUSE FOUND, still OPEN (user PAUSED 2026-08-26).**
+> Dashboard fingerprint BD:78 added (Claude-for-Chrome) → App Remote SSO now works on debug build; SSO no
+> longer the blocker. ROOT CAUSE (device-proven): Spotify gapless auto-advances at each track's REAL audio
+> end = 0.2–2.0s BEFORE metadata `duration_ms` (gapless trims the silent/encoder tail), VARIABLE per track →
+> no fixed lead can both avoid-advance and not-clip. `GET /v1/audio-analysis` (the precise real-end source)
+> = **403** for this dev-mode app (deprecated); no external first-play source. KEY WIN: with Spotify
+> **gapless OFF** the advance moves to ~0ms UNIFORMLY (A/B: lEXL ~0ms off vs ~2022ms on) → a small fixed
+> lead (`AUTOPLAY_APPREMOTE_LEAD_MS`=300, vc111) lands in the tail = precise, first-play, no learning;
+> TRADE-OFF (not yet accepted) = user must keep gapless off. CURRENT BLOCKER (vc111 test): it STILL advanced
+> because App Remote `fetchState()` FROZE the position (pos=11611 speed=0 for ~2s on a 13.4s track) so `rem`
+> stuck at 1829, never reached 300 → no pause; ALSO connection unstable (`wantLocalPreciseStop` flips false
+> on scrub/pause → disconnect kills the poll). FIX NEXT (do NOT churn device while user away): (1) extrapolate
+> position by wall-clock from last speed=1 sample, don't trust frozen/speed=0 fetchState; (2) harden lifecycle
+> gate vs transient isPlaying=false; (3) advance-catch backstop on trackUri change. `DIAG_MEASURE_ADVANCE`
+> flag=false ships the real stop (true=measurement-only). Full detail: [[project_spotify_precise_stop]].
+> vc111/1.5.56 on phone. audio-analysis probe (`SpotifyProvider.probeAudioAnalysis`, tag ANALYSIS) = debug
+> diagnostic, all 403, remove later.
 >
 > **(superseded) RESUME HERE (2026-08-03) — Spotify precise stop-at-end via App Remote SDK (WIP, vc92/1.5.37).**
 > Full handoff: `handoff/spotify-appremote-2026-08-03/README.md` (+ captured phone logs).
