@@ -441,6 +441,19 @@ class LastPlayedRepository @Inject constructor(
     /** #19 — one-shot live resume position for a starred row that follows live. */
     suspend fun livePositionForUri(uri: String): Long? = historyDao.positionForUri(uri)
 
+    /**
+     * PH5 — the position a TAP should resume from. The most recent row normally wins, but a
+     * tap that restarted the item (the podcast tap used to queue at 0 and immediately write
+     * a 0 row over the real progress) leaves a tiny latest position while an older row still
+     * holds the listen — recover that. See [pickResumePosition].
+     */
+    suspend fun resumePositionForUri(uri: String): Long =
+        pickResumePosition(
+            runCatching { historyDao.rowsForUri(uri) }.getOrDefault(emptyList())
+                .sortedByDescending { it.lastPlayedAt }
+                .map { it.lastPositionMs to it.durationMs }
+        )
+
     suspend fun pinSession(historyId: Long, followLive: Boolean = false): Result<Unit> {
         // Shared cap with pinned albums: both compete for the same 10 slots.
         val used = pinSlotsUsed()
@@ -601,4 +614,20 @@ object StarPositionResolver {
         explicitMs: Long? = null
     ): Long = explicitMs
         ?: if (followLive) (liveMs ?: snapshotMs) else snapshotMs
+}
+
+/**
+ * PH5 — pick the resume position from an item's history rows (newest first, as
+ * (positionMs, durationMs)). Rules: a finished row (within 5 s of its end) never resumes;
+ * the newest row wins unless it sits inside the first minute while an older row holds a
+ * deeper listen — then the deeper one is restored (an accidental restart must not lose the
+ * progress). Pure; unit-tested.
+ */
+fun pickResumePosition(rowsNewestFirst: List<Pair<Long, Long>>): Long {
+    fun finished(p: Long, d: Long) = d > 0L && p >= d - 5_000L
+    val live = rowsNewestFirst.filter { (p, d) -> p > 0L && !finished(p, d) }
+    if (live.isEmpty()) return 0L
+    val newest = rowsNewestFirst.firstOrNull()?.first ?: 0L
+    val deepest = live.maxOf { it.first }
+    return if (newest < 60_000L && deepest > newest) deepest else newest.coerceAtLeast(0L)
 }

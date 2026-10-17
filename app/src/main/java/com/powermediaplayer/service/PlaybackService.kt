@@ -1590,6 +1590,9 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // PH6: a skip tapped on the PREVIOUS item (or a debounced seek still in flight)
+                // must never seed the next item's skip base — reset the accumulator here.
+                resetSkipAccumulator("item transition")
                 val rname = when (reason) {
                     Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> "REPEAT"
                     Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> "AUTO"
@@ -1636,6 +1639,14 @@ class PlaybackService : MediaLibraryService() {
                 com.powermediaplayer.diag.DiagLog.player(
                     "discontinuity reason=$rname from=${oldPosition.positionMs}ms to=${newPosition.positionMs}ms"
                 )
+                // PH6: a seek that is NOT the accumulator's own (slider, chapter, A-B loop,
+                // car) makes the pending base stale — drop it so the next skip starts from
+                // where playback actually is.
+                if (reason == Player.DISCONTINUITY_REASON_SEEK && pendingSeekTarget >= 0L &&
+                    kotlin.math.abs(newPosition.positionMs - pendingSeekTarget) > 1_500L
+                ) {
+                    resetSkipAccumulator("external seek to ${newPosition.positionMs}ms")
+                }
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 com.powermediaplayer.diag.DiagLog.player(
@@ -4765,6 +4776,15 @@ class PlaybackService : MediaLibraryService() {
      * Pending target clears 600 ms after the last tap — by then the
      * player has settled and currentPosition is fresh.
      */
+    /** Forget any accumulated skip target + cancel a debounced seek still in flight. */
+    private fun resetSkipAccumulator(why: String) {
+        if (pendingSeekTarget < 0L && debouncedSeekJob?.isActive != true) return
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "skip accumulator reset ($why) pending=${pendingSeekTarget}ms")
+        debouncedSeekJob?.cancel(); debouncedSeekJob = null
+        clearPendingSeekJob?.cancel(); clearPendingSeekJob = null
+        pendingSeekTarget = -1L
+    }
+
     private fun cumulativeSkip(player: Player, deltaMs: Long) {
         val pos = player.currentPosition
         val base = if (pendingSeekTarget >= 0L) pendingSeekTarget else pos

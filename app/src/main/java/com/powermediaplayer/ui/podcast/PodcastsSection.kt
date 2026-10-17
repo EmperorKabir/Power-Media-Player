@@ -165,6 +165,9 @@ class PodcastsViewModel @Inject constructor(
         // paths) so the podcast takes over the mini-player/Player instead of the UI
         // sticking on the paused Spotify track.
         stopSpotifyMirrorIfActive()
+        // PH4: a tap is a user play intent — supersede a cold-start restore still in flight
+        // (it would otherwise replace the tapped episode with the last item, paused).
+        com.powermediaplayer.playback.ResumeGate.end(com.powermediaplayer.playback.ResumeGate.begin())
         viewModelScope.launch(Dispatchers.IO) {
             // Episode rows carry no artwork; resolve the show's image so the
             // player AND the Recents row both get a cover (fixes #3).
@@ -183,9 +186,14 @@ class PodcastsViewModel @Inject constructor(
             } else {
                 listOf(buildEpisodeItem(episode, show?.title, artUri))
             }
+            // PH5: resume where the listener left off (same backoff as Last Played / launch),
+            // instead of restarting at 0 and writing a 0 row over the real progress.
+            val saved = runCatching { lastPlayedRepo.resumePositionForUri(episode.audioUrl) }.getOrDefault(0L)
+            val backoffMs = runCatching { settings.coldStartResumeBackoffSec.first() }.getOrDefault(5) * 1000L
+            val startAt = if (saved > backoffMs) saved - backoffMs else saved
             // MediaController must be touched on the main thread. The tapped
             // episode is item 0; per-episode resume/override resolve by mediaId.
-            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(items, 0) }
+            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(items, 0, startPositionMs = startAt) }
             // Record DIRECTLY into Recents (not the gated 5s-tick fallback) so a
             // mid-session switch becomes the most-recent row and cold-start resumes
             // IT (fixes #4/#5). source="LOCAL" + a remote URL is proven to resume.
@@ -198,7 +206,7 @@ class PodcastsViewModel @Inject constructor(
                         artworkUri = artUri,
                         source = "LOCAL",
                         mediaKindOrdinal = 0,
-                        lastPositionMs = 0L,
+                        lastPositionMs = saved,
                         durationMs = episode.durationS * 1000L,
                         lastPlayedAt = System.currentTimeMillis()
                     )

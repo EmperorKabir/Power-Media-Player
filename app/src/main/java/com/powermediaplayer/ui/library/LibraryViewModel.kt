@@ -823,7 +823,11 @@ class LibraryViewModel @Inject constructor(
                         .buildEpisodeItem(context, podcastDao, episode, show?.title, artUri)
                 )
             }
-            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(items, 0) }
+            // PH5: resume where the listener left off (see PodcastsViewModel.playEpisode).
+            val saved = runCatching { lastPlayedRepo.resumePositionForUri(episode.audioUrl) }.getOrDefault(0L)
+            val backoffMs = runCatching { settingsDataStore.coldStartResumeBackoffSec.first() }.getOrDefault(5) * 1000L
+            val startAt = if (saved > backoffMs) saved - backoffMs else saved
+            withContext(Dispatchers.Main) { playbackConnection.setMediaItems(items, 0, startPositionMs = startAt) }
             runCatching {
                 lastPlayedRepo.recordPlay(
                     com.powermediaplayer.data.db.entity.PlaybackHistoryEntity(
@@ -833,7 +837,7 @@ class LibraryViewModel @Inject constructor(
                         artworkUri = artUri,
                         source = "LOCAL",
                         mediaKindOrdinal = 0,
-                        lastPositionMs = 0L,
+                        lastPositionMs = saved,
                         durationMs = episode.durationS * 1000L,
                         lastPlayedAt = System.currentTimeMillis()
                     )

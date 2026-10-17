@@ -1126,6 +1126,17 @@ class PlaybackSessionCoordinator @Inject constructor(
                             recent.lastPositionMs - backoffMs
                         else
                             recent.lastPositionMs.coerceAtLeast(0L)
+                        // PH4: seconds of IO ran since the gate check above (offline resolve,
+                        // chapter parse, settings reads) — a tap in that window must win.
+                        if (!com.powermediaplayer.playback.ResumeGate.isCurrent(gateToken) ||
+                            (playbackConnection.getPlayer()?.mediaItemCount ?: 0) > 0
+                        ) {
+                            com.powermediaplayer.diag.DiagLog.dec(
+                                branch = "cold-start",
+                                reason = "superseded before setMediaItems (user play intent / media loaded), abort restore"
+                            )
+                            return@runCatching
+                        }
                         playbackConnection.setMediaItems(
                             listOf(item), 0, playWhenReady = autoplay,
                             startPositionMs = target
