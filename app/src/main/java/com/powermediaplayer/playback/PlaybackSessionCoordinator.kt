@@ -116,11 +116,16 @@ class PlaybackSessionCoordinator @Inject constructor(
     }
 
     /**
-     * I4d precise-stop — App Remote connection lifecycle. Connect the App Remote ONLY
-     * when it can help: autoplay OFF + Spotify playing on THIS phone (device type
-     * "Smartphone"). Disconnect otherwise (autoplay on, a remote/cast device, or Spotify
-     * stopped) so the binding + one-time consent only happen when the feature is in use.
-     * Emits only on the local/not-local transition (distinctUntilChanged on the decision).
+     * I4d precise-stop — App Remote connection lifecycle. Connect the App Remote while the
+     * feature can apply: autoplay OFF + Spotify on THIS phone (device type "Smartphone").
+     * Disconnect otherwise (autoplay on, a remote/cast device, or Spotify stopped).
+     *
+     * NB: isPlaying is intentionally NOT in the gate. A scrub or a momentary pause blips
+     * isPlaying false for one mirror poll, and gating on it tore the binding down and back
+     * up mid-track (device-proven churn, 2026-08-26) — which killed the pending precise-stop
+     * right before the end. Keeping the binding up across pause/scrub (it's cheap, and the
+     * one-time consent is already granted) is what lets the scheduled pause survive to fire.
+     * The precise-stop itself still gates its scheduling on isPlaying.
      */
     private fun startSpotifyAppRemoteLifecycle() {
         scope.launch {
@@ -128,7 +133,7 @@ class PlaybackSessionCoordinator @Inject constructor(
                 spotifyProvider.spotifyState,
                 settingsDataStore.musicAutoplayNext
             ) { spot, autoplayOn ->
-                spot != null && spot.isPlaying && !autoplayOn &&
+                spot != null && !autoplayOn &&
                     spot.deviceType == SPOTIFY_LOCAL_DEVICE_TYPE
             }.distinctUntilChanged().collect { wantLocalPreciseStop ->
                 com.powermediaplayer.diag.DiagLog.event(
@@ -152,109 +157,106 @@ class PlaybackSessionCoordinator @Inject constructor(
     }
 
     /**
-     * I4d precise-stop (LOCAL / on-phone) — the artifact-free path. Driven by the App
-     * Remote's REAL-TIME state (pushed over local IPC, not the ~1s-stale Web-API poll).
-     * Each event carries an exact position at a known instant; extrapolate the true
-     * current position (position + elapsed × speed) and schedule `pause()` over the local
-     * IPC to LAND at ~0 remaining — fired [AUTOPLAY_APPREMOTE_LEAD_MS] early for the
-     * tens-of-ms IPC latency. Re-derived on every event, so it's robust to autoplay
-     * toggle / scrub / effects / background. Fires only while the App Remote is connected
-     * (= on-phone, per the lifecycle above), so it never overlaps the remote Web-API path.
+     * I4d precise-stop (LOCAL / on-phone) — the artifact-free path. With Spotify GAPLESS
+     * OFF the advance lands at ~0 ms remaining uniformly (gapless-on trims a variable
+     * 0.2–2.0 s tail — device-proven), so the exact end is the metadata duration and a
+     * single WALL-CLOCK-timed pause hits it.
+     *
+     * Each pushed App Remote event carries an exact position at a known instant; from it we
+     * schedule a one-shot pause to fire [AUTOPLAY_APPREMOTE_LEAD_MS] before the metadata
+     * end and snap the display to 0:00. This replaced a near-end poll of `getPlayerState()`
+     * that FROZE on a stale App Remote snapshot (pos stuck, speed 0) and never counted down
+     * (device-proven, vc111) — the wall-clock timer fires regardless of a frozen poll.
+     * Re-derived on EVERY event, so it's robust to scrub / pause / autoplay toggle: a new
+     * event cancels and reschedules. A conservative ADVANCE-CATCH backstop pauses the next
+     * track if one still slips past (e.g. the binding dropped right at the boundary).
      */
     private fun startSpotifyAppRemotePreciseStop() {
         scope.launch {
             var pauseJob: Job? = null
+            var prevTrackUri: String? = null
+            var prevPosMs = 0L
+            var prevDurMs = 0L
+            var prevSpeed = 1f
+            var prevAtElapsedMs = 0L
+            var prevPlaying = false
             kotlinx.coroutines.flow.combine(
                 spotifyAppRemote.state,
                 settingsDataStore.musicAutoplayNext
             ) { st, autoplayOn -> st to autoplayOn }.collect { (st, autoplayOn) ->
                 pauseJob?.cancel()
                 pauseJob = null
-                if (st == null || autoplayOn || st.isPaused || st.durationMs <= 0L) {
+                if (st == null) { prevTrackUri = null; prevPlaying = false; return@collect }
+
+                val trackChanged = prevTrackUri != null && st.trackUri.isNotBlank() &&
+                    st.trackUri != prevTrackUri
+                // ADVANCE-CATCH backstop: the scheduled pause missed and Spotify auto-advanced
+                // (e.g. the binding dropped at the boundary, or a frozen snapshot). Extrapolate
+                // the PREVIOUS track's position to the advance instant; if it was playing near
+                // its end + autoplay off, pause the new track so the album can't run on.
+                val prevExtrapPos = prevPosMs +
+                    ((st.atElapsedRealtimeMs - prevAtElapsedMs).coerceAtLeast(0L) *
+                        (if (prevSpeed > 0f) prevSpeed else 1f)).toLong()
+                val caught = !autoplayOn && trackChanged && prevPlaying && !st.isPaused &&
+                    isNearEndAutoAdvance(prevExtrapPos, prevDurMs, AUTOPLAY_END_EPSILON_MS)
+                if (caught) {
+                    spotifyAppRemote.pause()
+                    prevTrackUri?.let { spotifyProvider.pinPositionToEnd(it) }
                     com.powermediaplayer.diag.DiagLog.event(
                         "AUTOPLAY",
-                        "appremote-sched SKIP hasState=${st != null} autoplayOn=$autoplayOn " +
-                            "paused=${st?.isPaused} dur=${st?.durationMs}"
+                        "appremote advance-catch: paused new track (prev ~$prevExtrapPos/${prevDurMs}ms " +
+                            "→ ${st.trackUri.takeLast(14)})"
                     )
-                    return@collect
                 }
-                val speed = if (st.playbackSpeed > 0f) st.playbackSpeed else 1f
-                val elapsed = android.os.SystemClock.elapsedRealtime() - st.atElapsedRealtimeMs
-                val curPos = st.positionMs + (elapsed * speed).toLong()
-                val remaining = st.durationMs - curPos
-                val prepollDelay = (remaining - AUTOPLAY_APPREMOTE_POLL_WINDOW_MS).coerceAtLeast(0L)
-                val trackUri = st.trackUri
-                com.powermediaplayer.diag.DiagLog.event(
-                    "AUTOPLAY",
-                    "appremote-sched ARM prepollMs=$prepollDelay remaining=$remaining " +
-                        "dur=${st.durationMs} curPos=$curPos track=${trackUri.takeLast(14)}"
-                )
-                pauseJob = launch {
-                    // Phase 1: sleep until within the poll window of the (metadata) end.
-                    kotlinx.coroutines.delay(prepollDelay)
-                    // Phase 2: high-frequency poll of the LIVE position over the local IPC —
-                    // subscribeToPlayerState pushes only on change, so it can't sample the
-                    // final seconds. This (a) measures the TRUE advance point per track and
-                    // (b) fires pause() the instant we're within LEAD of the real end, robust
-                    // to a metadata duration that overstates the audio length.
-                    var prevRem = -1L
-                    var tick = 0
-                    while (isActive) {
+
+                // PRIMARY: schedule a wall-clock pause to land LEAD ms before the metadata end.
+                // Skipped right after an advance-catch (the album is already stopped).
+                if (!caught && !autoplayOn && !st.isPaused && st.durationMs > 0L) {
+                    val speed = if (st.playbackSpeed > 0f) st.playbackSpeed else 1f
+                    val elapsed = android.os.SystemClock.elapsedRealtime() - st.atElapsedRealtimeMs
+                    val curPos = st.positionMs + (elapsed * speed).toLong()
+                    val remaining = st.durationMs - curPos
+                    val fireInMs = ((remaining - AUTOPLAY_APPREMOTE_LEAD_MS) / speed)
+                        .toLong().coerceAtLeast(0L)
+                    val trackUri = st.trackUri
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "AUTOPLAY",
+                        "appremote-sched ARM fireInMs=$fireInMs remaining=$remaining " +
+                            "dur=${st.durationMs} curPos=$curPos track=${trackUri.takeLast(14)}"
+                    )
+                    pauseJob = launch {
+                        kotlinx.coroutines.delay(fireInMs)
+                        // Re-verify against the LAST PUSHED state (never a fresh fetchState —
+                        // that can freeze). Fire unless we can SEE it already moved on / paused
+                        // / autoplay was re-enabled.
+                        val cur = spotifyAppRemote.state.value
                         val stillOff = runCatching {
                             !settingsDataStore.musicAutoplayNext.first()
                         }.getOrDefault(false)
-                        if (!stillOff) {
-                            com.powermediaplayer.diag.DiagLog.event(
-                                "AUTOPLAY", "appremote-poll ABORT autoplay turned on tick=$tick"
-                            )
-                            break
-                        }
-                        val cur = spotifyAppRemote.fetchState()
-                        if (cur == null) {
-                            kotlinx.coroutines.delay(AUTOPLAY_APPREMOTE_POLL_MS); continue
-                        }
-                        if (cur.trackUri != trackUri) {
-                            // Spotify already advanced before we could pause — record how close
-                            // to the end we got (lastRemOnTarget) so the LEAD can be tuned.
-                            com.powermediaplayer.diag.DiagLog.event(
-                                "AUTOPLAY",
-                                "appremote-poll ADVANCED (missed) lastRemOnTarget=$prevRem " +
-                                    "newTrack=${cur.trackUri.takeLast(14)} newPos=${cur.positionMs} tick=$tick"
-                            )
-                            break
-                        }
-                        if (cur.isPaused) {
-                            com.powermediaplayer.diag.DiagLog.event(
-                                "AUTOPLAY", "appremote-poll STOP already paused pos=${cur.positionMs} tick=$tick"
-                            )
-                            break
-                        }
-                        val rem = cur.durationMs - cur.positionMs
-                        com.powermediaplayer.diag.DiagLog.event(
-                            "AUTOPLAY", "appremote-poll pos=${cur.positionMs} rem=$rem tick=$tick"
-                        )
-                        if (rem <= AUTOPLAY_APPREMOTE_LEAD_MS && !DIAG_MEASURE_ADVANCE) {
+                        val sameTrack = cur == null || cur.trackUri == trackUri
+                        if (stillOff && sameTrack && cur?.isPaused != true) {
                             spotifyAppRemote.pause()
-                            // Snap the on-screen timer to the very end: the pause lands
-                            // ~2 s before the metadata duration (Spotify's gapless advance
-                            // point = the real audio end), so hold the display at 0:00 /
-                            // 100% rather than frozen mid-progress. Cleared on track change
-                            // or any user transport command.
                             spotifyProvider.pinPositionToEnd(trackUri)
                             com.powermediaplayer.diag.DiagLog.event(
                                 "AUTOPLAY",
-                                "App Remote precise pause fired at end (local IPC) rem=$rem track=$trackUri"
+                                "App Remote precise pause fired (wall-clock) track=${trackUri.takeLast(14)}"
                             )
-                            break
+                        } else {
+                            com.powermediaplayer.diag.DiagLog.event(
+                                "AUTOPLAY",
+                                "appremote-sched SKIP-fire stillOff=$stillOff sameTrack=$sameTrack " +
+                                    "curPaused=${cur?.isPaused}"
+                            )
                         }
-                        // DIAG_MEASURE_ADVANCE: don't pre-empt — let the track advance
-                        // naturally so the ADVANCED-branch logs its true advance point
-                        // (gapless-on vs gapless-off A/B). No behaviour change when false.
-                        prevRem = rem
-                        tick++
-                        kotlinx.coroutines.delay(AUTOPLAY_APPREMOTE_POLL_MS)
                     }
                 }
+
+                prevTrackUri = st.trackUri.takeIf { it.isNotBlank() }
+                prevPosMs = st.positionMs
+                prevDurMs = st.durationMs
+                prevSpeed = if (st.playbackSpeed > 0f) st.playbackSpeed else 1f
+                prevAtElapsedMs = st.atElapsedRealtimeMs
+                prevPlaying = !st.isPaused
             }
         }
     }
@@ -1348,26 +1350,6 @@ class PlaybackSessionCoordinator @Inject constructor(
          * and the display is snapped to 0:00 (SpotifyProvider end-pin). REQUIRES gapless off.
          */
         private const val AUTOPLAY_APPREMOTE_LEAD_MS = 300L
-
-        /**
-         * DIAGNOSTIC: when true the App Remote precise-stop does NOT pre-empt the pause —
-         * it lets each track advance naturally so the poll's ADVANCED branch logs the true
-         * advance point (used for the gapless-on vs gapless-off A/B). Ship as false.
-         */
-        private const val DIAG_MEASURE_ADVANCE = false
-
-        /**
-         * I4d App Remote near-end poll window: start polling the LIVE position this far
-         * before the computed (metadata) track end. subscribeToPlayerState only pushes on
-         * change, so the final seconds are sampled by on-demand getPlayerState() polls
-         * instead of one stale scheduled guess. Wide enough to catch an early auto-advance
-         * (metadata duration can overstate the real audio length).
-         */
-        private const val AUTOPLAY_APPREMOTE_POLL_WINDOW_MS = 6000L
-
-        /** I4d App Remote near-end poll interval (local IPC, cheap). Tight enough that the
-         *  fire lands within ~1 poll of the 2400 ms lead threshold. */
-        private const val AUTOPLAY_APPREMOTE_POLL_MS = 100L
 
         /**
          * Spotify Connect `device.type` for on-phone playback — the ONLY case where the

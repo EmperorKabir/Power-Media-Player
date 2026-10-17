@@ -1553,13 +1553,6 @@ class SpotifyProvider @Inject constructor(
                         val step = trackResolveStep(isNewTrack = snap.trackUri != lastTrackUri)
                         if (step.fetchLyrics) {
                             lastTrackUri = snap.trackUri
-                            // DIAGNOSTIC: probe audio-analysis for the new track (async, never
-                            // blocks the poll). Debug builds only — see probeAudioAnalysis.
-                            if (com.powermediaplayer.BuildConfig.DEBUG &&
-                                snap.trackUri.startsWith("spotify:track:")
-                            ) {
-                                launch { probeAudioAnalysis(snap.trackUri, snap.durationMs) }
-                            }
                             // Lyrics fetch stays ASYNC (never blocks the loop). A
                             // cache hit attaches immediately; a miss fires the async
                             // fetch AND keeps the single loading banner up (lyrics
@@ -1770,59 +1763,6 @@ class SpotifyProvider @Inject constructor(
         com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.stopPlaybackPolling gen=$pollGen")
         com.powermediaplayer.diag.DiagLog.bg("spotify-poll stopped reason=stop gen=$pollGen")
     }
-
-    /**
-     * DIAGNOSTIC (I4d precise-stop): probe Spotify's per-track audio-analysis to learn
-     * whether it (a) is accessible for this app at all (200 vs 403 — Spotify deprecated it
-     * for newer/development-mode apps in Nov 2024) and (b) pinpoints the REAL audio end
-     * (track.duration / end_of_fade_out / last-segment end), which is where the gapless
-     * auto-advance fires. Logged against the metadata duration + the poller's observed
-     * advance point to decide whether a precise, first-play stop can be scheduled from it.
-     * Logs only — no behaviour change. Debug builds only.
-     */
-    suspend fun probeAudioAnalysis(trackUri: String, metaDurationMs: Long) =
-        withContext(Dispatchers.IO) {
-            val id = trackUri.substringAfterLast(':').takeIf { it.isNotBlank() }
-                ?: return@withContext
-            val token = currentAccessToken() ?: run {
-                com.powermediaplayer.diag.DiagLog.event("ANALYSIS", "probe skipped: no token")
-                return@withContext
-            }
-            val req = Request.Builder()
-                .url("https://api.spotify.com/v1/audio-analysis/$id")
-                .addHeader("Authorization", "Bearer $token")
-                .build()
-            runCatching {
-                http.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        com.powermediaplayer.diag.DiagLog.event(
-                            "ANALYSIS", "probe id=$id status=${resp.code} meta=${metaDurationMs}ms"
-                        )
-                        return@use
-                    }
-                    val body = resp.body?.string().orEmpty()
-                    val root = JsonParser.parseString(body) as? com.google.gson.JsonObject
-                    val track = root?.getAsJsonObject("track")
-                    fun d(k: String) = track?.get(k)?.takeIf { !it.isJsonNull }?.asDouble
-                    val segs = root?.getAsJsonArray("segments")
-                    val lastSeg = segs?.lastOrNull() as? com.google.gson.JsonObject
-                    val segEndMs = lastSeg?.let {
-                        (((it.get("start")?.asDouble ?: 0.0) +
-                            (it.get("duration")?.asDouble ?: 0.0)) * 1000).toLong()
-                    }
-                    com.powermediaplayer.diag.DiagLog.event(
-                        "ANALYSIS",
-                        "probe id=$id status=200 meta=${metaDurationMs}ms " +
-                            "analysisDur=${d("duration")?.let { (it * 1000).toLong() }}ms " +
-                            "endFadeOut=${d("end_of_fade_out")?.let { (it * 1000).toLong() }}ms " +
-                            "startFadeOut=${d("start_of_fade_out")?.let { (it * 1000).toLong() }}ms " +
-                            "lastSegEnd=${segEndMs}ms segCount=${segs?.size()}"
-                    )
-                }
-            }.onFailure {
-                com.powermediaplayer.diag.DiagLog.event("ANALYSIS", "probe id=$id error=${it.message}")
-            }
-        }
 
     private fun fetchCurrentState(token: String): SpotifyPlaybackState? {
         val req = Request.Builder()

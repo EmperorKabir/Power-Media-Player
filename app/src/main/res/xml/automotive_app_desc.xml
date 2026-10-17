@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares Power Media Player as a browsable media app for Android Auto /
+     Android Automotive OS. "media" tells the car that this app exposes a
+     MediaBrowserService (Media3 MediaLibraryService) with a browse tree. -->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

@@ -28,8 +28,11 @@ import com.powermediaplayer.data.preferences.BtMappingSet
 import com.powermediaplayer.data.preferences.BtMediaKind
 import com.powermediaplayer.data.preferences.SettingsDataStore
 import androidx.media3.session.CommandButton
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
@@ -48,12 +51,18 @@ import com.powermediaplayer.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
- * Background media playback service implementing MediaSessionService.
- * Hosts the ExoPlayer and MediaSession for system-integrated playback
- * with lock screen controls and notification media controls.
+ * Background media playback service implementing Media3 [MediaLibraryService].
+ * Hosts the ExoPlayer and a [MediaLibrarySession] for system-integrated playback
+ * (lock screen + notification controls) AND a browsable library tree so Android Auto
+ * (phone-projected) and Android Automotive OS can browse + play the app's content.
+ * MediaLibrarySession IS a MediaSession, so all existing session behaviour is preserved.
  */
 @AndroidEntryPoint
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaLibraryService() {
+
+    /** Android Auto / Automotive browse tree served by the MediaLibrarySession. */
+    @javax.inject.Inject
+    lateinit var mediaBrowseTree: MediaBrowseTree
 
     @javax.inject.Inject
     lateinit var googleDriveProvider: GoogleDriveProvider
@@ -247,7 +256,7 @@ class PlaybackService : MediaSessionService() {
     private var castSessionListener:
         com.google.android.gms.cast.framework.SessionManagerListener<com.google.android.gms.cast.framework.CastSession>? = null
     private var headphonePlugReceiver: android.content.BroadcastReceiver? = null
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaLibrarySession? = null
 
     // Cached Bluetooth mapping. The MediaSession callback fires on the
     // binder thread; reading DataStore there would block. We refresh
@@ -1989,9 +1998,8 @@ class PlaybackService : MediaSessionService() {
                 .setSessionCommand(SessionCommand(ACTION_SKIP_FORWARD_15, Bundle.EMPTY))
                 .build()
         )
-        mediaSession = MediaSession.Builder(this, player!!)
+        mediaSession = MediaLibrarySession.Builder(this, player!!, PlayerSessionCallback())
             .setSessionActivity(sessionActivityIntent)
-            .setCallback(PlayerSessionCallback())
             .setCustomLayout(customLayout)
             .build()
 
@@ -3492,7 +3500,7 @@ class PlaybackService : MediaSessionService() {
     }
 
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
         return mediaSession
     }
 
@@ -3615,7 +3623,7 @@ class PlaybackService : MediaSessionService() {
     /**
      * Custom callback to handle our extended skip actions via custom session commands.
      */
-    private inner class PlayerSessionCallback : MediaSession.Callback {
+    private inner class PlayerSessionCallback : MediaLibrarySession.Callback {
 
         @OptIn(UnstableApi::class)
         override fun onConnect(
@@ -3640,6 +3648,55 @@ class PlaybackService : MediaSessionService() {
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands.build())
                 .build()
+        }
+
+        // ---- Android Auto / Automotive browse tree -------------------------
+        // Delegate to MediaBrowseTree. onGetChildren/onGetItem run on serviceScope (the
+        // browse reads hit Room + MediaStore) and complete a SettableFuture; the root is
+        // synchronous. See MediaBrowseTree for the node/id scheme + playback-URI convention.
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<MediaItem>> =
+            Futures.immediateFuture(LibraryResult.ofItem(mediaBrowseTree.root(), params))
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<com.google.common.collect.ImmutableList<MediaItem>>> {
+            val future = com.google.common.util.concurrent.SettableFuture
+                .create<LibraryResult<com.google.common.collect.ImmutableList<MediaItem>>>()
+            serviceScope.launch {
+                val result = runCatching {
+                    val items = mediaBrowseTree.children(parentId, page, pageSize)
+                    LibraryResult.ofItemList(items, params)
+                }.getOrElse { LibraryResult.ofError(LibraryResult.RESULT_ERROR_UNKNOWN) }
+                future.set(result)
+            }
+            return future
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val future = com.google.common.util.concurrent.SettableFuture
+                .create<LibraryResult<MediaItem>>()
+            serviceScope.launch {
+                val item = runCatching { mediaBrowseTree.item(mediaId) }.getOrNull()
+                future.set(
+                    if (item != null) LibraryResult.ofItem(item, null)
+                    else LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                )
+            }
+            return future
         }
 
         override fun onCustomCommand(

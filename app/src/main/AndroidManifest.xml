@@ -101,6 +101,13 @@
             android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
             android:value="com.powermediaplayer.cast.CastOptionsProviderImpl" />
 
+        <!-- Android Auto / Automotive OS — declares this as a browsable MEDIA app so
+             Android Auto (phone-projected) and Android Automotive OS discover it via the
+             PlaybackService MediaLibraryService/MediaBrowserService. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -161,13 +168,22 @@
             android:launchMode="singleTop"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
-        <!-- Media Playback Service -->
+        <!-- Media Playback Service. Extends Media3 MediaLibraryService so Android Auto
+             (phone-projected) and Android Automotive OS can browse the library:
+             - MediaSessionService action keeps the in-app MediaController discovery working.
+             - MediaLibraryService action is the Media3 browsable-session interface.
+             - MediaBrowserService action lets the legacy MediaBrowserCompat client that
+               Android Auto uses bind to the same service.
+             - MEDIA_PLAY_FROM_SEARCH lets voice "play X" route to onSetMediaUri/search. -->
         <service
             android:name=".service.PlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
         </service>
 
