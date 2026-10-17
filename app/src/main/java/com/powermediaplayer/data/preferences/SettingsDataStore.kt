@@ -25,7 +25,6 @@ class SettingsDataStore @Inject constructor(
         val METADATA_DEEP_SCAN = booleanPreferencesKey("metadata_deep_scan")
         val SUBTITLE_FORMAT = stringPreferencesKey("subtitle_format")
         val USE_SOFTWARE_DECODING = booleanPreferencesKey("use_software_decoding")
-        val PLAYBACK_SPEED = floatPreferencesKey("playback_speed")
         val SLEEP_TIMER_MINUTES = intPreferencesKey("sleep_timer_minutes")
         // S3/S4: player (pill) text colour. Mode 0 default (black/white by brightness),
         // 1 custom (the colour below), 2 dynamic (app picks per file from the artwork).
@@ -1041,13 +1040,29 @@ class SettingsDataStore @Inject constructor(
     }
 
     // ── Playback Speed ───────────────────────────────────────────
-    val playbackSpeed: Flow<Float> = context.dataStore.data.map { prefs ->
-        prefs[Keys.PLAYBACK_SPEED] ?: 1.0f
-    }
+    // PH9 — remembered PER MEDIA KIND.
+    // The player slider and the car's speed button store the speed for the
+    // KIND of what is playing (music / audiobook / podcast / video, the same
+    // classification as the Bluetooth mapping); PlaybackService applies it on
+    // every item change and after a relaunch. Replaces the old single
+    // "playback_speed" key, which only the car button ever wrote and which
+    // the cold-start seed then applied to everything.
+    private fun speedKindKey(kind: BtMediaKind) = floatPreferencesKey("speed_kind_${kind.tag}")
 
-    suspend fun setPlaybackSpeed(speed: Float) {
+    private fun Preferences.readSpeedByKind(): Map<BtMediaKind, Float> =
+        BtMediaKind.values().mapNotNull { k -> this[speedKindKey(k)]?.let { k to it } }.toMap()
+
+    val speedByKindFlow: Flow<Map<BtMediaKind, Float>> =
+        context.dataStore.data.map { it.readSpeedByKind() }
+
+    suspend fun speedByKind(): Map<BtMediaKind, Float> =
+        context.dataStore.data.first().readSpeedByKind()
+
+    suspend fun setSpeedForKind(kind: BtMediaKind, speed: Float) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.PLAYBACK_SPEED] = speed
+            prefs[speedKindKey(kind)] = speed.coerceIn(
+                com.powermediaplayer.playback.SPEED_MIN, com.powermediaplayer.playback.SPEED_MAX
+            )
         }
     }
 

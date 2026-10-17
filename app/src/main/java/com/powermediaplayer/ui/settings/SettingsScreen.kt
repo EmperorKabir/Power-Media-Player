@@ -332,6 +332,16 @@ fun SettingsScreen(
                     checked = autoplay.podcastAutoplayNext,
                     onCheckedChange = { viewModel.setPodcastAutoplayNext(it) }
                 )
+                Text(
+                    text = "Playback speed is remembered separately for music, audiobooks, " +
+                        "podcasts and video: set it on the player (or with the car's speed " +
+                        "button) and every later item of that kind plays at it, including " +
+                        "after a relaunch. A per-file or per-show speed from the overrides " +
+                        "menu still wins.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
                 // ── Auto-play FEEL ───────────────────────────────────────────
                 SettingsToggleItem(
                     title = "Volume ease-in on auto-play",

@@ -520,20 +520,9 @@ class PlayerViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { (_, uri) ->
                     if (uri.isBlank()) return@collect
-                    // Speed
-                    val speedOverrides = runCatching {
-                        settingsDataStore.speedOverrides.first()
-                    }.getOrNull().orEmpty()
-                    speedOverrides[uri]?.let { saved ->
-                        val current = playbackConnection.getPlayer()?.playbackParameters?.speed ?: 1.0f
-                        if (kotlin.math.abs(saved - current) > 0.01f) {
-                            playbackConnection.setPlaybackSpeed(saved)
-                            com.powermediaplayer.util.Diag.i(
-                                "PMP_DIAG",
-                                "Applied saved speed override $saved× for uri=$uri"
-                            )
-                        }
-                    }
+                    // Speed: PH9 — applied service-side per media kind on every item
+                    // transition (PlaybackService.applySpeedRuleForCurrentItem); an
+                    // explicit per-file / per-show speed arrives via applyDirectAxes.
                     // A-B loop
                     if (!isSpotifyActive) {
                         val abOverrides = runCatching {
@@ -951,33 +940,35 @@ class PlayerViewModel @Inject constructor(
             "speed change → IPC=${"%.3f".format(speed)} (Sonic+A2DP buffers will add audible delay)"
         )
         playbackConnection.setPlaybackSpeed(speed)
-        // §C7 slim — persist per-file speed override so the next time
-        // the user opens this track it resumes at the chosen speed.
-        // Speed 1.0 (default) clears any existing override.
+        // PH9 — remember the chosen speed for the KIND of what is playing
+        // (music / audiobook / podcast / video); the service applies it to every
+        // later item of that kind and after a relaunch. Replaces the old per-file
+        // slider override (a new episode never inherited it, and the cold-start
+        // seed read a global key only the car button wrote). The explicit
+        // per-file / per-show speed lives in the overrides popup and still wins.
         // Audit 5.6 — the persist is debounced: a slider drag emits per
         // movement and each DataStore edit rewrites + fsyncs the whole
         // preferences file and wakes every collector. The player speed
         // above still applies instantly; only the WRITE settles.
-        val uri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
-        if (!uri.isNullOrBlank()) {
+        val player = playbackConnection.getPlayer()
+        if (player != null && player.currentMediaItem != null) {
             ensureSpeedPersister()
-            speedOverridePersist.value = uri to speed
+            speedKindPersist.value = com.powermediaplayer.playback.btKindOf(player) to speed
         }
     }
 
-    private val speedOverridePersist =
-        kotlinx.coroutines.flow.MutableStateFlow<Pair<String, Float>?>(null)
+    private val speedKindPersist =
+        kotlinx.coroutines.flow.MutableStateFlow<Pair<com.powermediaplayer.data.preferences.BtMediaKind, Float>?>(null)
     private var speedPersistJob: kotlinx.coroutines.Job? = null
     private fun ensureSpeedPersister() {
         if (speedPersistJob?.isActive == true) return
         speedPersistJob = viewModelScope.launch {
-            speedOverridePersist.filterNotNull().collectLatest { (uri, speed) ->
+            speedKindPersist.filterNotNull().collectLatest { (kind, speed) ->
                 kotlinx.coroutines.delay(300)   // new drag emissions cancel the wait
-                if (kotlin.math.abs(speed - 1.0f) < 0.01f) {
-                    settingsDataStore.clearSpeedOverride(uri)
-                } else {
-                    settingsDataStore.setSpeedOverride(uri, speed)
-                }
+                settingsDataStore.setSpeedForKind(kind, speed)
+                com.powermediaplayer.diag.DiagLog.ui(
+                    "speed remembered kind=${kind.tag} speed=${"%.2f".format(speed)}"
+                )
             }
         }
     }

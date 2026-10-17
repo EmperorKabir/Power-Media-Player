@@ -1374,6 +1374,13 @@ class PlaybackService : MediaLibraryService() {
                 kotlinx.coroutines.withTimeoutOrNull(200) { settingsDataStore.autoWheelSet() }
             }
         }.getOrNull() ?: BtMappingSet.DEFAULT
+        // PH9: remembered per-kind speed, seeded synchronously so the restored item's
+        // first transition already applies the right speed.
+        speedByKind = runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(200) { settingsDataStore.speedByKind() }
+            }
+        }.getOrNull() ?: emptyMap()
         // The player's GLOBAL seek increments are only a fallback for paths
         // we don't intercept; seed them from the music-kind skip seconds
         // (per-kind skip is applied in applyAction via cumulativeSkip).
@@ -1446,13 +1453,14 @@ class PlaybackService : MediaLibraryService() {
             kotlinx.coroutines.runBlocking {
                 kotlinx.coroutines.withTimeoutOrNull(600) {
                     val pitch = settingsDataStore.pitchIndependent.first()
-                    val speed = settingsDataStore.playbackSpeed.first()
+                    // PH9: speed is no longer a global value — the per-kind rule applies it
+                    // when the first item loads (applySpeedRuleForCurrentItem).
                     player!!.playbackParameters = androidx.media3.common.PlaybackParameters(
-                        speed.coerceIn(0.25f, 4f),
+                        1.0f,
                         pitch.coerceIn(0.5f, 2f)
                     )
                     com.powermediaplayer.diag.DiagLog.player(
-                        "cold-start seeded speed=$speed pitch=$pitch " +
+                        "cold-start seeded pitch=$pitch speedByKind=${speedByKind.mapKeys { it.key.tag }} " +
                             "in=${android.os.SystemClock.uptimeMillis() - seedStartMs}ms"
                     )
                     true
@@ -1593,6 +1601,8 @@ class PlaybackService : MediaLibraryService() {
                 // PH6: a skip tapped on the PREVIOUS item (or a debounced seek still in flight)
                 // must never seed the next item's skip base — reset the accumulator here.
                 resetSkipAccumulator("item transition")
+                // PH9: every item plays at the speed remembered for its kind.
+                if (mediaItem != null) player?.let { applySpeedRuleForCurrentItem(it, "item transition") }
                 val rname = when (reason) {
                     Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> "REPEAT"
                     Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> "AUTO"
@@ -1779,7 +1789,7 @@ class PlaybackService : MediaLibraryService() {
                 snap.append("btVideoAudioOffsetMs=").append(settingsDataStore.btVideoAudioOffsetMs.first()).append(' ')
                 snap.append("coldStartBackoffSec=").append(settingsDataStore.coldStartResumeBackoffSec.first()).append(' ')
                 snap.append("stopOnTaskRemoved=").append(settingsDataStore.stopOnTaskRemoved.first()).append(' ')
-                snap.append("speed=").append(settingsDataStore.playbackSpeed.first()).append(' ')
+                snap.append("speedByKind=").append(settingsDataStore.speedByKind().mapKeys { it.key.tag }).append(' ')
                 snap.append("pitch=").append(settingsDataStore.pitchIndependent.first())
                 com.powermediaplayer.diag.DiagLog.settings(snap.toString())
             }.onFailure {
@@ -2111,6 +2121,12 @@ class PlaybackService : MediaLibraryService() {
         }
         serviceScope.launch {
             settingsDataStore.autoWheelSetFlow.collect { autoWheelSet = it }
+        }
+        serviceScope.launch {
+            // PH9: the phone slider writes the per-kind speed; keep the snapshot live so
+            // the next item transition applies it (no re-apply mid-item: the slider
+            // already set the player, and an explicit per-file speed must not be undone).
+            settingsDataStore.speedByKindFlow.collect { speedByKind = it }
         }
 
         // Cast: initialize lazily; if Google Play Services is missing the
@@ -4563,6 +4579,9 @@ class PlaybackService : MediaLibraryService() {
      *  Bluetooth dispatch code are untouched by it. */
     @Volatile private var autoWheelSet: BtMappingSet = BtMappingSet.DEFAULT
 
+    /** PH9: the speed remembered per media kind (see playback/SpeedRule.kt). */
+    @Volatile private var speedByKind: Map<BtMediaKind, Float> = emptyMap()
+
     /**
      * Android Auto / Automotive steering-wheel and car prev/next keys, mapped by [autoWheelSet].
      * Handled BEFORE (and instead of) the Bluetooth key logic for car-client callers; only the
@@ -4648,13 +4667,38 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /** Cycle the live playback speed through [AUTO_SPEED_CYCLE] (preserves pitch) + persist. */
+    /** PH9: apply the speed remembered for the current item's kind (an explicit
+     *  per-file / per-show speed from the overrides popup is applied by the UI
+     *  afterwards and wins). Called on every media-item transition. */
+    private fun applySpeedRuleForCurrentItem(p: Player, why: String) {
+        val item = p.currentMediaItem ?: return
+        val kind = currentBtKind(p)
+        val target = com.powermediaplayer.playback.effectiveKindSpeed(speedByKind, kind)
+        val current = p.playbackParameters.speed
+        if (!com.powermediaplayer.playback.speedDiffers(current, target)) return
+        runCatching {
+            p.playbackParameters =
+                androidx.media3.common.PlaybackParameters(target, p.playbackParameters.pitch)
+        }
+        com.powermediaplayer.diag.DiagLog.player(
+            "speed rule applied kind=${kind.tag} ${"%.2f".format(current)}→${"%.2f".format(target)} " +
+                "($why) id=${com.powermediaplayer.diag.DiagLog.hash(item.mediaId)}"
+        )
+    }
+
+    /** PH9: a user-chosen speed (the car's speed button) is remembered for the item's kind. */
+    private fun persistUserSpeed(p: Player, speed: Float) {
+        val kind = currentBtKind(p)
+        serviceScope.launch { runCatching { settingsDataStore.setSpeedForKind(kind, speed) } }
+    }
+
     private fun cycleAutoSpeed(player: Player) {
         val next = nextSpeedPreset(player.playbackParameters.speed)
         runCatching {
             player.playbackParameters =
                 androidx.media3.common.PlaybackParameters(next, player.playbackParameters.pitch)
         }
-        serviceScope.launch { settingsDataStore.setPlaybackSpeed(next) }
+        persistUserSpeed(player, next)
         refreshAutoLayout()
     }
 
@@ -4713,7 +4757,7 @@ class PlaybackService : MediaLibraryService() {
                     player.playbackParameters =
                         androidx.media3.common.PlaybackParameters(s, player.playbackParameters.pitch)
                 }
-                serviceScope.launch { settingsDataStore.setPlaybackSpeed(s) }
+                persistUserSpeed(player, s)
                 com.powermediaplayer.diag.DiagLog.event(
                     "AABROWSE", "applied speed=$s now=${player.playbackParameters.speed} " +
                         "isPlaying=${player.isPlaying}"
