@@ -64,6 +64,13 @@ class PlaybackService : MediaLibraryService() {
     @javax.inject.Inject
     lateinit var mediaBrowseTree: MediaBrowseTree
 
+    /** Headless (car / BT-only) sessions: see [ensureSessionSideEffects]. Lazy so a process
+     *  that only ever serves the phone UI pays nothing here. */
+    @javax.inject.Inject
+    lateinit var playbackConnectionLazy: dagger.Lazy<PlaybackConnection>
+    @javax.inject.Inject
+    lateinit var sessionCoordinatorLazy: dagger.Lazy<com.powermediaplayer.playback.PlaybackSessionCoordinator>
+
     /** Android Auto favourite-toggle button → star/unstar the current item. */
     @javax.inject.Inject
     lateinit var favoriteDao: com.powermediaplayer.data.db.dao.FavoriteDao
@@ -3691,6 +3698,10 @@ class PlaybackService : MediaLibraryService() {
                 sessionCommands.add(SessionCommand(action, Bundle.EMPTY))
             }
 
+            // A car / Bluetooth / Assistant controller may be the ONLY client of this
+            // process (no Activity) — make sure the session side effects run for it.
+            if (controller.packageName != packageName) ensureSessionSideEffects()
+
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands.build())
                 .build()
@@ -4212,6 +4223,24 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    /**
+     * MainActivity connects [PlaybackConnection] and ignites [PlaybackSessionCoordinator]
+     * (history rows, the 5 s resume-position persist, enrichment, …). A process started only
+     * by Android Auto / a BT head unit never creates the Activity, so car plays were neither
+     * listed under Recent nor resumable (AAOS-emulator-proven: `cat/recent → 0 items` right
+     * after a play). Both calls are idempotent; this runs on the session's app thread.
+     * Cold-start restore is deliberately NOT triggered here (that is a launch behaviour).
+     */
+    private fun ensureSessionSideEffects() {
+        runCatching {
+            playbackConnectionLazy.get().connect()
+            sessionCoordinatorLazy.get().start()
+            com.powermediaplayer.diag.DiagLog.event("AABROWSE", "session side effects ignited for an external controller")
+        }.onFailure {
+            com.powermediaplayer.diag.DiagLog.event("AABROWSE", "session side effects FAILED: $it")
+        }
+    }
+
     // ───────────────────── Android Auto custom-action buttons ──────────────────
     // Context-aware now-playing layout + the handler behind each button. Additive: reuses
     // the existing player, DAOs, static setters and the seekChapter/cumulativeSkip engines.
@@ -4334,7 +4363,15 @@ class PlaybackService : MediaLibraryService() {
                     favoriteDao.insert(com.powermediaplayer.data.db.entity.FavoriteEntity(uri = key)); true
                 }
             }.getOrDefault(currentIsFavourite)
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { refreshAutoLayout() }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                refreshAutoLayout()
+                // The car's Favourites tab lists starred tracks too — tell it to re-fetch.
+                runCatching {
+                    mediaSession?.notifyChildrenChanged(
+                        MediaBrowseTree.CAT_FAVOURITES, Int.MAX_VALUE, null
+                    )
+                }
+            }
         }
     }
 

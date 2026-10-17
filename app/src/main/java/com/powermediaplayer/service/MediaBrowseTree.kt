@@ -35,11 +35,12 @@ class MediaBrowseTree @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val lastPlayed: LastPlayedRepository,
     private val podcastDao: PodcastDao,
+    private val favoriteDao: com.powermediaplayer.data.db.dao.FavoriteDao,
 ) {
     companion object {
         const val ROOT_ID = "pmp_root"
-        private const val CAT_RECENT = "cat/recent"
-        private const val CAT_FAVOURITES = "cat/favourites"
+        const val CAT_RECENT = "cat/recent"
+        const val CAT_FAVOURITES = "cat/favourites"
         private const val CAT_LIBRARY = "cat/library"
         private const val CAT_SONGS = "cat/songs"
         private const val CAT_ALBUMS = "cat/albums"
@@ -285,13 +286,24 @@ class MediaBrowseTree @Inject constructor(
             .map { historyToItem(it) }
             .toList()
 
-    private suspend fun favourites(): List<MediaItem> =
-        runCatching { lastPlayed.observePinned().first() }.getOrDefault(emptyList())
+    // Pinned sessions (the phone's Last Played pins) PLUS starred tracks (FavoriteDao — what
+    // the car's ♥ button and the Library star write), so a ♥ tapped in the car shows up here.
+    private suspend fun favourites(): List<MediaItem> {
+        val pinned = runCatching { lastPlayed.observePinned().first() }.getOrDefault(emptyList())
             .asSequence()
             .filter { it.source != LastPlayedRepository.Source.SPOTIFY }
             .filter { it.mediaUri.isNotBlank() }
             .map { historyToItem(it) }
             .toList()
+        val starredUris = runCatching { favoriteDao.getAll() }.getOrDefault(emptyList())
+            .mapTo(HashSet()) { it.uri }
+        if (starredUris.isEmpty()) return pinned
+        val pinnedIds = pinned.mapTo(HashSet()) { it.mediaId }
+        val starred = localAudio()
+            .filter { it.uri.toString() in starredUris && it.uri.toString() !in pinnedIds }
+            .map { trackToItem(it) }
+        return pinned + starred
+    }
 
     private fun historyToItem(h: LastPlayedRepository.HistoryItem): MediaItem {
         val play = runCatching { Uri.parse(h.mediaUri) }.getOrNull() ?: Uri.EMPTY
