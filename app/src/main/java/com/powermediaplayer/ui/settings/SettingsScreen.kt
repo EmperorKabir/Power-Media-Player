@@ -54,6 +54,7 @@ fun SettingsScreen(
     val autoplay by viewModel.autoplaySettings.collectAsStateWithLifecycle()
     val voiceBoost by viewModel.voiceBoost.collectAsStateWithLifecycle()
     val btMappingSet by viewModel.btMappingSet.collectAsStateWithLifecycle()
+    val autoButtonSet by viewModel.autoButtonSet.collectAsStateWithLifecycle()
     val subtitleTextSize by viewModel.subtitleTextSizeFlow.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
@@ -526,6 +527,75 @@ fun SettingsScreen(
                         onSecondsChange = { viewModel.setBtSkipForwardSeconds(kind, it) }
                     )
                 }
+            },
+            SettingsItem(
+                "android-auto", "Android Auto buttons (per file type)",
+                listOf("android auto", "car", "head unit", "automotive", "button", "player",
+                    "small bar", "mini player", "dashboard", "skip", "chapter", "speed",
+                    "favourite", "bookmark", "audiobook", "podcast", "music", "video")
+            ) {
+                Text(
+                    text = "Choose the buttons Android Auto shows for each kind of media. " +
+                        "The two either side of Play also appear in the small player bar and " +
+                        "on the dashboard card. The rest are shown in the order you set: the " +
+                        "car fits what it can beside those and puts the remainder in its three " +
+                        "dot menu. Your phone's lock screen and notification controls follow " +
+                        "the same choice.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                listOf(
+                    Triple(BtMediaKind.AUDIOBOOK, "Audiobooks", autoButtonSet.audiobook),
+                    Triple(BtMediaKind.PODCAST, "Podcasts", autoButtonSet.podcast),
+                    Triple(BtMediaKind.MUSIC, "Music", autoButtonSet.music),
+                    Triple(BtMediaKind.VIDEO, "Video", autoButtonSet.video)
+                ).forEach { (kind, title, cfg) ->
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TealAccent,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                    )
+                    AutoSlotPicker(
+                        label = "Left of Play",
+                        current = cfg.leftSlot,
+                        options = AUTO_LEFT_OPTIONS,
+                        onChange = { viewModel.setAutoLeftSlot(kind, it) }
+                    )
+                    AutoSlotPicker(
+                        label = "Right of Play",
+                        current = cfg.rightSlot,
+                        options = AUTO_RIGHT_OPTIONS,
+                        onChange = { viewModel.setAutoRightSlot(kind, it) }
+                    )
+                    Text(
+                        text = "Choosing the track buttons keeps the car's own previous and " +
+                            "next; a skip or chapter choice replaces them. Skip amounts use " +
+                            "the seconds set under Bluetooth car controls.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                    )
+                    AutoExtrasList(
+                        extras = cfg.extras,
+                        onChange = { viewModel.setAutoExtras(kind, it) }
+                    )
+                    TextButton(
+                        onClick = { viewModel.resetAutoButtons(kind) },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    ) { Text("Reset $title to defaults", color = TealAccent) }
+                }
+                Text(
+                    text = "Speed shows the current speed and cycles through 1, 1.25, 1.5, " +
+                        "1.75 and 2 times. A button already used either side of Play is not " +
+                        "repeated. Cars with a fixed five button bar show only what fits; the " +
+                        "Playback tab in the car always carries chapters, speed, sleep timer, " +
+                        "effects, favourite and bookmark.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
             },
             SettingsItem(
                 "bt-av-offset", "Bluetooth A/V sync offset",
@@ -1369,7 +1439,7 @@ internal fun settingsItemMatches(
 internal val SETTINGS_ITEM_IDS: List<String> = listOf(
     "playback", "crossfade",
     "library", "cloud",
-    "bluetooth-car", "bt-av-offset",
+    "bluetooth-car", "android-auto", "bt-av-offset",
     "audio-effects",
     "video", "subtitles", "autohide",
     "hue", "smart-home",
@@ -1477,6 +1547,160 @@ private fun BluetoothActionPicker(
                 seconds = seconds,
                 onChange = onSecondsChange
             )
+        }
+    }
+}
+
+// ── Android Auto buttons ────────────────────────────────────────────────────
+
+private data class AutoOption(val token: String, val label: String)
+
+private val AUTO_LEFT_OPTIONS = listOf(
+    AutoOption(com.powermediaplayer.data.preferences.AutoButtons.SLOT_SKIP, "Skip back"),
+    AutoOption(com.powermediaplayer.data.preferences.AutoButtons.SLOT_CHAPTER, "Previous chapter"),
+    AutoOption(com.powermediaplayer.data.preferences.AutoButtons.SLOT_TRACK, "Previous track (car's own button)")
+)
+
+private val AUTO_RIGHT_OPTIONS = listOf(
+    AutoOption(com.powermediaplayer.data.preferences.AutoButtons.SLOT_SKIP, "Skip forward"),
+    AutoOption(com.powermediaplayer.data.preferences.AutoButtons.SLOT_CHAPTER, "Next chapter"),
+    AutoOption(com.powermediaplayer.data.preferences.AutoButtons.SLOT_TRACK, "Next track (car's own button)")
+)
+
+private val AUTO_EXTRA_LABELS: Map<String, String> = mapOf(
+    com.powermediaplayer.data.preferences.AutoButtons.SPEED to "Speed",
+    com.powermediaplayer.data.preferences.AutoButtons.PREV_CHAPTER to "Previous chapter",
+    com.powermediaplayer.data.preferences.AutoButtons.NEXT_CHAPTER to "Next chapter",
+    com.powermediaplayer.data.preferences.AutoButtons.SKIP_BACK to "Skip back",
+    com.powermediaplayer.data.preferences.AutoButtons.SKIP_FORWARD to "Skip forward",
+    com.powermediaplayer.data.preferences.AutoButtons.FAVOURITE to "Favourite",
+    com.powermediaplayer.data.preferences.AutoButtons.BOOKMARK to "Add bookmark"
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AutoSlotPicker(
+    label: String,
+    current: String,
+    options: List<AutoOption>,
+    onChange: (String) -> Unit
+) {
+    val selected = options.firstOrNull { it.token == current } ?: options.first()
+    var menuExpanded by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp)
+    ) {
+        Text(text = label, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+        Spacer(Modifier.height(6.dp))
+        ExposedDropdownMenuBox(
+            expanded = menuExpanded,
+            onExpandedChange = { menuExpanded = it },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = selected.label,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menuExpanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = TealAccent,
+                    unfocusedBorderColor = DisabledContent,
+                    focusedTextColor = TealAccent,
+                    unfocusedTextColor = TextPrimary,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated
+                )
+            )
+            ExposedDropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                modifier = Modifier.background(SurfaceElevated)
+            ) {
+                options.forEach { opt ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = opt.label,
+                                color = if (opt.token == current) TealAccent else TextPrimary
+                            )
+                        },
+                        onClick = {
+                            onChange(opt.token)
+                            menuExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The ordered "more buttons" list for one kind: ticked rows are shown on the car in this
+ * order (arrows reorder), unticked rows are hidden. Plain rows rather than a drag list: the
+ * compact Settings layout is a scrolling column, and a tick plus two arrows is the most
+ * accessible control for a short list.
+ */
+@Composable
+private fun AutoExtrasList(extras: List<String>, onChange: (List<String>) -> Unit) {
+    val all = com.powermediaplayer.data.preferences.AutoButtons.EXTRA_TOKENS
+    val enabled = extras.filter { it in all }
+    val rows = enabled + all.filter { it !in enabled }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Text(
+            text = "More buttons, in this order",
+            style = MaterialTheme.typography.titleSmall,
+            color = TextPrimary,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+        rows.forEach { token ->
+            val index = enabled.indexOf(token)
+            val checked = index >= 0
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = { on ->
+                        onChange(if (on) enabled + token else enabled - token)
+                    },
+                    colors = CheckboxDefaults.colors(checkedColor = TealAccent)
+                )
+                Text(
+                    text = AUTO_EXTRA_LABELS[token] ?: token,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (checked) TextPrimary else TextTertiary,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = {
+                        if (index > 0) onChange(enabled.toMutableList().apply {
+                            removeAt(index); add(index - 1, token)
+                        })
+                    },
+                    enabled = checked && index > 0
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move ${AUTO_EXTRA_LABELS[token]} up",
+                        tint = if (checked && index > 0) TextPrimary else DisabledContent)
+                }
+                IconButton(
+                    onClick = {
+                        if (index >= 0 && index < enabled.lastIndex) onChange(enabled.toMutableList().apply {
+                            removeAt(index); add(index + 1, token)
+                        })
+                    },
+                    enabled = checked && index < enabled.lastIndex
+                ) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move ${AUTO_EXTRA_LABELS[token]} down",
+                        tint = if (checked && index < enabled.lastIndex) TextPrimary else DisabledContent)
+                }
+            }
         }
     }
 }

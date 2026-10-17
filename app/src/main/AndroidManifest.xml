@@ -317,6 +317,16 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
+        <!-- Media3 media-button receiver: a Bluetooth / headset Play that arrives while the
+             app is not running starts PlaybackService, which resumes the last played item via
+             MediaSession.Callback.onPlaybackResumption (same path Android Auto uses). -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

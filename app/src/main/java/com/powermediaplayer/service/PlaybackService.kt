@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.powermediaplayer.MainActivity
@@ -339,6 +340,8 @@ class PlaybackService : MediaLibraryService() {
         const val ACTION_SPEED_CYCLE      = "ACTION_SPEED_CYCLE"
         /** The AOSP Automotive media centre — see [autoCompactClientConnected]. */
         const val AUTO_COMPACT_CLIENT = "com.android.car.media"
+        /** Android Auto on the phone (projection to a head unit). */
+        const val AUTO_GEARHEAD_CLIENT = "com.google.android.projection.gearhead"
         const val ACTION_CHAPTER_NEXT     = "ACTION_CHAPTER_NEXT"
         const val ACTION_CHAPTER_PREV     = "ACTION_CHAPTER_PREV"
         const val ACTION_FAVOURITE_TOGGLE = "ACTION_FAVOURITE_TOGGLE"
@@ -1357,6 +1360,13 @@ class PlaybackService : MediaLibraryService() {
         // Seed the cached snapshot so the very first BT button (before the
         // reactive collector starts) resolves real per-kind mappings.
         btMappingSet = initialBtSet
+        // Android Auto button choices: same synchronous seed, so the session is BUILT with
+        // the user's layout rather than flashing the default first.
+        autoButtonSet = runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(200) { settingsDataStore.autoButtonSet() }
+            }
+        }.getOrNull() ?: com.powermediaplayer.data.preferences.AutoButtonSet.DEFAULT
         // The player's GLOBAL seek increments are only a fallback for paths
         // we don't intercept; seed them from the music-kind skip seconds
         // (per-kind skip is applied in applyAction via cumulativeSkip).
@@ -2071,7 +2081,12 @@ class PlaybackService : MediaLibraryService() {
         // applyAction on every BT press (kind resolved at dispatch) so live
         // changes still take effect on the primary code path.
         serviceScope.launch {
-            settingsDataStore.btMappingSetFlow.collect { btMappingSet = it }
+            // The skip seconds label the car's skip buttons → re-push the layout on change.
+            settingsDataStore.btMappingSetFlow.collect { btMappingSet = it; refreshAutoLayout() }
+        }
+        serviceScope.launch {
+            // Settings, Android Auto buttons → the car re-renders its row straight away.
+            settingsDataStore.autoButtonSetFlow.collect { autoButtonSet = it; refreshAutoLayout() }
         }
 
         // Cast: initialize lazily; if Google Play Services is missing the
@@ -3710,7 +3725,12 @@ class PlaybackService : MediaLibraryService() {
 
             // A car / Bluetooth / Assistant controller may be the ONLY client of this
             // process (no Activity) — make sure the session side effects run for it.
-            if (controller.packageName != packageName) ensureSessionSideEffects()
+            if (controller.packageName != packageName) {
+                ensureSessionSideEffects()
+                // Legacy (MediaBrowserCompat) car clients don't reach onPostConnect, so the
+                // "remember last played" load is kicked off here as well (idempotent).
+                if (isCarController(controller.packageName)) loadLastPlayedForCar()
+            }
 
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands.build())
@@ -3720,11 +3740,44 @@ class PlaybackService : MediaLibraryService() {
         // The button set depends on WHICH car client is connected (compact for the AOSP
         // Automotive media centre) — recompute once the controller is registered / gone.
         override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
-            if (controller.packageName != packageName) refreshAutoLayout()
+            if (controller.packageName != packageName) {
+                refreshAutoLayout()
+                // "Remember last played": the car connects to an empty player → show the last
+                // item paused at its saved spot, as the phone does on launch.
+                if (isCarController(controller.packageName)) loadLastPlayedForCar()
+            }
         }
 
         override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
             if (controller.packageName != packageName) refreshAutoLayout()
+        }
+
+        /**
+         * Android Auto's "Start music automatically", a tap on Play with nothing loaded, or a
+         * Bluetooth / System UI play after a process restart all arrive here with an EMPTY
+         * player. Hand back the most recent item at its saved position, built like the Recent
+         * tab's leaf (cover, author, chapters), so the car resumes exactly where the user was.
+         */
+        override fun onPlaybackResumption(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val fut = com.google.common.util.concurrent.SettableFuture
+                .create<MediaSession.MediaItemsWithStartPosition>()
+            serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val target = runCatching { mediaBrowseTree.resumeTarget() }.getOrNull()
+                com.powermediaplayer.diag.DiagLog.event(
+                    "AABROWSE",
+                    "playback resumption for ${controller.packageName}: " +
+                        "${target?.first?.mediaId?.takeLast(40)} @${target?.second}ms"
+                )
+                if (target == null) {
+                    fut.setException(UnsupportedOperationException("nothing to resume"))
+                } else {
+                    fut.set(MediaSession.MediaItemsWithStartPosition(listOf(target.first), 0, target.second))
+                }
+            }
+            return fut
         }
 
         // ---- Android Auto / Automotive browse tree -------------------------
@@ -4267,70 +4320,55 @@ class PlaybackService : MediaLibraryService() {
     // the existing player, DAOs, static setters and the seekChapter/cumulativeSkip engines.
 
     /**
-     * The Android Auto / System UI MEDIA BUTTON PREFERENCES for the CURRENT item — every
-     * phone-player control that the car template can carry, with explicit slots:
+     * The Android Auto / System UI MEDIA BUTTON PREFERENCES for the CURRENT item — the user's
+     * per-kind choice (Settings, Android Auto buttons; defaults = the vc118 layout) resolved by
+     * [resolveAutoButtons] into Media3 slots:
      *
-     *  - Chapter media (audiobook / podcast / chaptered video): the configured skips take the
-     *    car's BACK and FORWARD positions (Media3 1.6 clears the standard skip-previous/next
-     *    legacy actions when a custom button holds SLOT_BACK / SLOT_FORWARD, so the car shows
-     *    the skips where prev/next were); speed, next/previous chapter, favourite and bookmark
-     *    follow in the overflow. Steering-wheel prev/next keys still do chapter nav (BT map).
-     *  - Music: the standard prev/next TRACK buttons stay; favourite, speed, skips and
-     *    bookmark are overflow buttons (the car fills its spare slots from the front).
+     *  - The pair either side of Play (also the car's small bar and dashboard card): a skip or
+     *    chapter button holds SLOT_BACK / SLOT_FORWARD — Media3 1.6 then clears the standard
+     *    skip-previous/next legacy actions, so the car shows ours where prev/next were — or
+     *    "track" keeps the car's own button. Steering-wheel keys still follow the BT mapping.
+     *  - The extras follow in the user's order: Android Auto puts the first ones beside that
+     *    pair and the rest in ⋮; the AOSP Automotive media centre gets only what fits its bar.
      *
      * Skip amounts mirror the phone's per-kind setting (the BT mapping's seconds), icons are
      * Media3's bundled glyphs (android.R drawables rendered as rewind/rotate on the car), and
-     * the speed button shows the live speed. Overflow order = priority: the car fills its
-     * spare slots from the front of the list.
+     * the speed button shows the live speed.
      */
     @androidx.annotation.OptIn(UnstableApi::class)
     private fun buildAutoButtonPreferences(): List<CommandButton> {
         val player = exoPlayerRef?.get() ?: mediaSession?.player
-        val hasChapters = (player?.mediaMetadata?.extras?.getInt("chapter_count", 0) ?: 0) > 0
         val speed = player?.playbackParameters?.speed ?: 1.0f
         val kind = player?.let { runCatching { currentBtKind(it) }.getOrNull() } ?: BtMediaKind.MUSIC
         val mapping = btMappingSet.forKind(kind)
         val back = skipSpec(mapping.skipBackSeconds, back = true)
         val fwd = skipSpec(mapping.skipForwardSeconds, back = false)
-        val speedButton = autoButton(
-            formatSpeedLabel(speed), speedIcon(speed), ACTION_SPEED_CYCLE, CommandButton.SLOT_OVERFLOW
-        )
-        val favButton = autoButton(
-            if (currentIsFavourite) "Favourited" else "Favourite",
-            if (currentIsFavourite) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED,
-            ACTION_FAVOURITE_TOGGLE, CommandButton.SLOT_OVERFLOW
-        )
-        val bookmarkButton = autoButton(
-            "Add bookmark", CommandButton.ICON_BOOKMARK_UNFILLED, ACTION_BOOKMARK_ADD, CommandButton.SLOT_OVERFLOW
-        )
-        val nextChapter = autoButton("Next chapter", CommandButton.ICON_NEXT, ACTION_CHAPTER_NEXT, CommandButton.SLOT_OVERFLOW)
-        val prevChapter = autoButton("Previous chapter", CommandButton.ICON_PREVIOUS, ACTION_CHAPTER_PREV, CommandButton.SLOT_OVERFLOW)
-        val compact = autoCompactClientConnected()
-        val out = ArrayList<CommandButton>(7)
-        if (hasChapters) {
-            out += autoButton(back.label, back.icon, back.action, CommandButton.SLOT_BACK, CommandButton.SLOT_OVERFLOW)
-            out += autoButton(fwd.label, fwd.icon, fwd.action, CommandButton.SLOT_FORWARD, CommandButton.SLOT_OVERFLOW)
-            if (compact) {
-                // 5-slot bar, no overflow: [prev chapter][back][play][forward][next chapter].
-                out += prevChapter
-                out += nextChapter
-            } else {
-                out += speedButton
-                out += nextChapter
-                out += prevChapter
-                out += favButton
-                out += bookmarkButton
-            }
-        } else {
-            out += favButton
-            out += speedButton
-            if (!compact) {
-                out += autoButton(back.label, back.icon, back.action, CommandButton.SLOT_OVERFLOW)
-                out += autoButton(fwd.label, fwd.icon, fwd.action, CommandButton.SLOT_OVERFLOW)
-                out += bookmarkButton
+        // The user's choice for this kind (Settings, Android Auto buttons), resolved into slots.
+        val specs = resolveAutoButtons(autoButtonSet.forKind(kind), autoCompactClientConnected())
+        return specs.map { spec ->
+            // A slot button also lists OVERFLOW so a controller that cannot honour the slot
+            // still shows it somewhere.
+            val slots = if (spec.slot == CommandButton.SLOT_OVERFLOW) intArrayOf(spec.slot)
+                else intArrayOf(spec.slot, CommandButton.SLOT_OVERFLOW)
+            when (spec.token) {
+                com.powermediaplayer.data.preferences.AutoButtons.SKIP_BACK ->
+                    autoButton(back.label, back.icon, back.action, *slots)
+                com.powermediaplayer.data.preferences.AutoButtons.SKIP_FORWARD ->
+                    autoButton(fwd.label, fwd.icon, fwd.action, *slots)
+                com.powermediaplayer.data.preferences.AutoButtons.PREV_CHAPTER ->
+                    autoButton("Previous chapter", CommandButton.ICON_PREVIOUS, ACTION_CHAPTER_PREV, *slots)
+                com.powermediaplayer.data.preferences.AutoButtons.NEXT_CHAPTER ->
+                    autoButton("Next chapter", CommandButton.ICON_NEXT, ACTION_CHAPTER_NEXT, *slots)
+                com.powermediaplayer.data.preferences.AutoButtons.SPEED ->
+                    autoButton(formatSpeedLabel(speed), speedIcon(speed), ACTION_SPEED_CYCLE, *slots)
+                com.powermediaplayer.data.preferences.AutoButtons.FAVOURITE -> autoButton(
+                    if (currentIsFavourite) "Favourited" else "Favourite",
+                    if (currentIsFavourite) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED,
+                    ACTION_FAVOURITE_TOGGLE, *slots
+                )
+                else -> autoButton("Add bookmark", CommandButton.ICON_BOOKMARK_UNFILLED, ACTION_BOOKMARK_ADD, *slots)
             }
         }
-        return out
     }
 
     /**
@@ -4345,6 +4383,51 @@ class PlaybackService : MediaLibraryService() {
         runCatching {
             mediaSession?.connectedControllers?.any { it.packageName == AUTO_COMPACT_CLIENT } == true
         }.getOrDefault(false)
+
+    /** Android Auto (phone projection) or an Automotive OS media client. */
+    private fun isCarController(pkg: String): Boolean =
+        pkg == AUTO_GEARHEAD_CLIENT || pkg == AUTO_COMPACT_CLIENT || pkg.startsWith("com.android.car")
+
+    /**
+     * On a car connect with NOTHING loaded, load the most recent item paused at its saved
+     * position (honours Settings, Playback, Restore last played on launch) so the car's
+     * now-playing and dashboard card show it straight away instead of an empty player. Never
+     * touches a player that already has media. Main-thread player calls.
+     */
+    private fun loadLastPlayedForCar() {
+        val count = mediaSession?.player?.mediaItemCount ?: 1
+        if (count > 0) {
+            com.powermediaplayer.diag.DiagLog.event("AABROWSE", "car connect: player has $count item(s), no restore")
+            return
+        }
+        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val enabled = runCatching { settingsDataStore.restoreLastOnLaunch.first() }.getOrDefault(true)
+            if (!enabled) {
+                com.powermediaplayer.diag.DiagLog.event("AABROWSE", "car connect: restoreLastOnLaunch=false, no restore")
+                return@launch
+            }
+            val target = runCatching { mediaBrowseTree.resumeTarget() }
+                .onFailure { com.powermediaplayer.diag.DiagLog.event("AABROWSE", "car connect: resumeTarget failed $it") }
+                .getOrNull()
+            if (target == null) {
+                com.powermediaplayer.diag.DiagLog.event("AABROWSE", "car connect: nothing resumable")
+                return@launch
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                val p = mediaSession?.player ?: return@withContext
+                if (p.mediaItemCount > 0) return@withContext   // the user started something meanwhile
+                runCatching {
+                    p.setMediaItem(target.first, target.second)
+                    p.prepare()
+                    p.playWhenReady = false
+                }
+                com.powermediaplayer.diag.DiagLog.event(
+                    "AABROWSE", "car connect: loaded last played paused " +
+                        "'${target.first.mediaId.takeLast(40)}' @${target.second}ms"
+                )
+            }
+        }
+    }
 
     private data class SkipSpec(val label: String, val icon: Int, val action: String)
 
@@ -4406,6 +4489,11 @@ class PlaybackService : MediaLibraryService() {
         publishAutoChapters()
     }
     private var lastAutoLayout: List<CommandButton>? = null
+
+    /** Settings, Android Auto buttons — seeded synchronously in onCreate, kept fresh by a
+     *  collector (binder-thread callbacks must never block on DataStore). */
+    @Volatile private var autoButtonSet: com.powermediaplayer.data.preferences.AutoButtonSet =
+        com.powermediaplayer.data.preferences.AutoButtonSet.DEFAULT
 
     /**
      * Mirror the current item's chapter table into the browse tree (its Chapters menu) and,

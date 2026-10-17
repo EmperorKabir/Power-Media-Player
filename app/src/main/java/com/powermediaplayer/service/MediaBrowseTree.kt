@@ -37,6 +37,8 @@ class MediaBrowseTree @Inject constructor(
     private val lastPlayed: LastPlayedRepository,
     private val podcastDao: PodcastDao,
     private val favoriteDao: com.powermediaplayer.data.db.dao.FavoriteDao,
+    private val enrichmentCacheDao: com.powermediaplayer.data.db.dao.EnrichmentCacheDao,
+    private val offlineCopyDao: com.powermediaplayer.data.db.dao.OfflineCopyDao,
     @param:com.powermediaplayer.di.ApplicationScope private val appScope: kotlinx.coroutines.CoroutineScope,
 ) {
     companion object {
@@ -303,22 +305,18 @@ class MediaBrowseTree @Inject constructor(
 
     private suspend fun recents(): List<MediaItem> =
         runCatching { lastPlayed.observeDynamic().first() }.getOrDefault(emptyList())
-            .asSequence()
             .filter { it.source != LastPlayedRepository.Source.SPOTIFY }
             .filter { it.mediaUri.isNotBlank() }
             .take(MAX_RECENTS)
             .map { historyToItem(it) }
-            .toList()
 
     // Pinned sessions (the phone's Last Played pins) PLUS starred tracks (FavoriteDao — what
     // the car's ♥ button and the Library star write), so a ♥ tapped in the car shows up here.
     private suspend fun favourites(): List<MediaItem> {
         val pinned = runCatching { lastPlayed.observePinned().first() }.getOrDefault(emptyList())
-            .asSequence()
             .filter { it.source != LastPlayedRepository.Source.SPOTIFY }
             .filter { it.mediaUri.isNotBlank() }
             .map { historyToItem(it) }
-            .toList()
         val starredUris = runCatching { favoriteDao.getAll() }.getOrDefault(emptyList())
             .mapTo(HashSet()) { it.uri }
         if (starredUris.isEmpty()) return pinned
@@ -329,22 +327,92 @@ class MediaBrowseTree @Inject constructor(
         return pinned + starred
     }
 
-    private fun historyToItem(h: LastPlayedRepository.HistoryItem): MediaItem {
-        val play = runCatching { Uri.parse(h.mediaUri) }.getOrNull() ?: Uri.EMPTY
+    private suspend fun historyToItem(h: LastPlayedRepository.HistoryItem): MediaItem =
+        leafFor(h.mediaUri, h.title, h.subtitle, h.artworkUri, h.source.name)
+
+    /** A history row (Recent / Favourites / resume) as a car leaf. */
+    private suspend fun leafFor(
+        mediaUri: String, title: String, subtitle: String, artworkUri: String?, sourceName: String,
+    ): MediaItem {
+        val play = runCatching { Uri.parse(mediaUri) }.getOrNull() ?: Uri.EMPTY
         // Anything the phone app has played was parsed by it, so the chapter cache is warm
         // for a book here and this is a disk read, not a parse.
         val chapters = if (play != Uri.EMPTY) cachedChapters(play) else null
+        // Same overlay the phone's Last Played rows use: the enrichment cache (keyed by Drive
+        // file id) supplies the real title / author / cover for a Drive item whose history row
+        // only carries the source label ("DRIVE") and no artwork. A bare source label is never
+        // sent as the artist — the car would show it in place of the file's own author tag.
+        val driveId = driveIdOf(mediaUri)
+        val enriched = driveId?.let { runCatching { enrichmentCacheDao.get(it) }.getOrNull() }
+        val ownArtist = subtitle.takeIf { it.isNotBlank() && it != sourceName }
+        val art = enriched?.artworkUrl?.takeIf { it.isNotBlank() } ?: artworkUri
         return playable(
-            mediaId = h.mediaUri,
+            mediaId = mediaUri,
             playUri = play,
-            title = h.title,
-            artist = h.subtitle,
+            title = enriched?.title?.takeIf { it.isNotBlank() } ?: title,
+            artist = enriched?.artist?.takeIf { it.isNotBlank() } ?: ownArtist ?: "",
             album = "",
-            artUri = h.artworkUri?.let { runCatching { Uri.parse(it) }.getOrNull() },
+            artUri = art?.let { runCatching { Uri.parse(it) }.getOrNull() },
+            artData = art?.let { localArtworkBytes(it) },
             extras = chapters,
             mediaType = if (chapters != null) MediaMetadata.MEDIA_TYPE_AUDIO_BOOK
             else MediaMetadata.MEDIA_TYPE_MUSIC,
         )
+    }
+
+    private fun driveIdOf(mediaUri: String): String? =
+        com.powermediaplayer.util.DriveKeys.canonicalKey(mediaUri)
+            .takeIf { it.startsWith("drive:") }?.removePrefix("drive:")
+
+    /**
+     * "Remember last played" for the car: the most recent history row, rebuilt exactly as the
+     * Recent tab's leaf (cover, author, chapter table) WITH its playable URI set, plus the
+     * saved position. Null when there is nothing the car can resume on its own: no history,
+     * a Spotify row, or a Drive item with no offline copy (streaming needs the phone UI's
+     * token refresh). Called off the main thread.
+     */
+    suspend fun resumeTarget(): Pair<MediaItem, Long>? {
+        val row = runCatching { lastPlayed.mostRecent() }.getOrNull() ?: return null
+        if (row.mediaUri.isBlank() || row.source == LastPlayedRepository.Source.SPOTIFY.name) return null
+        val driveId = driveIdOf(row.mediaUri)
+        if (driveId != null) {
+            val copy = runCatching { offlineCopyDao.get(driveId) }.getOrNull()
+            if (copy == null || !java.io.File(copy.localPath).isFile) return null
+        }
+        val leaf = leafFor(row.mediaUri, row.title, row.subtitle, row.artworkUri, row.source)
+        val uri = leaf.requestMetadata.mediaUri ?: return null
+        return leaf.buildUpon().setUri(uri).build() to row.lastPositionMs.coerceAtLeast(0L)
+    }
+
+    // A cover that lives in the app's private storage (file:// or a bare path) is unreadable
+    // by the car's own process, so its iconUri shows nothing on Android Auto. Media3 DOES
+    // decode a browse item's artworkData and hands the car a bitmap, so ship a small JPEG copy
+    // (≤ 320 px, cached by path; ~20 KB per row, well inside the browser transaction limit).
+    private val artBytesCache = android.util.LruCache<String, ByteArray>(64)
+
+    private fun localArtworkBytes(art: String): ByteArray? {
+        val path = when {
+            art.startsWith("file://") -> Uri.parse(art).path
+            art.startsWith("/") -> art
+            else -> null
+        } ?: return null
+        artBytesCache.get(path)?.let { return it }
+        return runCatching {
+            val f = java.io.File(path)
+            if (!f.isFile) return null
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(path, bounds)
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 320) sample *= 2
+            val bmp = android.graphics.BitmapFactory.decodeFile(
+                path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+            ) ?: return null
+            java.io.ByteArrayOutputStream().use { out ->
+                bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+                bmp.recycle()
+                out.toByteArray()
+            }.also { artBytesCache.put(path, it) }
+        }.getOrNull()
     }
 
     private fun songs(): List<MediaItem> = localAudio().map { trackToItem(it) }
@@ -600,6 +668,7 @@ class MediaBrowseTree @Inject constructor(
         durationMs: Long? = null,
         extras: Bundle? = null,
         mediaType: Int = MediaMetadata.MEDIA_TYPE_MUSIC,
+        artData: ByteArray? = null,
     ): MediaItem = MediaItem.Builder()
         .setMediaId(mediaId)
         .setRequestMetadata(
@@ -612,6 +681,7 @@ class MediaBrowseTree @Inject constructor(
                 .apply {
                     if (album.isNotBlank()) setAlbumTitle(album)
                     artUri?.let { setArtworkUri(it) }
+                    artData?.let { setArtworkData(it, MediaMetadata.PICTURE_TYPE_FRONT_COVER) }
                     durationMs?.takeIf { it > 0 }?.let { setDurationMs(it) }
                     extras?.let { setExtras(it) }
                 }

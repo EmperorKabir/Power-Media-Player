@@ -155,6 +155,13 @@ class SettingsViewModel @Inject constructor(
     val btMappingSet: StateFlow<BtMappingSet> = settingsDataStore.btMappingSetFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BtMappingSet.DEFAULT)
 
+    /** Per-file-type Android Auto button choices (separate flow, same reason as [btMappingSet]). */
+    val autoButtonSet: StateFlow<com.powermediaplayer.data.preferences.AutoButtonSet> =
+        settingsDataStore.autoButtonSetFlow.stateIn(
+            viewModelScope, SharingStarted.WhileSubscribed(5000),
+            com.powermediaplayer.data.preferences.AutoButtonSet.DEFAULT
+        )
+
     /** S3/S4: player (pill) text colour. Standalone flows (not in the indexed uiState combine). */
     val playerTextColourMode: StateFlow<Int> = settingsDataStore.playerTextColourMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
@@ -885,6 +892,22 @@ class SettingsViewModel @Inject constructor(
 
     fun setBtSkipForwardSeconds(kind: BtMediaKind, seconds: Int) {
         viewModelScope.launch { settingsDataStore.setBtSkipForwardSeconds(kind, seconds) }
+    }
+
+    fun setAutoLeftSlot(kind: BtMediaKind, token: String) {
+        viewModelScope.launch { settingsDataStore.setAutoLeftSlot(kind, token) }
+    }
+
+    fun setAutoRightSlot(kind: BtMediaKind, token: String) {
+        viewModelScope.launch { settingsDataStore.setAutoRightSlot(kind, token) }
+    }
+
+    fun setAutoExtras(kind: BtMediaKind, extras: List<String>) {
+        viewModelScope.launch { settingsDataStore.setAutoExtras(kind, extras) }
+    }
+
+    fun resetAutoButtons(kind: BtMediaKind) {
+        viewModelScope.launch { settingsDataStore.resetAutoButtons(kind) }
     }
 
     // Video effects: applied per-frame in the GL surface (~16 ms floor

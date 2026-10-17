@@ -1449,6 +1449,53 @@ class SettingsDataStore @Inject constructor(
     val btSkipForwardSeconds: Flow<Int> =
         context.dataStore.data.map { it.readKindMapping(BtMediaKind.MUSIC).skipForwardSeconds }
 
+    // ── Android Auto buttons (PER FILE TYPE) ─────────────────────
+    // What the car's player screen shows: the pair either side of Play (also the small bar /
+    // dashboard card) and the ordered extras. Keys: aa_<tag>_left / _right / _extras (the
+    // extras are one \u001F-joined string so the order survives; "" = deliberately none,
+    // unset = the kind's default). See AutoButtons.
+    private fun aaKey(kind: BtMediaKind, field: String) =
+        stringPreferencesKey("aa_${kind.tag}_$field")
+
+    private fun Preferences.readAutoButtons(kind: BtMediaKind): AutoButtonConfig {
+        val d = DEFAULT_AUTO_BUTTONS.getValue(kind)
+        return AutoButtonConfig(
+            leftSlot = this[aaKey(kind, "left")]?.takeIf { it in AutoButtons.SLOT_TOKENS } ?: d.leftSlot,
+            rightSlot = this[aaKey(kind, "right")]?.takeIf { it in AutoButtons.SLOT_TOKENS } ?: d.rightSlot,
+            extras = this[aaKey(kind, "extras")]?.let { AutoButtons.decodeExtras(it) } ?: d.extras
+        )
+    }
+    private fun Preferences.readAutoButtonSet(): AutoButtonSet = AutoButtonSet(
+        audiobook = readAutoButtons(BtMediaKind.AUDIOBOOK),
+        podcast = readAutoButtons(BtMediaKind.PODCAST),
+        music = readAutoButtons(BtMediaKind.MUSIC),
+        video = readAutoButtons(BtMediaKind.VIDEO)
+    )
+
+    /** Per-kind Android Auto button choices, reactive. */
+    val autoButtonSetFlow: Flow<AutoButtonSet> =
+        context.dataStore.data.map { it.readAutoButtonSet() }
+
+    /** One-shot read for the service's synchronous seed. */
+    suspend fun autoButtonSet(): AutoButtonSet = context.dataStore.data.first().readAutoButtonSet()
+
+    suspend fun setAutoLeftSlot(kind: BtMediaKind, token: String) {
+        if (token !in AutoButtons.SLOT_TOKENS) return
+        context.dataStore.edit { it[aaKey(kind, "left")] = token }
+    }
+    suspend fun setAutoRightSlot(kind: BtMediaKind, token: String) {
+        if (token !in AutoButtons.SLOT_TOKENS) return
+        context.dataStore.edit { it[aaKey(kind, "right")] = token }
+    }
+    suspend fun setAutoExtras(kind: BtMediaKind, extras: List<String>) {
+        context.dataStore.edit { it[aaKey(kind, "extras")] = AutoButtons.encodeExtras(extras) }
+    }
+    suspend fun resetAutoButtons(kind: BtMediaKind) {
+        context.dataStore.edit {
+            it.remove(aaKey(kind, "left")); it.remove(aaKey(kind, "right")); it.remove(aaKey(kind, "extras"))
+        }
+    }
+
     // ── Drive favourite folders ──────────────────────────────────
     val driveFavouriteFolders: Flow<List<DriveFavouriteFolder>> =
         context.dataStore.data.map { prefs ->
