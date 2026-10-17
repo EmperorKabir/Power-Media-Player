@@ -2024,6 +2024,14 @@ class PlaybackService : MediaLibraryService() {
             .setCustomLayout(buildAutoCustomLayout())
             .build()
 
+        // Audiobooks node: chapter tables parsed in the background → re-announce the node so
+        // the car re-fetches it with chapters attached. Session calls belong on its thread.
+        mediaBrowseTree.onChildrenChanged = { parentId, count ->
+            serviceScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                runCatching { mediaSession?.notifyChildrenChanged(parentId, count, null) }
+            }
+        }
+
         // Android Auto: refresh the context-aware custom-action buttons when the track
         // changes (chapter buttons appear/disappear, favourite state) or the speed changes
         // (the speed-button label). setCustomLayout must run on the player's main looper;
@@ -4127,7 +4135,8 @@ class PlaybackService : MediaLibraryService() {
                 // screen gets the art and an audiobook keeps its chapter buttons. Keep the
                 // request's own extras (the car may attach some) over the served ones.
                 val item = if (raw.localConfiguration == null && raw.mediaMetadata.title == null) {
-                    mediaBrowseTree.servedLeaf(raw.mediaId)?.let { served ->
+                    (mediaBrowseTree.servedLeaf(raw.mediaId)
+                        ?: mediaBrowseTree.cachedLocalLeaf(raw.mediaId))?.let { served ->
                         served.buildUpon()
                             .setRequestMetadata(
                                 MediaItem.RequestMetadata.Builder()
@@ -4286,25 +4295,34 @@ class PlaybackService : MediaLibraryService() {
             .setSessionCommand(SessionCommand(action, Bundle.EMPTY))
             .build()
 
-    /** The speed badge nearest the live speed (Media3 ships 0.5/0.8/1.0/1.2/1.5/1.8/2.0). */
+    /** The numbered speed badge ONLY when it matches the live speed exactly (Media3 ships
+     *  0.5/0.8/1.0/1.2/1.5/1.8/2.0); the car shows the glyph, not the label, so a "1.2"
+     *  badge at 1.25× would read wrong — any other speed gets the generic speed icon. */
     @androidx.annotation.OptIn(UnstableApi::class)
-    private fun speedIcon(speed: Float): Int = when {
-        speed < 0.65f -> CommandButton.ICON_PLAYBACK_SPEED_0_5
-        speed < 0.9f -> CommandButton.ICON_PLAYBACK_SPEED_0_8
-        speed < 1.1f -> CommandButton.ICON_PLAYBACK_SPEED_1_0
-        speed < 1.35f -> CommandButton.ICON_PLAYBACK_SPEED_1_2
-        speed < 1.65f -> CommandButton.ICON_PLAYBACK_SPEED_1_5
-        speed < 1.9f -> CommandButton.ICON_PLAYBACK_SPEED_1_8
-        speed < 2.1f -> CommandButton.ICON_PLAYBACK_SPEED_2_0
+    private fun speedIcon(speed: Float): Int = when (speed) {
+        0.5f -> CommandButton.ICON_PLAYBACK_SPEED_0_5
+        0.8f -> CommandButton.ICON_PLAYBACK_SPEED_0_8
+        1.0f -> CommandButton.ICON_PLAYBACK_SPEED_1_0
+        1.2f -> CommandButton.ICON_PLAYBACK_SPEED_1_2
+        1.5f -> CommandButton.ICON_PLAYBACK_SPEED_1_5
+        1.8f -> CommandButton.ICON_PLAYBACK_SPEED_1_8
+        2.0f -> CommandButton.ICON_PLAYBACK_SPEED_2_0
         else -> CommandButton.ICON_PLAYBACK_SPEED
     }
 
     /** Push a freshly-built Auto layout to controllers (no-op before the session exists). */
     @androidx.annotation.OptIn(UnstableApi::class)
     private fun refreshAutoLayout() {
-        runCatching { mediaSession?.setCustomLayout(buildAutoCustomLayout()) }
+        // setCustomLayout has no equality guard (re-broadcasts the legacy PlaybackState to the
+        // car each call) and this runs on every metadata event — only push real changes.
+        val layout = buildAutoCustomLayout()
+        if (layout != lastAutoLayout) {
+            lastAutoLayout = layout
+            runCatching { mediaSession?.setCustomLayout(layout) }
+        }
         publishAutoChapters()
     }
+    private var lastAutoLayout: List<CommandButton>? = null
 
     /**
      * Mirror the current item's chapter table into the browse tree (its Chapters menu) and,
@@ -4314,24 +4332,27 @@ class PlaybackService : MediaLibraryService() {
     private fun publishAutoChapters() {
         val player = exoPlayerRef?.get() ?: mediaSession?.player ?: return
         val now = player.mediaMetadata.extras?.takeIf { it.getInt("chapter_count", 0) > 0 }
-        val before = mediaBrowseTree.currentChapters
-        val changed = when {
-            (now == null) != (before == null) -> true
-            now == null || before == null -> false
-            else -> now.getInt("chapter_count", 0) != before.getInt("chapter_count", 0) ||
-                now.getLong("chapter_start_1", -1L) != before.getLong("chapter_start_1", -1L) ||
-                now.getString("chapter_title_0") != before.getString("chapter_title_0")
-        }
-        mediaBrowseTree.currentChapters = now
+        // Identity = (item, chapter count): two books with equal-length, generated chapter
+        // titles must still re-announce the list.
+        val key = if (now == null) null
+            else "${player.currentMediaItem?.mediaId}|${now.getInt("chapter_count", 0)}"
+        val changed = key != publishedChaptersKey
+        publishedChaptersKey = key
+        // Copy: the player's extras Bundle is the parser-cache instance the phone UI mutates
+        // in place, and the browse tree reads this one on the IO dispatcher.
+        mediaBrowseTree.currentChapters = now?.let { Bundle(it) }
         if (changed) {
             runCatching {
-                mediaSession?.notifyChildrenChanged(MediaBrowseTree.CAT_PLAYBACK, 4, null)
+                mediaSession?.notifyChildrenChanged(
+                    MediaBrowseTree.CAT_PLAYBACK, if (now != null) 4 else 3, null
+                )
                 mediaSession?.notifyChildrenChanged(
                     MediaBrowseTree.MENU_CHAPTERS, now?.getInt("chapter_count", 0) ?: 0, null
                 )
             }
         }
     }
+    @Volatile private var publishedChaptersKey: String? = null
 
     /** "1×" / "1.25×" / "1.5×" — trims trailing zeros. */
     private fun formatSpeedLabel(s: Float): String {
@@ -4415,9 +4436,11 @@ class PlaybackService : MediaLibraryService() {
                 refreshAutoLayout()
             }
             "sleep" -> applyAutoSleep(value)
-            // Chapters menu: seek within the current item to chapter <i>'s start.
+            // Chapters menu: seek within the current item to chapter <i>'s start. Read the
+            // exact table the tapped list was built from (a CastPlayer's items carry no extras).
             "chapter" -> value.toIntOrNull()?.let { i ->
-                val start = player.mediaMetadata.extras?.getLong("chapter_start_$i", -1L) ?: -1L
+                val start = mediaBrowseTree.currentChapters?.getLong("chapter_start_$i", -1L)
+                    ?: player.mediaMetadata.extras?.getLong("chapter_start_$i", -1L) ?: -1L
                 if (start >= 0L) {
                     runCatching { player.seekTo(start) }
                     com.powermediaplayer.diag.DiagLog.event(

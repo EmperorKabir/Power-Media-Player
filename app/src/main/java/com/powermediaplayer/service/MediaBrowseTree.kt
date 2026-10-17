@@ -11,6 +11,7 @@ import com.powermediaplayer.data.db.dao.PodcastDao
 import com.powermediaplayer.data.repository.LastPlayedRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,6 +37,7 @@ class MediaBrowseTree @Inject constructor(
     private val lastPlayed: LastPlayedRepository,
     private val podcastDao: PodcastDao,
     private val favoriteDao: com.powermediaplayer.data.db.dao.FavoriteDao,
+    @param:com.powermediaplayer.di.ApplicationScope private val appScope: kotlinx.coroutines.CoroutineScope,
 ) {
     companion object {
         const val ROOT_ID = "pmp_root"
@@ -85,15 +87,29 @@ class MediaBrowseTree @Inject constructor(
     @Volatile private var audioCacheAtMs: Long = 0L
     private val cacheTtlMs = 15_000L
 
-    // Every playable leaf served to a browser, by mediaId. Car / legacy controllers play a
-    // leaf by sending ONLY its mediaId back (playFromMediaId) — title, artwork and the
-    // chapter extras do not survive that round-trip — so PlaybackService.onAddMediaItems
-    // re-hydrates the bare request from here (device-proven: the book played with the
-    // MUSIC button layout until this existed).
-    private val servedLeaves = android.util.LruCache<String, MediaItem>(1024)
+    // Every playable leaf a browser actually RECEIVED (registered in [children] after paging,
+    // so page 0 of a huge Songs list is never evicted by pages the car never saw), by
+    // mediaId. Car / legacy controllers play a leaf by sending ONLY its mediaId back
+    // (playFromMediaId) — title, artwork and the chapter extras do not survive that
+    // round-trip — so PlaybackService.onAddMediaItems re-hydrates the bare request from here
+    // (device-proven: the book played with the MUSIC button layout until this existed).
+    private val servedLeaves = android.util.LruCache<String, MediaItem>(4096)
 
     /** The full leaf last served under [mediaId], or null if never browsed. */
     fun servedLeaf(mediaId: String): MediaItem? = servedLeaves.get(mediaId)
+
+    /**
+     * Fallback for a play request whose leaf was evicted (library > cache): rebuild it from
+     * the still-warm MediaStore snapshot without querying (main-thread safe). Null when the
+     * snapshot expired or the id is not a local track.
+     */
+    fun cachedLocalLeaf(mediaId: String): MediaItem? =
+        audioCache?.firstOrNull { it.uri.toString() == mediaId }?.let { trackToItem(it) }
+
+    /** Set by PlaybackService: (parentId, itemCount) → MediaLibrarySession.notifyChildrenChanged
+     *  on the session thread. Fired when a background chapter warm-up finishes. */
+    @Volatile var onChildrenChanged: ((String, Int) -> Unit)? = null
+    @Volatile private var booksWarmJob: kotlinx.coroutines.Job? = null
 
     // The CURRENT item's chapter table (chapter_count / chapter_title_$i / chapter_start_$i),
     // mirrored here by PlaybackService on every item/metadata change so the Chapters menu is
@@ -111,6 +127,8 @@ class MediaBrowseTree @Inject constructor(
      */
     suspend fun children(parentId: String, page: Int, pageSize: Int): List<MediaItem> {
         val result = childrenInternal(parentId, page, pageSize)
+        // Register exactly what the browser receives (post-paging) — see servedLeaves.
+        result.forEach { if (it.mediaMetadata.isPlayable == true) servedLeaves.put(it.mediaId, it) }
         com.powermediaplayer.diag.DiagLog.event(
             "AABROWSE", "children parent=$parentId page=$page size=$pageSize → ${result.size} items"
         )
@@ -146,7 +164,9 @@ class MediaBrowseTree @Inject constructor(
     /** Best-effort single-item lookup (used for playback resumption / metadata by id). */
     suspend fun item(mediaId: String): MediaItem? = when {
         mediaId == ROOT_ID -> root()
-        servedLeaves.get(mediaId) != null -> servedLeaves.get(mediaId)
+        // A leaf the browser has seen — full metadata. (The bare fallback below is NOT
+        // registered, so it can never override a file's own tags on play.)
+        servedLeaf(mediaId) != null -> servedLeaf(mediaId)
         mediaId.startsWith("cat/") || mediaId.startsWith("menu/") ||
             mediaId.startsWith(PREFIX_ALBUM) ||
             mediaId.startsWith(PREFIX_ARTIST) || mediaId.startsWith(PREFIX_SHOW) ->
@@ -221,7 +241,8 @@ class MediaBrowseTree @Inject constructor(
         val h = s / 3600
         val m = (s % 3600) / 60
         val sec = s % 60
-        return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+        return if (h > 0) "%d:%02d:%02d".format(java.util.Locale.ROOT, h, m, sec)
+        else "%d:%02d".format(java.util.Locale.ROOT, m, sec)
     }
 
     private fun speedItems(): List<MediaItem> =
@@ -468,13 +489,15 @@ class MediaBrowseTree @Inject constructor(
     // A book reached via Songs / an album / an artist still gets its chapter buttons: the
     // cache-only lookup is a disk read (no parse), so the big lists stay cheap, and the
     // Audiobooks node (full parse) warms that cache the first time it is browsed.
-    private fun trackToItem(t: BrowseTrack): MediaItem =
-        playable(
+    private fun trackToItem(t: BrowseTrack): MediaItem {
+        val book = isAudiobook(t)
+        return playable(
             t.uri.toString(), t.uri, t.title, t.artist, t.album, t.artUri, t.durationMs,
-            extras = if (isAudiobook(t)) cachedChapters(t.uri) else null,
-            mediaType = if (isAudiobook(t)) MediaMetadata.MEDIA_TYPE_AUDIO_BOOK
+            extras = if (book) cachedChapters(t.uri) else null,
+            mediaType = if (book) MediaMetadata.MEDIA_TYPE_AUDIO_BOOK
             else MediaMetadata.MEDIA_TYPE_MUSIC,
         )
+    }
 
     // ---- Audiobooks ---------------------------------------------------------
 
@@ -485,30 +508,60 @@ class MediaBrowseTree @Inject constructor(
             t.mime.contains("audiobook", ignoreCase = true) ||
             t.durationMs > 20L * 60L * 1000L
 
-    /** The parser's on-disk chapter cache for [uri], if the book was ever parsed. */
-    private fun cachedChapters(uri: Uri): Bundle? = runCatching {
+    /** The parser's cache entry for [uri] as stored (null = never parsed; a parsed file with
+     *  no chapters is a Bundle with chapter_count=0). Never parses. */
+    private fun cachedRaw(uri: Uri): Bundle? = runCatching {
         com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri)
-    }.getOrNull()?.takeIf { it.getInt("chapter_count", 0) > 0 }
+    }.getOrNull()
+
+    /** A COPY of the cached chapter table for [uri] when it has chapters. The cache hands
+     *  out its stored instance and the phone UI mutates that Bundle in place
+     *  (is_video_hint), so never share it across the browse (IO) / player threads. */
+    private fun cachedChapters(uri: Uri): Bundle? =
+        cachedRaw(uri)?.takeIf { it.getInt("chapter_count", 0) > 0 }?.let { Bundle(it) }
 
     /**
      * Audiobooks with their CHAPTER table attached as MediaItem extras
      * (`chapter_count` / `chapter_start_$i` / `chapter_title_$i`, via
      * [com.powermediaplayer.util.M4bChapterParser]). The now-playing layout keys the
      * chapter buttons off `chapter_count`, and `seekChapter` reads the starts, so a book
-     * played from Auto gets chapter next/prev. Parsed on the IO browse dispatch and
-     * disk-cached by the parser; the list is short so the per-book parse is acceptable.
+     * played from Auto gets chapter next/prev.
+     *
+     * Served from the parser's cache only — a cache miss (a long file never parsed) is
+     * parsed in the BACKGROUND (moov walk, seconds per file, unbounded count) and the node
+     * is re-announced via [onChildrenChanged] when done, so the car never sits on a
+     * spinner behind N inline parses.
      */
-    private fun books(): List<MediaItem> =
-        localAudio().filter { isAudiobook(it) }.map { t ->
-            val chapters = runCatching {
-                com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, t.uri)
-            }.getOrNull()?.takeIf { it.getInt("chapter_count", 0) > 0 }
+    private fun books(): List<MediaItem> {
+        val tracks = localAudio().filter { isAudiobook(it) }
+        val misses = ArrayList<Uri>()
+        val items = tracks.map { t ->
+            val raw = cachedRaw(t.uri)
+            if (raw == null) misses.add(t.uri)
             playable(
                 t.uri.toString(), t.uri, t.title, t.artist, t.album, t.artUri, t.durationMs,
-                extras = chapters,
+                extras = raw?.takeIf { it.getInt("chapter_count", 0) > 0 }?.let { Bundle(it) },
                 mediaType = MediaMetadata.MEDIA_TYPE_AUDIO_BOOK,
             )
         }
+        if (misses.isNotEmpty()) warmChapters(misses, tracks.size)
+        return items
+    }
+
+    private fun warmChapters(uris: List<Uri>, bookCount: Int) {
+        if (booksWarmJob?.isActive == true) return
+        booksWarmJob = appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            uris.forEach { uri ->
+                runCatching {
+                    com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, uri)
+                }
+            }
+            com.powermediaplayer.diag.DiagLog.event(
+                "AABROWSE", "chapter warm-up done for ${uris.size} files → re-announce $CAT_BOOKS"
+            )
+            onChildrenChanged?.invoke(CAT_BOOKS, bookCount)
+        }
+    }
 
     // ---- builders -----------------------------------------------------------
 
@@ -565,7 +618,6 @@ class MediaBrowseTree @Inject constructor(
                 .build()
         )
         .build()
-        .also { servedLeaves.put(mediaId, it) }
 
     private fun paged(all: List<MediaItem>, page: Int, pageSize: Int): List<MediaItem> {
         if (pageSize <= 0) return all
