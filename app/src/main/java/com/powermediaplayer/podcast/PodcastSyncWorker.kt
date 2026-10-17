@@ -14,128 +14,41 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
  * §C10 — periodic feed refresh. Fetches every subscribed RSS, upserts
- * any new episodes. Runs every 6 h on Wi-Fi (configurable in the
- * future). Idempotent: episodes are keyed by guid + REPLACE on
- * conflict, so re-runs don't duplicate.
+ * any new episodes. Runs every 6 h on any network. Idempotent: episodes
+ * are keyed by guid + REPLACE on conflict, so re-runs don't duplicate.
+ * PH10: the per-show work lives in [PodcastFeedRefresher] (shared with the
+ * on-visit and manual refreshes) — this worker only schedules + reports.
  */
 @HiltWorker
 class PodcastSyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val podcastDao: PodcastDao,
-    private val settings: com.powermediaplayer.data.preferences.SettingsDataStore
+    private val refresher: PodcastFeedRefresher
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         // CoroutineWorker defaults to Dispatchers.Default — blocking OkHttp
-        // fetches were occupying the CPU pool (audit 5.5). IO dispatcher +
-        // bounded parallelism: feeds are independent; 3-wide keeps radio
-        // and server load sane while a 20-show library stops being serial.
-        val parser = RssFeedParser()
-        val downloader = com.powermediaplayer.podcast.PodcastDownloader(applicationContext)
-        val globalTree = settings.podcastDownloadTreeUri.first().ifBlank { null }
-        // Feed refresh (small XML) always runs on any connection, preserving the
-        // 2026-06-26 "seamless" directive; only the EPISODE AUDIO downloads honour
-        // Settings, Cloud, "Download files on mobile data". Blocked episodes are
-        // picked up by the next sync on an unmetered network (skip-if-present).
-        val downloadsAllowed = !com.powermediaplayer.util.MobileDataPolicy
-            .downloadsBlocked(applicationContext, settings)
+        // fetches were occupying the CPU pool (audit 5.5). IO dispatcher;
+        // the refresher bounds parallelism at 3 feeds.
         val shows = podcastDao.observeShows().first()
-        val sem = Semaphore(3)
-        val results = coroutineScope {
-            shows.map { show ->
-                async {
-                    sem.withPermit {
-                        runCatching {
-                            syncShow(parser, downloader, show, globalTree, downloadsAllowed)
-                        }.getOrDefault(0 to 0)
-                    }
-                }
-            }.map { it.await() }
-        }
-        val totalNew = results.sumOf { it.first }
-        val totalDownloaded = results.sumOf { it.second }
+        val summary = refresher.refreshShows(shows)
         com.powermediaplayer.util.Diag.i(
             "PMP_DIAG",
-            "Podcast sync: ${shows.size} feed(s), $totalNew episode(s) upserted, " +
-                "$totalDownloaded audio downloaded"
+            "Podcast sync: ${shows.size} feed(s), ${summary.checked} checked, " +
+                "${summary.failed} failed, ${summary.skipped} skipped, " +
+                "${summary.fresh} new episode(s), ${summary.downloaded} audio downloaded"
         )
         com.powermediaplayer.diag.DiagLog.bg(
-            "podcast-sync finished reason=workComplete feeds=${shows.size}"
+            "podcast-sync finished reason=workComplete feeds=${shows.size} " +
+                "checked=${summary.checked} failed=${summary.failed} fresh=${summary.fresh}"
         )
         Result.success()
-    }
-
-    /** Returns (episodesUpserted, audioFilesDownloaded) for one show. */
-    private suspend fun syncShow(
-        parser: RssFeedParser,
-        downloader: PodcastDownloader,
-        show: com.powermediaplayer.data.db.entity.PodcastShowEntity,
-        globalTree: String?,
-        downloadsAllowed: Boolean
-    ): Pair<Int, Int> {
-        val parsed = runCatching { parser.fetch(show.feedUrl) }.getOrNull()
-            ?: return 0 to 0
-        val (refreshed, episodes) = parsed
-        // Preserve user-set per-show settings + subscribedAt.
-        podcastDao.upsertShow(
-            refreshed.copy(
-                subscribedAt = show.subscribedAt,
-                autoDownload = show.autoDownload,
-                retentionLastN = show.retentionLastN,
-                notifyOnNewEpisode = show.notifyOnNewEpisode,
-                // Preserve the user's per-show download folder — a REPLACE upsert
-                // with the freshly-parsed (null) value would silently reset it
-                // to the global default on every periodic sync.
-                downloadTreeUri = show.downloadTreeUri
-            )
-        )
-        // Item 3 (2026-07-09): know which episodes are genuinely NEW before the
-        // upsert. First-ever population (empty pre set) never notifies — that
-        // would fire for the entire back catalogue on subscribe.
-        val preGuids: Set<String>? = if (show.notifyOnNewEpisode) {
-            podcastDao.observeEpisodes(show.feedUrl).first().mapTo(HashSet()) { it.guid }
-        } else null
-        podcastDao.syncEpisodes(episodes)
-        if (preGuids != null && preGuids.isNotEmpty()) {
-            val fresh = episodes.filter { it.guid !in preGuids }
-            if (fresh.isNotEmpty()) {
-                PodcastNotifier.notifyNewEpisodes(
-                    applicationContext, show, fresh.size,
-                    fresh.maxByOrNull { it.publishedAt }?.title
-                )
-            }
-        }
-        var downloaded = 0
-        // §C10 auto-download — when the user opted in, fetch the
-        // newest N episodes' audio files into the spec'd folder.
-        if (show.autoDownload && downloadsAllowed) {
-            val budget = if (show.retentionLastN > 0) show.retentionLastN else 5
-            // Re-read so localPath set by an earlier sync is visible (skip-if-present).
-            val stored = podcastDao.observeEpisodes(show.feedUrl).first()
-            val byGuid = stored.associateBy { it.guid }
-            val newest = episodes.sortedByDescending { it.publishedAt }.take(budget)
-            newest.forEach { parsedEp ->
-                val ep = byGuid[parsedEp.guid] ?: parsedEp
-                val saved = downloader.downloadIfMissing(show, ep, globalTree)
-                if (saved != null) {
-                    podcastDao.setLocalPath(
-                        ep.guid, saved.uri, saved.bytes, System.currentTimeMillis()
-                    )
-                    downloaded++
-                }
-            }
-        }
-        return episodes.size to downloaded
     }
 
     companion object {

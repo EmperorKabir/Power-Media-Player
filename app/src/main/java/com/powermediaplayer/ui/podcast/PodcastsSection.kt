@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Podcasts
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Folder
@@ -112,7 +113,11 @@ class PodcastsViewModel @Inject constructor(
     private val spotifyProvider: com.powermediaplayer.cloud.SpotifyProvider,
     // #6 — per-episode effects via the shared override system (val so the
     // section can pass it to MediaOverridesPopup). Hilt-provided already.
-    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao
+    val mediaOverrideDao: com.powermediaplayer.data.db.dao.MediaOverrideDao,
+    // PH10 — shared feed refresher (worker / on-visit / manual) + the app scope
+    // so a refresh survives leaving the tab (viewModelScope would cancel it).
+    private val refresher: com.powermediaplayer.podcast.PodcastFeedRefresher,
+    @com.powermediaplayer.di.ApplicationScope private val appScope: kotlinx.coroutines.CoroutineScope
 ) : ViewModel() {
 
     /** AC6 — a podcast play must tear down an active Spotify mirror, or the
@@ -146,6 +151,67 @@ class PodcastsViewModel @Inject constructor(
 
     private val _status = kotlinx.coroutines.flow.MutableStateFlow("")
     val status: StateFlow<String> = _status
+
+    // ── PH10 refresh ────────────────────────────────────────────────────────
+    /** Feed urls with a refresh in flight (header spinner + per-show spinner). */
+    val refreshing: StateFlow<Set<String>> = refresher.refreshing
+
+    /** Wall clock at the last visit / refresh — the "Checked N min ago"
+     *  captions derive from it so they do not freeze at first composition. */
+    private val _clock = kotlinx.coroutines.flow.MutableStateFlow(System.currentTimeMillis())
+    val clock: StateFlow<Long> = _clock
+    fun tickClock() { _clock.value = System.currentTimeMillis() }
+
+    /** Called when the Podcasts section comes on screen: re-check every show
+     *  not checked within the last 15 min (the header text promises "refresh on
+     *  each visit"; before PH10 nothing did it). Silent when nothing is stale. */
+    fun refreshOnVisit() {
+        appScope.launch(Dispatchers.IO) {
+            val stale = com.powermediaplayer.podcast.staleShows(
+                podcastDao.showsSnapshot(), System.currentTimeMillis()
+            )
+            if (stale.isEmpty()) return@launch
+            runRefresh(stale, label = "visit")
+        }
+    }
+
+    /** Header button: re-check every subscribed show now. */
+    fun refreshAll() {
+        appScope.launch(Dispatchers.IO) {
+            val shows = podcastDao.showsSnapshot()
+            if (shows.isEmpty()) { setStatus("No subscriptions to refresh"); return@launch }
+            runRefresh(shows, label = "manual")
+        }
+    }
+
+    /** Per-show button on the expanded header. */
+    fun refreshShow(feedUrl: String) {
+        appScope.launch(Dispatchers.IO) {
+            val show = podcastDao.getShow(feedUrl) ?: return@launch
+            runRefresh(listOf(show), label = "show")
+        }
+    }
+
+    private suspend fun runRefresh(shows: List<PodcastShowEntity>, label: String) {
+        val n = shows.size
+        setStatus(if (n == 1) "Checking ${shows[0].title}…" else "Checking $n podcasts…")
+        com.powermediaplayer.diag.DiagLog.bg("podcast-refresh start reason=$label feeds=$n")
+        val s = refresher.refreshShows(shows)
+        tickClock()
+        val checked = s.checked + s.skipped
+        val failedNote = if (s.failed > 0) " · ${s.failed} could not be refreshed" else ""
+        val msg = when {
+            s.failed == n -> "Could not refresh ${if (n == 1) shows[0].title else "$n podcasts"} (no connection or feed error)"
+            s.fresh > 0 -> "${s.fresh} new episode${if (s.fresh == 1) "" else "s"} across " +
+                "$checked podcast${if (checked == 1) "" else "s"}$failedNote"
+            else -> "Up to date · checked $checked podcast${if (checked == 1) "" else "s"}$failedNote"
+        }
+        setStatus(msg)
+    }
+
+    /** True while a subscribe (fetch + parse + store) is in flight. */
+    private val _subscribing = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val subscribing: StateFlow<Boolean> = _subscribing
 
     fun episodesFor(feedUrl: String): kotlinx.coroutines.flow.Flow<List<PodcastEpisodeEntity>> =
         podcastDao.observeEpisodes(feedUrl)
@@ -338,43 +404,73 @@ class PodcastsViewModel @Inject constructor(
         _status.value = msg // StateFlow writes are thread-safe (audit B3-P4)
     }
 
-    fun addByUrl(rssUrl: String) {
+    /** PH3 — subscribe. [hint] = the directory hit the user tapped (title +
+     *  artwork known up front). The show row is inserted IMMEDIATELY as a
+     *  placeholder so the list shows the podcast while its feed (often 1-2 MB,
+     *  1000+ episodes) downloads and parses; the parsed row replaces it by
+     *  primary key, and a failed fetch removes it. Runs on the app scope so
+     *  leaving the tab mid-fetch cannot orphan the placeholder. */
+    fun addByUrl(rssUrl: String, hint: com.powermediaplayer.podcast.ITunesPodcastSearch.Hit? = null) {
         if (rssUrl.isBlank()) return
+        if (_subscribing.value) { setStatus("Still adding the previous podcast…"); return }
+        _subscribing.value = true
         _status.value = "Fetching feed…"
-        viewModelScope.launch(Dispatchers.IO) {
-            // An Apple Podcasts page (…/idNNNN) isn't an RSS feed — resolve its
-            // real feedUrl via the iTunes lookup before trying to parse.
-            val appleId = Regex("""/id(\d+)""").find(rssUrl)?.groupValues?.get(1)
-            val target = if (rssUrl.contains("podcasts.apple.com") && appleId != null) {
-                itunes.lookupFeedUrl(appleId) ?: rssUrl
-            } else rssUrl
-            when (val r = parser.fetchResult(target)) {
-                is RssFeedParser.FetchResult.Ok -> {
-                    // Re-adding an already-subscribed feed must NOT reset the user's
-                    // per-show settings (auto-download / retention / notify / folder)
-                    // — a REPLACE upsert with the freshly-parsed defaults would.
-                    val existing = podcastDao.getShow(r.show.feedUrl)
-                    val merged = if (existing == null) {
-                        // #5 — a brand-new subscription appends to the bottom.
-                        r.show.copy(displayOrder = podcastDao.nextShowOrder())
-                    } else r.show.copy(
-                        subscribedAt = existing.subscribedAt,
-                        autoDownload = existing.autoDownload,
-                        retentionLastN = existing.retentionLastN,
-                        notifyOnNewEpisode = existing.notifyOnNewEpisode,
-                        downloadTreeUri = existing.downloadTreeUri,
-                        displayOrder = existing.displayOrder
+        appScope.launch(Dispatchers.IO) {
+            val t0 = System.currentTimeMillis()
+            var placeholderFeed: String? = null
+            try {
+                // An Apple Podcasts page (…/idNNNN) is not an RSS feed — resolve its
+                // real feedUrl via the iTunes lookup before trying to parse.
+                val appleId = Regex("""/id(\d+)""").find(rssUrl)?.groupValues?.get(1)
+                val target = if (rssUrl.contains("podcasts.apple.com") && appleId != null) {
+                    itunes.lookupFeedUrl(appleId) ?: rssUrl
+                } else rssUrl
+                val existing = podcastDao.getShow(target)
+                if (existing == null) {
+                    // #5 — a brand-new subscription appends to the bottom.
+                    podcastDao.upsertShow(
+                        com.powermediaplayer.podcast.placeholderShow(
+                            target, hint?.title, hint?.artworkUrl,
+                            podcastDao.nextShowOrder(), System.currentTimeMillis()
+                        )
                     )
-                    podcastDao.upsertShow(merged)
-                    podcastDao.syncEpisodes(r.episodes)
-                    setStatus("Subscribed: ${r.show.title} (${r.episodes.size} episodes)")
+                    placeholderFeed = target
+                    setStatus("Added ${hint?.title ?: target}. Fetching episodes…")
+                } else {
+                    setStatus("Refreshing ${existing.title}…")
                 }
-                is RssFeedParser.FetchResult.HttpError ->
-                    setStatus("Feed returned HTTP ${r.code}. Try searching the show name instead.")
-                is RssFeedParser.FetchResult.NotFeed ->
-                    setStatus("That URL isn't an RSS feed (${r.reason}). Paste the RSS feed, or search by name.")
-                RssFeedParser.FetchResult.Network ->
-                    setStatus("Network error fetching the feed. Check your connection.")
+                when (val r = parser.fetchResult(target)) {
+                    is RssFeedParser.FetchResult.Ok -> {
+                        setStatus("Saving ${r.episodes.size} episodes…")
+                        // Re-adding an already-subscribed feed must NOT reset the
+                        // user's per-show settings (auto-download / retention /
+                        // notify / folder / order); the placeholder carries the
+                        // appended order. Same merge the refresher uses.
+                        val base = podcastDao.getShow(r.show.feedUrl) ?: existing
+                        val merged = if (base == null) r.show.copy(displayOrder = podcastDao.nextShowOrder())
+                        else com.powermediaplayer.podcast.mergeShowRefresh(base, r.show)
+                        podcastDao.upsertShow(merged)
+                        podcastDao.syncEpisodes(r.episodes)
+                        placeholderFeed = null
+                        setStatus("Subscribed: ${merged.title} (${r.episodes.size} episodes)")
+                        com.powermediaplayer.diag.DiagLog.bg(
+                            "podcast-subscribe ok episodes=${r.episodes.size} " +
+                                "tookMs=${System.currentTimeMillis() - t0}"
+                        )
+                    }
+                    is RssFeedParser.FetchResult.HttpError ->
+                        setStatus("Feed returned HTTP ${r.code}. Try searching the show name instead.")
+                    is RssFeedParser.FetchResult.NotFeed ->
+                        setStatus("That URL is not an RSS feed (${r.reason}). Paste the RSS feed, or search by name.")
+                    RssFeedParser.FetchResult.Network ->
+                        setStatus("Network error fetching the feed. Check your connection.")
+                }
+            } finally {
+                // A placeholder that never got its feed must not linger as an
+                // empty, un-refreshable show row.
+                placeholderFeed?.let { runCatching { podcastDao.unsubscribe(it) } }
+                _subscribing.value = false
+                tickClock()
             }
         }
     }
@@ -389,8 +485,11 @@ class PodcastsViewModel @Inject constructor(
                 // also drop the per-show (podcast-wide) override row (keyed by feedUrl)
                 mediaOverrideDao.clear(feedUrl)
             }
+            val title = podcastDao.getShow(feedUrl)?.title
             podcastDao.deleteEpisodesForFeed(feedUrl)
             podcastDao.unsubscribe(feedUrl)
+            // Replace a stale "Subscribed: X" status, which otherwise outlives the row.
+            setStatus(if (title.isNullOrBlank()) "Unsubscribed" else "Unsubscribed: $title")
         }
     }
 
@@ -491,7 +590,7 @@ class PodcastsViewModel @Inject constructor(
     }
 
     fun subscribeFromItunes(hit: com.powermediaplayer.podcast.ITunesPodcastSearch.Hit) {
-        addByUrl(hit.feedUrl)
+        addByUrl(hit.feedUrl, hint = hit)
     }
 
     fun setShowSettings(
@@ -523,6 +622,10 @@ fun PodcastsSection(
     var searchFocused by remember { mutableStateOf(false) }
     val recentSearches by vm.recentSearches.collectAsStateWithLifecycle()
     val searching by vm.searching.collectAsStateWithLifecycle()
+    val refreshing by vm.refreshing.collectAsStateWithLifecycle()
+    val subscribing by vm.subscribing.collectAsStateWithLifecycle()
+    // PH10 — every visit re-checks the shows not checked in the last 15 min.
+    androidx.compose.runtime.LaunchedEffect(Unit) { vm.tickClock(); vm.refreshOnVisit() }
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
@@ -538,10 +641,27 @@ fun PodcastsSection(
                 )
                 Text(
                     "Subscribe by RSS URL or search for a show by name. " +
-                        "Episode lists refresh on each visit and sync in the background.",
+                        "Episode lists refresh on each visit (at most every 15 min) and " +
+                        "sync every 6 h in the background; tap the refresh icon to check now.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary
                 )
+            }
+            // PH10 — manual refresh of every show; spinner while any feed is in flight.
+            if (refreshing.isNotEmpty()) {
+                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = TealAccent
+                    )
+                }
+            } else {
+                IconButton(onClick = { vm.refreshAll() }, enabled = shows.isNotEmpty()) {
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = "Refresh all podcasts",
+                        tint = if (shows.isEmpty()) TextTertiary else TealAccent
+                    )
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -576,16 +696,27 @@ fun PodcastsSection(
                 modifier = Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused }
             )
             Spacer(Modifier.width(8.dp))
-            TextButton(onClick = {
-                if (url.startsWith("http://") || url.startsWith("https://")) {
-                    vm.addByUrl(url)
-                    url = ""
-                } else {
-                    vm.searchItunes(url)
+            TextButton(
+                enabled = !subscribing,
+                onClick = {
+                    if (url.startsWith("http://") || url.startsWith("https://")) {
+                        vm.addByUrl(url)
+                        url = ""
+                    } else {
+                        vm.searchItunes(url)
+                    }
                 }
-            }) {
-                Icon(Icons.Filled.Add, contentDescription = "Add")
-                Text("Add / search", color = TealAccent)
+            ) {
+                if (subscribing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = TealAccent
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Adding…", color = TextSecondary)
+                } else {
+                    Icon(Icons.Filled.Add, contentDescription = "Add")
+                    Text("Add / search", color = TealAccent)
+                }
             }
         }
         if (searchFocused && url.isBlank()) {
@@ -656,7 +787,14 @@ fun PodcastsSection(
                     // Item 5a (2026-07-09): the expanded panel renders below the
                     // whole shows list (deliberate, avoids push-down), so name
                     // WHOSE episodes these are. Uses theme tokens only.
-                    ExpandedShowHeader(show = show, onCollapse = { expandedFeed = null })
+                    val clock by vm.clock.collectAsStateWithLifecycle()
+                    ExpandedShowHeader(
+                        show = show,
+                        checkedCaption = com.powermediaplayer.podcast.formatCheckedAgo(show.lastChecked, clock),
+                        refreshing = refreshing.contains(show.feedUrl),
+                        onRefresh = { vm.refreshShow(show.feedUrl) },
+                        onCollapse = { expandedFeed = null }
+                    )
                     ShowSettingsRow(show = show, vm = vm)
                     EpisodeList(
                         feedUrl = show.feedUrl,
@@ -701,7 +839,13 @@ fun PodcastsSection(
  *  Theme tokens only (surface + accent + type scale) so any future theming
  *  restyles it automatically. Tapping it collapses, mirroring the show row. */
 @Composable
-private fun ExpandedShowHeader(show: PodcastShowEntity, onCollapse: () -> Unit) {
+private fun ExpandedShowHeader(
+    show: PodcastShowEntity,
+    checkedCaption: String,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    onCollapse: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -714,14 +858,38 @@ private fun ExpandedShowHeader(show: PodcastShowEntity, onCollapse: () -> Unit) 
     ) {
         PodcastArtwork(show.artworkUrl, 32.dp)
         Spacer(Modifier.width(10.dp))
-        Text(
-            "Episodes · ${show.title}",
-            style = MaterialTheme.typography.titleSmall,
-            color = TealAccent,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Episodes · ${show.title}",
+                style = MaterialTheme.typography.titleSmall,
+                color = TealAccent,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            // PH10 — when this feed was last fetched + a per-show refresh.
+            Text(
+                if (refreshing) "Checking for new episodes…" else checkedCaption,
+                style = MaterialTheme.typography.labelSmall,
+                color = TextTertiary,
+                maxLines = 1
+            )
+        }
+        if (refreshing) {
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = TealAccent
+                )
+            }
+        } else {
+            IconButton(onClick = onRefresh, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = "Refresh ${show.title}",
+                    tint = TealAccent,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
         Icon(
             Icons.Filled.Close,
             contentDescription = "Collapse ${show.title}",

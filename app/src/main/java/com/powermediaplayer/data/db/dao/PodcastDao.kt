@@ -62,25 +62,29 @@ interface PodcastDao {
     @Query("SELECT * FROM podcast_episodes WHERE guid = :guid LIMIT 1")
     suspend fun getEpisode(guid: String): PodcastEpisodeEntity?
 
+    /** Every stored episode of a feed (indexed on feedUrl). */
+    @Query("SELECT * FROM podcast_episodes WHERE feedUrl = :url")
+    suspend fun episodesForFeedAll(url: String): List<PodcastEpisodeEntity>
+
+    @Query("SELECT guid FROM podcast_episodes WHERE feedUrl = :url")
+    suspend fun episodeGuidsForFeed(url: String): List<String>
+
     /**
      * Feed re-sync that PRESERVES per-episode user state. A blanket REPLACE
      * upsert would reset isPlayed AND wipe the offline-download columns
      * (localPath/localBytes/downloadedAt) every time the RSS feed is re-fetched,
      * orphaning downloaded files. This carries the existing state forward for
      * matching guids; brand-new episodes insert as parsed.
+     * PH3: ONE indexed read of the feed's rows instead of a point query per
+     * episode (a 1200-episode feed ran 1200 queries inside the transaction).
      */
     @Transaction
     suspend fun syncEpisodes(episodes: List<PodcastEpisodeEntity>) {
-        val merged = episodes.map { e ->
-            val existing = getEpisode(e.guid)
-            if (existing == null) e else e.copy(
-                isPlayed = existing.isPlayed,
-                localPath = existing.localPath,
-                localBytes = existing.localBytes,
-                downloadedAt = existing.downloadedAt
-            )
-        }
-        upsertEpisodes(merged)
+        if (episodes.isEmpty()) return
+        val existing = episodes.map { it.feedUrl }.distinct()
+            .flatMap { episodesForFeedAll(it) }
+            .associateBy { it.guid }
+        upsertEpisodes(com.powermediaplayer.podcast.mergeEpisodeState(episodes, existing))
     }
 
     @Query("UPDATE podcast_episodes SET isPlayed = :played WHERE guid = :guid")

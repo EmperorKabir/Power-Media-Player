@@ -108,7 +108,10 @@ fun ReorderableShowList(
                         val total = c?.total ?: 0
                         val newCount = c?.unopened ?: 0
                         Text(
-                            "$total episode${if (total == 1) "" else "s"}" +
+                            // PH3: a placeholder row (subscribe in flight) says so
+                            // instead of a misleading "0 episodes".
+                            if (total == 0 && show.lastChecked == 0L) "Fetching episodes…"
+                            else "$total episode${if (total == 1) "" else "s"}" +
                                 if (newCount > 0) " · $newCount new" else "",
                             style = MaterialTheme.typography.labelSmall,
                             color = TextTertiary,

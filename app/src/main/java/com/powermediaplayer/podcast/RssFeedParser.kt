@@ -24,6 +24,10 @@ class RssFeedParser(
         private val defaultClient = com.powermediaplayer.util.SharedHttp.base.newBuilder()  // shared pool/cache (audit 5.3)
             .connectTimeout(8, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            // PH3: SharedHttp.base carries a 30 s callTimeout — a large feed (1000+
+            // episodes, 1-2 MB) on a slow link hit that cliff and surfaced as
+            // "Network error". Connect + per-read stalls stay bounded above.
+            .callTimeout(0, TimeUnit.SECONDS)
             // Many podcast CDNs (Megaphone/Fastly/Akamai) 403 the default okhttp
             // UA; a browser-ish UA + an RSS Accept header defeats that. Scoped to
             // THIS client only — SharedHttp (Drive/Spotify) is untouched.
@@ -50,8 +54,15 @@ class RssFeedParser(
         data object Network : FetchResult
     }
 
-    fun fetchResult(feedUrl: String): FetchResult {
-        val req = Request.Builder().url(feedUrl).build()
+    /** [fresh] = revalidate any cached copy (max-age=0: a conditional request when
+     *  the server gave validators, a full fetch otherwise) so a feed served with a
+     *  long Cache-Control max-age cannot hide new episodes from a refresh. */
+    fun fetchResult(feedUrl: String, fresh: Boolean = false): FetchResult {
+        val req = Request.Builder().url(feedUrl).apply {
+            if (fresh) cacheControl(
+                okhttp3.CacheControl.Builder().maxAge(0, TimeUnit.SECONDS).build()
+            )
+        }.build()
         return runCatching {
             httpClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return FetchResult.HttpError(resp.code)
@@ -64,10 +75,6 @@ class RssFeedParser(
             }
         }.getOrElse { FetchResult.Network }
     }
-
-    /** Back-compat shim — existing callers (PodcastSyncWorker) keep using this. */
-    fun fetch(feedUrl: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? =
-        (fetchResult(feedUrl) as? FetchResult.Ok)?.let { it.show to it.episodes }
 
     fun parse(feedUrl: String, xml: String): Pair<PodcastShowEntity, List<PodcastEpisodeEntity>>? {
         return runCatching {
