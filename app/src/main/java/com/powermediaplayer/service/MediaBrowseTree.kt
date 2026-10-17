@@ -217,6 +217,9 @@ class MediaBrowseTree @Inject constructor(
         add(browsable(MENU_SPEED, "Speed", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
         add(browsable(MENU_SLEEP, "Sleep timer", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
         add(browsable(MENU_EFFECTS, "Audio effects", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
+        // Reachable even on a head unit whose now-playing bar has no room for them.
+        add(actionItem("${ACTION_PREFIX}favourite/toggle", "Favourite / unfavourite", "Current item"))
+        add(actionItem("${ACTION_PREFIX}bookmark/add", "Add bookmark", "At the current position"))
     }
 
     /**

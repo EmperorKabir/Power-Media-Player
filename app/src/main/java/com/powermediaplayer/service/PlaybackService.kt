@@ -337,6 +337,8 @@ class PlaybackService : MediaLibraryService() {
         const val ACTION_SKIP_FORWARD_30 = "ACTION_SKIP_FORWARD_30"
         // Android Auto now-playing custom-action buttons (richer, phone-like controls).
         const val ACTION_SPEED_CYCLE      = "ACTION_SPEED_CYCLE"
+        /** The AOSP Automotive media centre — see [autoCompactClientConnected]. */
+        const val AUTO_COMPACT_CLIENT = "com.android.car.media"
         const val ACTION_CHAPTER_NEXT     = "ACTION_CHAPTER_NEXT"
         const val ACTION_CHAPTER_PREV     = "ACTION_CHAPTER_PREV"
         const val ACTION_FAVOURITE_TOGGLE = "ACTION_FAVOURITE_TOGGLE"
@@ -2021,7 +2023,7 @@ class PlaybackService : MediaLibraryService() {
         // supports them.
         mediaSession = MediaLibrarySession.Builder(this, player!!, PlayerSessionCallback())
             .setSessionActivity(sessionActivityIntent)
-            .setCustomLayout(buildAutoCustomLayout())
+            .setMediaButtonPreferences(buildAutoButtonPreferences())
             .build()
 
         // Audiobooks node: chapter tables parsed in the background → re-announce the node so
@@ -3715,6 +3717,16 @@ class PlaybackService : MediaLibraryService() {
                 .build()
         }
 
+        // The button set depends on WHICH car client is connected (compact for the AOSP
+        // Automotive media centre) — recompute once the controller is registered / gone.
+        override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            if (controller.packageName != packageName) refreshAutoLayout()
+        }
+
+        override fun onDisconnected(session: MediaSession, controller: MediaSession.ControllerInfo) {
+            if (controller.packageName != packageName) refreshAutoLayout()
+        }
+
         // ---- Android Auto / Automotive browse tree -------------------------
         // Delegate to MediaBrowseTree. onGetChildren/onGetItem run on serviceScope (the
         // browse reads hit Room + MediaStore) and complete a SettableFuture; the root is
@@ -4255,44 +4267,115 @@ class PlaybackService : MediaLibraryService() {
     // the existing player, DAOs, static setters and the seekChapter/cumulativeSkip engines.
 
     /**
-     * Build the Android Auto now-playing custom-action buttons for the CURRENT item.
-     * Chapter media (audiobook/podcast/chaptered video) gets 30 s skips + a chapter-next
-     * button; plain music gets 15 s skips + a favourite toggle. The speed button's label
-     * shows the live speed. Auto shows ~4 of these on the playback screen.
+     * The Android Auto / System UI MEDIA BUTTON PREFERENCES for the CURRENT item — every
+     * phone-player control that the car template can carry, with explicit slots:
+     *
+     *  - Chapter media (audiobook / podcast / chaptered video): the configured skips take the
+     *    car's BACK and FORWARD positions (Media3 1.6 clears the standard skip-previous/next
+     *    legacy actions when a custom button holds SLOT_BACK / SLOT_FORWARD, so the car shows
+     *    the skips where prev/next were); speed, next/previous chapter, favourite and bookmark
+     *    follow in the overflow. Steering-wheel prev/next keys still do chapter nav (BT map).
+     *  - Music: the standard prev/next TRACK buttons stay; favourite, speed, skips and
+     *    bookmark are overflow buttons (the car fills its spare slots from the front).
+     *
+     * Skip amounts mirror the phone's per-kind setting (the BT mapping's seconds), icons are
+     * Media3's bundled glyphs (android.R drawables rendered as rewind/rotate on the car), and
+     * the speed button shows the live speed. Overflow order = priority: the car fills its
+     * spare slots from the front of the list.
      */
     @androidx.annotation.OptIn(UnstableApi::class)
-    private fun buildAutoCustomLayout(): List<CommandButton> {
+    private fun buildAutoButtonPreferences(): List<CommandButton> {
         val player = exoPlayerRef?.get() ?: mediaSession?.player
         val hasChapters = (player?.mediaMetadata?.extras?.getInt("chapter_count", 0) ?: 0) > 0
         val speed = player?.playbackParameters?.speed ?: 1.0f
-        val skipBack = if (hasChapters) ACTION_SKIP_BACK_30 else ACTION_SKIP_BACK_15
-        val skipFwd = if (hasChapters) ACTION_SKIP_FORWARD_30 else ACTION_SKIP_FORWARD_15
-        val skipLabel = if (hasChapters) "30" else "15"
-        // Media3's bundled CommandButton icons (media3_icon_*): the car renders these as the
-        // proper 30s/15s skip glyphs, a speed badge and a heart — the stock android.R
-        // drawables came out as rewind/rotate glyphs on the AAOS emulator.
-        val backIcon = if (hasChapters) CommandButton.ICON_SKIP_BACK_30 else CommandButton.ICON_SKIP_BACK_15
-        val fwdIcon = if (hasChapters) CommandButton.ICON_SKIP_FORWARD_30 else CommandButton.ICON_SKIP_FORWARD_15
-        val out = ArrayList<CommandButton>(4)
-        out.add(autoButton("Back ${skipLabel}s", backIcon, skipBack))
-        out.add(autoButton(formatSpeedLabel(speed), speedIcon(speed), ACTION_SPEED_CYCLE))
-        out.add(autoButton("Forward ${skipLabel}s", fwdIcon, skipFwd))
+        val kind = player?.let { runCatching { currentBtKind(it) }.getOrNull() } ?: BtMediaKind.MUSIC
+        val mapping = btMappingSet.forKind(kind)
+        val back = skipSpec(mapping.skipBackSeconds, back = true)
+        val fwd = skipSpec(mapping.skipForwardSeconds, back = false)
+        val speedButton = autoButton(
+            formatSpeedLabel(speed), speedIcon(speed), ACTION_SPEED_CYCLE, CommandButton.SLOT_OVERFLOW
+        )
+        val favButton = autoButton(
+            if (currentIsFavourite) "Favourited" else "Favourite",
+            if (currentIsFavourite) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED,
+            ACTION_FAVOURITE_TOGGLE, CommandButton.SLOT_OVERFLOW
+        )
+        val bookmarkButton = autoButton(
+            "Add bookmark", CommandButton.ICON_BOOKMARK_UNFILLED, ACTION_BOOKMARK_ADD, CommandButton.SLOT_OVERFLOW
+        )
+        val nextChapter = autoButton("Next chapter", CommandButton.ICON_NEXT, ACTION_CHAPTER_NEXT, CommandButton.SLOT_OVERFLOW)
+        val prevChapter = autoButton("Previous chapter", CommandButton.ICON_PREVIOUS, ACTION_CHAPTER_PREV, CommandButton.SLOT_OVERFLOW)
+        val compact = autoCompactClientConnected()
+        val out = ArrayList<CommandButton>(7)
         if (hasChapters) {
-            out.add(autoButton("Next chapter", CommandButton.ICON_NEXT, ACTION_CHAPTER_NEXT))
+            out += autoButton(back.label, back.icon, back.action, CommandButton.SLOT_BACK, CommandButton.SLOT_OVERFLOW)
+            out += autoButton(fwd.label, fwd.icon, fwd.action, CommandButton.SLOT_FORWARD, CommandButton.SLOT_OVERFLOW)
+            if (compact) {
+                // 5-slot bar, no overflow: [prev chapter][back][play][forward][next chapter].
+                out += prevChapter
+                out += nextChapter
+            } else {
+                out += speedButton
+                out += nextChapter
+                out += prevChapter
+                out += favButton
+                out += bookmarkButton
+            }
         } else {
-            val favIcon = if (currentIsFavourite) CommandButton.ICON_HEART_FILLED
-                          else CommandButton.ICON_HEART_UNFILLED
-            val favLabel = if (currentIsFavourite) "Favourited" else "Favourite"
-            out.add(autoButton(favLabel, favIcon, ACTION_FAVOURITE_TOGGLE))
+            out += favButton
+            out += speedButton
+            if (!compact) {
+                out += autoButton(back.label, back.icon, back.action, CommandButton.SLOT_OVERFLOW)
+                out += autoButton(fwd.label, fwd.icon, fwd.action, CommandButton.SLOT_OVERFLOW)
+                out += bookmarkButton
+            }
         }
         return out
     }
 
+    /**
+     * The AOSP car media centre (Android Automotive OS reference app, `com.android.car.media`)
+     * never shows its ⋮ overflow row (AAOS-emulator-proven: the expanded row stays GONE even
+     * with animations off), so anything beyond its five-slot bar is unreachable there. When it
+     * is the connected client, send only what fits the bar; speed / favourite / bookmark stay
+     * reachable through the Playback tab. Android Auto (gearhead) renders the overflow and
+     * gets the full set.
+     */
+    private fun autoCompactClientConnected(): Boolean =
+        runCatching {
+            mediaSession?.connectedControllers?.any { it.packageName == AUTO_COMPACT_CLIENT } == true
+        }.getOrDefault(false)
+
+    private data class SkipSpec(val label: String, val icon: Int, val action: String)
+
+    /** The skip button for the phone's configured seconds, snapped to the nearest preset the
+     *  session commands / Media3 glyphs exist for (5/10/15/20/30; 20 s has no numbered glyph). */
     @androidx.annotation.OptIn(UnstableApi::class)
-    private fun autoButton(name: String, icon: Int, action: String): CommandButton =
+    private fun skipSpec(seconds: Int, back: Boolean): SkipSpec {
+        val s = intArrayOf(5, 10, 15, 20, 30).minByOrNull { kotlin.math.abs(it - seconds) } ?: 15
+        val action = when (s) {
+            5 -> if (back) ACTION_SKIP_BACK_5 else ACTION_SKIP_FORWARD_5
+            10 -> if (back) ACTION_SKIP_BACK_10 else ACTION_SKIP_FORWARD_10
+            15 -> if (back) ACTION_SKIP_BACK_15 else ACTION_SKIP_FORWARD_15
+            20 -> if (back) ACTION_SKIP_BACK_20 else ACTION_SKIP_FORWARD_20
+            else -> if (back) ACTION_SKIP_BACK_30 else ACTION_SKIP_FORWARD_30
+        }
+        val icon = when (s) {
+            5 -> if (back) CommandButton.ICON_SKIP_BACK_5 else CommandButton.ICON_SKIP_FORWARD_5
+            10 -> if (back) CommandButton.ICON_SKIP_BACK_10 else CommandButton.ICON_SKIP_FORWARD_10
+            15 -> if (back) CommandButton.ICON_SKIP_BACK_15 else CommandButton.ICON_SKIP_FORWARD_15
+            30 -> if (back) CommandButton.ICON_SKIP_BACK_30 else CommandButton.ICON_SKIP_FORWARD_30
+            else -> if (back) CommandButton.ICON_SKIP_BACK else CommandButton.ICON_SKIP_FORWARD
+        }
+        return SkipSpec(if (back) "Back ${s}s" else "Forward ${s}s", icon, action)
+    }
+
+    @androidx.annotation.OptIn(UnstableApi::class)
+    private fun autoButton(name: String, icon: Int, action: String, vararg slots: Int): CommandButton =
         CommandButton.Builder(icon)
             .setDisplayName(name)
             .setSessionCommand(SessionCommand(action, Bundle.EMPTY))
+            .setSlots(*slots)
             .build()
 
     /** The numbered speed badge ONLY when it matches the live speed exactly (Media3 ships
@@ -4310,15 +4393,15 @@ class PlaybackService : MediaLibraryService() {
         else -> CommandButton.ICON_PLAYBACK_SPEED
     }
 
-    /** Push a freshly-built Auto layout to controllers (no-op before the session exists). */
+    /** Push freshly-built Auto button preferences to controllers (no-op before the session exists). */
     @androidx.annotation.OptIn(UnstableApi::class)
     private fun refreshAutoLayout() {
-        // setCustomLayout has no equality guard (re-broadcasts the legacy PlaybackState to the
-        // car each call) and this runs on every metadata event — only push real changes.
-        val layout = buildAutoCustomLayout()
+        // No equality guard in Media3 (each call re-broadcasts the legacy PlaybackState to the
+        // car) and this runs on every metadata event — only push real changes.
+        val layout = buildAutoButtonPreferences()
         if (layout != lastAutoLayout) {
             lastAutoLayout = layout
-            runCatching { mediaSession?.setCustomLayout(layout) }
+            runCatching { mediaSession?.setMediaButtonPreferences(layout) }
         }
         publishAutoChapters()
     }
@@ -4436,6 +4519,8 @@ class PlaybackService : MediaLibraryService() {
                 refreshAutoLayout()
             }
             "sleep" -> applyAutoSleep(value)
+            "favourite" -> toggleFavouriteForCurrent(player)
+            "bookmark" -> addBookmarkForCurrent(player)
             // Chapters menu: seek within the current item to chapter <i>'s start. Read the
             // exact table the tapped list was built from (a CastPlayer's items carry no extras).
             "chapter" -> value.toIntOrNull()?.let { i ->
