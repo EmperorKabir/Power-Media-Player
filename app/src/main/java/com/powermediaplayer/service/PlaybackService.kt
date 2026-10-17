@@ -344,6 +344,8 @@ class PlaybackService : MediaLibraryService() {
         const val AUTO_GEARHEAD_CLIENT = "com.google.android.projection.gearhead"
         const val ACTION_CHAPTER_NEXT     = "ACTION_CHAPTER_NEXT"
         const val ACTION_CHAPTER_PREV     = "ACTION_CHAPTER_PREV"
+        const val ACTION_SHUFFLE_TOGGLE   = "ACTION_SHUFFLE_TOGGLE"
+        const val ACTION_REPEAT_CYCLE     = "ACTION_REPEAT_CYCLE"
         const val ACTION_FAVOURITE_TOGGLE = "ACTION_FAVOURITE_TOGGLE"
         const val ACTION_BOOKMARK_ADD     = "ACTION_BOOKMARK_ADD"
         /** Prefix for Android Auto browse "action" items — settings (speed/sleep/effects)
@@ -1367,6 +1369,11 @@ class PlaybackService : MediaLibraryService() {
                 kotlinx.coroutines.withTimeoutOrNull(200) { settingsDataStore.autoButtonSet() }
             }
         }.getOrNull() ?: com.powermediaplayer.data.preferences.AutoButtonSet.DEFAULT
+        autoWheelSet = runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(200) { settingsDataStore.autoWheelSet() }
+            }
+        }.getOrNull() ?: BtMappingSet.DEFAULT
         // The player's GLOBAL seek increments are only a fallback for paths
         // we don't intercept; seed them from the music-kind skip seconds
         // (per-kind skip is applied in applyAction via cumulativeSkip).
@@ -2072,6 +2079,9 @@ class PlaybackService : MediaLibraryService() {
             ) {
                 refreshAutoLayout()
             }
+            // Shuffle / repeat buttons show their live state (toggled from the phone too).
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) { refreshAutoLayout() }
+            override fun onRepeatModeChanged(repeatMode: Int) { refreshAutoLayout() }
         })
 
         // Keep the per-kind Bluetooth mapping set fresh in the @Volatile
@@ -2087,6 +2097,9 @@ class PlaybackService : MediaLibraryService() {
         serviceScope.launch {
             // Settings, Android Auto buttons → the car re-renders its row straight away.
             settingsDataStore.autoButtonSetFlow.collect { autoButtonSet = it; refreshAutoLayout() }
+        }
+        serviceScope.launch {
+            settingsDataStore.autoWheelSetFlow.collect { autoWheelSet = it }
         }
 
         // Cast: initialize lazily; if Google Play Services is missing the
@@ -3713,7 +3726,8 @@ class PlaybackService : MediaLibraryService() {
                 ACTION_SKIP_FORWARD_5, ACTION_SKIP_FORWARD_10, ACTION_SKIP_FORWARD_15,
                 ACTION_SKIP_FORWARD_20, ACTION_SKIP_FORWARD_30,
                 ACTION_SPEED_CYCLE, ACTION_CHAPTER_NEXT, ACTION_CHAPTER_PREV,
-                ACTION_FAVOURITE_TOGGLE, ACTION_BOOKMARK_ADD
+                ACTION_FAVOURITE_TOGGLE, ACTION_BOOKMARK_ADD,
+                ACTION_SHUFFLE_TOGGLE, ACTION_REPEAT_CYCLE
             )
 
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
@@ -3845,6 +3859,18 @@ class PlaybackService : MediaLibraryService() {
                 ACTION_CHAPTER_PREV -> runCatching { seekChapter(player, forward = false) }
                 ACTION_FAVOURITE_TOGGLE -> toggleFavouriteForCurrent(player)
                 ACTION_BOOKMARK_ADD -> addBookmarkForCurrent(player)
+                ACTION_SHUFFLE_TOGGLE -> runCatching {
+                    player.shuffleModeEnabled = !player.shuffleModeEnabled
+                    refreshAutoLayout()
+                }
+                ACTION_REPEAT_CYCLE -> runCatching {
+                    player.repeatMode = when (player.repeatMode) {
+                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                        else -> Player.REPEAT_MODE_OFF
+                    }
+                    refreshAutoLayout()
+                }
                 // Skip ±N s (the existing cumulative-skip engine).
                 ACTION_SKIP_BACK_5 -> cumulativeSkip(player, -5_000)
                 ACTION_SKIP_BACK_10 -> cumulativeSkip(player, -10_000)
@@ -3884,6 +3910,13 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             playerCommand: Int
         ): Int {
+            // Android Auto / Automotive car clients: their own mapping, decided before the
+            // Bluetooth remap below (which stays untouched for AVRCP head units).
+            if (isCarController(controller.packageName)) {
+                handleCarPlayerCommand(session.player, playerCommand)?.let { return it }
+                @Suppress("DEPRECATION")
+                return super.onPlayerCommandRequest(session, controller, playerCommand)
+            }
             // Only re-route AVRCP / system MediaController commands —
             // commands originating from our in-app MediaController
             // (same package, signed identity) bypass the remap so the
@@ -3997,6 +4030,12 @@ class PlaybackService : MediaLibraryService() {
             // Only act on key-DOWN; key-UP arrives ~50 ms later and
             // would otherwise double-fire the action.
             if (keyEvent.action != android.view.KeyEvent.ACTION_DOWN) return false
+            // Android Auto / Automotive car clients: their OWN mapping (Settings, Android Auto
+            // buttons, Steering wheel). Decided here so the Bluetooth logic below never sees
+            // a car key and stays exactly as it is.
+            if (isCarController(controllerInfo.packageName)) {
+                return handleCarMediaKey(session.player, keyEvent.keyCode)
+            }
             val pkg = controllerInfo.packageName
             val isExternal = pkg != packageName
             val btKind = currentBtKind(session.player)
@@ -4366,6 +4405,19 @@ class PlaybackService : MediaLibraryService() {
                     if (currentIsFavourite) CommandButton.ICON_HEART_FILLED else CommandButton.ICON_HEART_UNFILLED,
                     ACTION_FAVOURITE_TOGGLE, *slots
                 )
+                com.powermediaplayer.data.preferences.AutoButtons.SHUFFLE -> {
+                    val on = player?.shuffleModeEnabled == true
+                    autoButton(
+                        if (on) "Shuffle on" else "Shuffle off",
+                        if (on) CommandButton.ICON_SHUFFLE_ON else CommandButton.ICON_SHUFFLE_OFF,
+                        ACTION_SHUFFLE_TOGGLE, *slots
+                    )
+                }
+                com.powermediaplayer.data.preferences.AutoButtons.REPEAT -> when (player?.repeatMode) {
+                    Player.REPEAT_MODE_ALL -> autoButton("Repeat all", CommandButton.ICON_REPEAT_ALL, ACTION_REPEAT_CYCLE, *slots)
+                    Player.REPEAT_MODE_ONE -> autoButton("Repeat one", CommandButton.ICON_REPEAT_ONE, ACTION_REPEAT_CYCLE, *slots)
+                    else -> autoButton("Repeat off", CommandButton.ICON_REPEAT_OFF, ACTION_REPEAT_CYCLE, *slots)
+                }
                 else -> autoButton("Add bookmark", CommandButton.ICON_BOOKMARK_UNFILLED, ACTION_BOOKMARK_ADD, *slots)
             }
         }
@@ -4494,6 +4546,57 @@ class PlaybackService : MediaLibraryService() {
      *  collector (binder-thread callbacks must never block on DataStore). */
     @Volatile private var autoButtonSet: com.powermediaplayer.data.preferences.AutoButtonSet =
         com.powermediaplayer.data.preferences.AutoButtonSet.DEFAULT
+
+    /** Settings, Android Auto buttons, "Steering wheel on Android Auto" — the car clients'
+     *  prev/next mapping. Its OWN table: the Bluetooth mapping ([btMappingSet]) and the
+     *  Bluetooth dispatch code are untouched by it. */
+    @Volatile private var autoWheelSet: BtMappingSet = BtMappingSet.DEFAULT
+
+    /**
+     * Android Auto / Automotive steering-wheel and car prev/next keys, mapped by [autoWheelSet].
+     * Handled BEFORE (and instead of) the Bluetooth key logic for car-client callers; only the
+     * shared action executor [applyAction] is reused. Returns true when the key was consumed.
+     */
+    private fun handleCarMediaKey(player: Player, keyCode: Int): Boolean {
+        val kind = currentBtKind(player)
+        val m = autoWheelSet.forKind(kind)
+        com.powermediaplayer.diag.DiagLog.event(
+            "AABROWSE", "car key ${android.view.KeyEvent.keyCodeToString(keyCode)} kind=$kind " +
+                "prev=${m.prevAction} next=${m.nextAction} back=${m.skipBackSeconds}s fwd=${m.skipForwardSeconds}s"
+        )
+        return when (keyCode) {
+            android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            android.view.KeyEvent.KEYCODE_MEDIA_REWIND,
+            android.view.KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD -> {
+                applyAction(player, m.prevAction, m.skipBackSeconds, isPrev = true); true
+            }
+            android.view.KeyEvent.KEYCODE_MEDIA_NEXT,
+            android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+            android.view.KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD -> {
+                applyAction(player, m.nextAction, m.skipForwardSeconds, isPrev = false); true
+            }
+            else -> false
+        }
+    }
+
+    /** Same mapping for a car client's transport-control prev/next (the car's own on-screen
+     *  buttons arrive as player commands, not key events). Null = not a prev/next command. */
+    private fun handleCarPlayerCommand(player: Player, playerCommand: Int): Int? {
+        val m = autoWheelSet.forKind(currentBtKind(player))
+        return when (playerCommand) {
+            Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                com.powermediaplayer.diag.DiagLog.event("AABROWSE", "car cmd PREV → ${m.prevAction}")
+                applyAction(player, m.prevAction, m.skipBackSeconds, isPrev = true)
+                SessionResult.RESULT_INFO_SKIPPED
+            }
+            Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                com.powermediaplayer.diag.DiagLog.event("AABROWSE", "car cmd NEXT → ${m.nextAction}")
+                applyAction(player, m.nextAction, m.skipForwardSeconds, isPrev = false)
+                SessionResult.RESULT_INFO_SKIPPED
+            }
+            else -> null
+        }
+    }
 
     /**
      * Mirror the current item's chapter table into the browse tree (its Chapters menu) and,

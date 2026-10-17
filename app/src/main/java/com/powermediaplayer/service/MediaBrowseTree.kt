@@ -346,14 +346,20 @@ class MediaBrowseTree @Inject constructor(
         val enriched = driveId?.let { runCatching { enrichmentCacheDao.get(it) }.getOrNull() }
         val ownArtist = subtitle.takeIf { it.isNotBlank() && it != sourceName }
         val art = enriched?.artworkUrl?.takeIf { it.isNotBlank() } ?: artworkUri
+        val artBytes = art?.let { localArtworkBytes(it) }
+        // An app-private cover goes as BYTES ONLY. Media3 mirrors artworkUri into the legacy
+        // ART_URI keys, and Android Auto's dashboard card tries that URI before the bitmap —
+        // an unreadable file:// there left the card blank (DHU-proven) while now-playing,
+        // which uses the bitmap, showed the cover. Readable content:// / http(s) URIs pass.
+        val artUri = art?.takeIf { artBytes == null }?.let { runCatching { Uri.parse(it) }.getOrNull() }
         return playable(
             mediaId = mediaUri,
             playUri = play,
             title = enriched?.title?.takeIf { it.isNotBlank() } ?: title,
             artist = enriched?.artist?.takeIf { it.isNotBlank() } ?: ownArtist ?: "",
             album = "",
-            artUri = art?.let { runCatching { Uri.parse(it) }.getOrNull() },
-            artData = art?.let { localArtworkBytes(it) },
+            artUri = artUri,
+            artData = artBytes,
             extras = chapters,
             mediaType = if (chapters != null) MediaMetadata.MEDIA_TYPE_AUDIO_BOOK
             else MediaMetadata.MEDIA_TYPE_MUSIC,

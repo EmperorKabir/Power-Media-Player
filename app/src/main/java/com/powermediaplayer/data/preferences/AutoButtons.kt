@@ -23,8 +23,11 @@ object AutoButtons {
     const val SKIP_FORWARD = "skip_forward"
     const val FAVOURITE = "favourite"
     const val BOOKMARK = "bookmark"
+    const val SHUFFLE = "shuffle"
+    const val REPEAT = "repeat"
     val EXTRA_TOKENS: List<String> =
-        listOf(SPEED, PREV_CHAPTER, NEXT_CHAPTER, SKIP_BACK, SKIP_FORWARD, FAVOURITE, BOOKMARK)
+        listOf(SPEED, PREV_CHAPTER, NEXT_CHAPTER, SKIP_BACK, SKIP_FORWARD, FAVOURITE, BOOKMARK,
+            SHUFFLE, REPEAT)
 
     // Ordered list → one string (a StringSet would lose the order); unknown tokens are dropped
     // on both sides so a stale value from an older build can never crash the car layout.

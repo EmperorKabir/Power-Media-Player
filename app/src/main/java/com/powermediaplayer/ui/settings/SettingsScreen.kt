@@ -55,6 +55,7 @@ fun SettingsScreen(
     val voiceBoost by viewModel.voiceBoost.collectAsStateWithLifecycle()
     val btMappingSet by viewModel.btMappingSet.collectAsStateWithLifecycle()
     val autoButtonSet by viewModel.autoButtonSet.collectAsStateWithLifecycle()
+    val autoWheelSet by viewModel.autoWheelSet.collectAsStateWithLifecycle()
     val subtitleTextSize by viewModel.subtitleTextSizeFlow.collectAsStateWithLifecycle()
     var showHiddenSheet by remember { mutableStateOf(false) }
     var showStatsSheet by remember { mutableStateOf(false) }
@@ -580,6 +581,38 @@ fun SettingsScreen(
                     AutoExtrasList(
                         extras = cfg.extras,
                         onChange = { viewModel.setAutoExtras(kind, it) }
+                    )
+                    val wheel = autoWheelSet.forKind(kind)
+                    Text(
+                        text = "Steering wheel on Android Auto",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TextPrimary,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                    )
+                    Text(
+                        text = "What the steering wheel previous and next keys do while the " +
+                            "phone is connected over Android Auto. This is separate from " +
+                            "Bluetooth car controls, which keep handling older Bluetooth " +
+                            "stereos on their own.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                    )
+                    BluetoothActionPicker(
+                        label = "Previous key does",
+                        currentAction = wheel.prevAction,
+                        seconds = wheel.skipBackSeconds,
+                        options = PREV_OPTIONS,
+                        onActionChange = { viewModel.setAutoWheelPrevAction(kind, it) },
+                        onSecondsChange = { viewModel.setAutoWheelSkipBackSeconds(kind, it) }
+                    )
+                    BluetoothActionPicker(
+                        label = "Next key does",
+                        currentAction = wheel.nextAction,
+                        seconds = wheel.skipForwardSeconds,
+                        options = NEXT_OPTIONS,
+                        onActionChange = { viewModel.setAutoWheelNextAction(kind, it) },
+                        onSecondsChange = { viewModel.setAutoWheelSkipForwardSeconds(kind, it) }
                     )
                     TextButton(
                         onClick = { viewModel.resetAutoButtons(kind) },
@@ -1574,7 +1607,9 @@ private val AUTO_EXTRA_LABELS: Map<String, String> = mapOf(
     com.powermediaplayer.data.preferences.AutoButtons.SKIP_BACK to "Skip back",
     com.powermediaplayer.data.preferences.AutoButtons.SKIP_FORWARD to "Skip forward",
     com.powermediaplayer.data.preferences.AutoButtons.FAVOURITE to "Favourite",
-    com.powermediaplayer.data.preferences.AutoButtons.BOOKMARK to "Add bookmark"
+    com.powermediaplayer.data.preferences.AutoButtons.BOOKMARK to "Add bookmark",
+    com.powermediaplayer.data.preferences.AutoButtons.SHUFFLE to "Shuffle (on or off)",
+    com.powermediaplayer.data.preferences.AutoButtons.REPEAT to "Repeat (off, all, one)"
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

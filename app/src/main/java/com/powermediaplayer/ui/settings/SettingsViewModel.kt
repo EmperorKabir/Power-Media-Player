@@ -910,6 +910,26 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.resetAutoButtons(kind) }
     }
 
+    /** Android Auto steering-wheel mapping (separate from the Bluetooth car controls). */
+    val autoWheelSet: StateFlow<BtMappingSet> = settingsDataStore.autoWheelSetFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BtMappingSet.DEFAULT)
+
+    fun setAutoWheelPrevAction(kind: BtMediaKind, action: String) {
+        viewModelScope.launch { settingsDataStore.setAutoWheelPrevAction(kind, action) }
+    }
+
+    fun setAutoWheelNextAction(kind: BtMediaKind, action: String) {
+        viewModelScope.launch { settingsDataStore.setAutoWheelNextAction(kind, action) }
+    }
+
+    fun setAutoWheelSkipBackSeconds(kind: BtMediaKind, seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setAutoWheelSkipBackSeconds(kind, seconds) }
+    }
+
+    fun setAutoWheelSkipForwardSeconds(kind: BtMediaKind, seconds: Int) {
+        viewModelScope.launch { settingsDataStore.setAutoWheelSkipForwardSeconds(kind, seconds) }
+    }
+
     // Video effects: applied per-frame in the GL surface (~16 ms floor
     // at 60 Hz). Effectively instant — DataStore→Flow→@Volatile then
     // next frame.

@@ -1493,7 +1493,52 @@ class SettingsDataStore @Inject constructor(
     suspend fun resetAutoButtons(kind: BtMediaKind) {
         context.dataStore.edit {
             it.remove(aaKey(kind, "left")); it.remove(aaKey(kind, "right")); it.remove(aaKey(kind, "extras"))
+            it.remove(aaKey(kind, "wheel_prev")); it.remove(aaKey(kind, "wheel_next"))
+            it.remove(aaIntKey(kind, "wheel_back")); it.remove(aaIntKey(kind, "wheel_fwd"))
         }
+    }
+
+    // ── Android Auto STEERING WHEEL (PER FILE TYPE) ───────────────
+    // The car's previous/next keys when connected over Android Auto / Automotive. A SEPARATE
+    // table from the Bluetooth car controls above (keys aa_<tag>_wheel_*; same value shape
+    // and the same kind-appropriate defaults) so the two never interfere.
+    private fun aaIntKey(kind: BtMediaKind, field: String) =
+        intPreferencesKey("aa_${kind.tag}_$field")
+
+    private fun Preferences.readAutoWheel(kind: BtMediaKind): BtMappingSnapshot {
+        val d = DEFAULT_BT_MAPPINGS.getValue(kind)
+        return BtMappingSnapshot(
+            prevAction = this[aaKey(kind, "wheel_prev")] ?: d.prevAction,
+            nextAction = this[aaKey(kind, "wheel_next")] ?: d.nextAction,
+            skipBackSeconds = this[aaIntKey(kind, "wheel_back")] ?: d.skipBackSeconds,
+            skipForwardSeconds = this[aaIntKey(kind, "wheel_fwd")] ?: d.skipForwardSeconds
+        )
+    }
+    private fun Preferences.readAutoWheelSet(): BtMappingSet = BtMappingSet(
+        audiobook = readAutoWheel(BtMediaKind.AUDIOBOOK),
+        podcast = readAutoWheel(BtMediaKind.PODCAST),
+        music = readAutoWheel(BtMediaKind.MUSIC),
+        video = readAutoWheel(BtMediaKind.VIDEO)
+    )
+
+    /** Per-kind Android Auto steering-wheel mapping, reactive. */
+    val autoWheelSetFlow: Flow<BtMappingSet> =
+        context.dataStore.data.map { it.readAutoWheelSet() }
+
+    /** One-shot read for the service's synchronous seed. */
+    suspend fun autoWheelSet(): BtMappingSet = context.dataStore.data.first().readAutoWheelSet()
+
+    suspend fun setAutoWheelPrevAction(kind: BtMediaKind, action: String) {
+        context.dataStore.edit { it[aaKey(kind, "wheel_prev")] = action }
+    }
+    suspend fun setAutoWheelNextAction(kind: BtMediaKind, action: String) {
+        context.dataStore.edit { it[aaKey(kind, "wheel_next")] = action }
+    }
+    suspend fun setAutoWheelSkipBackSeconds(kind: BtMediaKind, seconds: Int) {
+        context.dataStore.edit { it[aaIntKey(kind, "wheel_back")] = seconds.coerceIn(1, 600) }
+    }
+    suspend fun setAutoWheelSkipForwardSeconds(kind: BtMediaKind, seconds: Int) {
+        context.dataStore.edit { it[aaIntKey(kind, "wheel_fwd")] = seconds.coerceIn(1, 600) }
     }
 
     // ── Drive favourite folders ──────────────────────────────────
