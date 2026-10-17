@@ -40,6 +40,7 @@ class MediaBrowseTree @Inject constructor(
         const val ROOT_ID = "pmp_root"
         private const val CAT_RECENT = "cat/recent"
         private const val CAT_FAVOURITES = "cat/favourites"
+        private const val CAT_LIBRARY = "cat/library"
         private const val CAT_SONGS = "cat/songs"
         private const val CAT_ALBUMS = "cat/albums"
         private const val CAT_ARTISTS = "cat/artists"
@@ -47,6 +48,16 @@ class MediaBrowseTree @Inject constructor(
         private const val PREFIX_ALBUM = "album/"
         private const val PREFIX_ARTIST = "artist/"
         private const val PREFIX_SHOW = "show/"
+        // Phase 2 — "Playback options" settings menus (speed / sleep / effects). The leaves
+        // are "action" items: tapping one applies a setting instead of playing (intercepted
+        // by PlaybackService.onSetMediaItems via ACTION_PREFIX, which must stay in sync with
+        // PlaybackService.AUTO_ACTION_PREFIX).
+        private const val CAT_PLAYBACK = "cat/playback"
+        private const val MENU_SPEED = "menu/speed"
+        private const val MENU_SLEEP = "menu/sleep"
+        private const val MENU_EFFECTS = "menu/effects"
+        // Single source of truth — PlaybackService.onSetMediaItems intercepts this exact prefix.
+        private val ACTION_PREFIX = PlaybackService.AUTO_ACTION_PREFIX
 
         private const val ALBUM_ART_BASE = "content://media/external/audio/albumart"
         private const val MAX_RECENTS = 50
@@ -88,12 +99,17 @@ class MediaBrowseTree @Inject constructor(
     private suspend fun childrenInternal(parentId: String, page: Int, pageSize: Int): List<MediaItem> {
         return when {
             parentId == ROOT_ID -> rootCategories()
+            parentId == CAT_LIBRARY -> libraryCategories()
             parentId == CAT_RECENT -> recents()
             parentId == CAT_FAVOURITES -> favourites()
             parentId == CAT_SONGS -> paged(songs(), page, pageSize)
             parentId == CAT_ALBUMS -> paged(albums(), page, pageSize)
             parentId == CAT_ARTISTS -> paged(artists(), page, pageSize)
             parentId == CAT_PODCASTS -> podcastShows()
+            parentId == CAT_PLAYBACK -> playbackMenus()
+            parentId == MENU_SPEED -> speedItems()
+            parentId == MENU_SLEEP -> sleepItems()
+            parentId == MENU_EFFECTS -> effectItems()
             parentId.startsWith(PREFIX_ALBUM) ->
                 paged(albumTracks(parentId.removePrefix(PREFIX_ALBUM)), page, pageSize)
             parentId.startsWith(PREFIX_ARTIST) ->
@@ -107,7 +123,8 @@ class MediaBrowseTree @Inject constructor(
     /** Best-effort single-item lookup (used for playback resumption / metadata by id). */
     suspend fun item(mediaId: String): MediaItem? = when {
         mediaId == ROOT_ID -> root()
-        mediaId.startsWith("cat/") || mediaId.startsWith(PREFIX_ALBUM) ||
+        mediaId.startsWith("cat/") || mediaId.startsWith("menu/") ||
+            mediaId.startsWith(PREFIX_ALBUM) ||
             mediaId.startsWith(PREFIX_ARTIST) || mediaId.startsWith(PREFIX_SHOW) ->
             browsable(mediaId, mediaId.substringAfterLast('/'), null,
                 MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
@@ -119,14 +136,82 @@ class MediaBrowseTree @Inject constructor(
 
     // ---- categories ---------------------------------------------------------
 
+    // Android Auto shows at most ~4 root tabs, so the top level is kept to 4: the two
+    // highest-value lists (Recently played, Favourites), a Library tab that nests the full
+    // browse (Songs/Albums/Artists/Podcasts), and the Playback-options settings tab.
     private fun rootCategories(): List<MediaItem> = listOf(
         browsable(CAT_RECENT, "Recently played", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         browsable(CAT_FAVOURITES, "Favourites", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+        browsable(CAT_LIBRARY, "Library", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+        browsable(CAT_PLAYBACK, "Playback options", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+    )
+
+    private fun libraryCategories(): List<MediaItem> = listOf(
         browsable(CAT_SONGS, "Songs", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         browsable(CAT_ALBUMS, "Albums", null, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS),
         browsable(CAT_ARTISTS, "Artists", null, MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
         browsable(CAT_PODCASTS, "Podcasts", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
     )
+
+    // ---- Playback-options settings menus (Phase 2) --------------------------
+
+    private fun playbackMenus(): List<MediaItem> = listOf(
+        browsable(MENU_SPEED, "Speed", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+        browsable(MENU_SLEEP, "Sleep timer", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+        browsable(MENU_EFFECTS, "Audio effects", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+    )
+
+    private fun speedItems(): List<MediaItem> =
+        floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.3f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f).map { s ->
+            actionItem("${ACTION_PREFIX}speed/$s", speedLabel(s))
+        }
+
+    private fun sleepItems(): List<MediaItem> = listOf(
+        actionItem("${ACTION_PREFIX}sleep/off", "Off"),
+        actionItem("${ACTION_PREFIX}sleep/15", "15 minutes"),
+        actionItem("${ACTION_PREFIX}sleep/30", "30 minutes"),
+        actionItem("${ACTION_PREFIX}sleep/45", "45 minutes"),
+        actionItem("${ACTION_PREFIX}sleep/60", "60 minutes"),
+        actionItem("${ACTION_PREFIX}sleep/90", "90 minutes"),
+        actionItem("${ACTION_PREFIX}sleep/120", "120 minutes"),
+        actionItem("${ACTION_PREFIX}sleep/eot", "End of current track"),
+    )
+
+    private fun effectItems(): List<MediaItem> = listOf(
+        actionItem("${ACTION_PREFIX}reverb/0", "Reverb: Off"),
+        actionItem("${ACTION_PREFIX}reverb/1", "Reverb: Room"),
+        actionItem("${ACTION_PREFIX}reverb/2", "Reverb: Medium hall"),
+        actionItem("${ACTION_PREFIX}reverb/3", "Reverb: Large hall"),
+        actionItem("${ACTION_PREFIX}reverb/4", "Reverb: Plate"),
+        actionItem("${ACTION_PREFIX}reverb/5", "Reverb: Cave"),
+        actionItem("${ACTION_PREFIX}voiceboost/1", "Voice boost: On"),
+        actionItem("${ACTION_PREFIX}voiceboost/0", "Voice boost: Off"),
+        actionItem("${ACTION_PREFIX}mono/1", "Mono mix: On"),
+        actionItem("${ACTION_PREFIX}mono/0", "Mono mix: Off"),
+        actionItem("${ACTION_PREFIX}stereo/1", "Stereo flip: On"),
+        actionItem("${ACTION_PREFIX}stereo/0", "Stereo flip: Off"),
+    )
+
+    private fun speedLabel(s: Float): String {
+        val whole = s.toLong()
+        val txt = if (s == whole.toFloat()) "$whole" else s.toString().trimEnd('0').trimEnd('.')
+        return "${txt}×"
+    }
+
+    /** A playable "action" leaf: tapping it in the car applies a setting (intercepted by
+     *  PlaybackService.onSetMediaItems via the ACTION_PREFIX) rather than playing media. */
+    private fun actionItem(actionId: String, title: String): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(actionId)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .build()
+            )
+            .build()
 
     private suspend fun recents(): List<MediaItem> =
         runCatching { lastPlayed.observeDynamic().first() }.getOrDefault(emptyList())

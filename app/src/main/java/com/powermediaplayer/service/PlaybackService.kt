@@ -64,6 +64,23 @@ class PlaybackService : MediaLibraryService() {
     @javax.inject.Inject
     lateinit var mediaBrowseTree: MediaBrowseTree
 
+    /** Android Auto favourite-toggle button → star/unstar the current item. */
+    @javax.inject.Inject
+    lateinit var favoriteDao: com.powermediaplayer.data.db.dao.FavoriteDao
+
+    /** Android Auto bookmark button → add a bookmark at the current position. */
+    @javax.inject.Inject
+    lateinit var bookmarkDao: com.powermediaplayer.data.db.dao.BookmarkDao
+
+    /** Cached favourite state of the current item, for the Auto favourite button label/icon.
+     *  Updated on track change + after a toggle (favouriteDao.isFavorite is suspend). */
+    @Volatile
+    private var currentIsFavourite: Boolean = false
+
+    /** Active Android Auto sleep-timer countdown (time-based mode), so it can be cancelled. */
+    @Volatile
+    private var autoSleepJob: kotlinx.coroutines.Job? = null
+
     @javax.inject.Inject
     lateinit var googleDriveProvider: GoogleDriveProvider
 
@@ -311,6 +328,16 @@ class PlaybackService : MediaLibraryService() {
         const val ACTION_SKIP_FORWARD_15 = "ACTION_SKIP_FORWARD_15"
         const val ACTION_SKIP_FORWARD_20 = "ACTION_SKIP_FORWARD_20"
         const val ACTION_SKIP_FORWARD_30 = "ACTION_SKIP_FORWARD_30"
+        // Android Auto now-playing custom-action buttons (richer, phone-like controls).
+        const val ACTION_SPEED_CYCLE      = "ACTION_SPEED_CYCLE"
+        const val ACTION_CHAPTER_NEXT     = "ACTION_CHAPTER_NEXT"
+        const val ACTION_CHAPTER_PREV     = "ACTION_CHAPTER_PREV"
+        const val ACTION_FAVOURITE_TOGGLE = "ACTION_FAVOURITE_TOGGLE"
+        const val ACTION_BOOKMARK_ADD     = "ACTION_BOOKMARK_ADD"
+        /** Prefix for Android Auto browse "action" items — settings (speed/sleep/effects)
+         *  tapped from the Playback-options menu. Intercepted in onSetMediaItems so they
+         *  apply WITHOUT replacing what's playing. Format: pmp_action/<kind>/<value>. */
+        const val AUTO_ACTION_PREFIX = "pmp_action/"
 
         /**
          * Direct reference to the ExoPlayer running inside this service.
@@ -1985,23 +2012,33 @@ class PlaybackService : MediaLibraryService() {
         // Previous-track and Next-track come from the standard
         // Player commands so they appear automatically when the queue
         // supports them.
-        @androidx.annotation.OptIn(UnstableApi::class)
-        val customLayout = listOf(
-            CommandButton.Builder()
-                .setDisplayName("Back 15s")
-                .setIconResId(android.R.drawable.ic_media_rew)
-                .setSessionCommand(SessionCommand(ACTION_SKIP_BACK_15, Bundle.EMPTY))
-                .build(),
-            CommandButton.Builder()
-                .setDisplayName("Forward 15s")
-                .setIconResId(android.R.drawable.ic_media_ff)
-                .setSessionCommand(SessionCommand(ACTION_SKIP_FORWARD_15, Bundle.EMPTY))
-                .build()
-        )
         mediaSession = MediaLibrarySession.Builder(this, player!!, PlayerSessionCallback())
             .setSessionActivity(sessionActivityIntent)
-            .setCustomLayout(customLayout)
+            .setCustomLayout(buildAutoCustomLayout())
             .build()
+
+        // Android Auto: refresh the context-aware custom-action buttons when the track
+        // changes (chapter buttons appear/disappear, favourite state) or the speed changes
+        // (the speed-button label). setCustomLayout must run on the player's main looper;
+        // these listener callbacks already do.
+        player?.addListener(object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val key = mediaItem?.mediaId
+                if (key.isNullOrBlank()) { refreshAutoLayout(); return }
+                serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    currentIsFavourite = runCatching { favoriteDao.isFavorite(key) }
+                        .getOrDefault(false)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        refreshAutoLayout()
+                    }
+                }
+            }
+            override fun onPlaybackParametersChanged(
+                playbackParameters: androidx.media3.common.PlaybackParameters
+            ) {
+                refreshAutoLayout()
+            }
+        })
 
         // Keep the per-kind Bluetooth mapping set fresh in the @Volatile
         // field. A single Flow over the prefs object → atomic set. The
@@ -3635,7 +3672,9 @@ class PlaybackService : MediaLibraryService() {
                 ACTION_SKIP_BACK_5, ACTION_SKIP_BACK_10, ACTION_SKIP_BACK_15,
                 ACTION_SKIP_BACK_20, ACTION_SKIP_BACK_30,
                 ACTION_SKIP_FORWARD_5, ACTION_SKIP_FORWARD_10, ACTION_SKIP_FORWARD_15,
-                ACTION_SKIP_FORWARD_20, ACTION_SKIP_FORWARD_30
+                ACTION_SKIP_FORWARD_20, ACTION_SKIP_FORWARD_30,
+                ACTION_SPEED_CYCLE, ACTION_CHAPTER_NEXT, ACTION_CHAPTER_PREV,
+                ACTION_FAVOURITE_TOGGLE, ACTION_BOOKMARK_ADD
             )
 
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
@@ -3672,7 +3711,9 @@ class PlaybackService : MediaLibraryService() {
         ): ListenableFuture<LibraryResult<com.google.common.collect.ImmutableList<MediaItem>>> {
             val future = com.google.common.util.concurrent.SettableFuture
                 .create<LibraryResult<com.google.common.collect.ImmutableList<MediaItem>>>()
-            serviceScope.launch {
+            // IO: the browse reads hit Room + a synchronous MediaStore query; serviceScope is
+            // Main.immediate, so running these on Main would risk an ANR in the in-car browse.
+            serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val result = runCatching {
                     val items = mediaBrowseTree.children(parentId, page, pageSize)
                     LibraryResult.ofItemList(items, params)
@@ -3689,7 +3730,7 @@ class PlaybackService : MediaLibraryService() {
         ): ListenableFuture<LibraryResult<MediaItem>> {
             val future = com.google.common.util.concurrent.SettableFuture
                 .create<LibraryResult<MediaItem>>()
-            serviceScope.launch {
+            serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val item = runCatching { mediaBrowseTree.item(mediaId) }.getOrNull()
                 future.set(
                     if (item != null) LibraryResult.ofItem(item, null)
@@ -3705,20 +3746,27 @@ class PlaybackService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: Bundle
         ): ListenableFuture<SessionResult> {
-            val deltaMs: Long = when (customCommand.customAction) {
-                ACTION_SKIP_BACK_5 -> -5_000
-                ACTION_SKIP_BACK_10 -> -10_000
-                ACTION_SKIP_BACK_15 -> -15_000
-                ACTION_SKIP_BACK_20 -> -20_000
-                ACTION_SKIP_BACK_30 -> -30_000
-                ACTION_SKIP_FORWARD_5 -> 5_000
-                ACTION_SKIP_FORWARD_10 -> 10_000
-                ACTION_SKIP_FORWARD_15 -> 15_000
-                ACTION_SKIP_FORWARD_20 -> 20_000
-                ACTION_SKIP_FORWARD_30 -> 30_000
-                else -> return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            val player = session.player
+            when (customCommand.customAction) {
+                // Richer Android Auto controls (phone-like).
+                ACTION_SPEED_CYCLE -> cycleAutoSpeed(player)
+                ACTION_CHAPTER_NEXT -> runCatching { seekChapter(player, forward = true) }
+                ACTION_CHAPTER_PREV -> runCatching { seekChapter(player, forward = false) }
+                ACTION_FAVOURITE_TOGGLE -> toggleFavouriteForCurrent(player)
+                ACTION_BOOKMARK_ADD -> addBookmarkForCurrent(player)
+                // Skip ±N s (the existing cumulative-skip engine).
+                ACTION_SKIP_BACK_5 -> cumulativeSkip(player, -5_000)
+                ACTION_SKIP_BACK_10 -> cumulativeSkip(player, -10_000)
+                ACTION_SKIP_BACK_15 -> cumulativeSkip(player, -15_000)
+                ACTION_SKIP_BACK_20 -> cumulativeSkip(player, -20_000)
+                ACTION_SKIP_BACK_30 -> cumulativeSkip(player, -30_000)
+                ACTION_SKIP_FORWARD_5 -> cumulativeSkip(player, 5_000)
+                ACTION_SKIP_FORWARD_10 -> cumulativeSkip(player, 10_000)
+                ACTION_SKIP_FORWARD_15 -> cumulativeSkip(player, 15_000)
+                ACTION_SKIP_FORWARD_20 -> cumulativeSkip(player, 20_000)
+                ACTION_SKIP_FORWARD_30 -> cumulativeSkip(player, 30_000)
+                else -> {}
             }
-            cumulativeSkip(session.player, deltaMs)
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
         }
 
@@ -3977,6 +4025,57 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
+        /**
+         * Intercept an Android Auto Playback-options "action" item (pmp_action/…): apply the
+         * setting and KEEP the current queue + position so nothing restarts. Everything else
+         * is a normal play request — resolve URIs via onAddMediaItems and honour the start.
+         */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val first = mediaItems.firstOrNull()
+            if (first != null && first.mediaId.startsWith(AUTO_ACTION_PREFIX)) {
+                com.powermediaplayer.diag.DiagLog.event(
+                    "AABROWSE", "action intercepted: ${first.mediaId}"
+                )
+                val p = mediaSession.player
+                // Android Auto taps arrive via the legacy playFromMediaId path, so after we
+                // return the session runs setMediaItems + prepare + play() UNCONDITIONALLY.
+                // Capture play/pause and re-assert it so tapping a settings item never
+                // force-resumes a paused track.
+                val wasPlaying = p.playWhenReady
+                applyAutoAction(first.mediaId, p)
+                val keep = if (p.mediaItemCount > 0)
+                    (0 until p.mediaItemCount).map { p.getMediaItemAt(it) } else emptyList()
+                if (!wasPlaying) {
+                    serviceScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                        kotlinx.coroutines.delay(120)
+                        runCatching { p.playWhenReady = false }
+                    }
+                }
+                return Futures.immediateFuture(
+                    MediaSession.MediaItemsWithStartPosition(
+                        keep,
+                        if (keep.isEmpty()) 0 else p.currentMediaItemIndex,
+                        if (keep.isEmpty()) 0L else p.currentPosition
+                    )
+                )
+            }
+            return com.google.common.util.concurrent.Futures.transform(
+                onAddMediaItems(mediaSession, controller, mediaItems),
+                { resolved ->
+                    MediaSession.MediaItemsWithStartPosition(
+                        resolved ?: mediaItems, startIndex, startPositionMs
+                    )
+                },
+                com.google.common.util.concurrent.MoreExecutors.directExecutor()
+            )
+        }
+
         override fun onAddMediaItems(
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo,
@@ -4074,6 +4173,158 @@ class PlaybackService : MediaLibraryService() {
                 }
             }
             return Futures.immediateFuture(resolvedItems)
+        }
+    }
+
+    // ───────────────────── Android Auto custom-action buttons ──────────────────
+    // Context-aware now-playing layout + the handler behind each button. Additive: reuses
+    // the existing player, DAOs, static setters and the seekChapter/cumulativeSkip engines.
+
+    /**
+     * Build the Android Auto now-playing custom-action buttons for the CURRENT item.
+     * Chapter media (audiobook/podcast/chaptered video) gets 30 s skips + a chapter-next
+     * button; plain music gets 15 s skips + a favourite toggle. The speed button's label
+     * shows the live speed. Auto shows ~4 of these on the playback screen.
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    private fun buildAutoCustomLayout(): List<CommandButton> {
+        val player = exoPlayerRef?.get() ?: mediaSession?.player
+        val hasChapters = (player?.mediaMetadata?.extras?.getInt("chapter_count", 0) ?: 0) > 0
+        val speed = player?.playbackParameters?.speed ?: 1.0f
+        val skipBack = if (hasChapters) ACTION_SKIP_BACK_30 else ACTION_SKIP_BACK_15
+        val skipFwd = if (hasChapters) ACTION_SKIP_FORWARD_30 else ACTION_SKIP_FORWARD_15
+        val skipLabel = if (hasChapters) "30" else "15"
+        val out = ArrayList<CommandButton>(4)
+        out.add(autoButton("Back ${skipLabel}s", android.R.drawable.ic_media_rew, skipBack))
+        out.add(autoButton(formatSpeedLabel(speed), android.R.drawable.ic_menu_rotate, ACTION_SPEED_CYCLE))
+        out.add(autoButton("Forward ${skipLabel}s", android.R.drawable.ic_media_ff, skipFwd))
+        if (hasChapters) {
+            out.add(autoButton("Next chapter", android.R.drawable.ic_media_next, ACTION_CHAPTER_NEXT))
+        } else {
+            val favIcon = if (currentIsFavourite) android.R.drawable.btn_star_big_on
+                          else android.R.drawable.btn_star_big_off
+            val favLabel = if (currentIsFavourite) "Favourited" else "Favourite"
+            out.add(autoButton(favLabel, favIcon, ACTION_FAVOURITE_TOGGLE))
+        }
+        return out
+    }
+
+    @androidx.annotation.OptIn(UnstableApi::class)
+    private fun autoButton(name: String, iconRes: Int, action: String): CommandButton =
+        CommandButton.Builder()
+            .setDisplayName(name)
+            .setIconResId(iconRes)
+            .setSessionCommand(SessionCommand(action, Bundle.EMPTY))
+            .build()
+
+    /** Push a freshly-built Auto layout to controllers (no-op before the session exists). */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    private fun refreshAutoLayout() {
+        runCatching { mediaSession?.setCustomLayout(buildAutoCustomLayout()) }
+    }
+
+    /** "1×" / "1.25×" / "1.5×" — trims trailing zeros. */
+    private fun formatSpeedLabel(s: Float): String {
+        val whole = s.toLong()
+        val txt = if (s == whole.toFloat()) "$whole"
+                  else s.toString().trimEnd('0').trimEnd('.')
+        return "${txt}×"
+    }
+
+    /** Cycle the live playback speed through [AUTO_SPEED_CYCLE] (preserves pitch) + persist. */
+    private fun cycleAutoSpeed(player: Player) {
+        val next = nextSpeedPreset(player.playbackParameters.speed)
+        runCatching {
+            player.playbackParameters =
+                androidx.media3.common.PlaybackParameters(next, player.playbackParameters.pitch)
+        }
+        serviceScope.launch { settingsDataStore.setPlaybackSpeed(next) }
+        refreshAutoLayout()
+    }
+
+    /** Star/unstar the current item (mediaId = its URI) + refresh the favourite button. */
+    private fun toggleFavouriteForCurrent(player: Player) {
+        val key = player.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() } ?: return
+        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            currentIsFavourite = runCatching {
+                if (favoriteDao.isFavorite(key)) {
+                    favoriteDao.deleteByUri(key); false
+                } else {
+                    favoriteDao.insert(com.powermediaplayer.data.db.entity.FavoriteEntity(uri = key)); true
+                }
+            }.getOrDefault(currentIsFavourite)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { refreshAutoLayout() }
+        }
+    }
+
+    /** Add a bookmark at the current position for the current item. */
+    private fun addBookmarkForCurrent(player: Player) {
+        val key = player.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() } ?: return
+        val pos = player.currentPosition.coerceAtLeast(0L)
+        serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                bookmarkDao.insert(
+                    com.powermediaplayer.data.db.entity.BookmarkEntity(
+                        mediaUri = key,
+                        positionMs = pos,
+                        label = com.powermediaplayer.util.TimeFormatter.formatDuration(pos)
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Apply an Android Auto browse "action" item (pmp_action/<kind>/<value>) as a setting,
+     * WITHOUT changing playback. Called from onSetMediaItems when the user taps an item in
+     * the Playback-options menu (speed, sleep timer, audio effects).
+     */
+    private fun applyAutoAction(mediaId: String, player: Player) {
+        val rest = mediaId.removePrefix(AUTO_ACTION_PREFIX)
+        val kind = rest.substringBefore('/')
+        val value = rest.substringAfter('/', "")
+        when (kind) {
+            "speed" -> value.toFloatOrNull()?.let { s ->
+                runCatching {
+                    player.playbackParameters =
+                        androidx.media3.common.PlaybackParameters(s, player.playbackParameters.pitch)
+                }
+                serviceScope.launch { settingsDataStore.setPlaybackSpeed(s) }
+                com.powermediaplayer.diag.DiagLog.event(
+                    "AABROWSE", "applied speed=$s now=${player.playbackParameters.speed} " +
+                        "isPlaying=${player.isPlaying}"
+                )
+                refreshAutoLayout()
+            }
+            "sleep" -> applyAutoSleep(value)
+            "reverb" -> value.toIntOrNull()?.let {
+                Companion.setReverb(it, if (it == 0) 0f else 0.4f)
+                serviceScope.launch { settingsDataStore.setReverbPreset(it) }
+            }
+            "voiceboost" -> serviceScope.launch { settingsDataStore.setVoiceBoost(value == "1") }
+            "mono" -> serviceScope.launch { settingsDataStore.setMonoMix(value == "1") }
+            "stereo" -> serviceScope.launch { settingsDataStore.setStereoFlip(value == "1") }
+        }
+    }
+
+    /** Android Auto sleep timer: off | eot (end of track) | <minutes>. */
+    private fun applyAutoSleep(value: String) {
+        autoSleepJob?.cancel(); autoSleepJob = null
+        val exo = exoPlayerRef?.get()
+        runCatching { exo?.pauseAtEndOfMediaItems = false }
+        when (value) {
+            "off" -> { /* cancelled above */ }
+            "eot" -> runCatching { exo?.pauseAtEndOfMediaItems = true }
+            else -> value.toIntOrNull()?.let { min ->
+                autoSleepJob = serviceScope.launch {
+                    kotlinx.coroutines.delay(min * 60_000L)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        // Re-resolve the player at fire time so a local↔cast switch during
+                        // the countdown still pauses the live player.
+                        runCatching { mediaSession?.player?.pause() }
+                    }
+                }
+            }
         }
     }
 
@@ -4286,4 +4537,17 @@ class PlaybackService : MediaLibraryService() {
             }
         }
     }
+}
+
+/**
+ * The speeds the Android Auto speed-cycle button steps through. The phone offers a finer
+ * set and the browse "Speed" menu exposes all of them for an exact pick; this is the quick
+ * in-drive cycle. Pure helper → unit-tested ([nextSpeedPreset]).
+ */
+internal val AUTO_SPEED_CYCLE = floatArrayOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+
+/** Next speed in [cycle] strictly greater than [current]; wraps to the first. */
+internal fun nextSpeedPreset(current: Float, cycle: FloatArray = AUTO_SPEED_CYCLE): Float {
+    for (s in cycle) if (s > current + 0.01f) return s
+    return cycle.first()
 }
