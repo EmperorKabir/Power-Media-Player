@@ -604,6 +604,11 @@ class PlaybackService : MediaLibraryService() {
          * path can still surface the right artwork in the app UI
          * regardless of what the receiver echoes back.
          */
+        /** PH9: the service's classification of the CURRENT item (music / audiobook / podcast /
+         *  video) — the single source of truth the phone slider persists its speed under. */
+        val currentKindFlow: kotlinx.coroutines.flow.MutableStateFlow<BtMediaKind> =
+            kotlinx.coroutines.flow.MutableStateFlow(BtMediaKind.MUSIC)
+
         val senderMetadataByMediaId: java.util.concurrent.ConcurrentHashMap<String, androidx.media3.common.MediaMetadata> =
             java.util.concurrent.ConcurrentHashMap()
 
@@ -2618,6 +2623,9 @@ class PlaybackService : MediaLibraryService() {
             override fun onMediaMetadataChanged(
                 mediaMetadata: androidx.media3.common.MediaMetadata
             ) {
+                // PH9: a late-resolved kind (chapters parsed after the transition) re-applies
+                // the per-kind speed once and republishes the kind for the phone slider.
+                player?.let { reapplySpeedRuleIfKindResolved(it) }
                 // Cast bug fix #2: ExoPlayer's MetadataDecoder enriches
                 // MediaMetadata after the file is parsed (artworkData /
                 // artworkUri / chapter title pulled from the file
@@ -4597,6 +4605,12 @@ class PlaybackService : MediaLibraryService() {
 
     /** PH9: the speed remembered per media kind (see playback/SpeedRule.kt). */
     @Volatile private var speedByKind: Map<BtMediaKind, Float> = emptyMap()
+    // The item + kind + target the rule last applied, so a kind that resolves late (an
+    // m4b's chapter_count arrives after the transition) can re-apply once, and only if the
+    // user has not touched the speed in between.
+    private var lastRuleItemId: String? = null
+    private var lastRuleKind: BtMediaKind? = null
+    private var lastRuleTarget: Float = 1.0f
 
     /**
      * Android Auto / Automotive steering-wheel and car prev/next keys, mapped by [autoWheelSet].
@@ -4689,8 +4703,15 @@ class PlaybackService : MediaLibraryService() {
     private fun applySpeedRuleForCurrentItem(p: Player, why: String) {
         val item = p.currentMediaItem ?: return
         val kind = currentBtKind(p)
+        // ONE classifier: the phone slider persists under this published kind (a controller-
+        // side classification saw a chaptered Drive book as a podcast — its metadata extras
+        // are not what the service sees — and stored the speed under the wrong kind).
+        Companion.currentKindFlow.value = kind
         val target = com.powermediaplayer.playback.effectiveKindSpeed(speedByKind, kind)
         val current = p.playbackParameters.speed
+        lastRuleItemId = item.mediaId
+        lastRuleKind = kind
+        lastRuleTarget = target
         if (!com.powermediaplayer.playback.speedDiffers(current, target)) return
         runCatching {
             p.playbackParameters =
@@ -4705,7 +4726,21 @@ class PlaybackService : MediaLibraryService() {
     /** PH9: a user-chosen speed (the car's speed button) is remembered for the item's kind. */
     private fun persistUserSpeed(p: Player, speed: Float) {
         val kind = currentBtKind(p)
+        Companion.currentKindFlow.value = kind
         serviceScope.launch { runCatching { settingsDataStore.setSpeedForKind(kind, speed) } }
+    }
+
+    /** Chapter markers can arrive after the transition (metadata parse) and flip the kind
+     *  music→audiobook; re-apply the rule once for the SAME item, only while the speed is
+     *  still the one the rule set (the user has not moved the slider since). */
+    private fun reapplySpeedRuleIfKindResolved(p: Player) {
+        val id = p.currentMediaItem?.mediaId ?: return
+        if (id != lastRuleItemId) return
+        val kind = currentBtKind(p)
+        if (kind == lastRuleKind) return
+        Companion.currentKindFlow.value = kind
+        if (com.powermediaplayer.playback.speedDiffers(p.playbackParameters.speed, lastRuleTarget)) return
+        applySpeedRuleForCurrentItem(p, "kind resolved ${lastRuleKind?.tag}→${kind.tag}")
     }
 
     private fun cycleAutoSpeed(player: Player) {

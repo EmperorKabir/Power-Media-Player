@@ -58,11 +58,16 @@ class RssFeedParser(
      *  the server gave validators, a full fetch otherwise) so a feed served with a
      *  long Cache-Control max-age cannot hide new episodes from a refresh. */
     fun fetchResult(feedUrl: String, fresh: Boolean = false): FetchResult {
-        val req = Request.Builder().url(feedUrl).apply {
-            if (fresh) cacheControl(
-                okhttp3.CacheControl.Builder().maxAge(0, TimeUnit.SECONDS).build()
-            )
-        }.build()
+        // A malformed url (a pasted feed with an IME-inserted space, a bare host…) made
+        // Request.Builder.url() throw OUTSIDE the runCatching below → the subscribe
+        // coroutine died with the exception. Report it as a typed failure instead.
+        val req = runCatching {
+            Request.Builder().url(feedUrl).apply {
+                if (fresh) cacheControl(
+                    okhttp3.CacheControl.Builder().maxAge(0, TimeUnit.SECONDS).build()
+                )
+            }.build()
+        }.getOrElse { return FetchResult.NotFeed("invalid URL") }
         return runCatching {
             httpClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return FetchResult.HttpError(resp.code)

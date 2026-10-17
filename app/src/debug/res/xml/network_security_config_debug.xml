@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG-only network security config (release has none → platform default: no
+  cleartext). Permits plain-http ONLY to the developer PC on the LAN so the
+  scenario tests can subscribe to a locally served RSS feed (tools/verify,
+  docs/verification/2026-10-17-ph-scenario-matrix.md). Everything else keeps
+  the default (cleartext blocked, system trust anchors).
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.50.31</domain>
+    </domain-config>
+</network-security-config>

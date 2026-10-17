@@ -1,6 +1,5 @@
 package com.powermediaplayer.playback
 
-import androidx.media3.common.Player
 import com.powermediaplayer.data.preferences.BtMediaKind
 
 /**
@@ -31,19 +30,7 @@ fun effectiveKindSpeed(speedByKind: Map<BtMediaKind, Float>, kind: BtMediaKind):
 fun speedDiffers(current: Float, target: Float): Boolean =
     kotlin.math.abs(current - target) >= 0.01f
 
-/**
- * The playing item's kind from a live Player (service ExoPlayer or a UI
- * MediaController). Mirrors PlaybackService.currentBtKind (chapter markers
- * win over the http-podcast heuristic, video by name or decoded size) so the
- * phone slider stores under the same kind the service later reads.
- */
-fun btKindOf(player: Player): BtMediaKind {
-    val item = player.currentMediaItem ?: return BtMediaKind.MUSIC
-    val uri = item.mediaId
-    val name = uri.substringAfterLast('/')
-    val isVideo = com.powermediaplayer.util.MediaClassifier.isVideoByName(name, "") ||
-        player.videoSize.width > 0
-    val hasChapters = (player.mediaMetadata.extras?.getInt("chapter_count", 0) ?: 0) > 0
-    val isPodcast = uri.startsWith("http")
-    return BtKindResolver.resolve(isVideo, hasChapters, isPodcast)
-}
+// NOTE: there is deliberately NO controller-side kind classifier here. The service's
+// `currentBtKind` is the only classification (published as PlaybackService.currentKindFlow);
+// a MediaController's metadata extras do not always carry the chapter markers the service
+// sees, and a second classifier filed an audiobook's speed under "podcast".

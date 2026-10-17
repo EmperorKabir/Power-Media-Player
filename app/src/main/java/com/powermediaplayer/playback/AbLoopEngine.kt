@@ -144,6 +144,7 @@ class AbLoopEngine @Inject constructor(
                     _start.value = null
                     _end.value = null
                     loopUri = null
+                    com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop B too close to A (${end - start}ms) → markers reset")
                     return
                 }
                 activate(mediaUri, start, end, persist = true)

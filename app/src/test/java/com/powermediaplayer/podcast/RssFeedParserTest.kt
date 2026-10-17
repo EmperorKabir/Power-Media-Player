@@ -123,4 +123,10 @@ class RssFeedParserTest {
         assertEquals(1, parsed!!.second.size)
         assertEquals("Has audio", parsed.second[0].title)
     }
+
+    @Test fun fetchResult_malformedUrl_isTypedFailureNotException() {
+        val r = RssFeedParser().fetchResult("http://192.168 .50.31:8765/feed.xml")   // space in the HOST: OkHttp rejects it (a space in the path is percent-encoded)
+        assertTrue(r is RssFeedParser.FetchResult.NotFeed)
+        assertEquals("invalid URL", (r as RssFeedParser.FetchResult.NotFeed).reason)
+    }
 }

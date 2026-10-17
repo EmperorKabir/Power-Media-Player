@@ -916,7 +916,11 @@ class PlayerViewModel @Inject constructor(
         val player = playbackConnection.getPlayer()
         if (player != null && player.currentMediaItem != null) {
             ensureSpeedPersister()
-            speedKindPersist.value = com.powermediaplayer.playback.btKindOf(player) to speed
+            // The kind comes from the SERVICE (PlaybackService.currentKindFlow): a controller-
+            // side classification can miss the chapter extras and file the speed under the
+            // wrong kind (seen on a Drive audiobook stored as "podcast").
+            speedKindPersist.value =
+                com.powermediaplayer.service.PlaybackService.currentKindFlow.value to speed
         }
     }
 

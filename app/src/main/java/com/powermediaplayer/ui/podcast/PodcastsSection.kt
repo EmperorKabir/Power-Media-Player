@@ -410,7 +410,11 @@ class PodcastsViewModel @Inject constructor(
      *  1000+ episodes) downloads and parses; the parsed row replaces it by
      *  primary key, and a failed fetch removes it. Runs on the app scope so
      *  leaving the tab mid-fetch cannot orphan the placeholder. */
-    fun addByUrl(rssUrl: String, hint: com.powermediaplayer.podcast.ITunesPodcastSearch.Hit? = null) {
+    fun addByUrl(rawUrl: String, hint: com.powermediaplayer.podcast.ITunesPodcastSearch.Hit? = null) {
+        // A url never contains whitespace; on-screen keyboards insert a space after a
+        // full stop ("feed. xml") when a pasted/typed url is committed, which used to
+        // reach OkHttp as-is. Strip every whitespace character before anything else.
+        val rssUrl = rawUrl.filterNot { it.isWhitespace() }
         if (rssUrl.isBlank()) return
         if (_subscribing.value) { setStatus("Still adding the previous podcast…"); return }
         _subscribing.value = true
