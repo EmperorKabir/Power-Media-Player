@@ -45,6 +45,7 @@ class MediaBrowseTree @Inject constructor(
         private const val CAT_ALBUMS = "cat/albums"
         private const val CAT_ARTISTS = "cat/artists"
         private const val CAT_PODCASTS = "cat/podcasts"
+        private const val CAT_BOOKS = "cat/books"
         private const val PREFIX_ALBUM = "album/"
         private const val PREFIX_ARTIST = "artist/"
         private const val PREFIX_SHOW = "show/"
@@ -52,7 +53,8 @@ class MediaBrowseTree @Inject constructor(
         // are "action" items: tapping one applies a setting instead of playing (intercepted
         // by PlaybackService.onSetMediaItems via ACTION_PREFIX, which must stay in sync with
         // PlaybackService.AUTO_ACTION_PREFIX).
-        private const val CAT_PLAYBACK = "cat/playback"
+        const val CAT_PLAYBACK = "cat/playback"
+        const val MENU_CHAPTERS = "menu/chapters"
         private const val MENU_SPEED = "menu/speed"
         private const val MENU_SLEEP = "menu/sleep"
         private const val MENU_EFFECTS = "menu/effects"
@@ -71,6 +73,9 @@ class MediaBrowseTree @Inject constructor(
         val albumId: Long,
         val durationMs: Long,
         val artUri: Uri?,
+        /** File path + MIME — used to classify audiobooks (.m4b / long-form). */
+        val path: String,
+        val mime: String,
     )
 
     // Short-lived cache so a single car browse session (songs → albums → album → …)
@@ -78,6 +83,21 @@ class MediaBrowseTree @Inject constructor(
     @Volatile private var audioCache: List<BrowseTrack>? = null
     @Volatile private var audioCacheAtMs: Long = 0L
     private val cacheTtlMs = 15_000L
+
+    // Every playable leaf served to a browser, by mediaId. Car / legacy controllers play a
+    // leaf by sending ONLY its mediaId back (playFromMediaId) — title, artwork and the
+    // chapter extras do not survive that round-trip — so PlaybackService.onAddMediaItems
+    // re-hydrates the bare request from here (device-proven: the book played with the
+    // MUSIC button layout until this existed).
+    private val servedLeaves = android.util.LruCache<String, MediaItem>(1024)
+
+    /** The full leaf last served under [mediaId], or null if never browsed. */
+    fun servedLeaf(mediaId: String): MediaItem? = servedLeaves.get(mediaId)
+
+    // The CURRENT item's chapter table (chapter_count / chapter_title_$i / chapter_start_$i),
+    // mirrored here by PlaybackService on every item/metadata change so the Chapters menu is
+    // built on the IO browse dispatch without touching the player (main-thread only).
+    @Volatile var currentChapters: Bundle? = null
 
     /** The browsable root item. */
     fun root(): MediaItem = browsable(
@@ -106,7 +126,9 @@ class MediaBrowseTree @Inject constructor(
             parentId == CAT_ALBUMS -> paged(albums(), page, pageSize)
             parentId == CAT_ARTISTS -> paged(artists(), page, pageSize)
             parentId == CAT_PODCASTS -> podcastShows()
+            parentId == CAT_BOOKS -> books()
             parentId == CAT_PLAYBACK -> playbackMenus()
+            parentId == MENU_CHAPTERS -> chapterItems()
             parentId == MENU_SPEED -> speedItems()
             parentId == MENU_SLEEP -> sleepItems()
             parentId == MENU_EFFECTS -> effectItems()
@@ -123,6 +145,7 @@ class MediaBrowseTree @Inject constructor(
     /** Best-effort single-item lookup (used for playback resumption / metadata by id). */
     suspend fun item(mediaId: String): MediaItem? = when {
         mediaId == ROOT_ID -> root()
+        servedLeaves.get(mediaId) != null -> servedLeaves.get(mediaId)
         mediaId.startsWith("cat/") || mediaId.startsWith("menu/") ||
             mediaId.startsWith(PREFIX_ALBUM) ||
             mediaId.startsWith(PREFIX_ARTIST) || mediaId.startsWith(PREFIX_SHOW) ->
@@ -139,27 +162,66 @@ class MediaBrowseTree @Inject constructor(
     // Android Auto shows at most ~4 root tabs, so the top level is kept to 4: the two
     // highest-value lists (Recently played, Favourites), a Library tab that nests the full
     // browse (Songs/Albums/Artists/Podcasts), and the Playback-options settings tab.
+    // Short tab titles: the car's tab strip truncates longer ones ("Recently pla…",
+    // "Playback opt…" on the 1080×600 AAOS emulator).
     private fun rootCategories(): List<MediaItem> = listOf(
-        browsable(CAT_RECENT, "Recently played", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+        browsable(CAT_RECENT, "Recent", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         browsable(CAT_FAVOURITES, "Favourites", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         browsable(CAT_LIBRARY, "Library", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-        browsable(CAT_PLAYBACK, "Playback options", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
+        browsable(CAT_PLAYBACK, "Playback", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
     )
 
     private fun libraryCategories(): List<MediaItem> = listOf(
         browsable(CAT_SONGS, "Songs", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
         browsable(CAT_ALBUMS, "Albums", null, MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS),
         browsable(CAT_ARTISTS, "Artists", null, MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS),
+        browsable(CAT_BOOKS, "Audiobooks", null, MediaMetadata.MEDIA_TYPE_FOLDER_AUDIO_BOOKS),
         browsable(CAT_PODCASTS, "Podcasts", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
     )
 
     // ---- Playback-options settings menus (Phase 2) --------------------------
 
-    private fun playbackMenus(): List<MediaItem> = listOf(
-        browsable(MENU_SPEED, "Speed", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-        browsable(MENU_SLEEP, "Sleep timer", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-        browsable(MENU_EFFECTS, "Audio effects", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED),
-    )
+    // "Chapters" leads the list only while the current item has a chapter table; the
+    // service notifies CAT_PLAYBACK changed when that comes and goes.
+    private fun playbackMenus(): List<MediaItem> = buildList {
+        val n = currentChapters?.getInt("chapter_count", 0) ?: 0
+        if (n > 0) {
+            add(
+                browsable(
+                    MENU_CHAPTERS, "Chapters", null, MediaMetadata.MEDIA_TYPE_FOLDER_AUDIO_BOOKS,
+                    subtitle = "$n chapters",
+                )
+            )
+        }
+        add(browsable(MENU_SPEED, "Speed", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
+        add(browsable(MENU_SLEEP, "Sleep timer", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
+        add(browsable(MENU_EFFECTS, "Audio effects", null, MediaMetadata.MEDIA_TYPE_FOLDER_MIXED))
+    }
+
+    /**
+     * The current book's chapters as action leaves (`pmp_action/chapter/<i>`, title + start
+     * time): tapping one seeks WITHIN the current item (PlaybackService.applyAutoAction).
+     */
+    private fun chapterItems(): List<MediaItem> {
+        val b = currentChapters ?: return emptyList()
+        return (0 until b.getInt("chapter_count", 0)).map { i ->
+            val title = b.getString("chapter_title_$i")?.takeIf { it.isNotBlank() }
+                ?: "Chapter ${i + 1}"
+            actionItem(
+                "${ACTION_PREFIX}chapter/$i", title,
+                subtitle = formatClock(b.getLong("chapter_start_$i", 0L)),
+            )
+        }
+    }
+
+    /** 0:00 / 12:34 / 1:02:03 */
+    private fun formatClock(ms: Long): String {
+        val s = ms / 1000
+        val h = s / 3600
+        val m = (s % 3600) / 60
+        val sec = s % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
+    }
 
     private fun speedItems(): List<MediaItem> =
         floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.3f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f).map { s ->
@@ -200,12 +262,13 @@ class MediaBrowseTree @Inject constructor(
 
     /** A playable "action" leaf: tapping it in the car applies a setting (intercepted by
      *  PlaybackService.onSetMediaItems via the ACTION_PREFIX) rather than playing media. */
-    private fun actionItem(actionId: String, title: String): MediaItem =
+    private fun actionItem(actionId: String, title: String, subtitle: String? = null): MediaItem =
         MediaItem.Builder()
             .setMediaId(actionId)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(title)
+                    .apply { subtitle?.let { setSubtitle(it); setArtist(it) } }
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
@@ -232,6 +295,9 @@ class MediaBrowseTree @Inject constructor(
 
     private fun historyToItem(h: LastPlayedRepository.HistoryItem): MediaItem {
         val play = runCatching { Uri.parse(h.mediaUri) }.getOrNull() ?: Uri.EMPTY
+        // Anything the phone app has played was parsed by it, so the chapter cache is warm
+        // for a book here and this is a disk read, not a parse.
+        val chapters = if (play != Uri.EMPTY) cachedChapters(play) else null
         return playable(
             mediaId = h.mediaUri,
             playUri = play,
@@ -239,6 +305,9 @@ class MediaBrowseTree @Inject constructor(
             artist = h.subtitle,
             album = "",
             artUri = h.artworkUri?.let { runCatching { Uri.parse(it) }.getOrNull() },
+            extras = chapters,
+            mediaType = if (chapters != null) MediaMetadata.MEDIA_TYPE_AUDIO_BOOK
+            else MediaMetadata.MEDIA_TYPE_MUSIC,
         )
     }
 
@@ -333,6 +402,8 @@ class MediaBrowseTree @Inject constructor(
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.ALBUM_ID,
             MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.MIME_TYPE,
         )
         runCatching {
             // selection = null to match the app's own Library (LibraryViewModel.scanAudioFiles
@@ -351,6 +422,8 @@ class MediaBrowseTree @Inject constructor(
                 val albumC = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val albumIdC = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
                 val durC = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val dataC = c.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val mimeC = c.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
                 while (c.moveToNext()) {
                     val id = c.getLong(idC)
                     val albumId = c.getLong(albumIdC)
@@ -365,6 +438,8 @@ class MediaBrowseTree @Inject constructor(
                             artUri = ContentUris.withAppendedId(
                                 Uri.parse(ALBUM_ART_BASE), albumId
                             ),
+                            path = if (dataC >= 0) c.getString(dataC) ?: "" else "",
+                            mime = if (mimeC >= 0) c.getString(mimeC) ?: "" else "",
                         )
                     )
                 }
@@ -378,8 +453,50 @@ class MediaBrowseTree @Inject constructor(
     private fun albumKey(artist: String, album: String): String =
         "${artist.lowercase()}|||${album.lowercase()}"
 
+    // A book reached via Songs / an album / an artist still gets its chapter buttons: the
+    // cache-only lookup is a disk read (no parse), so the big lists stay cheap, and the
+    // Audiobooks node (full parse) warms that cache the first time it is browsed.
     private fun trackToItem(t: BrowseTrack): MediaItem =
-        playable(t.uri.toString(), t.uri, t.title, t.artist, t.album, t.artUri, t.durationMs)
+        playable(
+            t.uri.toString(), t.uri, t.title, t.artist, t.album, t.artUri, t.durationMs,
+            extras = if (isAudiobook(t)) cachedChapters(t.uri) else null,
+            mediaType = if (isAudiobook(t)) MediaMetadata.MEDIA_TYPE_AUDIO_BOOK
+            else MediaMetadata.MEDIA_TYPE_MUSIC,
+        )
+
+    // ---- Audiobooks ---------------------------------------------------------
+
+    /** .m4b, an audiobook MIME, or long-form (>20 min) local audio. */
+    private fun isAudiobook(t: BrowseTrack): Boolean =
+        t.path.endsWith(".m4b", ignoreCase = true) ||
+            t.mime.contains("m4b", ignoreCase = true) ||
+            t.mime.contains("audiobook", ignoreCase = true) ||
+            t.durationMs > 20L * 60L * 1000L
+
+    /** The parser's on-disk chapter cache for [uri], if the book was ever parsed. */
+    private fun cachedChapters(uri: Uri): Bundle? = runCatching {
+        com.powermediaplayer.util.M4bChapterParser.cachedOnly(context, uri)
+    }.getOrNull()?.takeIf { it.getInt("chapter_count", 0) > 0 }
+
+    /**
+     * Audiobooks with their CHAPTER table attached as MediaItem extras
+     * (`chapter_count` / `chapter_start_$i` / `chapter_title_$i`, via
+     * [com.powermediaplayer.util.M4bChapterParser]). The now-playing layout keys the
+     * chapter buttons off `chapter_count`, and `seekChapter` reads the starts, so a book
+     * played from Auto gets chapter next/prev. Parsed on the IO browse dispatch and
+     * disk-cached by the parser; the list is short so the per-book parse is acceptable.
+     */
+    private fun books(): List<MediaItem> =
+        localAudio().filter { isAudiobook(it) }.map { t ->
+            val chapters = runCatching {
+                com.powermediaplayer.util.M4bChapterParser.extractChaptersAsBundle(context, t.uri)
+            }.getOrNull()?.takeIf { it.getInt("chapter_count", 0) > 0 }
+            playable(
+                t.uri.toString(), t.uri, t.title, t.artist, t.album, t.artUri, t.durationMs,
+                extras = chapters,
+                mediaType = MediaMetadata.MEDIA_TYPE_AUDIO_BOOK,
+            )
+        }
 
     // ---- builders -----------------------------------------------------------
 
@@ -413,6 +530,8 @@ class MediaBrowseTree @Inject constructor(
         album: String,
         artUri: Uri?,
         durationMs: Long? = null,
+        extras: Bundle? = null,
+        mediaType: Int = MediaMetadata.MEDIA_TYPE_MUSIC,
     ): MediaItem = MediaItem.Builder()
         .setMediaId(mediaId)
         .setRequestMetadata(
@@ -426,13 +545,15 @@ class MediaBrowseTree @Inject constructor(
                     if (album.isNotBlank()) setAlbumTitle(album)
                     artUri?.let { setArtworkUri(it) }
                     durationMs?.takeIf { it > 0 }?.let { setDurationMs(it) }
+                    extras?.let { setExtras(it) }
                 }
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
-                .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                .setMediaType(mediaType)
                 .build()
         )
         .build()
+        .also { servedLeaves.put(mediaId, it) }
 
     private fun paged(all: List<MediaItem>, page: Int, pageSize: Int): List<MediaItem> {
         if (pageSize <= 0) return all

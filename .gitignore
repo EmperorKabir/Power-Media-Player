@@ -29,3 +29,4 @@ deeplogs/*.txt
 
 # dedicated .test debug signing key (per-machine, not committed)
 app/pmp-test-debug.jks
+.aatest/

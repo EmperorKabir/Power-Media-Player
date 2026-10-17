@@ -2038,6 +2038,13 @@ class PlaybackService : MediaLibraryService() {
             ) {
                 refreshAutoLayout()
             }
+            // The phone app attaches a book's chapter table after the item starts (async
+            // parse) — pick that up for the chapter buttons + Chapters menu too.
+            override fun onMediaMetadataChanged(
+                mediaMetadata: androidx.media3.common.MediaMetadata
+            ) {
+                refreshAutoLayout()
+            }
         })
 
         // Keep the per-kind Bluetooth mapping set fresh in the @Volatile
@@ -4102,7 +4109,36 @@ class PlaybackService : MediaLibraryService() {
                 "onAddMediaItems count=${mediaItems.size} casting=$isCasting " +
                     "firstId='${mediaItems.firstOrNull()?.mediaId?.takeLast(40).orEmpty()}'"
             )
-            val resolvedItems = mediaItems.map { item ->
+            val resolvedItems = mediaItems.map { raw ->
+                // Android Auto / Assistant / Bluetooth play a browsed leaf by sending ONLY
+                // its mediaId back (legacy playFromMediaId): no title, artwork or chapter
+                // extras. Re-hydrate from the leaf the browse tree served so the now-playing
+                // screen gets the art and an audiobook keeps its chapter buttons. Keep the
+                // request's own extras (the car may attach some) over the served ones.
+                val item = if (raw.localConfiguration == null && raw.mediaMetadata.title == null) {
+                    mediaBrowseTree.servedLeaf(raw.mediaId)?.let { served ->
+                        served.buildUpon()
+                            .setRequestMetadata(
+                                MediaItem.RequestMetadata.Builder()
+                                    .setMediaUri(
+                                        served.requestMetadata.mediaUri
+                                            ?: raw.requestMetadata.mediaUri
+                                    )
+                                    .setExtras(
+                                        raw.requestMetadata.extras ?: served.requestMetadata.extras
+                                    )
+                                    .build()
+                            )
+                            .build()
+                            .also {
+                                com.powermediaplayer.diag.DiagLog.event(
+                                    "AABROWSE",
+                                    "hydrated '${raw.mediaId.takeLast(40)}' chapters=" +
+                                        (it.mediaMetadata.extras?.getInt("chapter_count", 0) ?: 0)
+                                )
+                            }
+                    } ?: raw
+                } else raw
                 val resolvedUri = item.localConfiguration?.uri
                     ?: item.requestMetadata.mediaUri
                     ?: runCatching { android.net.Uri.parse(item.mediaId) }.getOrNull()
@@ -4194,15 +4230,20 @@ class PlaybackService : MediaLibraryService() {
         val skipBack = if (hasChapters) ACTION_SKIP_BACK_30 else ACTION_SKIP_BACK_15
         val skipFwd = if (hasChapters) ACTION_SKIP_FORWARD_30 else ACTION_SKIP_FORWARD_15
         val skipLabel = if (hasChapters) "30" else "15"
+        // Media3's bundled CommandButton icons (media3_icon_*): the car renders these as the
+        // proper 30s/15s skip glyphs, a speed badge and a heart — the stock android.R
+        // drawables came out as rewind/rotate glyphs on the AAOS emulator.
+        val backIcon = if (hasChapters) CommandButton.ICON_SKIP_BACK_30 else CommandButton.ICON_SKIP_BACK_15
+        val fwdIcon = if (hasChapters) CommandButton.ICON_SKIP_FORWARD_30 else CommandButton.ICON_SKIP_FORWARD_15
         val out = ArrayList<CommandButton>(4)
-        out.add(autoButton("Back ${skipLabel}s", android.R.drawable.ic_media_rew, skipBack))
-        out.add(autoButton(formatSpeedLabel(speed), android.R.drawable.ic_menu_rotate, ACTION_SPEED_CYCLE))
-        out.add(autoButton("Forward ${skipLabel}s", android.R.drawable.ic_media_ff, skipFwd))
+        out.add(autoButton("Back ${skipLabel}s", backIcon, skipBack))
+        out.add(autoButton(formatSpeedLabel(speed), speedIcon(speed), ACTION_SPEED_CYCLE))
+        out.add(autoButton("Forward ${skipLabel}s", fwdIcon, skipFwd))
         if (hasChapters) {
-            out.add(autoButton("Next chapter", android.R.drawable.ic_media_next, ACTION_CHAPTER_NEXT))
+            out.add(autoButton("Next chapter", CommandButton.ICON_NEXT, ACTION_CHAPTER_NEXT))
         } else {
-            val favIcon = if (currentIsFavourite) android.R.drawable.btn_star_big_on
-                          else android.R.drawable.btn_star_big_off
+            val favIcon = if (currentIsFavourite) CommandButton.ICON_HEART_FILLED
+                          else CommandButton.ICON_HEART_UNFILLED
             val favLabel = if (currentIsFavourite) "Favourited" else "Favourite"
             out.add(autoButton(favLabel, favIcon, ACTION_FAVOURITE_TOGGLE))
         }
@@ -4210,17 +4251,57 @@ class PlaybackService : MediaLibraryService() {
     }
 
     @androidx.annotation.OptIn(UnstableApi::class)
-    private fun autoButton(name: String, iconRes: Int, action: String): CommandButton =
-        CommandButton.Builder()
+    private fun autoButton(name: String, icon: Int, action: String): CommandButton =
+        CommandButton.Builder(icon)
             .setDisplayName(name)
-            .setIconResId(iconRes)
             .setSessionCommand(SessionCommand(action, Bundle.EMPTY))
             .build()
+
+    /** The speed badge nearest the live speed (Media3 ships 0.5/0.8/1.0/1.2/1.5/1.8/2.0). */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    private fun speedIcon(speed: Float): Int = when {
+        speed < 0.65f -> CommandButton.ICON_PLAYBACK_SPEED_0_5
+        speed < 0.9f -> CommandButton.ICON_PLAYBACK_SPEED_0_8
+        speed < 1.1f -> CommandButton.ICON_PLAYBACK_SPEED_1_0
+        speed < 1.35f -> CommandButton.ICON_PLAYBACK_SPEED_1_2
+        speed < 1.65f -> CommandButton.ICON_PLAYBACK_SPEED_1_5
+        speed < 1.9f -> CommandButton.ICON_PLAYBACK_SPEED_1_8
+        speed < 2.1f -> CommandButton.ICON_PLAYBACK_SPEED_2_0
+        else -> CommandButton.ICON_PLAYBACK_SPEED
+    }
 
     /** Push a freshly-built Auto layout to controllers (no-op before the session exists). */
     @androidx.annotation.OptIn(UnstableApi::class)
     private fun refreshAutoLayout() {
         runCatching { mediaSession?.setCustomLayout(buildAutoCustomLayout()) }
+        publishAutoChapters()
+    }
+
+    /**
+     * Mirror the current item's chapter table into the browse tree (its Chapters menu) and,
+     * when the list appears / disappears / changes book, tell browsers the Playback-options
+     * node changed so the car re-fetches it. Main thread (reads the player).
+     */
+    private fun publishAutoChapters() {
+        val player = exoPlayerRef?.get() ?: mediaSession?.player ?: return
+        val now = player.mediaMetadata.extras?.takeIf { it.getInt("chapter_count", 0) > 0 }
+        val before = mediaBrowseTree.currentChapters
+        val changed = when {
+            (now == null) != (before == null) -> true
+            now == null || before == null -> false
+            else -> now.getInt("chapter_count", 0) != before.getInt("chapter_count", 0) ||
+                now.getLong("chapter_start_1", -1L) != before.getLong("chapter_start_1", -1L) ||
+                now.getString("chapter_title_0") != before.getString("chapter_title_0")
+        }
+        mediaBrowseTree.currentChapters = now
+        if (changed) {
+            runCatching {
+                mediaSession?.notifyChildrenChanged(MediaBrowseTree.CAT_PLAYBACK, 4, null)
+                mediaSession?.notifyChildrenChanged(
+                    MediaBrowseTree.MENU_CHAPTERS, now?.getInt("chapter_count", 0) ?: 0, null
+                )
+            }
+        }
     }
 
     /** "1×" / "1.25×" / "1.5×" — trims trailing zeros. */
@@ -4297,6 +4378,16 @@ class PlaybackService : MediaLibraryService() {
                 refreshAutoLayout()
             }
             "sleep" -> applyAutoSleep(value)
+            // Chapters menu: seek within the current item to chapter <i>'s start.
+            "chapter" -> value.toIntOrNull()?.let { i ->
+                val start = player.mediaMetadata.extras?.getLong("chapter_start_$i", -1L) ?: -1L
+                if (start >= 0L) {
+                    runCatching { player.seekTo(start) }
+                    com.powermediaplayer.diag.DiagLog.event(
+                        "AABROWSE", "applied chapter=$i seekTo=${start}ms now=${player.currentPosition}"
+                    )
+                }
+            }
             "reverb" -> value.toIntOrNull()?.let {
                 Companion.setReverb(it, if (it == 0) 0f else 0.4f)
                 serviceScope.launch { settingsDataStore.setReverbPreset(it) }

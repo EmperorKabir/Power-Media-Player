@@ -69,6 +69,21 @@
 
 Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
+## AA — Android Auto (2026-10-16/17; tester-friend request; AAOS emulator `PMP_Auto` = emulator-5554)
+
+| ID | Task | Phase | Status |
+|----|------|-------|--------|
+| AA1 | MediaLibraryService + browse tree (4 root tabs; Library nests Songs/Albums/Artists/Audiobooks/Podcasts) | M | DONE(vc113 f35e84a + vc114 81a8e1e; AABROWSE `children parent=cat/library → 5 items`; emulator screenshot `tabs.png` shows Recent/Favourites/Library/Playback) |
+| AA2 | Now-playing custom buttons: context-aware (chapter media → Back 30s/speed/Forward 30s/Next chapter; music → 15s/speed/15s/Favourite) | M | DONE(vc114; `dumpsys media_session` mName='Back 30s','1.25×','Forward 30s','Next chapter' while the DCC book plays; tap Back 30s → `skip delta=-30000ms pos=287994 target=257994`; tap speed → speed=1.25 label 1.25×) |
+| AA3 | Playback-options menus (Speed/Sleep/Effects action leaves intercepted in onSetMediaItems) | M | DONE(vc114; `children parent=cat/playback → 4 items`; `action intercepted: pmp_action/chapter/2` proves the intercept path) |
+| AA4 | BUG: book played from the car showed the MUSIC layout — car/legacy `playFromMediaId` sends ONLY the mediaId (no title/art/chapter extras) | I→M | DONE(vc115: `MediaBrowseTree.servedLeaves` LruCache + `servedLeaf()`; `PlaybackService.onAddMediaItems` re-hydrates bare requests; log `hydrated '…/1000000020' chapters=104` → layout flipped to the chapter set; screenshot `aa_now.png` = cover art + title/author/album + 28:40:29) |
+| AA5 | Audiobooks category with chapter table attached (full M4bChapterParser parse in `cat/books`; cache-only attach in Songs/Albums/Artists/Recents) | M | DONE(vc115; `children parent=cat/books → 2 items`; DCC "This Inevitable Ruin" (1.64GB, 104 ch, moov-at-end) pushed to emulator user-10 MediaStore id=1000000020 + scanned) |
+| AA6 | Chapters list in the car (Playback → Chapters: 104 rows, title + start time; tap = seek within the item) | M | DONE(vc115; `children parent=menu/chapters → 104 items`; screenshot `c2.png` rows "Opening Credits 0:00 / Dedication 0:22 / Epigraph 0:56"; tap Epigraph → `applied chapter=2 seekTo=56313ms now=56313`, position 534407→60198) |
+| AA7 | Proper button icons (Media3 `CommandButton.ICON_SKIP_BACK_30/_15`, `ICON_SKIP_FORWARD_*`, `ICON_PLAYBACK_SPEED_x`, `ICON_NEXT`, `ICON_HEART_*`) — stock android.R drawables rendered as rew/rotate glyphs | M | DONE(vc115; screenshot `v2a.png` shows ↺30 + "1.2X" badge; constants verified by javap on media3-session-1.6.0.aar) |
+| AA8 | Root tab titles truncated ("Recently pla…", "Playback opt…") | M | DONE(vc115 titles Recent/Favourites/Library/Playback; screenshot `tabs.png` all four fully visible) |
+| AA9 | Real head-unit (phone-projected Android Auto via DHU or car) tap verification of AA2/AA3/AA6 + custom-action slot order on gearhead | V | AWAITING-USER(phone: Android Auto → developer mode → "Start head unit server", then run desktop-head-unit.exe — the DHU window is a desktop GUI I cannot see; user drives + reports) |
+| AA10 | Emulator overflow (⋮) renders no items; AAOS fills custom[0] right-of-play, custom[1] far-left, rest → overflow | I | DONE(evidence: screenshots `t3b.png`/`v2b.png` dimmed + empty; all 4 actions present in dumpsys → AAOS media-center rendering limit, not ours; recorded in memory `reference_aaos_emulator`) |
+
 ## B — Outstanding (carried, phone now available)
 
 | ID | Task | Phase | Status |
