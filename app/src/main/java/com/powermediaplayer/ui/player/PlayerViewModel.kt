@@ -38,6 +38,8 @@ class PlayerViewModel @Inject constructor(
     // (commit 3131738). Removed.
     private val offlineMediaManager: com.powermediaplayer.offline.OfflineMediaManager,
     private val podcastDao: com.powermediaplayer.data.db.dao.PodcastDao,
+    // PH8 — the ONE A-B loop engine shared by every PlayerViewModel instance.
+    private val abLoopEngine: com.powermediaplayer.playback.AbLoopEngine,
     @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -48,6 +50,7 @@ class PlayerViewModel @Inject constructor(
     private val _currentIsPodcast = kotlinx.coroutines.flow.MutableStateFlow(false)
 
     init {
+        abLoopEngine.start()   // idempotent; restores the saved loop per track
         viewModelScope.launch {
             playbackConnection.playerState
                 .map { it.currentMediaUri }
@@ -523,48 +526,8 @@ class PlayerViewModel @Inject constructor(
                     // Speed: PH9 — applied service-side per media kind on every item
                     // transition (PlaybackService.applySpeedRuleForCurrentItem); an
                     // explicit per-file / per-show speed arrives via applyDirectAxes.
-                    // A-B loop
-                    if (!isSpotifyActive) {
-                        val abOverrides = runCatching {
-                            settingsDataStore.abLoopOverrides.first()
-                        }.getOrNull().orEmpty()
-                        val saved = abOverrides[uri]
-                        if (saved != null) {
-                            val (a, b) = saved
-                            if (_abLoopStart.value != a || _abLoopEnd.value != b) {
-                                _abLoopStart.value = a
-                                _abLoopEnd.value = b
-                                abLoopJob?.cancel()
-                                abLoopJob = launch {
-                                    while (isActive) {
-                                        delay(250L)
-                                        val sa = _abLoopStart.value ?: break
-                                        val sb = _abLoopEnd.value ?: break
-                                        if (currentPositionMsAnySource() >= sb) {
-                                            seekToAnySource(sa)
-                                        }
-                                    }
-                                }
-                                com.powermediaplayer.util.Diag.i(
-                                    "PMP_DIAG",
-                                    "Restored saved A-B loop $a..${b}ms for uri=$uri"
-                                )
-                            }
-                        } else if (_abLoopStart.value != null || _abLoopEnd.value != null) {
-                            // The new track has NO saved A-B loop — clear any
-                            // loop carried over in memory from the previous
-                            // track so its A/B markers don't keep seeking this
-                            // one (the "doing an A-B loop I never set" bug).
-                            _abLoopStart.value = null
-                            _abLoopEnd.value = null
-                            abLoopJob?.cancel()
-                            abLoopJob = null
-                            com.powermediaplayer.util.Diag.i(
-                                "PMP_DIAG",
-                                "Cleared carried-over A-B loop on track change to uri=$uri"
-                            )
-                        }
-                    }
+                    // A-B loop: PH8 — restored per track by AbLoopEngine (one engine
+                    // for every PlayerViewModel instance; see playback/AbLoopEngine.kt).
                 }
         }
 
@@ -1360,90 +1323,14 @@ class PlayerViewModel @Inject constructor(
      * lacked fade support — removed by audit B1.
      */
 
-    // ── A-B loop ─────────────────────────────────────────────────
-    private val _abLoopStart = MutableStateFlow<Long?>(null)
-    private val _abLoopEnd = MutableStateFlow<Long?>(null)
-    val abLoopStart: StateFlow<Long?> = _abLoopStart.asStateFlow()
-    val abLoopEnd: StateFlow<Long?> = _abLoopEnd.asStateFlow()
-    private var abLoopJob: Job? = null
-
-    /**
-     * Three-state A-B loop: first tap captures A; second tap captures
-     * B and starts looping; third tap clears the loop. The loop is
-     * enforced by a polling job that seeks back to A whenever
-     * currentPosition crosses B.
-     */
-    /** Current playback position regardless of source (Spotify mirror or local). */
-    private fun currentPositionMsAnySource(): Long =
-        if (isSpotifyActive) spotifyProvider.spotifyState.value?.positionMs ?: 0L
-        else playbackConnection.playerState.value.currentPosition
-
-    /** Seek regardless of source. Spotify routes through Connect /me/player/seek. */
-    private fun seekToAnySource(positionMs: Long) {
-        if (isSpotifyActive) {
-            viewModelScope.launch { spotifyProvider.seekTo(positionMs) }
-        } else {
-            playbackConnection.seekTo(positionMs)
-        }
-    }
-
-    fun toggleAbLoop() {
-        val mediaUri = playbackConnection.getPlayer()?.currentMediaItem?.mediaId
-        when {
-            _abLoopStart.value == null -> {
-                _abLoopStart.value = currentPositionMsAnySource()
-                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop A=${_abLoopStart.value}ms src=${if (isSpotifyActive) "spotify" else "local"}")
-            }
-            _abLoopEnd.value == null -> {
-                val end = currentPositionMsAnySource()
-                val start = _abLoopStart.value ?: return
-                if (end <= start + 1_000) {
-                    _abLoopStart.value = null
-                    _abLoopEnd.value = null
-                    return
-                }
-                _abLoopEnd.value = end
-                abLoopJob?.cancel()
-                // Persist for next open of this track (§C7 slim). Only
-                // for non-Spotify (local + Drive) — Spotify track URIs
-                // are stable but the experience is "Connect"-side, so
-                // restoring on Connect first-emit could surprise users.
-                if (!mediaUri.isNullOrBlank() && !isSpotifyActive) {
-                    viewModelScope.launch {
-                        runCatching {
-                            settingsDataStore.setAbLoopOverride(mediaUri, start, end)
-                        }
-                    }
-                }
-                // Spotify Connect /seek IPC is round-trip ~300-500ms;
-                // poll less aggressively when remote and add a small
-                // dwell guard so we don't spam-seek.
-                val pollInterval = if (isSpotifyActive) 750L else 250L
-                abLoopJob = viewModelScope.launch {
-                    while (isActive) {
-                        delay(pollInterval)
-                        val a = _abLoopStart.value ?: break
-                        val b = _abLoopEnd.value ?: break
-                        if (currentPositionMsAnySource() >= b) {
-                            seekToAnySource(a)
-                        }
-                    }
-                }
-                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop B=${end}ms (loop active, src=${if (isSpotifyActive) "spotify" else "local"})")
-            }
-            else -> {
-                _abLoopStart.value = null
-                _abLoopEnd.value = null
-                abLoopJob?.cancel()
-                if (!mediaUri.isNullOrBlank()) {
-                    viewModelScope.launch {
-                        runCatching { settingsDataStore.clearAbLoopOverride(mediaUri) }
-                    }
-                }
-                com.powermediaplayer.util.Diag.i("PMP_DIAG", "AB-loop cleared")
-            }
-        }
-    }
+    // ── A-B loop (PH8: delegated to the single AbLoopEngine) ──────────────
+    // Before: each PlayerViewModel instance (Player screen, every route's
+    // MiniPlayerBar, the floating video mini player) ran its own markers +
+    // poller; clearing in one left the others seeking back to A until the
+    // track changed ("A-B bug, had to switch track").
+    val abLoopStart: StateFlow<Long?> = abLoopEngine.start
+    val abLoopEnd: StateFlow<Long?> = abLoopEngine.end
+    fun toggleAbLoop() = abLoopEngine.toggle()
 
     // ── Pitch shift (independent of speed) ────────────────────────
     // _pitch backing field is declared above the init block (see

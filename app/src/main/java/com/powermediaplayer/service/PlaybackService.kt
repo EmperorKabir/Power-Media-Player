@@ -3419,10 +3419,20 @@ class PlaybackService : MediaLibraryService() {
                 artUri != null && (artUri.scheme == "http" || artUri.scheme == "https") ->
                     b.setArtworkUri(artUri)
                 ip == null -> {}                                       // no relay → leave as-is
-                // Phone-local file:// or MediaStore content:// → relay-serve.
-                artUri != null && (artUri.scheme == "file" || artUri.scheme == "content") ->
+                // Phone-local file:// or MediaStore content:// → relay-serve, but ONLY when
+                // the phone can actually open it. PH2: a queue-time MediaStore album-art uri
+                // (content://media/external/audio/albumart/<id>) is often absent on the
+                // device; the relay then 404s and the receiver showed a blank cover for every
+                // track after the first (the first track's cover came from the merged
+                // player metadata as embedded bytes). An unopenable uri now falls through to
+                // the embedded-bytes / ArtworkCache / MMR path below.
+                artUri != null && (artUri.scheme == "file" || artUri.scheme == "content") &&
+                    coverOpenable(artUri) ->
                     b.setArtworkUri(relay(artUri))
                 else -> {
+                    if (artUri != null) com.powermediaplayer.diag.DiagLog.event(
+                        "T302", "cast cover uri ${artUri.scheme} not openable → embedded/MMR fallback"
+                    )
                     // Embedded bytes → cache to a file; else the durable ArtworkCache file
                     // (keyed by the media uri OR the mediaId — try both).
                     val data = base.artworkData ?: item.mediaMetadata.artworkData
@@ -3452,6 +3462,12 @@ class PlaybackService : MediaLibraryService() {
         }.onFailure { com.powermediaplayer.diag.DiagLog.event("T302", "cast cover relay failed ${it.javaClass.simpleName}") }
         return b.build()
     }
+
+    /** PH2: true when [uri] yields at least one byte (a MediaStore albumart uri with no
+     *  cached art throws FileNotFoundException; an empty file reads nothing). */
+    private fun coverOpenable(uri: android.net.Uri): Boolean = runCatching {
+        contentResolver.openInputStream(uri)?.use { it.read() >= 0 } ?: false
+    }.getOrDefault(false)
 
     /** Persist embedded cover bytes to a stable cache file so the relay can serve them. */
     private fun writeCastCover(mediaId: String, data: ByteArray): java.io.File? = runCatching {

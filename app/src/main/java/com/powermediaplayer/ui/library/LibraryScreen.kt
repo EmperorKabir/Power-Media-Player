@@ -690,10 +690,14 @@ fun LibraryScreen(
                     // app-private storage so the MediaStore scan never sees them;
                     // surfaced here as synthetic rows. Tapping plays the LOCAL file
                     // but keeps the Drive key, so Recents/resume stay unified.
-                    if (uiState.selectedTab == 0 && downloadedBooks.isNotEmpty()) {
+                    // PH1 — ONE "Downloaded" section: offline Drive books first, then
+                    // downloaded podcast episodes (previously two separate sections).
+                    if (uiState.selectedTab == 0 &&
+                        (downloadedBooks.isNotEmpty() || downloadedEpisodes.isNotEmpty())
+                    ) {
                         item(key = "downloaded_header", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
-                                text = "Downloaded (${downloadedBooks.size})",
+                                text = "Downloaded (${downloadedBooks.size + downloadedEpisodes.size})",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = TealAccent,
                                 modifier = Modifier.padding(
@@ -765,29 +769,11 @@ fun LibraryScreen(
                                 }
                             }
                         }
-                        item(key = "downloaded_divider", span = { GridItemSpan(maxLineSpan) }) {
-                            HorizontalDivider(
-                                color = SurfaceElevated,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                    }
-                    // I6 — Downloaded podcast episodes. Same synthetic-row pattern as
-                    // the Drive books above (app-private storage → invisible to the
-                    // MediaStore scan). Tapping plays the LOCAL file but keeps the
-                    // episode's audioUrl as mediaId, so Recents/resume stay unified
-                    // with the Podcasts tab.
-                    if (uiState.selectedTab == 0 && downloadedEpisodes.isNotEmpty()) {
-                        item(key = "downloaded_podcasts_header", span = { GridItemSpan(maxLineSpan) }) {
-                            Text(
-                                text = "Downloaded podcasts (${downloadedEpisodes.size})",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = TealAccent,
-                                modifier = Modifier.padding(
-                                    start = 16.dp, top = 4.dp, bottom = 4.dp
-                                )
-                            )
-                        }
+                        // I6 — Downloaded podcast episodes. Same synthetic-row pattern as
+                        // the Drive books above (app-private storage → invisible to the
+                        // MediaStore scan). Tapping plays the LOCAL file but keeps the
+                        // episode's audioUrl as mediaId, so Recents/resume stay unified
+                        // with the Podcasts tab. PH1: listed under the same header.
                         itemsIndexed(
                             downloadedEpisodes,
                             key = { _, e -> "dlpod_${e.guid}" }
@@ -833,8 +819,10 @@ fun LibraryScreen(
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
-                                    // Show name · size · Offline.
+                                    // Podcast · show name · size · Offline (the kind prefix
+                                    // tells it apart from the books in the merged list).
                                     val sub = buildString {
+                                        append("Podcast · ")
                                         append(ep.showTitle)
                                         if (ep.bytes > 0) {
                                             append(" · ")
