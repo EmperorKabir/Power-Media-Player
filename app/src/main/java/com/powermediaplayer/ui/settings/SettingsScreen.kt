@@ -566,7 +566,9 @@ fun SettingsScreen(
                         "separately for every kind of media: A. the buttons on the car screen, " +
                         "B. the steering wheel keys. All of it is independent of Bluetooth car " +
                         "controls above, which keep handling cars and remotes that work over " +
-                        "Bluetooth; nothing here changes them.",
+                        "Bluetooth; nothing here changes them. Video: the car cannot show a " +
+                        "picture and videos are not browsable from it; a video playing on the " +
+                        "phone sends its sound to the car and uses the Video settings below.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
