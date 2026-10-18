@@ -1069,7 +1069,7 @@ private fun EpisodeList(
                     TextButton(onClick = { shown = episodes.size }) {
                         Text(
                             "Show all ($remaining more)",
-                            color = TextSecondary, style = MaterialTheme.typography.labelSmall
+                            color = TealAccent, style = MaterialTheme.typography.labelSmall
                         )
                     }
                 }
