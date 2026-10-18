@@ -15,20 +15,20 @@ class SettingsSearchTest {
 
     // ── A2 — inventory guard ─────────────────────────────────────────
     @Test
-    fun inventory_has_exactly_the_expected_21_unique_ids() {
+    fun inventory_has_exactly_the_expected_25_unique_ids() {
         val expected = setOf(
             "playback", "crossfade",
-            "library", "cloud",
-            "bluetooth-car", "android-auto", "bt-av-offset",
+            "library", "cloud", "backup-restore",
+            "bluetooth-car", "bt-av-offset", "android-auto", "cast-av-offset", "cast-start-delay",
             "audio-effects",
-            "video", "subtitles", "autohide",
+            "video", "subtitles", "autohide", "player-text-colour",
             "hue", "smart-home",
             "alarms", "webhooks", "external-control",
             "display", "font-size", "theme", "diag-log", "about"
         )
         assertEquals("no setting dropped or renamed", expected, SETTINGS_ITEM_IDS.toSet())
         assertEquals("no duplicate ids", SETTINGS_ITEM_IDS.size, SETTINGS_ITEM_IDS.toSet().size)
-        assertEquals(21, SETTINGS_ITEM_IDS.size)
+        assertEquals(25, SETTINGS_ITEM_IDS.size)
     }
 
     // ── B1 — title match ─────────────────────────────────────────────

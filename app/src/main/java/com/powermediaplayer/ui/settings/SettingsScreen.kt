@@ -1529,14 +1529,18 @@ internal fun settingsItemMatches(
 /**
  * A2 inventory guard — the complete set of catalog item ids. Any
  * relocation that drops or renames a control changes this list, which
- * the verification gate diffs against the expected 20-item set.
+ * the verification gate diffs against the expected 25-item set
+ * (SettingsSearchTest). Audit 2026-10-18: four items added after the
+ * guard (backup-restore, cast-av-offset, cast-start-delay,
+ * player-text-colour) were never registered, so the "no setting dropped"
+ * claim did not cover them — every SettingsItem id must appear here.
  */
 internal val SETTINGS_ITEM_IDS: List<String> = listOf(
     "playback", "crossfade",
-    "library", "cloud",
-    "bluetooth-car", "android-auto", "bt-av-offset",
+    "library", "cloud", "backup-restore",
+    "bluetooth-car", "bt-av-offset", "android-auto", "cast-av-offset", "cast-start-delay",
     "audio-effects",
-    "video", "subtitles", "autohide",
+    "video", "subtitles", "autohide", "player-text-colour",
     "hue", "smart-home",
     "alarms", "webhooks", "external-control",
     "display", "font-size", "theme", "diag-log", "about"

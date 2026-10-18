@@ -129,6 +129,16 @@ class CrossfadeController(
             if (primarySession != 0) sec.setAudioSessionId(primarySession)
         }
         runCatching {
+            // Audit 2026-10-18: the incoming track must run at the same tempo as the
+            // outgoing one (the remembered kind/file speed, e.g. podcasts at 1.3x) or the
+            // overlap plays at 1x and jumps when the primary takes over. Pitch comes along.
+            com.powermediaplayer.service.PlaybackService.getExoPlayer()?.playbackParameters
+                ?.let { pp ->
+                    sec.playbackParameters = pp
+                    com.powermediaplayer.diag.DiagLog.player(
+                        "crossfade secondary speed=${"%.2f".format(pp.speed)} pitch=${"%.2f".format(pp.pitch)}"
+                    )
+                }
             sec.setMediaItem(nextItem)
             sec.prepare()
             sec.volume = 0.0f

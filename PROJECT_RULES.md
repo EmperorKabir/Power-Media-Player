@@ -8,7 +8,7 @@
 > Live task ledger: `/TASKS.md` (slim — live items only). Closed history: `archive/`.
 > Deeper detail pointers: §8.
 >
-> *Last refreshed 2026-08-25 at versionCode 102 / versionName 1.5.47. When a fact here drifts
+> *Last refreshed 2026-10-18 at versionCode 134 / versionName 1.5.79. When a fact here drifts
 > from code, fix the code-derived fact here in the same turn.*
 
 ---
@@ -23,7 +23,7 @@
 
 ## 2. Current build coordinates (verify against `app/build.gradle.kts`)
 
-- **versionCode 102 / versionName 1.5.47** — current HEAD. Each Play upload MUST be a higher
+- **versionCode 134 / versionName 1.5.79** — current HEAD. Each Play upload MUST be a higher
   versionCode than whatever is live, and a distinct versionName. (Recent trail: vc85 Spotify
   sticky-sign-in PendingIntent fix; vc86-92 autoplay-off Spotify stop + App Remote scaffolding;
   vc93-96 App Remote SDK precise on-phone stop-at-end — BLOCKED on a Spotify-dashboard package+SHA-1
@@ -161,7 +161,12 @@ episode → show → global) via the Tune popup; see §4.
   `cast speed settled=…` 3 s later = the receiver's rate); the speed paths classify through
   `speedKindOf` (cast items take chapter markers from the sender caches, then the disk ChapterCache by
   the ORIGINAL media uri — the same chain `buildCastMetadata` uses; cast-of-local-video = VIDEO)
-  while the Bluetooth mapping keeps `currentBtKind` untouched. The SPEED control is usable while
+  while the Bluetooth mapping keeps `currentBtKind` untouched.
+  Crossfade: the secondary player takes the primary's live `PlaybackParameters` when it is prepared
+  (vc134) — any new per-item speed source must reach it too. Every custom `SessionCommand` the app
+  sends must be in the `onConnect` available-commands list (`ACTION_SET_PITCH` is). The Settings
+  no-drop guard `SETTINGS_ITEM_IDS` must list EVERY `SettingsItem` id (25 at vc134; the test asserts
+  the exact set). The SPEED control is usable while
   casting (vc133): Media3 1.6.0's CastPlayer implements `setPlaybackParameters` (the 2026-05-06
   cast-controls matrix note "doesn't expose playback speed" was wrong); pitch and the audio effects
   stay greyed on cast. Cast-side cache writes must be `putIfAbsent` (sender caches hold the richest
