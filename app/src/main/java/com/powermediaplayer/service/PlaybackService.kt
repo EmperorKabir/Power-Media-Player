@@ -614,6 +614,10 @@ class PlaybackService : MediaLibraryService() {
         val currentKindFlow: kotlinx.coroutines.flow.MutableStateFlow<BtMediaKind> =
             kotlinx.coroutines.flow.MutableStateFlow(BtMediaKind.MUSIC)
 
+        /** A5: how long after a cast queue push a play() is treated as "start that queue"
+         *  rather than a playback-resumption request (receiver load latency, generous). */
+        const val CAST_QUEUE_INFLIGHT_MS = 6000L
+
         val senderMetadataByMediaId: java.util.concurrent.ConcurrentHashMap<String, androidx.media3.common.MediaMetadata> =
             java.util.concurrent.ConcurrentHashMap()
 
@@ -2141,10 +2145,16 @@ class PlaybackService : MediaLibraryService() {
             // PH9: the phone slider writes the per-kind speed; keep the snapshot live so
             // the next item transition applies it (no re-apply mid-item: the slider
             // already set the player, and an explicit per-file speed must not be undone).
-            settingsDataStore.speedByKindFlow.collect { speedByKind = it }
+            settingsDataStore.speedByKindFlow.collect {
+                speedByKind = it
+                reapplySpeedRuleIfPrefsChanged("kind prefs arrived")
+            }
         }
         serviceScope.launch {
-            settingsDataStore.speedOverrides.collect { speedByFile = it }
+            settingsDataStore.speedOverrides.collect {
+                speedByFile = it
+                reapplySpeedRuleIfPrefsChanged("file prefs arrived")
+            }
         }
 
         // Cast: initialize lazily; if Google Play Services is missing the
@@ -2283,6 +2293,48 @@ class PlaybackService : MediaLibraryService() {
                 }
             })
             castPlayer = cp
+            // PH9 cast (audit 2026-10-18): the layered speed rule ran only on the LOCAL
+            // player's transitions, so a cast queue advanced at the receiver's default rate
+            // and the phone slider filed a cast item's speed under the last LOCAL item's kind
+            // (currentKindFlow was never published while casting). CastPlayer supports
+            // setPlaybackParameters (receiver playbackRate, 0.5–2×; pitch is dropped). The
+            // rate is read back 3 s later from the receiver status so the diag log shows
+            // whether the receiver kept it. When the phone shows the picture of a cast video
+            // its speed follows the receiver's, so the picture cannot drift from the sound.
+            cp.addListener(object : Player.Listener {
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    if (mediaItem == null || mediaSession?.player !== cp) return
+                    applySpeedRuleForCurrentItem(cp, "cast item transition")
+                    val id = mediaItem.mediaId
+                    Companion.castMainHandler.postDelayed({
+                        if (castPlayer === cp && cp.currentMediaItem?.mediaId == id) {
+                            com.powermediaplayer.diag.DiagLog.player(
+                                "cast speed settled=${"%.2f".format(cp.playbackParameters.speed)} " +
+                                    "3s after transition id=${com.powermediaplayer.diag.DiagLog.hash(id)}"
+                            )
+                        }
+                    }, 3000L)
+                }
+                override fun onPlaybackParametersChanged(
+                    playbackParameters: androidx.media3.common.PlaybackParameters
+                ) {
+                    com.powermediaplayer.diag.DiagLog.player(
+                        "cast speed now=${"%.2f".format(playbackParameters.speed)}"
+                    )
+                    if (!castLocalVideoActive) return
+                    val lp = player ?: return
+                    if (com.powermediaplayer.playback.speedDiffers(
+                            lp.playbackParameters.speed, playbackParameters.speed
+                        )
+                    ) {
+                        runCatching {
+                            lp.playbackParameters = androidx.media3.common.PlaybackParameters(
+                                playbackParameters.speed, lp.playbackParameters.pitch
+                            )
+                        }
+                    }
+                }
+            })
 
             // Bug fix (user-reported "I cast to A, then to B; A keeps
             // playing"): SessionAvailabilityListener only fires on
@@ -2993,6 +3045,8 @@ class PlaybackService : MediaLibraryService() {
                 )
                 emptyList()
             } else {
+                coverOpenableMemo.clear()
+                lastCastQueueSetAtMs = android.os.SystemClock.elapsedRealtime()
                 items.map { rebuildForCast(it, server) }
             }
         } else {
@@ -3486,9 +3540,21 @@ class PlaybackService : MediaLibraryService() {
 
     /** PH2: true when [uri] yields at least one byte (a MediaStore albumart uri with no
      *  cached art throws FileNotFoundException; an empty file reads nothing). */
-    private fun coverOpenable(uri: android.net.Uri): Boolean = runCatching {
-        contentResolver.openInputStream(uri)?.use { it.read() >= 0 } ?: false
-    }.getOrDefault(false)
+    /** A4 (audit 2026-10-18): memo per cast build — an album's tracks share ONE MediaStore
+     *  albumart uri, so a 50-track queue probed the same uri 50 times on the main thread at
+     *  cast start. Cleared before each cast rebuild and with the sender caches. */
+    private val coverOpenableMemo = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /** A5 (audit 2026-10-18, device-found crash): when the LAST queue was pushed to the
+     *  CastPlayer. Its load is asynchronous (the timeline stays empty until the receiver
+     *  reports it), so a play() that follows a setMediaItems within this window makes
+     *  MediaSession call onPlaybackResumption (it sees an empty timeline). */
+    @Volatile private var lastCastQueueSetAtMs = 0L
+    private fun coverOpenable(uri: android.net.Uri): Boolean =
+        coverOpenableMemo.getOrPut(uri.toString()) {
+            runCatching { contentResolver.openInputStream(uri)?.use { it.read() >= 0 } ?: false }
+                .getOrDefault(false)
+        }
 
     /** Persist embedded cover bytes to a stable cache file so the relay can serve them. */
     private fun writeCastCover(mediaId: String, data: ByteArray): java.io.File? = runCatching {
@@ -3723,6 +3789,7 @@ class PlaybackService : MediaLibraryService() {
         // is safe; the mid-cast process-restart path repopulates from CastPlayer.
         senderMetadataByMediaId.clear()
         senderItemByMediaId.clear()
+        coverOpenableMemo.clear()
         audioDeviceCallback?.let {
             runCatching { getSystemService(android.media.AudioManager::class.java)?.unregisterAudioDeviceCallback(it) }
         }
@@ -3842,18 +3909,60 @@ class PlaybackService : MediaLibraryService() {
         ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
             val fut = com.google.common.util.concurrent.SettableFuture
                 .create<MediaSession.MediaItemsWithStartPosition>()
+            // A5 (audit 2026-10-18, device-found FATAL "The item must specify its mimeType"):
+            // MediaSession calls this whenever play() arrives while the player's timeline is
+            // empty. On the CastPlayer that is also the case for the few seconds AFTER a
+            // queue was pushed (the receiver has not reported it yet): the user taps an
+            // episode while casting → onAddMediaItems rebuilt it for cast → setMediaItems →
+            // play() → resumption → the raw resume target (no cast mimeType) went into the
+            // CastPlayer → DefaultMediaItemConverter threw on the main thread. Two guards:
+            //  (1) queue load in flight → FAIL the future: Media3 then falls back to a plain
+            //      play() (Util.handlePlayButtonAction), which starts the pending queue;
+            //  (2) otherwise rebuild the resume target for cast (mimeType + relay uri) and
+            //      fail rather than hand the converter an item it will throw on.
+            val cp = mediaSession.player as? CastPlayer
+            val sinceSetMs = android.os.SystemClock.elapsedRealtime() - lastCastQueueSetAtMs
+            if (cp != null && sinceSetMs in 0 until CAST_QUEUE_INFLIGHT_MS) {
+                com.powermediaplayer.diag.DiagLog.event(
+                    "AABROWSE",
+                    "playback resumption for ${controller.packageName} skipped: cast queue " +
+                        "pushed ${sinceSetMs}ms ago is still loading → plain play"
+                )
+                fut.setException(UnsupportedOperationException("cast queue load in flight"))
+                return fut
+            }
             serviceScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 val target = runCatching { mediaBrowseTree.resumeTarget() }.getOrNull()
                 com.powermediaplayer.diag.DiagLog.event(
                     "AABROWSE",
                     "playback resumption for ${controller.packageName}: " +
-                        "${target?.first?.mediaId?.takeLast(40)} @${target?.second}ms"
+                        "${target?.first?.mediaId?.takeLast(40)} @${target?.second}ms" +
+                        (if (cp != null) " (cast)" else "")
                 )
                 if (target == null) {
                     fut.setException(UnsupportedOperationException("nothing to resume"))
-                } else {
-                    fut.set(MediaSession.MediaItemsWithStartPosition(listOf(target.first), 0, target.second))
+                    return@launch
                 }
+                var item = target.first
+                if (cp != null) {
+                    item = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        runCatching {
+                            if (item.mediaId.isNotEmpty()) {
+                                senderMetadataByMediaId[item.mediaId] = item.mediaMetadata
+                                senderItemByMediaId[item.mediaId] = item
+                            }
+                            startCastRelayIfNeeded()?.let { rebuildForCast(item, it) }
+                        }.getOrNull() ?: item
+                    }
+                    if (item.localConfiguration?.mimeType.isNullOrEmpty()) {
+                        com.powermediaplayer.diag.DiagLog.event(
+                            "AABROWSE", "playback resumption: resume target cannot be cast (no mimeType) → skipped"
+                        )
+                        fut.setException(UnsupportedOperationException("resume target not castable"))
+                        return@launch
+                    }
+                }
+                fut.set(MediaSession.MediaItemsWithStartPosition(listOf(item), 0, target.second))
             }
             return fut
         }
@@ -4356,6 +4465,7 @@ class PlaybackService : MediaLibraryService() {
                 }
                 if (relay != null) rebuildForCast(withUri, relay) else withUri
             }.toMutableList()
+            if (relay != null) lastCastQueueSetAtMs = android.os.SystemClock.elapsedRealtime()
             // Cast-local-video: a NEW track chosen WHILE casting must keep the
             // app's on-phone PICTURE in step with the cast audio. For a VIDEO,
             // load it into the local player (so the picture updates) and cast
@@ -4729,7 +4839,7 @@ class PlaybackService : MediaLibraryService() {
      *  afterwards and wins). Called on every media-item transition. */
     private fun applySpeedRuleForCurrentItem(p: Player, why: String) {
         val item = p.currentMediaItem ?: return
-        val kind = currentBtKind(p)
+        val kind = speedKindOf(p)
         // ONE classifier: the phone slider persists under this published kind (a controller-
         // side classification saw a chaptered Drive book as a podcast — its metadata extras
         // are not what the service sees — and stored the speed under the wrong kind).
@@ -4756,7 +4866,7 @@ class PlaybackService : MediaLibraryService() {
     /** PH9: a user-chosen speed (the car's speed button) is remembered for the item's kind AND
      *  for the file (same two layers the phone slider writes; 1× clears the file entry). */
     private fun persistUserSpeed(p: Player, speed: Float) {
-        val kind = currentBtKind(p)
+        val kind = speedKindOf(p)
         val uri = p.currentMediaItem?.mediaId
         Companion.currentKindFlow.value = kind
         serviceScope.launch {
@@ -4774,11 +4884,49 @@ class PlaybackService : MediaLibraryService() {
     private fun reapplySpeedRuleIfKindResolved(p: Player) {
         val id = p.currentMediaItem?.mediaId ?: return
         if (id != lastRuleItemId) return
-        val kind = currentBtKind(p)
+        val kind = speedKindOf(p)
         if (kind == lastRuleKind) return
         Companion.currentKindFlow.value = kind
         if (com.powermediaplayer.playback.speedDiffers(p.playbackParameters.speed, lastRuleTarget)) return
         applySpeedRuleForCurrentItem(p, "kind resolved ${lastRuleKind?.tag}→${kind.tag}")
+    }
+
+    /** A2 (audit 2026-10-18): the speed snapshots are seeded with a 200 ms budget at cold
+     *  start; had the DataStore read run late, the restored item's transition would have
+     *  applied 1× from an empty map. Re-resolve for the SAME item when the real values
+     *  arrive — only while the speed is still the one the rule set. A slider move, a car
+     *  speed press or a per-file override changes the live speed first and writes these
+     *  prefs 300 ms later, so for those current ≠ rule target → no-op (never undone). */
+    private fun reapplySpeedRuleIfPrefsChanged(why: String) {
+        val p = mediaSession?.player ?: return
+        val id = p.currentMediaItem?.mediaId ?: return
+        if (id != lastRuleItemId) return
+        val kind = lastRuleKind ?: return
+        if (com.powermediaplayer.playback.speedDiffers(p.playbackParameters.speed, lastRuleTarget)) return
+        val (target, _) = com.powermediaplayer.playback.resolveSpeed(speedByFile[id], speedByKind, kind)
+        if (!com.powermediaplayer.playback.speedDiffers(target, lastRuleTarget)) return
+        applySpeedRuleForCurrentItem(p, why)
+    }
+
+    /** A1 (audit 2026-10-18): the kind the SPEED paths classify under. Local player →
+     *  [currentBtKind] unchanged. CastPlayer: its currentMediaItem is rebuilt from receiver
+     *  state (DefaultMediaItemConverter keeps the mediaId, drops the metadata extras), so a
+     *  book's chapter markers come from the sender-side caches; a cast of local video
+     *  (picture on the phone, sound on the receiver) is VIDEO. The Bluetooth mapping keeps
+     *  calling [currentBtKind] directly — its behaviour is untouched. */
+    private fun speedKindOf(player: Player): BtMediaKind {
+        if (player !is CastPlayer) return currentBtKind(player)
+        if (castLocalVideoActive) return BtMediaKind.VIDEO
+        val item = player.currentMediaItem ?: return BtMediaKind.MUSIC
+        val uri = item.mediaId
+        val name = uri.substringAfterLast('/')
+        val isVideo = com.powermediaplayer.util.MediaClassifier.isVideoByName(name, "")
+        val extras = Companion.senderItemByMediaId[uri]?.mediaMetadata?.extras
+            ?: Companion.senderMetadataByMediaId[uri]?.extras
+            ?: item.mediaMetadata.extras
+        val hasChapters = (extras?.getInt("chapter_count", 0) ?: 0) > 0
+        val isPodcast = uri.startsWith("http")
+        return com.powermediaplayer.playback.BtKindResolver.resolve(isVideo, hasChapters, isPodcast)
     }
 
     private fun cycleAutoSpeed(player: Player) {

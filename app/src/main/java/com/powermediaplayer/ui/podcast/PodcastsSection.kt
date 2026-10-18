@@ -427,6 +427,7 @@ class PodcastsViewModel @Inject constructor(
         appScope.launch(Dispatchers.IO) {
             val t0 = System.currentTimeMillis()
             var placeholderFeed: String? = null
+            var claimedFeed: String? = null
             try {
                 // An Apple Podcasts page (…/idNNNN) is not an RSS feed — resolve its
                 // real feedUrl via the iTunes lookup before trying to parse.
@@ -434,6 +435,9 @@ class PodcastsViewModel @Inject constructor(
                 val target = if (rssUrl.contains("podcasts.apple.com") && appleId != null) {
                     itunes.lookupFeedUrl(appleId) ?: rssUrl
                 } else rssUrl
+                // A3: hold the refresher's in-flight slot for this feed so a concurrent
+                // on-visit / header refresh is Skipped (no second download of the feed).
+                if (refresher.claimExternal(target)) claimedFeed = target
                 val existing = podcastDao.getShow(target)
                 if (existing == null) {
                     // #5 — a brand-new subscription appends to the bottom.
@@ -478,6 +482,7 @@ class PodcastsViewModel @Inject constructor(
                 // A placeholder that never got its feed must not linger as an
                 // empty, un-refreshable show row.
                 placeholderFeed?.let { runCatching { podcastDao.unsubscribe(it) } }
+                claimedFeed?.let { refresher.releaseExternal(it) }
                 _subscribing.value = false
                 tickClock()
             }

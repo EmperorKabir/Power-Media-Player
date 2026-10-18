@@ -157,6 +157,18 @@ episode → show → global) via the Tune popup; see §4.
   podcast|video>`) → 1×; the overrides-popup speed is applied by the UI afterwards and wins. The
   SERVICE applies the rule on every item transition (`speed rule applied layer=…`); there is NO global
   speed key any more (the old one was written only by the car button and leaked onto every relaunch).
+  CAST (vc132): the rule also runs on the CastPlayer's transitions (`(cast item transition)`, then
+  `cast speed settled=…` 3 s later = the receiver's rate); the speed paths classify through
+  `speedKindOf` (cast items take chapter markers from the sender caches; cast-of-local-video = VIDEO)
+  while the Bluetooth mapping keeps `currentBtKind` untouched. The snapshots re-resolve the SAME item
+  once the DataStore values land after a cold start (`… prefs arrived`), never over a user-set speed.
+- **Playback resumption on a CastPlayer (vc132):** MediaSession calls `onPlaybackResumption` whenever
+  play() arrives on an EMPTY timeline — on the CastPlayer that includes the seconds after a queue push
+  (the receiver has not reported it yet). The callback must never hand the converter a raw item (it
+  throws "must specify its mimeType" on the main thread → FATAL): inside `CAST_QUEUE_INFLIGHT_MS` the
+  future is FAILED (Media3 then issues a plain play() that starts the pending queue); otherwise the
+  resume target goes through `rebuildForCast`. Stamp `lastCastQueueSetAtMs` wherever a queue is
+  pushed to the CastPlayer.
 - **ONE media-kind classifier:** `PlaybackService.currentBtKind` (published as `currentKindFlow`). Never
   classify on the controller side — its metadata extras can lack the chapter markers (a Drive audiobook
   was filed under "podcast").

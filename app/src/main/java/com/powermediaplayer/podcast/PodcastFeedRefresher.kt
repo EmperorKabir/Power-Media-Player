@@ -74,6 +74,13 @@ class PodcastFeedRefresher @Inject constructor(
         _refreshing.value = inFlight.toSet()
     }
 
+    /** A3 (audit 2026-10-18): the subscribe path fetches the feed itself (directory lookup,
+     *  status text, failure classes). It claims the url here so an on-visit / header refresh
+     *  of the optimistic placeholder row (lastChecked=0 → always "stale") is Skipped instead
+     *  of downloading the same 1-2 MB feed a second time, and the row's spinner shows. */
+    suspend fun claimExternal(feedUrl: String): Boolean = claim(feedUrl)
+    suspend fun releaseExternal(feedUrl: String) = release(feedUrl)
+
     /** Refresh [shows] 3-wide (feeds are independent; bounded radio/server load). */
     suspend fun refreshShows(shows: List<PodcastShowEntity>): Summary {
         if (shows.isEmpty()) return Summary(0, 0, 0, 0, 0)
