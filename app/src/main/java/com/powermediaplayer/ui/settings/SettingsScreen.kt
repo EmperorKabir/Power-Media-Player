@@ -541,113 +541,165 @@ fun SettingsScreen(
                 }
             },
             SettingsItem(
-                "android-auto", "Android Auto buttons (per file type)",
-                listOf("android auto", "car", "head unit", "automotive", "button", "player",
-                    "small bar", "mini player", "dashboard", "skip", "chapter", "speed",
-                    "favourite", "bookmark", "audiobook", "podcast", "music", "video")
-            ) {
-                Text(
-                    text = "Choose the buttons Android Auto shows for each kind of media. " +
-                        "The two either side of Play also appear in the small player bar and " +
-                        "on the dashboard card. The rest are shown in the order you set: the " +
-                        "car fits what it can beside those and puts the remainder in its three " +
-                        "dot menu. Your phone's lock screen and notification controls follow " +
-                        "the same choice.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                )
-                listOf(
-                    Triple(BtMediaKind.AUDIOBOOK, "Audiobooks", autoButtonSet.audiobook),
-                    Triple(BtMediaKind.PODCAST, "Podcasts", autoButtonSet.podcast),
-                    Triple(BtMediaKind.MUSIC, "Music", autoButtonSet.music),
-                    Triple(BtMediaKind.VIDEO, "Video", autoButtonSet.video)
-                ).forEach { (kind, title, cfg) ->
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = TealAccent,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
-                    )
-                    AutoSlotPicker(
-                        label = "Left of Play",
-                        current = cfg.leftSlot,
-                        options = AUTO_LEFT_OPTIONS,
-                        onChange = { viewModel.setAutoLeftSlot(kind, it) }
-                    )
-                    AutoSlotPicker(
-                        label = "Right of Play",
-                        current = cfg.rightSlot,
-                        options = AUTO_RIGHT_OPTIONS,
-                        onChange = { viewModel.setAutoRightSlot(kind, it) }
-                    )
-                    Text(
-                        text = "Choosing the track buttons keeps the car's own previous and " +
-                            "next; a skip or chapter choice replaces them. Skip amounts use " +
-                            "the seconds set under Bluetooth car controls.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                    )
-                    AutoExtrasList(
-                        extras = cfg.extras,
-                        onChange = { viewModel.setAutoExtras(kind, it) }
-                    )
-                    val wheel = autoWheelSet.forKind(kind)
-                    Text(
-                        text = "Steering wheel on Android Auto",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
-                    )
-                    Text(
-                        text = "What the steering wheel previous and next keys do while the " +
-                            "phone is connected over Android Auto. This is separate from " +
-                            "Bluetooth car controls, which keep handling older Bluetooth " +
-                            "stereos on their own.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                    )
-                    BluetoothActionPicker(
-                        label = "Previous key does",
-                        currentAction = wheel.prevAction,
-                        seconds = wheel.skipBackSeconds,
-                        options = PREV_OPTIONS,
-                        onActionChange = { viewModel.setAutoWheelPrevAction(kind, it) },
-                        onSecondsChange = { viewModel.setAutoWheelSkipBackSeconds(kind, it) }
-                    )
-                    BluetoothActionPicker(
-                        label = "Next key does",
-                        currentAction = wheel.nextAction,
-                        seconds = wheel.skipForwardSeconds,
-                        options = NEXT_OPTIONS,
-                        onActionChange = { viewModel.setAutoWheelNextAction(kind, it) },
-                        onSecondsChange = { viewModel.setAutoWheelSkipForwardSeconds(kind, it) }
-                    )
-                    TextButton(
-                        onClick = { viewModel.resetAutoButtons(kind) },
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    ) { Text("Reset $title to defaults", color = TealAccent) }
-                }
-                Text(
-                    text = "Speed shows the current speed and cycles through 1, 1.25, 1.5, " +
-                        "1.75 and 2 times. A button already used either side of Play is not " +
-                        "repeated. Cars with a fixed five button bar show only what fits; the " +
-                        "Playback tab in the car always carries chapters, speed, sleep timer, " +
-                        "effects, favourite and bookmark.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiary,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
-                )
-            },
-            SettingsItem(
                 "bt-av-offset", "Bluetooth A/V sync offset",
                 listOf("bluetooth", "offset", "sync", "delay", "lip", "latency", "video", "audio")
             ) {
                 BtVideoAudioOffsetRow(
                     valueMs = uiState.btVideoAudioOffsetMs,
                     onValueChange = { viewModel.setBtVideoAudioOffsetMs(it) }
+                )
+            },
+            SettingsItem(
+                "android-auto", "Android Auto (per file type)",
+                listOf("android auto", "car", "head unit", "automotive", "button", "player",
+                    "small bar", "mini player", "small window", "dashboard", "card", "skip",
+                    "chapter", "speed", "favourite", "bookmark", "steering wheel", "wheel",
+                    "audiobook", "podcast", "music", "video")
+            ) {
+                // ONE unbroken Android Auto section. A kind selector shows one kind's whole
+                // configuration at a time (the earlier layout stacked four kind blocks, each
+                // ending with its own "Steering wheel" sub-block, which read as duplicated).
+                // Entirely separate from "Bluetooth car controls" above: that item, its
+                // DataStore keys (bt_<kind>_*) and its service code path are untouched.
+                Text(
+                    text = "Everything Android Auto specific is here, set separately for each " +
+                        "kind of media. It is independent of Bluetooth car controls above, " +
+                        "which keep handling cars and remotes that work over Bluetooth; " +
+                        "nothing here changes them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                var aaKindTag by rememberSaveable { mutableStateOf(BtMediaKind.AUDIOBOOK.tag) }
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        BtMediaKind.AUDIOBOOK to "Audiobooks", BtMediaKind.PODCAST to "Podcasts",
+                        BtMediaKind.MUSIC to "Music", BtMediaKind.VIDEO to "Video"
+                    ).forEach { (k, label) ->
+                        FilterChip(
+                            selected = aaKindTag == k.tag,
+                            onClick = { aaKindTag = k.tag },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+                val kind = BtMediaKind.values().firstOrNull { it.tag == aaKindTag } ?: BtMediaKind.AUDIOBOOK
+                val kindTitle = when (kind) {
+                    BtMediaKind.AUDIOBOOK -> "Audiobooks"
+                    BtMediaKind.PODCAST -> "Podcasts"
+                    BtMediaKind.MUSIC -> "Music"
+                    BtMediaKind.VIDEO -> "Video"
+                }
+                val cfg = autoButtonSet.forKind(kind)
+                val wheel = autoWheelSet.forKind(kind)
+
+                // 1 — the slot pair: full player row AND the small player bar / dashboard card.
+                Text(
+                    text = "1. Small player bar and dashboard card: the two buttons beside Play",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TealAccent,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                )
+                Text(
+                    text = "These two sit either side of Play on the car's full player screen " +
+                        "and are the only two the small player bar and the dashboard card " +
+                        "show. Android Auto does not let the small view differ from the big " +
+                        "one, so setting them here sets both.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                AutoSlotPicker(
+                    label = "Left of Play",
+                    current = cfg.leftSlot,
+                    options = AUTO_LEFT_OPTIONS,
+                    onChange = { viewModel.setAutoLeftSlot(kind, it) }
+                )
+                AutoSlotPicker(
+                    label = "Right of Play",
+                    current = cfg.rightSlot,
+                    options = AUTO_RIGHT_OPTIONS,
+                    onChange = { viewModel.setAutoRightSlot(kind, it) }
+                )
+                Text(
+                    text = "Choosing the track buttons keeps the car's own previous and next; " +
+                        "a skip or chapter choice replaces them. Skip amounts use the seconds " +
+                        "set under Bluetooth car controls.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+
+                // 2 — the rest of the full-screen row, in priority order.
+                Text(
+                    text = "2. Full player screen: the other buttons, in priority order",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TealAccent,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                )
+                Text(
+                    text = "Beside Play and the two buttons above, the car fits as many of " +
+                        "these as it can: a car with a fixed five button bar fits two more, " +
+                        "Android Auto fits three and puts the rest in its three dot menu. Tick " +
+                        "the ones you want and order them; the first ones win. A button " +
+                        "already used beside Play is not repeated. Speed shows the current " +
+                        "speed and cycles through 1, 1.25, 1.5, 1.75 and 2 times.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                AutoExtrasList(
+                    extras = cfg.extras,
+                    onChange = { viewModel.setAutoExtras(kind, it) }
+                )
+
+                // 3 — steering wheel keys over Android Auto (NOT the Bluetooth mapping).
+                Text(
+                    text = "3. Steering wheel keys on Android Auto",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = TealAccent,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+                )
+                Text(
+                    text = "What the steering wheel's previous and next keys do while the " +
+                        "phone is connected over Android Auto. Separate from Bluetooth car " +
+                        "controls, which keep handling Bluetooth stereos on their own; " +
+                        "changing this never changes those.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                )
+                BluetoothActionPicker(
+                    label = "Previous key does",
+                    currentAction = wheel.prevAction,
+                    seconds = wheel.skipBackSeconds,
+                    options = PREV_OPTIONS,
+                    onActionChange = { viewModel.setAutoWheelPrevAction(kind, it) },
+                    onSecondsChange = { viewModel.setAutoWheelSkipBackSeconds(kind, it) }
+                )
+                BluetoothActionPicker(
+                    label = "Next key does",
+                    currentAction = wheel.nextAction,
+                    seconds = wheel.skipForwardSeconds,
+                    options = NEXT_OPTIONS,
+                    onActionChange = { viewModel.setAutoWheelNextAction(kind, it) },
+                    onSecondsChange = { viewModel.setAutoWheelSkipForwardSeconds(kind, it) }
+                )
+                TextButton(
+                    onClick = { viewModel.resetAutoButtons(kind) },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) { Text("Reset $kindTitle to defaults", color = TealAccent) }
+                Text(
+                    text = "Whatever you choose, the car's Playback tab always carries the " +
+                        "chapter list, speed, sleep timer, effects, favourite and bookmark. " +
+                        "Your phone's lock screen and notification controls follow the same " +
+                        "buttons.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
                 )
             },
             SettingsItem(
