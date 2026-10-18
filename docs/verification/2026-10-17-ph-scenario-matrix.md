@@ -66,3 +66,14 @@ Local RSS feed: `http://192.168.50.31:8765/feed.xml` (PC-served; episodes 22 s t
 - Saved A-B loop on test ep1 cleared (`AB-loop cleared (user)`), test downloads deleted (DB 0 rows, Library `Downloaded (1)`), test subscription unsubscribed, test rows removed from Last Played, cast stopped, playback paused.
 - Stored speeds restored: audiobook 1x (Reset Speed), podcast 1.3x (the value the user had before the tests). The audiobook's test-time history rows were deleted so the user's 19:55:02 position is the newest row again (the resume picker takes the newest row).
 - PC feed server and log captures stopped. To repeat the matrix: `tools/verify/ph_device.sh`, `tools/verify/mkfeed.py`, debug-only cleartext exception for 192.168.50.31.
+
+## Post-cleanup findings (2026-10-18 13:49–14:05, vc126)
+
+| ID | Change | Scenario | Predicate (evidence source) |
+|----|--------|----------|-----------------------------|
+| V22 | PH-V pitch fix | An episode with a 0.7x popup override, then switching to the audiobook: the book must play at its own speed | DiagLog `speed rule applied layer=kind kind=audiobook 0.70→1.00`; `dumpsys media_session` while playing shows `speed=1.0`; no `slider pitch` rewrite after the rule |
+| V23 | Per-file speed layer restored | S16E24 holds a per-file 1.3x; 1.5x is set on another episode (kind now 1.5); return to S16E24 | DiagLog `speed rule applied layer=file kind=podcast 1.50→1.30`; UI label `1.3x`; `dumpsys` `speed=1.3` while playing |
+
+Before vc126 the book played at 0.7x (`dumpsys speed=0.7` while PLAYING at 13:49): the view model's pitch collector (which fires on every preferences write) rewrote `PlaybackParameters(controllerSpeed=0.7, pitch=1.0)` 33 ms after the service applied 1.0x. Pitch-only changes now go through the service (`ACTION_SET_PITCH`).
+
+Gate (post-cleanup subset, 2026-10-18 14:06, vc126): V22 PASS · V23 PASS. (V1/V3/V7 read the live DB and the test feed is now unsubscribed, so the full gate is not re-run; the 13:40 21/21 table stands for V1–V21.)

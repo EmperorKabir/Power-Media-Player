@@ -32,4 +32,12 @@ class SpeedRuleTest {
         assertTrue(speedDiffers(1.0f, 1.25f))
         assertTrue(speedDiffers(1.3f, 1.0f))
     }
+
+    @Test fun resolveSpeed_fileWinsOverKind_thenKind_thenDefault() {
+        val kinds = mapOf(BtMediaKind.PODCAST to 1.3f)
+        assertEquals(1.1f to SpeedLayer.FILE, resolveSpeed(1.1f, kinds, BtMediaKind.PODCAST))
+        assertEquals(1.3f to SpeedLayer.KIND, resolveSpeed(null, kinds, BtMediaKind.PODCAST))
+        assertEquals(1.0f to SpeedLayer.DEFAULT, resolveSpeed(null, kinds, BtMediaKind.MUSIC))
+        assertEquals(SPEED_MAX to SpeedLayer.FILE, resolveSpeed(9f, kinds, BtMediaKind.MUSIC))
+    }
 }

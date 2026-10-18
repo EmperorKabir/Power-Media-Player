@@ -310,11 +310,15 @@ class PlayerViewModel @Inject constructor(
         if (row == null || row.isEmpty()) return
         val speed = row.playbackSpeed ?: player.playbackParameters.speed
         val pitch = row.pitch ?: player.playbackParameters.pitch
-        if (row.playbackSpeed != null || row.pitch != null) {
+        if (row.playbackSpeed != null) {
+            // Explicit per-file speed: compose both (the speed is the row's, not a stale read).
             runCatching {
                 player.playbackParameters =
                     androidx.media3.common.PlaybackParameters(speed, pitch)
             }
+        } else if (row.pitch != null) {
+            // Pitch-only row: let the service compose it with its authoritative speed.
+            playbackConnection.setPitchOnly(pitch)
         }
         row.volumeBoostMb?.let { setVolumeBoost(it) }
         com.powermediaplayer.util.Diag.i(
@@ -500,7 +504,9 @@ class PlayerViewModel @Inject constructor(
         // Settings → playback hot-wire: pitch and volume boost values
         // change in Settings; reflect them in the running player.
         viewModelScope.launch {
-            settingsDataStore.pitchIndependent.collect { p -> setPitch(p) }
+            // distinctUntilChanged: every DataStore write re-emits the unchanged pitch, and
+            // each re-emission used to rewrite PlaybackParameters with a possibly stale speed.
+            settingsDataStore.pitchIndependent.distinctUntilChanged().collect { p -> setPitch(p) }
         }
         viewModelScope.launch {
             settingsDataStore.volumeBoostMb.collect { mb -> setVolumeBoost(mb) }
@@ -904,37 +910,45 @@ class PlayerViewModel @Inject constructor(
         )
         playbackConnection.setPlaybackSpeed(speed)
         // PH9 — remember the chosen speed for the KIND of what is playing
-        // (music / audiobook / podcast / video); the service applies it to every
-        // later item of that kind and after a relaunch. Replaces the old per-file
-        // slider override (a new episode never inherited it, and the cold-start
-        // seed read a global key only the car button wrote). The explicit
-        // per-file / per-show speed lives in the overrides popup and still wins.
+        // (music / audiobook / podcast / video) AND for this file (§C7 slim per-file
+        // memory: "re-open the original track → it auto-resumes at 1.5×"; 1× clears
+        // the file entry). The service applies file → kind → 1× on every item
+        // transition and after a relaunch. The explicit per-file / per-show speed
+        // from the overrides popup still wins over both.
         // Audit 5.6 — the persist is debounced: a slider drag emits per
         // movement and each DataStore edit rewrites + fsyncs the whole
         // preferences file and wakes every collector. The player speed
         // above still applies instantly; only the WRITE settles.
         val player = playbackConnection.getPlayer()
-        if (player != null && player.currentMediaItem != null) {
+        val uri = player?.currentMediaItem?.mediaId
+        if (player != null && !uri.isNullOrBlank()) {
             ensureSpeedPersister()
             // The kind comes from the SERVICE (PlaybackService.currentKindFlow): a controller-
             // side classification can miss the chapter extras and file the speed under the
             // wrong kind (seen on a Drive audiobook stored as "podcast").
-            speedKindPersist.value =
-                com.powermediaplayer.service.PlaybackService.currentKindFlow.value to speed
+            speedKindPersist.value = SpeedPersist(
+                com.powermediaplayer.service.PlaybackService.currentKindFlow.value, uri, speed
+            )
         }
     }
 
-    private val speedKindPersist =
-        kotlinx.coroutines.flow.MutableStateFlow<Pair<com.powermediaplayer.data.preferences.BtMediaKind, Float>?>(null)
+    private data class SpeedPersist(
+        val kind: com.powermediaplayer.data.preferences.BtMediaKind, val uri: String, val speed: Float
+    )
+    private val speedKindPersist = kotlinx.coroutines.flow.MutableStateFlow<SpeedPersist?>(null)
     private var speedPersistJob: kotlinx.coroutines.Job? = null
     private fun ensureSpeedPersister() {
         if (speedPersistJob?.isActive == true) return
         speedPersistJob = viewModelScope.launch {
-            speedKindPersist.filterNotNull().collectLatest { (kind, speed) ->
+            speedKindPersist.filterNotNull().collectLatest { (kind, uri, speed) ->
                 kotlinx.coroutines.delay(300)   // new drag emissions cancel the wait
                 settingsDataStore.setSpeedForKind(kind, speed)
+                // §C7 slim per-file memory: 1× (default) clears the entry, as before.
+                if (kotlin.math.abs(speed - 1.0f) < 0.01f) settingsDataStore.clearSpeedOverride(uri)
+                else settingsDataStore.setSpeedOverride(uri, speed)
                 com.powermediaplayer.diag.DiagLog.ui(
-                    "speed remembered kind=${kind.tag} speed=${"%.2f".format(speed)}"
+                    "speed remembered kind=${kind.tag} speed=${"%.2f".format(speed)} file=${
+                        if (kotlin.math.abs(speed - 1.0f) < 0.01f) "cleared" else "set"}"
                 )
             }
         }
@@ -1360,10 +1374,14 @@ class PlayerViewModel @Inject constructor(
         // NPEs on a fresh launch (same field-init-order race class
         // that previously hit _pitch / _volumeBoostMb).
         // See docs/superpowers/plans/2026-05-07-info-icons-...md §A3.
-        val speed = runCatching {
-            playbackConnection.getPlayer()?.playbackParameters?.speed
-        }.getOrNull() ?: 1.0f
-        playbackConnection.setPlaybackParametersWithPitch(speed, clamped)
+        // PH-V fix: never compose the speed here. The service composes the pitch with its
+        // own speed (ACTION_SET_PITCH); the controller's speed can lag a service-side
+        // change (the per-kind rule) and wrote the previous item's speed back.
+        val currentPitch = runCatching {
+            playbackConnection.getPlayer()?.playbackParameters?.pitch
+        }.getOrNull()
+        if (currentPitch != null && !com.powermediaplayer.playback.speedDiffers(currentPitch, clamped)) return
+        playbackConnection.setPitchOnly(clamped)
     }
 
     // ── Reverb (rendered in the service AudioProcessor chain) ───────

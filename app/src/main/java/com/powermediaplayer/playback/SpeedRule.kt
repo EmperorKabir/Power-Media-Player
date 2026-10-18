@@ -26,6 +26,26 @@ const val SPEED_MAX = 4f
 fun effectiveKindSpeed(speedByKind: Map<BtMediaKind, Float>, kind: BtMediaKind): Float =
     speedByKind[kind]?.coerceIn(SPEED_MIN, SPEED_MAX) ?: 1.0f
 
+/** Which layer decided the speed (for the diag line). */
+enum class SpeedLayer { FILE, KIND, DEFAULT }
+
+/**
+ * Layered resolution: a speed the user set while THIS file was playing (the
+ * documented per-file memory, §C7 slim: "re-open the original track → it
+ * auto-resumes at 1.5×") → the speed remembered for the file's KIND → 1×.
+ * The explicit per-file / per-show speed from the overrides popup is applied
+ * by the UI afterwards and wins over all three.
+ */
+fun resolveSpeed(
+    fileSpeed: Float?,
+    speedByKind: Map<BtMediaKind, Float>,
+    kind: BtMediaKind
+): Pair<Float, SpeedLayer> = when {
+    fileSpeed != null -> fileSpeed.coerceIn(SPEED_MIN, SPEED_MAX) to SpeedLayer.FILE
+    speedByKind[kind] != null -> effectiveKindSpeed(speedByKind, kind) to SpeedLayer.KIND
+    else -> 1.0f to SpeedLayer.DEFAULT
+}
+
 /** True when [target] is far enough from [current] to be worth a Sonic flush. */
 fun speedDiffers(current: Float, target: Float): Boolean =
     kotlin.math.abs(current - target) >= 0.01f

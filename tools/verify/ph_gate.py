@@ -90,6 +90,9 @@ checks = {
     "V19": lambda: ui.get("V19_one") == "Downloaded (4)" and ui.get("V19_zero") == "Downloaded (1)",
     "V20": lambda: ui.get("V20_resumed") is True,
     "V21": lambda: ui.get("V21_won") is True,
+    "V22": lambda: has(diag, r"speed rule applied layer=kind kind=audiobook 0\.70→1\.00") and ui.get("V22_actual") == "speed=1.0",
+    # Ran with the file's existing 1.3x entry vs a fresh 1.5x kind speed (the 1.25 chip tap missed).
+    "V23": lambda: has(diag, r"speed rule applied layer=file kind=podcast 1\.50→1\.30") and ui.get("V23_return_label") == "1.3x",
 }
 
 rows = []

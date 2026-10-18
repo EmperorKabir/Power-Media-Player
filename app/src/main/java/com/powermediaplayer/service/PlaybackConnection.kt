@@ -416,6 +416,15 @@ class PlaybackConnection @Inject constructor(
         controller?.setPlaybackParameters(PlaybackParameters(speed, pitch))
     }
 
+    /** PH-V fix: a pitch-only change goes to the SERVICE, which composes it with its own
+     *  (authoritative) speed. Composing on the controller used the controller's view of the
+     *  speed, which lags a service-side change (the per-kind speed rule) by tens of ms and
+     *  wrote the stale value back. */
+    fun setPitchOnly(pitch: Float) {
+        val args = Bundle().apply { putFloat(PlaybackService.EXTRA_PITCH, pitch) }
+        controller?.sendCustomCommand(SessionCommand(PlaybackService.ACTION_SET_PITCH, Bundle.EMPTY), args)
+    }
+
     /**
      * Audio delay is fed to AudioDelayProcessor through the
      * service-side DataStore Flow collector (see PlaybackService

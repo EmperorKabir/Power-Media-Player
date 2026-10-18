@@ -333,11 +333,12 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.setPodcastAutoplayNext(it) }
                 )
                 Text(
-                    text = "Playback speed is remembered separately for music, audiobooks, " +
-                        "podcasts and video: set it on the player (or with the car's speed " +
-                        "button) and every later item of that kind plays at it, including " +
-                        "after a relaunch. A per-file or per-show speed from the overrides " +
-                        "menu still wins.",
+                    text = "Playback speed is remembered in layers: a speed you set while a " +
+                        "file was playing is remembered for that file; otherwise the speed " +
+                        "remembered for that kind of media (music, audiobooks, podcasts, video) " +
+                        "applies, including after a relaunch. Setting 1x clears the file's " +
+                        "entry. A per-file or per-show speed from the overrides menu wins over " +
+                        "both.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextTertiary,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)

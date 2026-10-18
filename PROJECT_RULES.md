@@ -152,6 +152,21 @@ episode → show → global) via the Tune popup; see §4.
   omit it (Spotify defaults to 5; page via the `next` URL). `/me/top/artists` 403s in dev mode.
 - **Album-art gate**: containers (albums/artists) have `isFolder = type != "track" && type != "episode"`,
   so an art gate must key on `thumbnailUri != null`, NOT `!isFolder` (the latter shows a folder icon on albums).
+- **Playback speed is layered (vc126):** per-file memory (`speed_overrides`, written by the slider /
+  car button while that file plays; 1× clears it) → per-kind speed (`speed_kind_<music|audiobook|
+  podcast|video>`) → 1×; the overrides-popup speed is applied by the UI afterwards and wins. The
+  SERVICE applies the rule on every item transition (`speed rule applied layer=…`); there is NO global
+  speed key any more (the old one was written only by the car button and leaked onto every relaunch).
+- **ONE media-kind classifier:** `PlaybackService.currentBtKind` (published as `currentKindFlow`). Never
+  classify on the controller side — its metadata extras can lack the chapter markers (a Drive audiobook
+  was filed under "podcast").
+- **Pitch-only changes go through the service** (`ACTION_SET_PITCH`): composing `PlaybackParameters` on
+  the controller used its lagging view of the speed and reverted a service-side speed change 33 ms
+  later (an episode's 0.7× leaked onto the next audiobook). Any `setPlaybackParameters` from the UI
+  must carry an EXPLICIT speed (the override row's), never one read back from the controller.
+- **A-B loop engine is a singleton** (`playback/AbLoopEngine`, vc124): one PlayerViewModel exists per
+  navigation destination, so per-VM pollers left a cleared loop running elsewhere. The vc33 note
+  "A-B loop STAYS in PlayerViewModel" is superseded; the VMs delegate.
 - **Media3 sticky `artworkData`** can bleed across tracks — clear per-track or art carries over.
 - **Hue**: area is a collector source; intensity is preserved on disconnect; engine restarts on re-pick.
   Single teardown path on disconnect (double stop made lights keep changing — past regression).

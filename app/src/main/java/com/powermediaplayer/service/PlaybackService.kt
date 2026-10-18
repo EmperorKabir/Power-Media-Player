@@ -338,6 +338,11 @@ class PlaybackService : MediaLibraryService() {
         const val ACTION_SKIP_FORWARD_30 = "ACTION_SKIP_FORWARD_30"
         // Android Auto now-playing custom-action buttons (richer, phone-like controls).
         const val ACTION_SPEED_CYCLE      = "ACTION_SPEED_CYCLE"
+        /** PH-V fix: pitch-only change composed SERVICE-side with the authoritative speed
+         *  (a controller-side PlaybackParameters(staleSpeed, pitch) write 33 ms after the
+         *  per-kind speed rule reverted an audiobook to the previous episode's 0.7x). */
+        const val ACTION_SET_PITCH        = "ACTION_SET_PITCH"
+        const val EXTRA_PITCH             = "pitch"
         /** The AOSP Automotive media centre — see [autoCompactClientConnected]. */
         const val AUTO_COMPACT_CLIENT = "com.android.car.media"
         /** Android Auto on the phone (projection to a head unit). */
@@ -1386,6 +1391,11 @@ class PlaybackService : MediaLibraryService() {
                 kotlinx.coroutines.withTimeoutOrNull(200) { settingsDataStore.speedByKind() }
             }
         }.getOrNull() ?: emptyMap()
+        speedByFile = runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeoutOrNull(200) { settingsDataStore.speedOverrides.first() }
+            }
+        }.getOrNull() ?: emptyMap()
         // The player's GLOBAL seek increments are only a fallback for paths
         // we don't intercept; seed them from the music-kind skip seconds
         // (per-kind skip is applied in applyAction via cumulativeSkip).
@@ -2132,6 +2142,9 @@ class PlaybackService : MediaLibraryService() {
             // the next item transition applies it (no re-apply mid-item: the slider
             // already set the player, and an explicit per-file speed must not be undone).
             settingsDataStore.speedByKindFlow.collect { speedByKind = it }
+        }
+        serviceScope.launch {
+            settingsDataStore.speedOverrides.collect { speedByFile = it }
         }
 
         // Cast: initialize lazily; if Google Play Services is missing the
@@ -3778,7 +3791,7 @@ class PlaybackService : MediaLibraryService() {
                 ACTION_SKIP_FORWARD_20, ACTION_SKIP_FORWARD_30,
                 ACTION_SPEED_CYCLE, ACTION_CHAPTER_NEXT, ACTION_CHAPTER_PREV,
                 ACTION_FAVOURITE_TOGGLE, ACTION_BOOKMARK_ADD,
-                ACTION_SHUFFLE_TOGGLE, ACTION_REPEAT_CYCLE
+                ACTION_SHUFFLE_TOGGLE, ACTION_REPEAT_CYCLE, ACTION_SET_PITCH
             )
 
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
@@ -3906,6 +3919,17 @@ class PlaybackService : MediaLibraryService() {
             when (customCommand.customAction) {
                 // Richer Android Auto controls (phone-like).
                 ACTION_SPEED_CYCLE -> cycleAutoSpeed(player)
+                ACTION_SET_PITCH -> runCatching {
+                    val pitch = args.getFloat(EXTRA_PITCH, 1.0f).coerceIn(0.5f, 2.0f)
+                    val cur = player.playbackParameters
+                    if (com.powermediaplayer.playback.speedDiffers(cur.pitch, pitch)) {
+                        player.playbackParameters =
+                            androidx.media3.common.PlaybackParameters(cur.speed, pitch)
+                        com.powermediaplayer.diag.DiagLog.player(
+                            "pitch set service-side pitch=${"%.3f".format(pitch)} speed kept=${"%.2f".format(cur.speed)}"
+                        )
+                    }
+                }
                 ACTION_CHAPTER_NEXT -> runCatching { seekChapter(player, forward = true) }
                 ACTION_CHAPTER_PREV -> runCatching { seekChapter(player, forward = false) }
                 ACTION_FAVOURITE_TOGGLE -> toggleFavouriteForCurrent(player)
@@ -4605,6 +4629,9 @@ class PlaybackService : MediaLibraryService() {
 
     /** PH9: the speed remembered per media kind (see playback/SpeedRule.kt). */
     @Volatile private var speedByKind: Map<BtMediaKind, Float> = emptyMap()
+    /** §C7 slim per-file speed memory (DataStore `speed_overrides`, keyed by mediaId) —
+     *  the layer ABOVE the kind speed. Snapshot kept live by a collector. */
+    @Volatile private var speedByFile: Map<String, Float> = emptyMap()
     // The item + kind + target the rule last applied, so a kind that resolves late (an
     // m4b's chapter_count arrives after the transition) can re-apply once, and only if the
     // user has not touched the speed in between.
@@ -4707,7 +4734,9 @@ class PlaybackService : MediaLibraryService() {
         // side classification saw a chaptered Drive book as a podcast — its metadata extras
         // are not what the service sees — and stored the speed under the wrong kind).
         Companion.currentKindFlow.value = kind
-        val target = com.powermediaplayer.playback.effectiveKindSpeed(speedByKind, kind)
+        val (target, layer) = com.powermediaplayer.playback.resolveSpeed(
+            speedByFile[item.mediaId], speedByKind, kind
+        )
         val current = p.playbackParameters.speed
         lastRuleItemId = item.mediaId
         lastRuleKind = kind
@@ -4718,16 +4747,25 @@ class PlaybackService : MediaLibraryService() {
                 androidx.media3.common.PlaybackParameters(target, p.playbackParameters.pitch)
         }
         com.powermediaplayer.diag.DiagLog.player(
-            "speed rule applied kind=${kind.tag} ${"%.2f".format(current)}→${"%.2f".format(target)} " +
-                "($why) id=${com.powermediaplayer.diag.DiagLog.hash(item.mediaId)}"
+            "speed rule applied layer=${layer.name.lowercase()} kind=${kind.tag} " +
+                "${"%.2f".format(current)}→${"%.2f".format(target)} ($why) " +
+                "id=${com.powermediaplayer.diag.DiagLog.hash(item.mediaId)}"
         )
     }
 
-    /** PH9: a user-chosen speed (the car's speed button) is remembered for the item's kind. */
+    /** PH9: a user-chosen speed (the car's speed button) is remembered for the item's kind AND
+     *  for the file (same two layers the phone slider writes; 1× clears the file entry). */
     private fun persistUserSpeed(p: Player, speed: Float) {
         val kind = currentBtKind(p)
+        val uri = p.currentMediaItem?.mediaId
         Companion.currentKindFlow.value = kind
-        serviceScope.launch { runCatching { settingsDataStore.setSpeedForKind(kind, speed) } }
+        serviceScope.launch {
+            runCatching { settingsDataStore.setSpeedForKind(kind, speed) }
+            if (!uri.isNullOrBlank()) runCatching {
+                if (kotlin.math.abs(speed - 1.0f) < 0.01f) settingsDataStore.clearSpeedOverride(uri)
+                else settingsDataStore.setSpeedOverride(uri, speed)
+            }
+        }
     }
 
     /** Chapter markers can arrive after the transition (metadata parse) and flip the kind
