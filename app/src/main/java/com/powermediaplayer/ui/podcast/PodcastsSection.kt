@@ -213,8 +213,11 @@ class PodcastsViewModel @Inject constructor(
     private val _subscribing = kotlinx.coroutines.flow.MutableStateFlow(false)
     val subscribing: StateFlow<Boolean> = _subscribing
 
+    /** Every stored episode of the show (newest first). The expanded panel pages the rows
+     *  (EPISODE_PAGE at a time) so a 1000-episode feed stays cheap to compose; the old
+     *  `LIMIT 200` + `take(15)` pair hid everything but the newest 15. */
     fun episodesFor(feedUrl: String): kotlinx.coroutines.flow.Flow<List<PodcastEpisodeEntity>> =
-        podcastDao.observeEpisodes(feedUrl)
+        podcastDao.observeEpisodes(feedUrl, limit = Int.MAX_VALUE)
 
     /** Per-show episode totals + "new" counts, keyed by feedUrl (B1 show rows). */
     val feedCounts: StateFlow<Map<String, PodcastDao.FeedCounts>> =
@@ -244,8 +247,10 @@ class PodcastsViewModel @Inject constructor(
             // auto-advances to the next episode at end. When off, a single item.
             val autoNext = runCatching { settings.podcastAutoplayNext.first() }.getOrDefault(true)
             val items: List<androidx.media3.common.MediaItem> = if (autoNext) {
+                // Whole feed, not the newest 200: an older episode tapped from the paged
+                // list must still queue the ones after it (episodeQueueSlice caps the slice).
                 val ordered = runCatching {
-                    podcastDao.episodesForFeedOrdered(episode.feedUrl)
+                    podcastDao.episodesForFeedOrdered(episode.feedUrl, limit = Int.MAX_VALUE)
                 }.getOrDefault(emptyList())
                 val slice = episodeQueueSlice(ordered, episode.guid, episode)
                 slice.map { buildEpisodeItem(it, show?.title, artUri) }
@@ -1039,6 +1044,10 @@ private fun EpisodeList(
 ) {
     val episodesFlow = androidx.compose.runtime.remember(feedUrl) { vm.episodesFor(feedUrl) } // audit B3-P1: stable flow instance
     val episodes by episodesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    // Paged, not capped: the panel is a plain Column inside the Cloud tab's lazy list, so
+    // composing every row of a 1000-episode feed at once would be expensive — but hiding
+    // all but the newest 15 (the previous `take(15)`) made older episodes unreachable.
+    var shown by remember(feedUrl) { mutableStateOf(EPISODE_PAGE) }
     Column(modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 4.dp)) {
         if (episodes.isEmpty()) {
             Text(
@@ -1047,10 +1056,38 @@ private fun EpisodeList(
                 color = TextTertiary
             )
         } else {
-            episodes.take(15).forEach { e -> EpisodeRow(e, vm, onOverride) }
+            episodes.take(shown).forEach { e -> EpisodeRow(e, vm, onOverride) }
+            val remaining = episodes.size - shown
+            if (remaining > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { shown += EPISODE_PAGE_STEP }) {
+                        Text(
+                            "Show ${minOf(EPISODE_PAGE_STEP, remaining)} more",
+                            color = TealAccent, style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                    TextButton(onClick = { shown = episodes.size }) {
+                        Text(
+                            "Show all ($remaining more)",
+                            color = TextSecondary, style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            } else if (episodes.size > EPISODE_PAGE) {
+                Text(
+                    "All ${episodes.size} episodes shown",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                    modifier = Modifier.padding(start = 12.dp, top = 4.dp)
+                )
+            }
         }
     }
 }
+
+/** Rows rendered when a show is expanded, and how many each "Show more" adds. */
+internal const val EPISODE_PAGE = 15
+internal const val EPISODE_PAGE_STEP = 30
 
 /** One episode row. The listened marker is DERIVED from the saved resume
  *  position (history row keyed by audioUrl), not the open-on-tap flag:

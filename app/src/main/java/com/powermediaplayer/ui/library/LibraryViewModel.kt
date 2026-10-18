@@ -810,7 +810,7 @@ class LibraryViewModel @Inject constructor(
             }.getOrDefault(true)
             val items = if (autoNext) {
                 val ordered = runCatching {
-                    podcastDao.episodesForFeedOrdered(episode.feedUrl)
+                    podcastDao.episodesForFeedOrdered(episode.feedUrl, limit = Int.MAX_VALUE)
                 }.getOrDefault(emptyList())
                 val slice = com.powermediaplayer.ui.podcast.episodeQueueSlice(ordered, episode.guid, episode)
                 slice.map {
