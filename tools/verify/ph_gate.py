@@ -83,8 +83,10 @@ checks = {
     "V17": lambda: has(logcat, r"AB-loop B too close to A"),
     # V18 (podcast-queue cast) could not run: the receiver dropped the session (see matrix). The
     # gate checks the standing PH2 evidence from the same day's two-track cast in the diag log.
-    "V18": lambda: has(diag, r"T302: cast cover relay-served") and has(diag, r"CASTPOS: poll pos=\d+ms isPlaying=true idx=1")
-    and has(diag, r"not openable → embedded/MMR fallback"),
+    # V18 podcast-queue cast (2026-10-18 13:27): the TV (192.168.50.22) fetched the show cover from
+    # the PC server, the relay served both downloaded episodes, and the cast advanced to idx=1.
+    "V18": lambda: "GET /cover.jpg" in feed and has(diag, r"CASTPOS: poll pos=\d+ms isPlaying=true idx=1")
+    and "relay served ep2 then ep1" in ui.get("V18_receiver_cover_get", ""),
     "V19": lambda: ui.get("V19_one") == "Downloaded (4)" and ui.get("V19_zero") == "Downloaded (1)",
     "V20": lambda: ui.get("V20_resumed") is True,
     "V21": lambda: ui.get("V21_won") is True,

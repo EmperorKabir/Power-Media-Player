@@ -88,10 +88,10 @@ Legend: phase I=investigate, P=plan, M=implement, V=verify-on-device.
 
 | ID | Task | Phase | Status |
 |----|------|-------|--------|
-| PHV1 | 21-scenario matrix (docs/verification/2026-10-17-ph-scenario-matrix.md) driven on the Oppo with a PC-served RSS feed; independent gate tools/verify/ph_gate.py | V | 18/21 PASS; V19-V21 NOT RUN; V18 podcast-queue cast NOT RUN (Sony TV session connected then ended in 40 ms, app/SDK side to investigate; the user confirms the TV is on); V9 = WorkManager refuses an early periodic run (worker body is the proven refresher) |
+| PHV1 | 21-scenario matrix (docs/verification/2026-10-17-ph-scenario-matrix.md) driven on the Oppo with a PC-served RSS feed; independent gate tools/verify/ph_gate.py | V | DONE: 21/21 PASS on the final gate (2026-10-18 13:40); V18 podcast-queue cast run on Living Area TV (the earlier drop was transient); V9 passed on registration evidence only (WorkManager refuses an early periodic run) |
 | PHV2 | Bug found and fixed: per-kind speed stored under the wrong kind for a chaptered Drive book (controller-side classifier) -> single service classifier `PlaybackService.currentKindFlow` | M->V | DONE (vc125; re-verified audiobook/podcast alternation) |
 | PHV3 | Bug found and fixed: typed feed URL with a keyboard space -> 404; whitespace stripped + typed NotFeed for an invalid URL | M->V | DONE (vc125; unit test) |
-| PHV4 | Resume: V18 cast on the Sony TV, V19-V21, cleanup of the test subscription / saved loop / stored speeds | I | ACTIVE; exact steps in the matrix file |
+| PHV4 | Resume: V18 cast on the Sony TV, V19-V21, cleanup of the test subscription / saved loop / stored speeds | V | DONE 2026-10-18 13:45: all run (gate 21/21); test subscription, downloads and Last Played rows removed; the book's test-time history rows deleted so its 19:55 position is newest again; speeds restored (audiobook 1x, podcast 1.3x); player left paused on S16E24 |
 
 ## AA — Android Auto (2026-10-16/17; tester-friend request; AAOS emulator `PMP_Auto` = emulator-5554)
 

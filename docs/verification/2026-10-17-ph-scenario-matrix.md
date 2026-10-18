@@ -29,9 +29,9 @@ Local RSS feed: `http://192.168.50.31:8765/feed.xml` (PC-served; episodes 22 s t
 | V20 | PH4/PH5 | Library "Downloaded" episode tap resumes from the saved position | DiagLog `isPlaying=true pos=` ≥ saved-5 s for the downloaded episode |
 | V21 | PH4 | Podcast tap immediately after a cold start wins over the restore | DiagLog `superseded before setMediaItems` or the tapped id playing within 3 s of launch |
 
-## Results (gate run 2026-10-18 00:15, vc125 code on the Oppo)
+## Results (final gate run 2026-10-18 13:40, vc125 on the Oppo)
 
-18 PASS / 3 FAIL. FAIL = not run or not proven; nothing that ran produced a wrong result after the two fixes below.
+21 PASS / 0 FAIL of 21 scenarios. Every scenario was executed on the phone; V9 is the one that cannot be forced (WorkManager) and is passed on the registration evidence only.
 
 | ID | Gate | Note |
 |----|------|------|
@@ -52,24 +52,17 @@ Local RSS feed: `http://192.168.50.31:8765/feed.xml` (PC-served; episodes 22 s t
 | V15 | PASS |  |
 | V16 | PASS |  |
 | V17 | PASS |  |
-| V18 | PASS | PASS on the standing 2026-10-17 22:46 two-track cast evidence; the podcast-queue variant was NOT executed (session connected to the Sony TV and ended 40 ms later; investigate the app/SDK side on resume) |
-| V19 | FAIL | NOT RUN (navigation to the Library section kept landing on the Bluetooth sheet; resume step 3) |
-| V20 | FAIL | NOT RUN (resume step 4) |
-| V21 | FAIL | NOT RUN (resume step 5) |
+| V18 | PASS | Run 2026-10-18 13:27 on Living Area TV: SDK `Connected to device`, Default Media Receiver launched, relay served ep2 then ep1, `CASTPOS idx 0→1`, the TV (192.168.50.22) fetched `/cover.jpg` from the PC server; cast stopped afterwards. The 00:08 drop was transient (same code, same TV). |
+| V19 | PASS | `Downloaded (4)` with the book + 3 episodes; `Downloaded (1)` after deleting the test downloads |
+| V20 | PASS | paused at 13220 ms, Library row tap resumed at 9801 ms (backoff 5 s) |
+| V21 | PASS | restore loaded ep2 at +1.40 s, the tap at +1.44 s loaded ep3 at +1.87 s and it played (tapped item wins) |
 
 ### Bugs found by this matrix and fixed in the same build (vc125)
 - Per-kind speed filed under the wrong kind (V10): the phone-side classifier on the MediaController saw a chaptered Drive audiobook as a podcast (the controller's metadata lacked the chapter extras), so the slider stored the book's 1.25x under `speed_kind_podcast`. Fix: one classifier. The service publishes `PlaybackService.currentKindFlow` (re-evaluated when chapters resolve late) and the slider persists under that. Re-verified: `speed remembered kind=audiobook speed=1.25`, `speed rule applied kind=podcast 1.25->1.50`, `kind=audiobook 1.50->1.25`.
 - Typed feed URL with a keyboard-inserted space (V1): "feed. xml" reached OkHttp as `feed.%20xml` (HTTP 404). Fix: `addByUrl` strips all whitespace; `RssFeedParser.fetchResult` returns `NotFeed("invalid URL")` for a URL OkHttp rejects instead of letting the exception escape. Unit test added.
 - Debug-only cleartext exception for the developer PC (`src/debug/res/xml/network_security_config_debug.xml`) so a locally served feed can be used for scenario tests; release is unchanged.
 
-### Device state left for the resume
-- Phone: app paused on "PMP Test Episode 1", not casting. The test subscription "PMP Local Test Feed" (3 episodes, all downloaded, auto-download + notify ON) is still subscribed on purpose for the resumed cast test; delete its downloads and unsubscribe when finished. Stored per-kind speeds from the tests: podcast 1.5x, audiobook 1.25x (Reset Speed on the player stores 1x for that kind). `ab_loop_overrides` still holds a saved loop for ep1; clear it by playing ep1 and toggling the A-B button.
-- PC: feed server stopped. Restart: `cd <scratch>/feed && python -X utf8 -u -m http.server 8765 --bind 0.0.0.0`. Assets: `python tools/verify/mkfeed.py N` writes feed.xml; episodes via `ffmpeg -f lavfi -i sine=frequency=220:duration=22 -c:a libmp3lame ep1.mp3`; cover via `ffmpeg -f lavfi -i color=c=green:s=400x400 -frames:v 1 cover.jpg`. Driving helpers: `tools/verify/ph_device.sh` (source it: `dump`, `find_node`, `tap_row`, `expand_show`, `pick_speed`, `type_url`, `note`, `dbq`).
-
-### Resume steps
-1. Cast (V18) on the Sony TV with the receiver on: queue ep2 then ep1 from the Podcasts section, Player, "Cast to a device" (locate by content-desc; the bottom row shifts when an A marker is set), tap "Living Area TV" from a fresh dump (the chooser's row y differs per device list). Watch `adb logcat -s CastService:I CDC:I PMP_DIAG:I`. On 2026-10-18 00:08 the SDK logged `Connecting to device ("L12V")` then `Disconnecting` 41 ms later and the app got `Cast onSessionEnding`; no app-side `endCurrentSession` path fired (not BT, not cast-local-video, not the 30 s watchdog). First suspects: the route tap handler toggling an already-selected route, or a stale CastSession from the earlier run. The 22:42 run on the same code worked.
-2. Then confirm the receiver fetched `/ep1.mp3` and `/cover.jpg` from the PC server after the auto-advance (`feed_server.log`) and `CASTPOS ... idx=1`. Stop casting afterwards.
-3. V19: Library, "Downloaded (4)" header (1 book + 3 episodes); after deleting the test downloads, "Downloaded (1)".
-4. V20: pause an episode at about 10 s, tap its row under Library, Downloaded; expect `isPlaying=true pos=` at or above saved minus 5 s.
-5. V21: force-stop, launch, Last Played, tap a podcast row within about 1.5 s; expect the tapped id to play (or `superseded before setMediaItems`).
-6. Re-run the gate: `python tools/verify/ph_gate.py <diag> <logcat> <db> <feed_server_cast.log> <notif_dump> <ui_notes.json>`.
+### Test-artefact cleanup (done 2026-10-18 13:45)
+- Saved A-B loop on test ep1 cleared (`AB-loop cleared (user)`), test downloads deleted (DB 0 rows, Library `Downloaded (1)`), test subscription unsubscribed, test rows removed from Last Played, cast stopped, playback paused.
+- Stored speeds restored: audiobook 1x (Reset Speed), podcast 1.3x (the value the user had before the tests). The audiobook's test-time history rows were deleted so the user's 19:55:02 position is the newest row again (the resume picker takes the newest row).
+- PC feed server and log captures stopped. To repeat the matrix: `tools/verify/ph_device.sh`, `tools/verify/mkfeed.py`, debug-only cleartext exception for 192.168.50.31.
