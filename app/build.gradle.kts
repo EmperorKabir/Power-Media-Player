@@ -1,4 +1,4 @@
-import java.util.Properties
+﻿import java.util.Properties
 import java.io.FileInputStream
 
 plugins {
@@ -7,11 +7,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-    id("androidx.baselineprofile")   // §8.6 (G1)
+    id("androidx.baselineprofile")   // Â§8.6 (G1)
 }
 
 // Read OAuth credentials from local.properties (gitignored).
-// Falling back to empty strings keeps the build green when keys are missing —
+// Falling back to empty strings keeps the build green when keys are missing â€”
 // runtime auth will fail with a clear error instead of leaking placeholders
 // into source control.
 val localProps = Properties().apply {
@@ -27,25 +27,25 @@ android {
     defaultConfig {
         applicationId = "com.powermediaplayer"
         minSdk = 30
-        // 2026-07-22: Play policy — target API 36 by 31 Aug 2026 or updates
+        // 2026-07-22: Play policy â€” target API 36 by 31 Aug 2026 or updates
         // are rejected. Behaviour-change review for 36: edge-to-edge opt-out
         // removed (we already run enableEdgeToEdge + Compose insets), no
         // orientation locks to trip the large-screen rule, no native .so
         // (16 KB page rule moot), WorkManager unaffected.
         targetSdk = 36
-        versionCode = 132
-        versionName = "1.5.77"
+        versionCode = 133
+        versionName = "1.5.78"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // OAuth credentials surfaced to code via BuildConfig.* — never committed.
+        // OAuth credentials surfaced to code via BuildConfig.* â€” never committed.
         buildConfigField("String", "GDRIVE_ANDROID_CLIENT_ID", "\"${localProp("GDRIVE_ANDROID_CLIENT_ID")}\"")
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"${localProp("SPOTIFY_CLIENT_ID")}\"")
         buildConfigField("String", "SPOTIFY_REDIRECT_URI", "\"${localProp("SPOTIFY_REDIRECT_URI")}\"")
-        // (DRIVE_PICKER_APP_ID / DRIVE_PICKER_API_KEY removed 2026-07-25 —
+        // (DRIVE_PICKER_APP_ID / DRIVE_PICKER_API_KEY removed 2026-07-25 â€”
         //  the WebView JS Picker they fed was deleted for a native folder
         //  browser; no BuildConfig.DRIVE_PICKER_* consumer remains.)
-        // §C9 LOCKED — OpenSubtitles app-identifying API key. The key
+        // Â§C9 LOCKED â€” OpenSubtitles app-identifying API key. The key
         // identifies our APP, not the user; per-user login uses a
         // separate token. Empty default means the auto-fetcher
         // disables itself silently when the dev hasn't set the key
@@ -65,7 +65,7 @@ android {
 
     // Release signing configured from local.properties (gitignored). When
     // RELEASE_STORE_FILE is missing the release signingConfig is omitted, so
-    // `bundleRelease` builds an unsigned AAB instead of failing — useful in CI
+    // `bundleRelease` builds an unsigned AAB instead of failing â€” useful in CI
     // and for contributors who don't have the keystore.
     signingConfigs {
         val storeFilePath = localProp("RELEASE_STORE_FILE")
@@ -89,7 +89,7 @@ android {
             )
             // Attach the release signingConfig only if it was created above.
             signingConfigs.findByName("release")?.let { signingConfig = it }
-            // §91 — bundle native debug symbols (Media3 ExoPlayer
+            // Â§91 â€” bundle native debug symbols (Media3 ExoPlayer
             // extensions, Cast SDK, NanoHTTPD JNI) into the AAB so
             // Play Console can symbolicate native crash / ANR stack
             // traces. SYMBOL_TABLE keeps the AAB small (vs FULL which
@@ -100,12 +100,12 @@ android {
         debug {
             isMinifyEnabled = false
             // 2026-07-25: BASE-PACKAGE debug build (NO .test suffix) signed with the
-            // DEFAULT debug key (SHA-1 BD:78…). This gives it the SAME app identity
+            // DEFAULT debug key (SHA-1 BD:78â€¦). This gives it the SAME app identity
             // as the OAuth client "Power Media Player" (com.powermediaplayer + debug
             // SHA-1), so the embedded Drive Picker accepts its token and grants file
             // access. The .test package could NOT: the Picker binds file grants to
             // the project's base package, so a different-package build's picks never
-            // grant (device-proven — token aud = the .test client, files.get 404 even
+            // grant (device-proven â€” token aud = the .test client, files.get 404 even
             // after a dedicated unique signing key). This build REPLACES the Play app
             // on the device (same package); per user request it is the standard test
             // build from now on. Fresh, separate data on install.
@@ -134,7 +134,7 @@ android {
         buildConfig = true
     }
 
-    // Audit §2.1: export Room schemas so the 22-version hand-written migration
+    // Audit Â§2.1: export Room schemas so the 22-version hand-written migration
     // chain becomes testable (MigrationTestHelper) and future bumps are diffable.
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
@@ -151,7 +151,7 @@ android {
         }
     }
 
-    // §A17 — release build verification. AGP 8.7.x bundles a Lint
+    // Â§A17 â€” release build verification. AGP 8.7.x bundles a Lint
     // detector (NonNullableMutableLiveDataDetector) that throws
     // IncompatibleClassChangeError when run against this project
     // because of a Kotlin-bytecode visitor incompatibility. The
@@ -187,29 +187,29 @@ android {
 }
 
 dependencies {
-    // ── android-deep-logger (debug-only forensic NDJSON logger) ──
+    // â”€â”€ android-deep-logger (debug-only forensic NDJSON logger) â”€â”€
     // App Startup auto-installs DeepLogger at process start via the
     // debug manifest. Release builds link the src/release no-op and
     // never pull this in.
     debugImplementation("androidx.startup:startup-runtime:1.1.1")
 
-    // ── Compose BOM ──────────────────────────────────────────────
+    // â”€â”€ Compose BOM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     val composeBom = platform("androidx.compose:compose-bom:2025.04.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    // Specific icon groups from material-icons — avoids the full 5MB extended bundle.
+    // Specific icon groups from material-icons â€” avoids the full 5MB extended bundle.
     // icons-core = base icons (Play, Pause, Settings, etc.)
     // Extended icons needed for FastForward/FastRewind/FileOpen etc.
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3-window-size-class")
-    // ── Adaptive layouts (8.1/8.2) ──────────────────────────────
-    // Navigation suite (bar↔rail by width) is BOM-managed; the pane/
+    // â”€â”€ Adaptive layouts (8.1/8.2) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Navigation suite (barâ†”rail by width) is BOM-managed; the pane/
     // posture artifacts live in their own group. Posture (isTabletop,
-    // hinge bounds) wraps androidx.window — no hand-rolled
+    // hinge bounds) wraps androidx.window â€” no hand-rolled
     // WindowInfoTracker needed.
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
     implementation("androidx.compose.material3.adaptive:adaptive:1.1.0")
@@ -221,27 +221,27 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    // ── Reorderable lists (Last Played favourites drag-to-reorder) ──
+    // â”€â”€ Reorderable lists (Last Played favourites drag-to-reorder) â”€â”€
     implementation("sh.calvin.reorderable:reorderable:2.5.0")
 
-    // ── Baseline profile (§8.6 / G1) ─────────────────────────────
+    // â”€â”€ Baseline profile (Â§8.6 / G1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // profileinstaller embeds + installs the generated profile at
     // first run; the :baselineprofile module generates it.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     baselineProfile(project(":baselineprofile"))
 
-    // ── Core AndroidX ────────────────────────────────────────────
+    // â”€â”€ Core AndroidX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
-    // ProcessLifecycleOwner — pauses the Spotify mirror poll 30s after
+    // ProcessLifecycleOwner â€” pauses the Spotify mirror poll 30s after
     // the app backgrounds (audit 3.8/8.7).
     implementation("androidx.lifecycle:lifecycle-process:2.9.0")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.navigation:navigation-compose:2.9.0")
 
-    // ── Media3 ExoPlayer ─────────────────────────────────────────
+    // â”€â”€ Media3 ExoPlayer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     val media3Version = "1.6.0"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
@@ -257,68 +257,68 @@ dependencies {
     // FFmpeg extension - requires local build from androidx/media repo
     // implementation("androidx.media3:media3-decoder-ffmpeg:$media3Version")
 
-    // ── FFmpeg Metadata Retriever ────────────────────────────────
+    // â”€â”€ FFmpeg Metadata Retriever â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // NOTE: FFmpegMediaMetadataRetriever has namespace conflicts with AGP 9.
     // Deep Scan mode falls back to Android's built-in MediaMetadataRetriever.
     // To enable: resolve namespace conflict or use local AAR build.
 
 
-    // ── Hilt Dependency Injection ────────────────────────────────
+    // â”€â”€ Hilt Dependency Injection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("com.google.dagger:hilt-android:2.54")
     ksp("com.google.dagger:hilt-android-compiler:2.54")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
-    // ── Room Database ────────────────────────────────────────────
+    // â”€â”€ Room Database â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     val roomVersion = "2.7.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
-    // ── DataStore Preferences ────────────────────────────────────
+    // â”€â”€ DataStore Preferences â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("androidx.datastore:datastore-preferences:1.1.7")
 
-    // ── Coil Image Loading ───────────────────────────────────────
+    // â”€â”€ Coil Image Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
-    // Network fetcher — required for Coil 3 to load HTTP/HTTPS URLs
+    // Network fetcher â€” required for Coil 3 to load HTTP/HTTPS URLs
     // (e.g. Spotify CDN album art at https://i.scdn.co/image/...).
     // Without this, AsyncImage fails with
     // "Unable to create a fetcher that supports: https://..."
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
     // Video-frame thumbnails for LOCAL library video rows (#12). Pin to the same
-    // 3.1.0 as coil-compose/coil-network-okhttp above — do NOT bump.
+    // 3.1.0 as coil-compose/coil-network-okhttp above â€” do NOT bump.
     implementation("io.coil-kt.coil3:coil-video:3.1.0")
 
-    // ── Palette API ──────────────────────────────────────────────
+    // â”€â”€ Palette API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("androidx.palette:palette-ktx:1.0.0")
 
-    // ── Coroutines ───────────────────────────────────────────────
+    // â”€â”€ Coroutines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
 
-    // ── Google Guava (for MediaController ListenableFuture) ─────
+    // â”€â”€ Google Guava (for MediaController ListenableFuture) â”€â”€â”€â”€â”€
     implementation("com.google.guava:guava:33.4.0-android")
 
-    // ── Gson for JSON serialization ──────────────────────────────
+    // â”€â”€ Gson for JSON serialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("com.google.code.gson:gson:2.12.1")
 
-    // ── Cloud / OAuth ────────────────────────────────────────────
+    // â”€â”€ Cloud / OAuth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // AppAuth: PKCE OAuth flows with Custom Tabs (Spotify).
     implementation("net.openid:appauth:0.11.1")
-    // Spotify App Remote SDK (I4d precise stop) — real-time local player-state
+    // Spotify App Remote SDK (I4d precise stop) â€” real-time local player-state
     // subscription + local-IPC pause() to the installed Spotify app, bypassing the
     // ~1s Web-API cloud lag so an on-phone track can be paused at the exact end
     // without auto-advancing. Not on Maven Central (JitPack serves a broken artifact),
     // so the official AAR is vendored in app/libs. Only transitive need is gson (above).
     implementation(files("libs/spotify-app-remote-release-0.8.0.aar"))
-    // Spotify Auth library (SSO) — grants the app-remote-control scope via Spotify's OWN
+    // Spotify Auth library (SSO) â€” grants the app-remote-control scope via Spotify's OWN
     // native consent handshake, the ONLY thing the App Remote SDK recognises (device-proven
     // 2026-08-25: a valid app-remote-control token from the app's AppAuth OAuth flow does
     // NOT authorise App Remote, and the built-in showAuthView consent is broken on modern
-    // Spotify apps). AuthorizationClient.createLoginActivityIntent → onActivityResult grants
+    // Spotify apps). AuthorizationClient.createLoginActivityIntent â†’ onActivityResult grants
     // it; App Remote then connects with showAuthView(false).
     implementation("com.spotify.android:auth:2.1.0")
     // OkHttp: Spotify + Drive REST HTTP client.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // BouncyCastle TLS — DTLS-PSK for the Philips Hue Entertainment API
+    // BouncyCastle TLS â€” DTLS-PSK for the Philips Hue Entertainment API
     // (audio-reactive lighting). The bridge's UDP entertainment endpoint
     // requires DTLS 1.2 with pre-shared key, which Android's stock JSSE
     // does not expose for UDP. bctls bundles a UDP-capable DTLS stack.
@@ -330,26 +330,26 @@ dependencies {
     // relay forwards Range requests with the appropriate auth back to
     // the original source on the phone side.
     implementation("org.nanohttpd:nanohttpd:2.3.1")
-    // Storage Access Framework — kept for OneDrive / Dropbox / USB /
+    // Storage Access Framework â€” kept for OneDrive / Dropbox / USB /
     // local-storage flow on devices whose SAF picker exposes those
     // sources. (Drive uses its own JS Picker via WebView since the
     // SAF picker hides Drive on some Samsung / fold builds.)
     implementation("androidx.documentfile:documentfile:1.0.1")
-    // Google Sign-In + drive.file OAuth — Google's official SDK
+    // Google Sign-In + drive.file OAuth â€” Google's official SDK
     // returns OAuth tokens scoped to specific files/folders the user
     // picks via the Drive Picker. No Google verification required
     // because drive.file is non-sensitive.
     implementation("com.google.android.gms:play-services-auth:21.3.0")
 
-    // ── §C10 Podcast auto-sync via WorkManager + Hilt ────────────
+    // â”€â”€ Â§C10 Podcast auto-sync via WorkManager + Hilt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.hilt:hilt-work:1.2.0")
     ksp("androidx.hilt:hilt-compiler:1.2.0")
 
-    // ── §C9 LOCKED — EncryptedSharedPreferences for OpenSubs creds.
+    // â”€â”€ Â§C9 LOCKED â€” EncryptedSharedPreferences for OpenSubs creds.
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
-    // ── Testing ──────────────────────────────────────────────────
+    // â”€â”€ Testing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.13")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

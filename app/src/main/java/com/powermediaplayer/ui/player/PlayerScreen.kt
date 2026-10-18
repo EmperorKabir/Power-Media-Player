@@ -1227,11 +1227,14 @@ private fun OverlayContent(
             playbackSpeed = uiState.playbackSpeed,
             onSpeedChange = { viewModel.setPlaybackSpeed(it) },
             modifier = Modifier.padding(horizontal = 16.dp),
-            // CastPlayer (Media3 1.6.0) doesn't expose playback speed
-            // and Spotify Connect plays on a remote device we can't
-            // touch — grey out in both cases so the user knows why
-            // toggling the speed has no audible effect.
-            enabled = uiState.controls.playbackSpeed && !uiState.isCasting && !uiState.isSpotifyActive
+            // Speed stays usable while casting (audit 2026-10-18): Media3 1.6.0's CastPlayer
+            // DOES implement setPlaybackParameters (receiver playbackRate 0.5–2×; the earlier
+            // "doesn't expose playback speed" note was wrong — verified from the cast jar and on
+            // the kitchen stereo, V24/V26), and since vc132 the per-kind rule drives the
+            // receiver's rate, so the user must be able to change what they hear. A receiver
+            // that rejects the rate reports 1× back and the label snaps to it. Spotify Connect
+            // plays on a remote device we can't touch — still greyed there.
+            enabled = uiState.controls.playbackSpeed && !uiState.isSpotifyActive
         )
         if (uiState.isSpotifyActive) {
             Text(
@@ -1569,7 +1572,8 @@ private fun PlayerScreenExpanded(
                 // Drift fix (audit 2026-08-25): Compact greys speed during Spotify
                 // (Connect ignores it); Expanded was missing `!isSpotifyActive` so it
                 // stayed draggable-but-inert. Match Compact + show the same note.
-                enabled = uiState.controls.playbackSpeed && !uiState.isCasting && !uiState.isSpotifyActive
+                // Usable while casting since the 2026-10-18 audit (see the Compact layout).
+                enabled = uiState.controls.playbackSpeed && !uiState.isSpotifyActive
             )
             if (uiState.isSpotifyActive) {
                 Text(

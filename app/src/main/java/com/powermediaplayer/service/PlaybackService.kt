@@ -3947,11 +3947,17 @@ class PlaybackService : MediaLibraryService() {
                 if (cp != null) {
                     item = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         runCatching {
-                            if (item.mediaId.isNotEmpty()) {
-                                senderMetadataByMediaId[item.mediaId] = item.mediaMetadata
-                                senderItemByMediaId[item.mediaId] = item
-                            }
-                            startCastRelayIfNeeded()?.let { rebuildForCast(item, it) }
+                            // The sender caches hold the richest known version of this id (cover
+                            // bytes captured from the parser, chapter extras, enriched title) —
+                            // the DB-built leaf must never replace them (same "best-known" rule
+                            // as switchPlayer); it only fills a gap. Rebuild the cached original.
+                            val id = item.mediaId
+                            val src = if (id.isNotEmpty()) {
+                                senderItemByMediaId.putIfAbsent(id, item)
+                                senderMetadataByMediaId.putIfAbsent(id, item.mediaMetadata)
+                                senderItemByMediaId[id] ?: item
+                            } else item
+                            startCastRelayIfNeeded()?.let { rebuildForCast(src, it) }
                         }.getOrNull() ?: item
                     }
                     if (item.localConfiguration?.mimeType.isNullOrEmpty()) {
@@ -4921,10 +4927,28 @@ class PlaybackService : MediaLibraryService() {
         val uri = item.mediaId
         val name = uri.substringAfterLast('/')
         val isVideo = com.powermediaplayer.util.MediaClassifier.isVideoByName(name, "")
-        val extras = Companion.senderItemByMediaId[uri]?.mediaMetadata?.extras
-            ?: Companion.senderMetadataByMediaId[uri]?.extras
-            ?: item.mediaMetadata.extras
-        val hasChapters = (extras?.getInt("chapter_count", 0) ?: 0) > 0
+        val original = Companion.senderItemByMediaId[uri]
+        // Chapter markers, in the order buildCastMetadata trusts them: the original item's
+        // extras, the sender metadata cache, the receiver-echoed item, then the disk chapter
+        // cache keyed by the ORIGINAL media uri (the Drive download url / content uri — the
+        // key the parser cached under). Without the last source a Drive .m4b whose extras
+        // were not captured (reattach after a process restart, resume on an idle session)
+        // would resolve PODCAST (https uri) and get the podcast speed on the receiver.
+        val chapterCount = listOfNotNull(
+            original?.mediaMetadata?.extras,
+            Companion.senderMetadataByMediaId[uri]?.extras,
+            item.mediaMetadata.extras
+        ).firstNotNullOfOrNull { b -> b.getInt("chapter_count", 0).takeIf { it > 0 } }
+            ?: run {
+                val mediaUri = original?.localConfiguration?.uri
+                    ?: original?.requestMetadata?.mediaUri
+                    ?: runCatching { android.net.Uri.parse(uri) }.getOrNull()
+                mediaUri?.let { u ->
+                    runCatching { com.powermediaplayer.util.M4bChapterParser.cachedOnly(applicationContext, u) }
+                        .getOrNull()?.getInt("chapter_count", 0)
+                } ?: 0
+            }
+        val hasChapters = chapterCount > 0
         val isPodcast = uri.startsWith("http")
         return com.powermediaplayer.playback.BtKindResolver.resolve(isVideo, hasChapters, isPodcast)
     }

@@ -38,7 +38,7 @@ val playerInfo: InfoSheetData = InfoSheetData(
         InfoSection(
             title = "Time & position",
             bullets = listOf(
-                "Speed: 0.5×, 0.75×, 1×, 1.25×, 1.3×, 1.5×, 1.75×, 2×, 2.5×, 3×. Tap \"Reset\" to go back to 1×. The speed you pick is remembered for that file and for that kind of media (music, audiobook, podcast, video): re-opening the file resumes at its own speed, and every other item of that kind plays at the kind's speed, including after a relaunch and while casting (the cast device is asked for the same speed; most speakers and TVs follow it). Setting 1x clears the file's entry. A per-file or per-show speed from the overrides menu wins over both.",
+                "Speed: 0.5×, 0.75×, 1×, 1.25×, 1.3×, 1.5×, 1.75×, 2×, 2.5×, 3×. Tap \"Reset\" to go back to 1×. The speed you pick is remembered for that file and for that kind of media (music, audiobook, podcast, video): re-opening the file resumes at its own speed, and every other item of that kind plays at the kind's speed, including after a relaunch and while casting (the cast device is asked for the same speed and the speed control stays usable while casting; most speakers and TVs follow it, one that cannot shows 1x again). Setting 1x clears the file's entry. A per-file or per-show speed from the overrides menu wins over both.",
                 "Sleep timer: auto-pause after a chosen time, or at the end of the track, chapter, or queue. Optional linear fade-out over the last 30 seconds.",
                 "Bookmark: saves the current second to come back to later. The chips above the bottom row are your bookmarks for this file. Tap a chip to jump (it lands a few seconds before for context, adjustable in Settings). Tap the × to delete."
             )

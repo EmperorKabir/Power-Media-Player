@@ -159,8 +159,13 @@ episode → show → global) via the Tune popup; see §4.
   speed key any more (the old one was written only by the car button and leaked onto every relaunch).
   CAST (vc132): the rule also runs on the CastPlayer's transitions (`(cast item transition)`, then
   `cast speed settled=…` 3 s later = the receiver's rate); the speed paths classify through
-  `speedKindOf` (cast items take chapter markers from the sender caches; cast-of-local-video = VIDEO)
-  while the Bluetooth mapping keeps `currentBtKind` untouched. The snapshots re-resolve the SAME item
+  `speedKindOf` (cast items take chapter markers from the sender caches, then the disk ChapterCache by
+  the ORIGINAL media uri — the same chain `buildCastMetadata` uses; cast-of-local-video = VIDEO)
+  while the Bluetooth mapping keeps `currentBtKind` untouched. The SPEED control is usable while
+  casting (vc133): Media3 1.6.0's CastPlayer implements `setPlaybackParameters` (the 2026-05-06
+  cast-controls matrix note "doesn't expose playback speed" was wrong); pitch and the audio effects
+  stay greyed on cast. Cast-side cache writes must be `putIfAbsent` (sender caches hold the richest
+  known entry — cover bytes, chapter extras, enriched title; T307/switchPlayer rule). The snapshots re-resolve the SAME item
   once the DataStore values land after a cold start (`… prefs arrived`), never over a user-set speed.
 - **Playback resumption on a CastPlayer (vc132):** MediaSession calls `onPlaybackResumption` whenever
   play() arrives on an EMPTY timeline — on the CastPlayer that includes the seconds after a queue push
