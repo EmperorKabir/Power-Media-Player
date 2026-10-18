@@ -1505,9 +1505,18 @@ class SettingsDataStore @Inject constructor(
     suspend fun setAutoExtras(kind: BtMediaKind, extras: List<String>) {
         context.dataStore.edit { it[aaKey(kind, "extras")] = AutoButtons.encodeExtras(extras) }
     }
+    /** Reset the car-screen buttons (slot pair + extras) of one kind. The steering-wheel keys
+     *  have their own reset ([resetAutoWheel]) so each part of the Android Auto settings
+     *  carries an inline reset that touches only that part. */
     suspend fun resetAutoButtons(kind: BtMediaKind) {
         context.dataStore.edit {
             it.remove(aaKey(kind, "left")); it.remove(aaKey(kind, "right")); it.remove(aaKey(kind, "extras"))
+        }
+    }
+
+    /** Reset the Android Auto steering-wheel keys of one kind (NOT the Bluetooth mapping). */
+    suspend fun resetAutoWheel(kind: BtMediaKind) {
+        context.dataStore.edit {
             it.remove(aaKey(kind, "wheel_prev")); it.remove(aaKey(kind, "wheel_next"))
             it.remove(aaIntKey(kind, "wheel_back")); it.remove(aaIntKey(kind, "wheel_fwd"))
         }

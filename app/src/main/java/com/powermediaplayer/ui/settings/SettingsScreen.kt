@@ -620,6 +620,10 @@ fun SettingsScreen(
                         extras = cfg.extras,
                         onChange = { viewModel.setAutoExtras(kind, it) }
                     )
+                    TextButton(
+                        onClick = { viewModel.resetAutoButtons(kind) },
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    ) { Text("Reset $title car screen buttons", color = TealAccent) }
                 }
                 Text(
                     text = "B. Steering wheel keys over Android Auto",
@@ -663,21 +667,10 @@ fun SettingsScreen(
                         onActionChange = { viewModel.setAutoWheelNextAction(kind, it) },
                         onSecondsChange = { viewModel.setAutoWheelSkipForwardSeconds(kind, it) }
                     )
-                }
-                Text(
-                    text = "Reset Android Auto to defaults (parts A and B)",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = TealAccent,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                )
-                listOf(
-                    BtMediaKind.AUDIOBOOK to "Audiobooks", BtMediaKind.PODCAST to "Podcasts",
-                    BtMediaKind.MUSIC to "Music", BtMediaKind.VIDEO to "Video"
-                ).forEach { (kind, title) ->
                     TextButton(
-                        onClick = { viewModel.resetAutoButtons(kind) },
+                        onClick = { viewModel.resetAutoWheel(kind) },
                         modifier = Modifier.padding(horizontal = 16.dp)
-                    ) { Text("Reset $title", color = TealAccent) }
+                    ) { Text("Reset $title steering wheel keys", color = TealAccent) }
                 }
                 Text(
                     text = "Whatever you choose, the car's Playback tab always carries the " +

@@ -910,6 +910,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.resetAutoButtons(kind) }
     }
 
+    fun resetAutoWheel(kind: BtMediaKind) {
+        viewModelScope.launch { settingsDataStore.resetAutoWheel(kind) }
+    }
+
     /** Android Auto steering-wheel mapping (separate from the Bluetooth car controls). */
     val autoWheelSet: StateFlow<BtMappingSet> = settingsDataStore.autoWheelSetFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BtMappingSet.DEFAULT)
