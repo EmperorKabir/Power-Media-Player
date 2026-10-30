@@ -188,6 +188,8 @@ Scope: every commit from vc121 (podcast tap resumes, skip accumulator) to vc133 
 | V47 | RT4 + FOLDER-CH on device | Emulator 20:07, three mp3s in one folder | "Play folder as book" in the row sheet → Player on file 2 with the bar at 0:05 / -0:14 / 0:20 | PASS |
 | V48 | SW4 connection kept while another instance lives | Emulator 20:14, final build: picker above A, tap stacks B, BACK finishes B | log `MainActivity.onDestroy: 1 live instance(s) remain → connection kept`; A's Player still drives the fixture | PASS |
 | V49 | SW1 slow vertical swipe starting ON the bar scrolls the controls | Emulator 20:16, final build | Track label y 634 → 189 after a 1.5 s upward swipe from the bar; 0 `reason=SEEK` lines | PASS |
+| V50 | RT4 + FOLDER-CH on the PHONE | Oppo, final build 20:2x, three mp3s in `Music/Book/` | Library row sheet → "Play folder as book" → Player on "Autoplay T2" with the bar at 0:05 / -0:14 / 0:20 | PASS |
+| V51 | RT3 lyrics after the outage | User 2026-10-30 evening: "the lyrics are back" (lrclib.net recovered); no code involved | — | PASS (external) |
 | V37 | Spotify handoff untouched by VID5 | Phone log 16:21:24–27 on 1.5.80-test | AuthorizationManagementActivity → RedirectUriReceiverActivity → SpotifyAuthCompleteActivity (CLEAR_TOP\|SINGLE_TOP, since vc85) → `MainActivity.onResume`, no `onCreate` between; history grep: no recorded link between the handoff and MainActivity recreation | PASS |
 
 ### Open questions for the user (recorded, not decided)

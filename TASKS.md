@@ -882,3 +882,5 @@ User: "everything must be evidence based, no guesswork… deeply analysed includ
 | SW13/14 | PiP, alarm, QS, recreate extras | clean | — |
 | SW15 | Stale "CLEAR_TOP replacement" comments | VERIFIED | Reworded |
 Untouched (reviewer evidence): Spotify sign-in handoff, Connect polling, cast, Bluetooth, Android Auto, PiP, alarm, widget broadcasts, cold-start/warm resume bodies, offline download logic, podcast refresh/DAO, backup/DataStore keys, speed/pitch/crossfade/Hue/audio chain/Drive OAuth, Media3/Room/proguard.
+
+**STATUS 2026-10-30 ~20:25 (commit after 8292c6f):** phone back on the final 1.5.80-test build; user: lyrics back (lrclib.net recovered), scrub drag felt "the bar gets left behind my finger, after a while it's ok" = the speed-gain model at slow speeds (thumb lags = precision; MIN_GAIN 0.05) — user call whether to raise the floor; folder-as-book proven on the PHONE (V50). Test files left on the phone for the user's own checks: `Music/Book/Autoplay_T1-3.mp3`, `Music/PMP_Scrub_Fixture_20min.m4a` (the chaptered m4b removed). Play bundle `dist/PowerMediaPlayer-1.5.80-vc135-closed-2026-10-30.aab` = final code.
