@@ -1915,7 +1915,10 @@ private fun TrackInfoSection(
             val livePos by viewModel.positionUi.collectAsStateWithLifecycle()
             SyncedLyricsPanel(
                 lines = uiState.syncedLyrics,
-                positionMs = livePos.positionMs,
+                // Live position normally; while scrubbing, the previewed position (the lyric
+                // line jumps without animation — user 2026-10-30: lyrics should follow the drag).
+                positionMs = if (livePos.scrubbing) livePos.scrubPositionMs else livePos.positionMs,
+                scrubbing = livePos.scrubbing,
                 onLineTap = { /* set in caller */ }
             )
         } else if (uiState.lyrics.isNotEmpty()) {
@@ -1973,7 +1976,8 @@ private fun TrackInfoSection(
 private fun SyncedLyricsPanel(
     lines: List<com.powermediaplayer.cloud.LyricLine>,
     positionMs: Long,
-    onLineTap: (Long) -> Unit
+    onLineTap: (Long) -> Unit,
+    scrubbing: Boolean = false
 ) {
     val viewModel = androidx.hilt.navigation.compose.hiltViewModel<PlayerViewModel>()
     val activeIndex = remember(lines, positionMs) {
@@ -1994,13 +1998,15 @@ private fun SyncedLyricsPanel(
             userScrollUntilMs = android.os.SystemClock.elapsedRealtime() + 2_000L
         }
     }
-    LaunchedEffect(activeIndex) {
+    LaunchedEffect(activeIndex, scrubbing) {
         if (activeIndex >= 0 &&
-            android.os.SystemClock.elapsedRealtime() >= userScrollUntilMs
+            (scrubbing || android.os.SystemClock.elapsedRealtime() >= userScrollUntilMs)
         ) {
             // Centre the active line in the panel by leaving ~2 lines
-            // of context above it.
-            listState.animateScrollToItem((activeIndex - 2).coerceAtLeast(0))
+            // of context above it. While scrubbing: jump, no animation (one restart per
+            // lyric line crossed would otherwise pile up at pointer rate).
+            val target = (activeIndex - 2).coerceAtLeast(0)
+            if (scrubbing) listState.scrollToItem(target) else listState.animateScrollToItem(target)
         }
     }
     Surface(

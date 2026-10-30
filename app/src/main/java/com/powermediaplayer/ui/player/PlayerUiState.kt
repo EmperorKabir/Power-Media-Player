@@ -160,7 +160,10 @@ data class PositionUi(
     /** While the Full bar is dragged inside the current file: the chapter it would land in. */
     val scrubChapterTitle: String? = null,
     /** FOLDER-CH: the Track bar spans one FILE of a folder book (chapter times queue-absolute). */
-    val isFolderBook: Boolean = false
+    val isFolderBook: Boolean = false,
+    /** While scrubbing: the previewed position inside the file (chapter start + previewed offset).
+     *  The synced-lyrics panel jumps to this line (no animation) so the lyrics follow the finger. */
+    val scrubPositionMs: Long = 0L
 )
 
 /**

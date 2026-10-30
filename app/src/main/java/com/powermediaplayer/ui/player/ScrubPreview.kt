@@ -46,7 +46,8 @@ data class RawPosition(
         positionMs = livePositionMs,
         scrubbing = scrubbing,
         scrubChapterTitle = scrubChapterTitle,
-        isFolderBook = isFolderBook
+        isFolderBook = isFolderBook,
+        scrubPositionMs = if (isFolderBook) positionMs else chapterStartMs + positionMs
     )
 }
 
