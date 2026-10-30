@@ -1822,8 +1822,38 @@ class SpotifyProvider @Inject constructor(
         } catch (_: Exception) { null }
     }
 
+    /** True while the mirror shows a remembered track that Spotify has not been asked to play yet. */
+    fun isProvisionalMirror(): Boolean = provisionalActive
+
+    /**
+     * COLD-BOUNCE (2026-10-30, phone log): the cold-start restore used to SEND a play command
+     * for the remembered Spotify track even with autoplay off ("autoplay gate → false" then
+     * `playTrackOnConnectDevice` 3 ms later, then pause). Whenever the Spotify app had no active
+     * device — on this phone its process is routinely dead in the background — that command
+     * failed with NO_ACTIVE_DEVICE and the wake-Spotify bounce ran at every app restart. The
+     * restore now only ARMS the mirror; the play command is sent here, when the user presses
+     * play, which is also the moment a wake bounce is acceptable.
+     */
+    suspend fun playProvisionalMirror(): Result<Unit> {
+        val snap = _spotifyState.value ?: return Result.failure(IllegalStateException("no mirror"))
+        val uri = snap.trackUri ?: return Result.failure(IllegalStateException("no track uri"))
+        com.powermediaplayer.util.Diag.i("PMP_DIAG", "Spotify.playProvisionalMirror $uri @${snap.positionMs}ms")
+        val played = playTrackOnConnectDevice(uri)
+        if (played.isSuccess) {
+            startPlaybackPolling(expectPlayback = true, expectedTrack = uri)
+            if (snap.positionMs > 0L) {
+                kotlinx.coroutines.delay(500)
+                runCatching { seekTo(snap.positionMs) }
+            }
+        }
+        return played
+    }
+
     suspend fun togglePlayPause(): Result<Unit> = withContext(Dispatchers.IO) {
         clearEndPin()   // user transport action → leave the paused-at-end display
+        if (provisionalActive && _spotifyState.value?.isPlaying != true) {
+            return@withContext playProvisionalMirror()
+        }
         val token = currentAccessToken() ?: return@withContext Result.failure(
             IllegalStateException("Spotify session expired")
         )

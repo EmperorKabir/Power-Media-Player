@@ -1245,6 +1245,17 @@ class PlaybackSessionCoordinator @Inject constructor(
                             deviceName = null
                         )
                     )
+                    if (!autoplay) {
+                        // COLD-BOUNCE: no play command when autoplay is off — the mirror shows
+                        // the remembered track paused at its saved position, and the first
+                        // user play tap sends the command (SpotifyProvider.playProvisionalMirror).
+                        lastPlayedRepo.adoptSession(recent.id)
+                        com.powermediaplayer.diag.DiagLog.dec(
+                            branch = "cold-start",
+                            reason = "spotify mirror armed, NO play command (autoplay=false) '${recent.title}' @${recent.lastPositionMs}ms"
+                        )
+                        return@launch
+                    }
                     playbackConnection.setCloudFetchInProgress(true)
                     runCatching {
                         val played = spotifyProvider
