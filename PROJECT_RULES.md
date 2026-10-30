@@ -246,6 +246,12 @@ episode → show → global) via the Tune popup; see §4.
   never assume 10 dp). A vertical swipe on the bar is handed to the parent scroll, RTL mirrors.
   The iOS "drag away from the bar for precision" pattern was proposed and REJECTED ("not
   remotely intuitive") — do not reintroduce it.
+- **LRCLib (lyrics) failures are classified (vc135, RT3).** FOUND / NOT_FOUND are cached; a SERVICE_ERROR
+  (429, 5xx, network) is never cached and is retried with backoff while the panel shows "Lyrics
+  service busy". 2026-10-30 evening lrclib.net answered 503 to everything for a while — check
+  `Spotify.lyrics GET code=` in the log and curl lrclib.net with the app UA before touching code.
+- **Folder-as-book entry point (vc135, RT4):** Library row sheet → "Play folder as book"
+  (`LibraryViewModel.playFolderOf` → `playFolder`). It had no UI since 8885a11.
 - **ACTION_VIEW launches play the handed-over file (vc135, OPEN-VIEW).** The manifest's audio/video
   VIEW filters are served by `DeepLinkBus.openUri` → `LibraryViewModel.handlePickedFile` → Player;
   the cold-start restore yields while a VIEW is pending. Before this nothing read the intent data.

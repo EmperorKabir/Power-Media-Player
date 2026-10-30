@@ -45,6 +45,8 @@ data class PlayerUiState(
     // single loading banner (lyrics are metadata) and the "No lyrics" panel
     // message, which shows only once loading has finished with an empty result.
     val lyricsLoading: Boolean = false,
+    /** RT3: the lyrics service is answering with errors; the panel says so instead of "no lyrics". */
+    val lyricsServiceBusy: Boolean = false,
 
     // Progress - current track
     val currentPosition: Long = 0L,

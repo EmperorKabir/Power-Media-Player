@@ -1950,7 +1950,8 @@ private fun TrackInfoSection(
             // empty result, so the panel isn't left silently blank).
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "No lyrics for this track",
+                text = if (uiState.lyricsServiceBusy) "Lyrics service busy, retrying\u2026"
+                    else "No lyrics for this track",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 textAlign = TextAlign.Center,

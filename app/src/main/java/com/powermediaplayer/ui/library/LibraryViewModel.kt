@@ -942,6 +942,38 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    /**
+     * RT4 (2026-10-30): "Play folder as book" from a row's context sheet. Every scanned audio
+     * file that sits in the same MediaStore folder (RELATIVE_PATH) as [file], natural order,
+     * starting at [file] — fed to [playFolder], which has existed since 8885a11 (2026-05-01)
+     * but was never reachable from the UI. Falls back to a single play when the folder cannot
+     * be resolved.
+     */
+    fun playFolderOf(file: MediaFileInfo) {
+        viewModelScope.launch {
+            val siblings = withContext(Dispatchers.IO) { runCatching { audioFilesInSameFolder(file) }.getOrDefault(emptyList()) }
+            if (siblings.size <= 1) { playSingle(file); return@launch }
+            val sorted = FolderChapterAggregator.naturalSort(siblings)
+            val idx = sorted.indexOfFirst { it.id == file.id }.coerceAtLeast(0)
+            com.powermediaplayer.util.Diag.i("PMP_DIAG", "playFolderOf: ${sorted.size} files in folder, start=$idx")
+            playFolder(sorted, idx)
+        }
+    }
+
+    private fun audioFilesInSameFolder(file: MediaFileInfo): List<MediaFileInfo> {
+        val folder = context.contentResolver.query(
+            ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, file.id),
+            arrayOf(MediaStore.Audio.Media.RELATIVE_PATH), null, null, null
+        )?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: return emptyList()
+        val ids = HashSet<Long>()
+        context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.Audio.Media._ID),
+            "${MediaStore.Audio.Media.RELATIVE_PATH} = ?", arrayOf(folder), null
+        )?.use { c -> while (c.moveToNext()) ids.add(c.getLong(0)) }
+        return rawAudio.filter { !it.isVideo && it.id in ids }
+    }
+
     private fun recordLocalPlay(file: MediaFileInfo) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {

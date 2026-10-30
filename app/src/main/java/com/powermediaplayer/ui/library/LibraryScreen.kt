@@ -122,6 +122,15 @@ fun LibraryScreen(
                     viewModel.addToQueueNext(item)
                     contextItem = null
                 },
+                // RT4: the folder-as-audiobook player (playFolder, since 8885a11) had no entry
+                // point in any screen — "how do I even play a folder?". Audio rows only.
+                onPlayFolderAsBook = if (!item.isVideo) {
+                    {
+                        viewModel.playFolderOf(item)
+                        contextItem = null
+                        onNavigateToPlayer()
+                    }
+                } else null,
                 onEditTags = {
                     editTagsTarget = item
                     contextItem = null

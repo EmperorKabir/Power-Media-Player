@@ -73,7 +73,9 @@ data class SpotifyPlaybackState(
     // True while LRCLib lyrics are being fetched for this track (async). Drives a
     // "Loading lyrics…" status so a slow fetch / a no-lyrics track isn't a blank
     // panel. Independent of the metadata banner (decoupled from lyrics in #2).
-    val lyricsLoading: Boolean = false
+    val lyricsLoading: Boolean = false,
+    /** RT3: the lyrics service answered with an error (e.g. 503); a retry is scheduled. */
+    val lyricsServiceBusy: Boolean = false
 )
 
 /** A single time-tagged line from a LRC-format lyric file. */
@@ -1588,7 +1590,9 @@ class SpotifyProvider @Inject constructor(
                             _spotifyState.value = applyEndPin(
                                 snap.copy(
                                     lyrics = lastLyrics, syncedLyrics = lastSynced,
-                                    lyricsLoading = lastLyricsLoading
+                                    lyricsLoading = lastLyricsLoading,
+                                    lyricsServiceBusy = _spotifyState.value?.lyricsServiceBusy == true &&
+                                        _spotifyState.value?.trackUri == snap.trackUri
                                 )
                             )
                         }
@@ -1644,27 +1648,43 @@ class SpotifyProvider @Inject constructor(
      * miss) and paints it onto the live state only if still the same generation
      * AND the same track — never blocks the banner or a track change.
      */
-    private fun fetchLyricsAsync(gen: Int, snap: SpotifyPlaybackState) {
+    private fun fetchLyricsAsync(gen: Int, snap: SpotifyPlaybackState, retryDelayMs: Long = 0L) {
         val key = lyricsKey(snap.title, snap.artist, snap.album, snap.durationMs)
         pollScope.launch {
-            val res = try {
+            if (retryDelayMs > 0L) {
+                delay(retryDelayMs)
+                if (gen != pollGen || _spotifyState.value?.trackUri != snap.trackUri) return@launch
+            }
+            val fetch = try {
                 fetchLyricsLrclib(snap.title, snap.artist, snap.album, snap.durationMs)
-                    ?.let { LyricsResult(it.first, it.second) }
             } catch (ce: kotlinx.coroutines.CancellationException) {
                 throw ce
             } catch (_: Exception) {
-                null
+                LrclibFetch(LrclibOutcome.SERVICE_ERROR, null)
             }
-            synchronized(lyricsCache) { lyricsCache[key] = res }
+            val res = fetch.result?.let { LyricsResult(it.first, it.second) }
+            val busy = fetch.outcome == LrclibOutcome.SERVICE_ERROR
+            if (!busy) {
+                // Only a SETTLED answer (found / genuinely absent) is cached (RT3).
+                synchronized(lyricsCache) { lyricsCache[key] = res }
+                lyricsRetryAttempts.remove(key)
+            } else {
+                val attempt = lyricsRetryAttempts.getOrDefault(key, 0)
+                val next = LrclibClassifier.retryDelayMs(attempt)
+                lyricsRetryAttempts[key] = attempt + 1
+                com.powermediaplayer.util.Diag.i(
+                    "PMP_DIAG",
+                    "Spotify lyrics SERVICE ERROR (not cached) attempt=$attempt retryIn=${next ?: -1}ms track=${snap.title}"
+                )
+                if (next != null) fetchLyricsAsync(gen, snap, next)
+            }
             if (gen == pollGen && _spotifyState.value?.trackUri == snap.trackUri) {
-                // Persist into the fields so the next poll's emit KEEPS them —
-                // the fix for lyrics appearing then vanishing / not loading.
                 lastLyrics = res?.plain
                 lastSynced = res?.synced.orEmpty()
                 lastLyricsLoading = false
                 _spotifyState.value = _spotifyState.value?.copy(
                     lyrics = res?.plain, syncedLyrics = res?.synced.orEmpty(),
-                    lyricsLoading = false
+                    lyricsLoading = false, lyricsServiceBusy = busy
                 )
                 // Lyrics are metadata → clear the SINGLE loading banner now that
                 // the async fetch has resolved (the metadata emit deferred it).
@@ -1682,13 +1702,15 @@ class SpotifyProvider @Inject constructor(
      * duration. Returns null on miss. LRCLib is free and doesn't
      * require an API key. https://lrclib.net/docs
      */
+    private class LrclibFetch(val outcome: LrclibOutcome, val result: Pair<String, List<LyricLine>>?)
+
     private fun fetchLyricsLrclib(
         title: String,
         artist: String,
         album: String,
         durationMs: Long
-    ): Pair<String, List<LyricLine>>? {
-        if (title.isBlank() || artist.isBlank()) return null
+    ): LrclibFetch {
+        if (title.isBlank() || artist.isBlank()) return LrclibFetch(LrclibOutcome.NOT_FOUND, null)
         val firstArtist = artist.substringBefore(',').trim()
         val durSec = (durationMs / 1000).toString()
         val url = "https://lrclib.net/api/get?" +
@@ -1708,7 +1730,9 @@ class SpotifyProvider @Inject constructor(
                     "PMP_DIAG",
                     "Spotify.lyrics GET code=${resp.code} album='$album' durSec=$durSec url=$url"
                 )
-                if (!resp.isSuccessful) return@use null
+                if (!resp.isSuccessful) {
+                    return@use LrclibFetch(LrclibClassifier.classify(resp.code, false), null)
+                }
                 val body = resp.body?.string().orEmpty()
                 val root = JsonParser.parseString(body).asJsonObject
                 val plain = root.get("plainLyrics")?.takeIf { !it.isJsonNull }?.asString
@@ -1719,11 +1743,14 @@ class SpotifyProvider @Inject constructor(
                     "PMP_DIAG",
                     "Spotify.lyrics LRCLib synced=${parsed.size} plain=${plainFallback?.length ?: 0} title='$title' artist='$firstArtist'"
                 )
-                if (plainFallback == null && parsed.isEmpty()) null
-                else (plainFallback.orEmpty()) to parsed
+                if (plainFallback == null && parsed.isEmpty()) LrclibFetch(LrclibOutcome.NOT_FOUND, null)
+                else LrclibFetch(LrclibOutcome.FOUND, (plainFallback.orEmpty()) to parsed)
             }
-        } catch (_: Exception) { null }
+        } catch (_: Exception) { LrclibFetch(LrclibOutcome.SERVICE_ERROR, null) }
     }
+
+    /** RT3: per-track retry counter for SERVICE_ERROR (reset when a lookup settles). */
+    private val lyricsRetryAttempts = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     private val lrcTagRegex = Regex("\\[(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?\\]")
 

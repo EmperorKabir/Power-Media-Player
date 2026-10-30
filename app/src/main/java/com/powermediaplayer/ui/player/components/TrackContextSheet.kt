@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Download
@@ -61,6 +62,8 @@ data class TrackContextActions(
     val onUnfavourite: (() -> Unit)? = null,
     val onHide: (() -> Unit)? = null,
     val onAddToQueueNext: (() -> Unit)? = null,
+    /** RT4 (2026-10-30): play every audio file in this file's folder as one book, natural order. */
+    val onPlayFolderAsBook: (() -> Unit)? = null,
     val onEditTags: (() -> Unit)? = null,
     val onOverrideSpeed: (() -> Unit)? = null,
     val onOverrideAudio: (() -> Unit)? = null,
@@ -153,6 +156,9 @@ fun TrackContextSheet(
             }
             actions.onAddToQueueNext?.let {
                 Item(Icons.Filled.PlaylistAdd, "Add to queue next", onClick = it)
+            }
+            actions.onPlayFolderAsBook?.let {
+                Item(Icons.Filled.FolderOpen, "Play folder as book", onClick = it)
             }
             actions.onEditTags?.let {
                 Item(Icons.Filled.Edit, "Edit tags", onClick = it)

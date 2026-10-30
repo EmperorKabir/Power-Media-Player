@@ -1835,6 +1835,7 @@ class PlayerViewModel @Inject constructor(
             lyrics = s.lyrics.orEmpty(),
             syncedLyrics = s.syncedLyrics,
             lyricsLoading = s.lyricsLoading,
+            lyricsServiceBusy = s.lyricsServiceBusy,
             currentPosition = pos,
             duration = dur,
             currentPositionFormatted = TimeFormatter.formatDuration(pos),
