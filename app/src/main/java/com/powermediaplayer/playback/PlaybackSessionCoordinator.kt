@@ -1245,10 +1245,11 @@ class PlaybackSessionCoordinator @Inject constructor(
                             deviceName = null
                         )
                     )
-                    if (!autoplay) {
+                    if (!ColdStartSpotifyRule.sendsPlayCommand(autoplay)) {
                         // COLD-BOUNCE: no play command when autoplay is off — the mirror shows
                         // the remembered track paused at its saved position, and the first
                         // user play tap sends the command (SpotifyProvider.playProvisionalMirror).
+                        spotifyProvider.settleProvisionalMirror()   // no poll will clear the banner
                         lastPlayedRepo.adoptSession(recent.id)
                         com.powermediaplayer.diag.DiagLog.dec(
                             branch = "cold-start",

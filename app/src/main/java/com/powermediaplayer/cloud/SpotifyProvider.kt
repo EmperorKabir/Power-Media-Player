@@ -1826,6 +1826,16 @@ class SpotifyProvider @Inject constructor(
     fun isProvisionalMirror(): Boolean = provisionalActive
 
     /**
+     * COLD-BOUNCE: the no-play restore keeps the provisional mirror as the SETTLED display
+     * (title/art/position from the history row) — arming had raised the metadata-loading
+     * banner expecting a poll to clear it, and no poll runs until the user plays.
+     */
+    fun settleProvisionalMirror() {
+        bannerGraceUntilMs = 0L
+        _spotifyMetadataFetching.value = false
+    }
+
+    /**
      * COLD-BOUNCE (2026-10-30, phone log): the cold-start restore used to SEND a play command
      * for the remembered Spotify track even with autoplay off ("autoplay gate → false" then
      * `playTrackOnConnectDevice` 3 ms later, then pause). Whenever the Spotify app had no active
