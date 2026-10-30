@@ -951,7 +951,11 @@ class LibraryViewModel @Inject constructor(
      */
     fun playFolderOf(file: MediaFileInfo) {
         viewModelScope.launch {
-            val siblings = withContext(Dispatchers.IO) { runCatching { audioFilesInSameFolder(file) }.getOrDefault(emptyList()) }
+            // A6 (audit): a SAF / VIEW-added row carries a hash as its id — never look that up
+            // in MediaStore (a collision would resolve an unrelated folder).
+            val isMediaStore = file.uri.authority == "media"
+            val siblings = if (!isMediaStore) emptyList()
+                else withContext(Dispatchers.IO) { runCatching { audioFilesInSameFolder(file) }.getOrDefault(emptyList()) }
             if (siblings.size <= 1) { playSingle(file); return@launch }
             val sorted = FolderChapterAggregator.naturalSort(siblings)
             val idx = sorted.indexOfFirst { it.id == file.id }.coerceAtLeast(0)
@@ -1196,8 +1200,11 @@ class LibraryViewModel @Inject constructor(
      * a later restore / Last Played tap of the same uri still has access.
      */
     suspend fun openExternalUri(uri: Uri): Boolean {
-        val fileInfo = withContext(Dispatchers.IO) { runCatching { resolvePickedFile(uri) }.getOrNull() }
-            ?: return false
+        val fileInfo = withContext(Dispatchers.IO) {
+            runCatching {
+                if (uri.scheme == "file") resolveFileUri(uri) else resolvePickedFile(uri)
+            }.getOrNull()
+        } ?: return false
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -1236,6 +1243,31 @@ class LibraryViewModel @Inject constructor(
     // Audit B3: createSingleMediaItem was uncalled AND parsed chapters on the
     // CALLER thread (a Main-thread parse landmine if ever wired). The live
     // single-file path is playSingle. Removed.
+
+    /** A7 (audit): a legacy `file://` VIEW uri (no content provider to query). */
+    private fun resolveFileUri(uri: Uri): MediaFileInfo? {
+        val f = java.io.File(uri.path ?: return null)
+        if (!f.isFile) return null
+        val ext = f.extension.lowercase()
+        val isVideo = ext in setOf("mp4", "m4v", "mkv", "webm", "mov", "avi", "3gp", "ts", "mts")
+        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+            ?: if (isVideo) "video/*" else "audio/*"
+        var title = f.nameWithoutExtension; var artist = ""; var album = ""; var duration = 0L
+        runCatching {
+            android.media.MediaMetadataRetriever().use { r ->
+                r.setDataSource(f.absolutePath)
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }?.let { title = it }
+                artist = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST).orEmpty()
+                album = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM).orEmpty()
+                duration = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            }
+        }
+        return MediaFileInfo(
+            id = uri.hashCode().toLong(), uri = uri, title = title, artist = artist, album = album,
+            duration = duration, mimeType = mime, size = f.length(), dateModified = f.lastModified() / 1000,
+            isVideo = isVideo
+        )
+    }
 
     /**
      * Resolve metadata from a SAF-picked file URI using ContentResolver.

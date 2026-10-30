@@ -1993,8 +1993,11 @@ private fun SyncedLyricsPanel(
     // the active line. Set to "now + 2 s" whenever scroll-in-progress
     // starts; auto-recentre is suppressed until that timestamp passes.
     var userScrollUntilMs by remember { mutableStateOf(0L) }
+    // A4 (audit): our own scrollToItem/animateScrollToItem also flips isScrollInProgress; only a
+    // USER scroll may arm the 2 s re-centre suppression.
+    var programmaticScroll by remember { mutableStateOf(false) }
     LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) {
+        if (listState.isScrollInProgress && !programmaticScroll) {
             userScrollUntilMs = android.os.SystemClock.elapsedRealtime() + 2_000L
         }
     }
@@ -2006,7 +2009,12 @@ private fun SyncedLyricsPanel(
             // of context above it. While scrubbing: jump, no animation (one restart per
             // lyric line crossed would otherwise pile up at pointer rate).
             val target = (activeIndex - 2).coerceAtLeast(0)
-            if (scrubbing) listState.scrollToItem(target) else listState.animateScrollToItem(target)
+            programmaticScroll = true
+            try {
+                if (scrubbing) listState.scrollToItem(target) else listState.animateScrollToItem(target)
+            } finally {
+                programmaticScroll = false
+            }
         }
     }
     Surface(
@@ -2339,6 +2347,9 @@ private fun PositionSection(
     val abEnd by viewModel.abLoopEnd.collectAsStateWithLifecycle()
     fun abFraction(ms: Long?): Float? {
         if (ms == null || pos.durationMs <= 0L) return null
+        // A9 (audit): during a FULL-bar preview into another file of a folder book the bar shows
+        // that file, but A/B belong to the current one — hide them for the drag.
+        if (pos.isFolderBook && pos.scrubbing && pos.scrubChapterTitle != null) return null
         // SW7: A/B are file-relative; in a folder book the bar IS the file (chapter start is
         // queue-absolute there), so no chapter offset applies.
         val base = if (pos.isFolderBook) 0L else pos.chapterStartMs
@@ -2354,7 +2365,8 @@ private fun PositionSection(
         trackRemainingFormatted = pos.remainingFormatted,
         trackSliderEnabled = controls.trackSlider,
         onTrackSeek = { fraction ->
-            viewModel.seekTrackBar(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
+            // A2: a bar with no known duration (Spotify poll gap) must not seek to 0.
+            if (pos.durationMs > 0L) viewModel.seekTrackBar(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
         },
         // 2026-10-30: labels / time bubble / chapter chip follow the drag (see applyScrubPreview).
         onTrackScrub = { viewModel.setScrubPreview(ScrubBar.TRACK, it) },
@@ -2363,12 +2375,12 @@ private fun PositionSection(
         onPlaylistScrubEnd = { seeked -> viewModel.clearScrubPreview(seeked) },
         // #4 — Track time taps. Math mirrors onTrackSeek (chapterStartMs + ms).
         onTrackSeekToElapsedMs = {
-            seekDialog = SeekDialogReq("Jump to time", pos.positionFormatted, pos.durationMs) { ms ->
+            if (pos.durationMs > 0L) seekDialog = SeekDialogReq("Jump to time", pos.positionFormatted, pos.durationMs) { ms ->
                 viewModel.seekTrackBar(pos.chapterStartMs + ms)
             }
         },
         onTrackSeekToRemainingMs = {
-            seekDialog = SeekDialogReq("Jump to time remaining", pos.remainingFormatted, pos.durationMs) { ms ->
+            if (pos.durationMs > 0L) seekDialog = SeekDialogReq("Jump to time remaining", pos.remainingFormatted, pos.durationMs) { ms ->
                 viewModel.seekTrackBar(pos.chapterStartMs + (pos.durationMs - ms))
             }
         },

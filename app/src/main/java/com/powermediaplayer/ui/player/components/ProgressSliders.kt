@@ -1,5 +1,15 @@
 package com.powermediaplayer.ui.player.components
 
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+
+import androidx.compose.ui.semantics.disabled
+
+import androidx.compose.ui.semantics.progressBarRangeInfo
+
+import androidx.compose.ui.semantics.setProgress
+
+import androidx.compose.ui.semantics.semantics
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -235,6 +245,16 @@ private fun PositionSlider(
             modifier = Modifier
                 .fillMaxWidth()
                 .onSizeChanged { widthPx = it.width.toFloat() }
+                // A3: accessibility seeking (TalkBack "adjust") now lives here, since the
+                // Material Slider beneath is render-only.
+                .semantics(mergeDescendants = true) {
+                    if (enabled) {
+                        progressBarRangeInfo = ProgressBarRangeInfo(shownValue.coerceIn(0f, 1f), 0f..1f, 0)
+                        setProgress { v -> onSeek(v.coerceIn(0f, 1f)); pendingSeek = v.coerceIn(0f, 1f); true }
+                    } else {
+                        disabled()
+                    }
+                }
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         // Initial pass + consume: the Material slider below never sees the
@@ -321,23 +341,25 @@ private fun PositionSlider(
                     }
                 }
         ) {
+        // A3 (audit): the Material Slider is RENDER-ONLY. It is always `enabled = false` so its own
+        // draggable can never capture a gesture our Box let through (a diagonal swipe used to
+        // reach it and seek on every move); the "enabled" look is painted through the disabled
+        // colour slots. Accessibility seeking is exposed on the Box (setProgress) instead.
         val sliderColors = SliderDefaults.colors(
             thumbColor = activeColor,
             activeTrackColor = activeColor,
+            inactiveTrackColor = activeColor.copy(alpha = 0.25f),
+            disabledThumbColor = if (enabled) activeColor else DisabledGrey,
+            disabledActiveTrackColor = if (enabled) activeColor else DisabledGrey.copy(alpha = 0.5f),
             // Tinted teal instead of plain grey so the unfilled
             // portion reads as part of the same control surface.
-            inactiveTrackColor = if (enabled) activeColor.copy(alpha = 0.25f)
-                else activeColor.copy(alpha = 0.12f),
-            disabledThumbColor = DisabledGrey,
-            disabledActiveTrackColor = DisabledGrey.copy(alpha = 0.5f),
-            disabledInactiveTrackColor = activeColor.copy(alpha = 0.12f)
+            disabledInactiveTrackColor = if (enabled) activeColor.copy(alpha = 0.25f)
+                else activeColor.copy(alpha = 0.12f)
         )
         Slider(
             value = shownValue,
-            // Touches are consumed above; this only serves accessibility actions
-            // (TalkBack "adjust"), which still seek directly.
-            onValueChange = { value -> if (!isDragging) { onSeek(value); pendingSeek = value } },
-            enabled = enabled,
+            onValueChange = {},
+            enabled = false,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(28.dp),
@@ -349,7 +371,7 @@ private fun PositionSlider(
                 SliderDefaults.Thumb(
                     interactionSource = interactionSource,
                     colors = sliderColors,
-                    enabled = enabled,
+                    enabled = false,   // render-only; colour comes from the disabled slot above
                     modifier = Modifier.onSizeChanged { thumbWidthPx = it.width.toFloat() }
                 )
             }

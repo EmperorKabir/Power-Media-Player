@@ -684,6 +684,16 @@ class PlaybackConnection @Inject constructor(
      */
     fun seekToAbsolutePlaylistPosition(absolutePositionMs: Long) {
         val c = controller ?: return
+        // A8 (audit): in a folder book the chapter list is the ONE time basis (the bar and the
+        // target were computed from it) — resolve the window from it, never from a mix of
+        // measured and metadata durations.
+        folderChapters?.let { fc ->
+            val ch = fc.lastOrNull { it.startTimeMs <= absolutePositionMs } ?: fc.firstOrNull() ?: return
+            if (ch.index in 0 until c.currentTimeline.windowCount) {
+                c.seekTo(ch.index, (absolutePositionMs - ch.startTimeMs).coerceAtLeast(0L))
+                return
+            }
+        }
         val timeline = c.currentTimeline
         val window = Timeline.Window()
         var cursor = 0L

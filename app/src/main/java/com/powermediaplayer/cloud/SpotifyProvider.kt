@@ -1586,6 +1586,7 @@ class SpotifyProvider @Inject constructor(
                                 // SW11: a new lookup for this track starts with a fresh retry budget
                                 if (lyricsRetryAttempts.size > 256) lyricsRetryAttempts.clear()
                                 lyricsRetryAttempts.remove(key)
+                                lyricsRetryJobs.remove(key)?.cancel()
                                 fetchLyricsAsync(gen, snap)
                             }
                         }
@@ -1651,9 +1652,9 @@ class SpotifyProvider @Inject constructor(
      * miss) and paints it onto the live state only if still the same generation
      * AND the same track — never blocks the banner or a track change.
      */
-    private fun fetchLyricsAsync(gen: Int, snap: SpotifyPlaybackState, retryDelayMs: Long = 0L) {
+    private fun fetchLyricsAsync(gen: Int, snap: SpotifyPlaybackState, retryDelayMs: Long = 0L): kotlinx.coroutines.Job? {
         val key = lyricsKey(snap.title, snap.artist, snap.album, snap.durationMs)
-        pollScope.launch {
+        return pollScope.launch {
             if (retryDelayMs > 0L) {
                 delay(retryDelayMs)
                 if (gen != pollGen || _spotifyState.value?.trackUri != snap.trackUri) return@launch
@@ -1679,7 +1680,7 @@ class SpotifyProvider @Inject constructor(
                     "PMP_DIAG",
                     "Spotify lyrics SERVICE ERROR (not cached) attempt=$attempt retryIn=${next ?: -1}ms track=${snap.title}"
                 )
-                if (next != null) fetchLyricsAsync(gen, snap, next)
+                if (next != null) fetchLyricsAsync(gen, snap, next)?.let { lyricsRetryJobs[key] = it }
             }
             if (gen == pollGen && _spotifyState.value?.trackUri == snap.trackUri) {
                 lastLyrics = res?.plain
@@ -1754,6 +1755,8 @@ class SpotifyProvider @Inject constructor(
 
     /** RT3: per-track retry counter for SERVICE_ERROR (reset when a lookup settles). */
     private val lyricsRetryAttempts = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    /** A5 (audit): the pending retry per key, cancelled when a fresh lookup for that key starts. */
+    private val lyricsRetryJobs = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Job>()
 
     private val lrcTagRegex = Regex("\\[(\\d{1,2}):(\\d{2})(?:\\.(\\d{1,3}))?\\]")
 

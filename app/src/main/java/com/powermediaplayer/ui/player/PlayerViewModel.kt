@@ -636,6 +636,17 @@ class PlayerViewModel @Inject constructor(
      *  release through the existing seekTo paths. */
     private var lastSpotifyTrackSliderEnabled: Boolean? = null
     private var spotifyLastRealDurationAt: Long = Long.MIN_VALUE / 2
+    private var spotifyLastRealDurationMs: Long = 0L
+    private var spotifyLastRealPositionMs: Long = 0L
+
+    /** A2: remember the last real Spotify duration/position so a poll gap shows (and seeks) them. */
+    private fun rememberSpotifyReal(s: SpotifyPlaybackState) {
+        if (s.durationMs > 0L) {
+            spotifyLastRealDurationMs = s.durationMs
+            spotifyLastRealPositionMs = s.positionMs.coerceAtLeast(0L)
+            spotifyLastRealDurationAt = android.os.SystemClock.uptimeMillis()
+        }
+    }
     private val _scrubPreview = MutableStateFlow<Pair<ScrubBar, Float>?>(null)
     private var scrubReleaseJob: kotlinx.coroutines.Job? = null
     fun setScrubPreview(bar: ScrubBar, fraction: Float) {
@@ -698,8 +709,13 @@ class PlayerViewModel @Inject constructor(
         s: SpotifyPlaybackState?
     ): RawPosition {
         if (s != null) {
-            val pos = s.positionMs.coerceAtLeast(0L)
-            val dur = s.durationMs.coerceAtLeast(0L)
+            rememberSpotifyReal(s)
+            val held = SpotifySliderGate.hold(
+                s.durationMs, s.positionMs, spotifyLastRealDurationMs, spotifyLastRealPositionMs,
+                android.os.SystemClock.uptimeMillis(), spotifyLastRealDurationAt
+            )
+            val pos = held.positionMs
+            val dur = held.durationMs
             val prog = if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
             return RawPosition(
                 trackProgress = prog,
@@ -1881,8 +1897,7 @@ class PlayerViewModel @Inject constructor(
                 brightness = true,
                 volume = true,
                 sleepTimer = true,
-                trackSlider = SpotifySliderGate.enabled(dur, android.os.SystemClock.uptimeMillis(), spotifyLastRealDurationAt)
-                    .let { (en, at) -> spotifyLastRealDurationAt = at; en }
+                trackSlider = run { rememberSpotifyReal(s); SpotifySliderGate.enabled(dur, android.os.SystemClock.uptimeMillis(), spotifyLastRealDurationAt).first }
                     .also { en ->
                         if (en != lastSpotifyTrackSliderEnabled) {
                             lastSpotifyTrackSliderEnabled = en

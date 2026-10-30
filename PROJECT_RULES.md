@@ -252,6 +252,13 @@ episode → show → global) via the Tune popup; see §4.
   The gesture is keyed on `Unit`, never on `enabled`: Spotify flips the Track bar's enabled
   state for ~1 s on every track change (poll `dur=0`), and a keyed pointerInput would restart
   and cancel a drag in flight (SCRUB-FLIP, phone-proven); `SpotifySliderGate` hides the gap.
+  The Material Slider under the gesture is RENDER-ONLY (`enabled=false`, enabled look via the
+  disabled colour slots; a11y seeking via `semantics { setProgress }` on the Box) — its own
+  draggable must never see a touch (A2-2). While the gap is bridged the bar shows the last REAL
+  duration/position (`SpotifySliderGate.hold`) and a bar with `durationMs ≤ 0` never seeks (A2-1).
+- **Cold-start restore of a Spotify track sends NO play command when autoplay is off (vc135,
+  COLD-BOUNCE):** it arms and settles the provisional mirror; the first play tap plays it
+  (`playProvisionalMirror`). The launch-time play + wake bounce was the "bounce at restart".
   The iOS "drag away from the bar for precision" pattern was proposed and REJECTED ("not
   remotely intuitive") — do not reintroduce it.
 - **LRCLib (lyrics) failures are classified (vc135, RT3).** FOUND / NOT_FOUND are cached; a SERVICE_ERROR

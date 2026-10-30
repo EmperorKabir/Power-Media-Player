@@ -190,6 +190,8 @@ Scope: every commit from vc121 (podcast tap resumes, skip accumulator) to vc133 
 | V49 | SW1 slow vertical swipe starting ON the bar scrolls the controls | Emulator 20:16, final build | Track label y 634 → 189 after a 1.5 s upward swipe from the bar; 0 `reason=SEEK` lines | PASS |
 | V50 | RT4 + FOLDER-CH on the PHONE | Oppo, final build 20:2x, three mp3s in `Music/Book/` | Library row sheet → "Play folder as book" → Player on "Autoplay T2" with the bar at 0:05 / -0:14 / 0:20 | PASS |
 | V51 | RT3 lyrics after the outage | User 2026-10-30 evening: "the lyrics are back" (lrclib.net recovered); no code involved | — | PASS (external) |
+| V52 | COLD-BOUNCE | Phone 21:59–22:0x, Spotify app force-stopped, last-played = Spotify | cold start → `spotify mirror armed, NO play command (autoplay=false)`, 0 bridge starts, no loading node; Play tap → `playProvisionalMirror` → 404 → wake bounce → 204 → PLAYING | PASS |
+| V53 | A2-1 gap hold | Unit | `SpotifySliderGateTest.gapShowsTheLastRealPairNotZeros` (bridged gap shows 227 893 / 127 273, live values when present, zeros after the grace) | PASS |
 | V37 | Spotify handoff untouched by VID5 | Phone log 16:21:24–27 on 1.5.80-test | AuthorizationManagementActivity → RedirectUriReceiverActivity → SpotifyAuthCompleteActivity (CLEAR_TOP\|SINGLE_TOP, since vc85) → `MainActivity.onResume`, no `onCreate` between; history grep: no recorded link between the handoff and MainActivity recreation | PASS |
 
 ### Open questions for the user (recorded, not decided)
