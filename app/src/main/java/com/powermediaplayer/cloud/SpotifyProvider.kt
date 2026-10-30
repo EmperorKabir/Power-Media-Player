@@ -826,7 +826,10 @@ class SpotifyProvider @Inject constructor(
      */
     suspend fun playTrackOnConnectDevice(
         spotifyUri: String?,
-        contextUri: String? = null
+        contextUri: String? = null,
+        /** COLD-BOUNCE: false for an AUTOMATIC play (cold-start autoplay) — with no Spotify
+         *  device it fails cleanly instead of bouncing the user into the Spotify app. */
+        allowWake: Boolean = true
     ): Result<Unit> =
         withContext(Dispatchers.IO) {
             com.powermediaplayer.util.Diag.i(
