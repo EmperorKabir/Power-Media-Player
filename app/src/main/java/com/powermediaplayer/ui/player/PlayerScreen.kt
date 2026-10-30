@@ -2344,7 +2344,7 @@ private fun PositionSection(
         trackRemainingFormatted = pos.remainingFormatted,
         trackSliderEnabled = controls.trackSlider,
         onTrackSeek = { fraction ->
-            viewModel.seekTo(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
+            viewModel.seekTrackBar(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
         },
         // 2026-10-30: labels / time bubble / chapter chip follow the drag (see applyScrubPreview).
         onTrackScrub = { viewModel.setScrubPreview(ScrubBar.TRACK, it) },
@@ -2354,12 +2354,12 @@ private fun PositionSection(
         // #4 — Track time taps. Math mirrors onTrackSeek (chapterStartMs + ms).
         onTrackSeekToElapsedMs = {
             seekDialog = SeekDialogReq("Jump to time", pos.positionFormatted, pos.durationMs) { ms ->
-                viewModel.seekTo(pos.chapterStartMs + ms)
+                viewModel.seekTrackBar(pos.chapterStartMs + ms)
             }
         },
         onTrackSeekToRemainingMs = {
             seekDialog = SeekDialogReq("Jump to time remaining", pos.remainingFormatted, pos.durationMs) { ms ->
-                viewModel.seekTo(pos.chapterStartMs + (pos.durationMs - ms))
+                viewModel.seekTrackBar(pos.chapterStartMs + (pos.durationMs - ms))
             }
         },
         // #4 — Full/playlist time taps. Mirrors onPlaylistSeek (absolute ms).

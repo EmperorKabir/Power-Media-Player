@@ -1,5 +1,6 @@
 package com.powermediaplayer.ui.navigation
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -137,6 +138,21 @@ fun AppNavigation(
                 }
                 onOpenTabConsumed()
             }
+        }
+    }
+
+    // OPEN-VIEW: a media uri handed over by another app (see DeepLinkBus.openUri) — the same
+    // path the Library's "Open file" picker uses (adds the file to the list and auto-plays),
+    // then the Player comes to the front.
+    val openUri by DeepLinkBus.openUri.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(openUri) {
+        val uri = openUri ?: return@LaunchedEffect
+        DeepLinkBus.consumeOpen(uri)
+        libraryViewModel.handlePickedFile(uri)
+        navController.navigate(Screen.Player.route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
         }
     }
 

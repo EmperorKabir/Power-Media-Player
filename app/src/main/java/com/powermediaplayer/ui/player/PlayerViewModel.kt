@@ -661,7 +661,7 @@ class PlayerViewModel @Inject constructor(
                         else (f * raw.playlistDurationMs).toLong()
                     val live = when {
                         s != null -> s.positionMs
-                        bar == ScrubBar.TRACK -> ps.currentPosition
+                        bar == ScrubBar.TRACK && !ps.isFolderBook -> ps.currentPosition
                         else -> ps.totalPlaylistPosition
                     }
                     kotlin.math.abs(live - target) <= 1500L
@@ -715,7 +715,9 @@ class PlayerViewModel @Inject constructor(
         val chapterStart = currentChapter?.startTimeMs?.takeIf { inChapter } ?: 0L
         val chapterEnd = currentChapter?.endTimeMs?.takeIf { inChapter } ?: ps.duration
         val chapterDuration = (chapterEnd - chapterStart).coerceAtLeast(0L)
-        val chapterPos = (ps.currentPosition - chapterStart).coerceIn(0L, chapterDuration)
+        val chapterPos = chapterRelativePosition(
+            ps.isFolderBook, ps.currentPosition, ps.totalPlaylistPosition, chapterStart, chapterDuration
+        )
         val trackProgress = if (inChapter && chapterDuration > 0) {
             (chapterPos.toFloat() / chapterDuration.toFloat()).coerceIn(0f, 1f)
         } else if (ps.duration > 0) {
@@ -867,6 +869,19 @@ class PlayerViewModel @Inject constructor(
             viewModelScope.launch { spotifyProvider.seekTo(positionMs) }
         } else {
             playbackConnection.seekTo(positionMs)
+        }
+    }
+
+    /**
+     * FOLDER-CH: a Track-bar target (`chapterStartMs + offset`). With embedded chapters that is
+     * a position inside the current file; with folder-as-book chapters it is queue-absolute and
+     * must cross files.
+     */
+    fun seekTrackBar(targetMs: Long) {
+        if (!isSpotifyActive && playbackConnection.playerState.value.isFolderBook) {
+            playbackConnection.seekToAbsolutePlaylistPosition(targetMs)
+        } else {
+            seekTo(targetMs)
         }
     }
     /** Spotify next: with shuffle ON and the album/playlist tracks known, jump to

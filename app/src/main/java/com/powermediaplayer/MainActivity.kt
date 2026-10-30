@@ -295,7 +295,12 @@ class MainActivity : FragmentActivity() {
         // still fire. Fresh create only (savedInstanceState==null); a config
         // recreate keeps the live session, so re-restoring there is wrong.
         if (savedInstanceState == null) {
-            sessionCoordinator.attemptColdStartRestore()
+            // OPEN-VIEW: a file handed to us by another app wins over the last-played restore.
+            if (com.powermediaplayer.ui.navigation.DeepLinkBus.hasPendingOpen()) {
+                com.powermediaplayer.diag.DiagLog.dec(branch = "cold-start", reason = "VIEW launch pending → restore skipped")
+            } else {
+                sessionCoordinator.attemptColdStartRestore()
+            }
         } else {
             // A non-null savedInstanceState is NOT only a config change: Android
             // also hands one back when it destroyed the activity for resources
@@ -488,6 +493,17 @@ class MainActivity : FragmentActivity() {
         )?.let {
             if (honour) com.powermediaplayer.ui.navigation.DeepLinkBus.revealPodcast(it)
             i.removeExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_PODCAST_FEED)
+        }
+        // OPEN-VIEW: "Open with Power Media Player" — play the handed-over file. The data is
+        // cleared from the sticky intent so a recreation does not replay it.
+        if (i.action == android.content.Intent.ACTION_VIEW) {
+            i.data?.let { uri ->
+                if (honour) {
+                    com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity VIEW uri=${uri.scheme}:${uri.lastPathSegment} type=${i.type}")
+                    com.powermediaplayer.ui.navigation.DeepLinkBus.requestOpen(uri)
+                }
+                i.setDataAndType(null, null)
+            }
         }
     }
 

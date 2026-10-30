@@ -246,6 +246,13 @@ episode → show → global) via the Tune popup; see §4.
   never assume 10 dp). A vertical swipe on the bar is handed to the parent scroll, RTL mirrors.
   The iOS "drag away from the bar for precision" pattern was proposed and REJECTED ("not
   remotely intuitive") — do not reintroduce it.
+- **ACTION_VIEW launches play the handed-over file (vc135, OPEN-VIEW).** The manifest's audio/video
+  VIEW filters are served by `DeepLinkBus.openUri` → `LibraryViewModel.handlePickedFile` → Player;
+  the cold-start restore yields while a VIEW is pending. Before this nothing read the intent data.
+- **Folder-as-book chapters are QUEUE-absolute (vc135, FOLDER-CH).** `PlayerState.isFolderBook` marks
+  them; the Track bar measures from `totalPlaylistPosition` (`chapterRelativePosition`) and seeks via
+  `seekTrackBar` → `seekToAbsolutePlaylistPosition`. Embedded chapters stay file-relative. Never
+  subtract a folder chapter start from `currentPosition`.
 - **Library permissions are per tab (vc135, LIB-PERM):** `LibraryPermissions` — the Audio tab gates
   on READ_MEDIA_AUDIO, the Video tab on READ_MEDIA_VIDEO; each tab prompts for exactly what it
   lacks when shown (both at once on a fresh install). Never gate both tabs on one flag again.

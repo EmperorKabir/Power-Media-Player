@@ -112,3 +112,21 @@ fun applyScrubPreview(
         }
     }
 }
+
+/**
+ * FOLDER-CH: the Track bar's position inside the current chapter. Embedded chapters are
+ * file-relative, so the file position applies; folder-as-book chapters are queue-absolute, so
+ * the playlist position applies — subtracting an absolute chapter start from a file-relative
+ * position pinned the bar at 0:00 for every file after the first (pre-existing, found by the
+ * 2026-10-30 audit).
+ */
+fun chapterRelativePosition(
+    isFolderBook: Boolean,
+    filePositionMs: Long,
+    playlistPositionMs: Long,
+    chapterStartMs: Long,
+    chapterDurationMs: Long
+): Long {
+    val ref = if (isFolderBook) playlistPositionMs else filePositionMs
+    return (ref - chapterStartMs).coerceIn(0L, chapterDurationMs.coerceAtLeast(0L))
+}

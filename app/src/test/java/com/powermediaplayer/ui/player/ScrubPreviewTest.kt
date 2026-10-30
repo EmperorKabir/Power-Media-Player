@@ -78,6 +78,16 @@ class ScrubPreviewTest {
         assertEquals(0.1f, outside.trackProgress, 0f)
     }
 
+    /** FOLDER-CH: file #2 of a folder book, 10 s in — the bar must show 0:10, not 0:00. */
+    @Test fun folderBookChapterPositionUsesThePlaylistPosition() {
+        // embedded chapters: file-relative
+        assertEquals(10_000L, chapterRelativePosition(false, filePositionMs = 70_000L, playlistPositionMs = 70_000L, chapterStartMs = 60_000L, chapterDurationMs = 40_000L))
+        // folder book: file #2 starts at 60 s absolute; the player is 10 s into that file
+        assertEquals(10_000L, chapterRelativePosition(true, filePositionMs = 10_000L, playlistPositionMs = 70_000L, chapterStartMs = 60_000L, chapterDurationMs = 40_000L))
+        // the old maths (file position minus absolute start) is what pinned it at 0
+        assertEquals(0L, chapterRelativePosition(false, filePositionMs = 10_000L, playlistPositionMs = 70_000L, chapterStartMs = 60_000L, chapterDurationMs = 40_000L))
+    }
+
     @Test fun spotifyShapedBasePreviewsTheSingleTrack() {
         // Spotify: one track, no chapters, playlist == track (what computeRawPosition builds).
         val spot = RawPosition(

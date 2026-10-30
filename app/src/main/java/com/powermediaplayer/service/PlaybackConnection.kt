@@ -62,6 +62,10 @@ data class PlayerState(
     val chapters: List<ChapterInfo> = emptyList(),
     val currentChapterIndex: Int = -1,
     val hasChapters: Boolean = false,
+    /** FOLDER-CH (2026-10-30): true when [chapters] are folder-as-book chapters, whose times are
+     *  QUEUE-absolute (FolderChapterAggregator), not file-relative like embedded chapters. The
+     *  Track bar must then measure from totalPlaylistPosition and seek absolutely. */
+    val isFolderBook: Boolean = false,
     // I3 — snapshot of the current play queue (title/artist/duration per item) so the
     // now-playing "Tracks" picker can list a multi-track queue and jump to any item.
     // Rebuilt only on timeline change (recomputeTimelineCache), not every tick.
@@ -1317,6 +1321,7 @@ class PlaybackConnection @Inject constructor(
             chapters = chapters,
             currentChapterIndex = currentChapter,
             hasChapters = chapters.isNotEmpty(),
+            isFolderBook = isFolderMode && chapters.isNotEmpty(),
             queue = cachedQueue,
             description = preservedDescription,
             playerError = preservedError,
