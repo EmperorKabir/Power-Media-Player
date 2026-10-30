@@ -259,6 +259,9 @@ episode → show → global) via the Tune popup; see §4.
 - **Cold-start restore of a Spotify track sends NO play command when autoplay is off (vc135,
   COLD-BOUNCE):** it arms and settles the provisional mirror; the first play tap plays it
   (`playProvisionalMirror`). The launch-time play + wake bounce was the "bounce at restart".
+  With autoplay ON the automatic play passes `allowWake = false`: no Spotify device → it fails
+  cleanly, the mirror stays paused, and the user's play/next tap does the (one) wake. Never let an
+  AUTOMATIC action open the Spotify app.
   The iOS "drag away from the bar for precision" pattern was proposed and REJECTED ("not
   remotely intuitive") — do not reintroduce it.
 - **LRCLib (lyrics) failures are classified (vc135, RT3).** FOUND / NOT_FOUND are cached; a SERVICE_ERROR
