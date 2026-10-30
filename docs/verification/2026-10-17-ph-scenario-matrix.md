@@ -192,6 +192,7 @@ Scope: every commit from vc121 (podcast tap resumes, skip accumulator) to vc133 
 | V51 | RT3 lyrics after the outage | User 2026-10-30 evening: "the lyrics are back" (lrclib.net recovered); no code involved | — | PASS (external) |
 | V52 | COLD-BOUNCE | Phone 21:59–22:0x, Spotify app force-stopped, last-played = Spotify | cold start → `spotify mirror armed, NO play command (autoplay=false)`, 0 bridge starts, no loading node; Play tap → `playProvisionalMirror` → 404 → wake bounce → 204 → PLAYING | PASS |
 | V53 | A2-1 gap hold | Unit | `SpotifySliderGateTest.gapShowsTheLastRealPairNotZeros` (bridged gap shows 227 893 / 127 273, live values when present, zeros after the grace) | PASS |
+| V54 | A2-2 render-only slider on the PHONE | Oppo, final build 22:2x, 20-min fixture paused | centre tap → 10:00 (Box gesture intact); slow 100 px drag → +0:03; 45° diagonal swipe → exactly ONE seek (our release seek, never per-move; 0 Spotify API seeks); ~68° swipe → 0 seeks. The Player's controls column on this 3168 px screen has nothing to scroll, so the scroll hand-off itself is evidenced by V49 (emulator) | PASS |
 | V37 | Spotify handoff untouched by VID5 | Phone log 16:21:24–27 on 1.5.80-test | AuthorizationManagementActivity → RedirectUriReceiverActivity → SpotifyAuthCompleteActivity (CLEAR_TOP\|SINGLE_TOP, since vc85) → `MainActivity.onResume`, no `onCreate` between; history grep: no recorded link between the handoff and MainActivity recreation | PASS |
 
 ### Open questions for the user (recorded, not decided)
