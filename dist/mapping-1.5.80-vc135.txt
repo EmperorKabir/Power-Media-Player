@@ -3,8 +3,8 @@
 # min_api: 30
 # common_typos_disable
 # {"id":"com.android.tools.r8.mapping","version":"2.2"}
-# pg_map_id: 7ff12d9
-# pg_map_hash: SHA-256 7ff12d9707f224cd58ed9aa2f8c4e1f3e7096fe687b208fe856084924cdd901e
+# pg_map_id: 087b9b6
+# pg_map_hash: SHA-256 087b9b6d5fe80e2e2aba9099a763b8ce39fd26416361b3866f3d199beb1b206d
 _COROUTINE.ArtificialStackFrames -> R8$$REMOVED$$CLASS$$0:
 # {"id":"sourceFile","fileName":"CoroutineDebugging.kt"}
 _COROUTINE.CoroutineDebuggingKt -> R8$$REMOVED$$CLASS$$1:
@@ -357315,7 +357315,7 @@ androidx.navigation.NavGraph$Companion$$ExternalSyntheticLambda0 -> Y1.p:
     1173:1180:java.util.List com.powermediaplayer.data.db.dao.BookmarkDao_Impl.observeAll$lambda$2(java.lang.String,androidx.sqlite.SQLiteConnection):114:114 -> invoke
     1173:1180:java.lang.Object Y1.NavGraph$Companion$$ExternalSyntheticLambda0.invoke(java.lang.Object):0 -> invoke
     1181:1184:java.lang.Object Y1.NavGraph$Companion$$ExternalSyntheticLambda0.invoke(java.lang.Object):0:0 -> invoke
-    1185:1205:java.lang.CharSequence com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState$lambda$3(com.google.gson.JsonElement):2136:2136 -> invoke
+    1185:1205:java.lang.CharSequence com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState$lambda$3(com.google.gson.JsonElement):2146:2146 -> invoke
     1185:1205:java.lang.Object Y1.NavGraph$Companion$$ExternalSyntheticLambda0.invoke(java.lang.Object):0 -> invoke
     1206:1211:java.lang.Object Y1.NavGraph$Companion$$ExternalSyntheticLambda0.invoke(java.lang.Object):0:0 -> invoke
     1212:1214:boolean com.powermediaplayer.cloud.SpotifyProvider.stripLrcTimestamps$lambda$48(java.lang.String):0:0 -> invoke
@@ -500325,16 +500325,16 @@ com.powermediaplayer.MainActivity$maybeRestoreOnForeground$1 -> b4.p:
     124:127:java.lang.Object invokeSuspend(java.lang.Object):230:230 -> invokeSuspend
     128:130:java.lang.Object invokeSuspend(java.lang.Object):229:229 -> invokeSuspend
     131:132:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator.access$getColdStartGuard$cp():24:24 -> invokeSuspend
-    131:132:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.getColdStartGuard():1389 -> invokeSuspend
-    131:132:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1392 -> invokeSuspend
+    131:132:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.getColdStartGuard():1390 -> invokeSuspend
+    131:132:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1393 -> invokeSuspend
     131:132:java.lang.Object invokeSuspend(java.lang.Object):232 -> invokeSuspend
-    133:138:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1392:1392 -> invokeSuspend
+    133:138:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1393:1393 -> invokeSuspend
     133:138:java.lang.Object invokeSuspend(java.lang.Object):232 -> invokeSuspend
-    139:140:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1394:1394 -> invokeSuspend
+    139:140:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1395:1395 -> invokeSuspend
     139:140:java.lang.Object invokeSuspend(java.lang.Object):232 -> invokeSuspend
-    141:142:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1395:1395 -> invokeSuspend
+    141:142:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1396:1396 -> invokeSuspend
     141:142:java.lang.Object invokeSuspend(java.lang.Object):232 -> invokeSuspend
-    143:145:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1393:1393 -> invokeSuspend
+    143:145:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1394:1394 -> invokeSuspend
     143:145:java.lang.Object invokeSuspend(java.lang.Object):232 -> invokeSuspend
     146:149:com.powermediaplayer.playback.PlaybackSessionCoordinator com.powermediaplayer.MainActivity.getSessionCoordinator():116:116 -> invokeSuspend
     146:149:java.lang.Object invokeSuspend(java.lang.Object):233 -> invokeSuspend
@@ -510982,13 +510982,13 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     201:211:void <init>(android.content.Context,com.powermediaplayer.cloud.SpotifyTokenStore):370:370 -> <init>
     212:218:void <init>(android.content.Context,com.powermediaplayer.cloud.SpotifyTokenStore):1756:1756 -> <init>
     219:228:void <init>(android.content.Context,com.powermediaplayer.cloud.SpotifyTokenStore):1758:1758 -> <init>
-    28:51:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1880:1880 -> A
+    28:51:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1890:1890 -> A
       # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
     52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> A
-    52:53:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1880 -> A
-    54:70:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1880:1880 -> A
+    52:53:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1890 -> A
+    54:70:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1890:1890 -> A
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> A
-    71:73:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1880 -> A
+    71:73:java.lang.Object pause-IoAF18A(kotlin.coroutines.Continuation):1890 -> A
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     0:1:void performAuthRequest(android.app.PendingIntent,android.app.PendingIntent):399:399 -> B
     2:5:void performAuthRequest(android.app.PendingIntent,android.app.PendingIntent):400:400 -> B
@@ -511005,48 +511005,48 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     36:44:net.openid.appauth.AuthorizationRequest buildAuthRequest():385:385 -> B
     36:44:void performAuthRequest(android.app.PendingIntent,android.app.PendingIntent):402 -> B
     45:48:void performAuthRequest(android.app.PendingIntent,android.app.PendingIntent):402:402 -> B
-    28:48:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1837:1837 -> C
+    28:48:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1847:1847 -> C
     28:48:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
       # {"id":"com.android.tools.r8.synthesized"}
       # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
     49:54:java.lang.Object kotlin.Result.unbox-impl():0:0 -> C
-    49:54:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1837 -> C
+    49:54:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1847 -> C
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     49:54:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
-    55:86:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1837:1837 -> C
+    55:86:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1847:1847 -> C
     55:86:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
     87:89:java.lang.Object kotlin.Result.unbox-impl():0:0 -> C
-    87:89:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1837 -> C
+    87:89:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1847 -> C
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     87:89:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
-    90:92:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1837:1837 -> C
+    90:92:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1847:1847 -> C
     90:92:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
-    93:104:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1838:1838 -> C
+    93:104:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1848:1848 -> C
     93:104:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
     105:109:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0:0 -> C
-    110:116:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1839:1839 -> C
+    110:116:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1849:1849 -> C
     110:116:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
-    117:122:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1841:1841 -> C
+    117:122:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1851:1851 -> C
     117:122:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
     123:132:java.lang.Object playTrackOnConnectDevice-0E7RQCE$default(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String,kotlin.coroutines.Continuation,int,java.lang.Object):827:827 -> C
-    123:132:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1841 -> C
+    123:132:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1851 -> C
     123:132:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
     133:136:boolean kotlin.Result.isSuccess-impl(java.lang.Object):32:32 -> C
-    133:136:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1842 -> C
+    133:136:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1852 -> C
     133:136:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
-    137:139:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1843:1843 -> C
+    137:139:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1853:1853 -> C
     137:139:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
     140:147:long com.powermediaplayer.cloud.SpotifyPlaybackState.getPositionMs():51:51 -> C
-    140:147:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1844 -> C
+    140:147:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1854 -> C
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     140:147:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
-    148:163:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1845:1845 -> C
+    148:163:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1855:1855 -> C
     148:163:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
     164:165:long com.powermediaplayer.cloud.SpotifyPlaybackState.getPositionMs():51:51 -> C
-    164:165:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1846 -> C
+    164:165:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1856 -> C
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     164:165:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
-    166:190:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1846:1846 -> C
+    166:190:java.lang.Object playProvisionalMirror-IoAF18A(kotlin.coroutines.Continuation):1856:1856 -> C
     166:190:java.lang.Object f4.SpotifyProvider.playProvisionalMirror-IoAF18A(Z4.ContinuationImpl):0 -> C
     28:49:java.lang.Object playTrackOnConnectDevice-0E7RQCE(java.lang.String,java.lang.String,kotlin.coroutines.Continuation):827:827 -> D
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/String;Ljava/lang/String;LZ4/c;)Ljava/lang/Object;"}
@@ -511057,13 +511057,13 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> D
     71:73:java.lang.Object playTrackOnConnectDevice-0E7RQCE(java.lang.String,java.lang.String,kotlin.coroutines.Continuation):831 -> D
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    28:51:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1960:1960 -> E
+    28:51:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1970:1970 -> E
       # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
     52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> E
-    52:53:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1960 -> E
-    54:70:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1960:1960 -> E
+    52:53:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1970 -> E
+    54:70:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1970:1970 -> E
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> E
-    71:73:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1960 -> E
+    71:73:java.lang.Object resume-IoAF18A(kotlin.coroutines.Continuation):1970 -> E
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     28:49:java.lang.Object search-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1451:1451 -> F
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/String;LZ4/c;)Ljava/lang/Object;"}
@@ -511074,13 +511074,13 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> F
     71:73:java.lang.Object search-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1452 -> F
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    28:51:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1903:1903 -> G
+    28:51:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1913:1913 -> G
       # {"id":"com.android.tools.r8.residualsignature","signature":"(JLZ4/c;)Ljava/lang/Object;"}
     52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> G
-    52:53:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1903 -> G
-    54:70:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1903:1903 -> G
+    52:53:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1913 -> G
+    54:70:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1913:1913 -> G
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> G
-    71:73:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1903 -> G
+    71:73:java.lang.Object seekTo-gIAlu-s(long,kotlin.coroutines.Continuation):1913 -> G
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     28:51:java.lang.Object setRepeat-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):915:915 -> H
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/String;LZ4/c;)Ljava/lang/Object;"}
@@ -511098,78 +511098,82 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> I
     71:73:java.lang.Object setShuffle-gIAlu-s(boolean,kotlin.coroutines.Continuation):938 -> I
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    28:51:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1920:1920 -> J
+    28:51:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1930:1930 -> J
       # {"id":"com.android.tools.r8.residualsignature","signature":"(ILZ4/c;)Ljava/lang/Object;"}
     52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> J
-    52:53:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1920 -> J
-    54:70:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1920:1920 -> J
+    52:53:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1930 -> J
+    54:70:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1930:1930 -> J
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> J
-    71:73:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1920 -> J
+    71:73:java.lang.Object setVolume-gIAlu-s(int,kotlin.coroutines.Continuation):1930 -> J
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    28:51:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476:476 -> K
-      # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
-    52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> K
-    52:53:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476 -> K
-    54:70:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476:476 -> K
-    71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> K
-    71:73:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476 -> K
-      # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    28:51:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1887:1887 -> L
+    2:3:void settleProvisionalMirror():1834:1834 -> K
+    4:11:void settleProvisionalMirror():1835:1835 -> K
+    12:15:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> K
+    12:15:void settleProvisionalMirror():1835 -> K
+    28:51:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476:476 -> L
       # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
     52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> L
-    52:53:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1887 -> L
-    54:70:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1887:1887 -> L
+    52:53:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476 -> L
+    54:70:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476:476 -> L
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> L
-    71:73:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1887 -> L
+    71:73:java.lang.Object signOut-IoAF18A(kotlin.coroutines.Continuation):476 -> L
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    28:51:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1895:1895 -> M
+    28:51:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1897:1897 -> M
       # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
     52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> M
-    52:53:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1895 -> M
-    54:70:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1895:1895 -> M
+    52:53:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1897 -> M
+    54:70:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1897:1897 -> M
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> M
-    71:73:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1895 -> M
+    71:73:java.lang.Object skipNext-IoAF18A(kotlin.coroutines.Continuation):1897 -> M
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    3:10:void startPlaybackPolling(boolean,java.lang.String):1512:1512 -> N
-      # {"id":"com.android.tools.r8.residualsignature","signature":"(Z)V"}
-    11:12:void startPlaybackPolling(boolean,java.lang.String):1511:1511 -> N
-    13:19:void startPlaybackPolling(boolean,java.lang.String):1517:1517 -> N
-    20:22:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> N
-    20:22:void startPlaybackPolling(boolean,java.lang.String):1517 -> N
-    23:34:void startPlaybackPolling(boolean,java.lang.String):1519:1519 -> N
-    35:41:void startPlaybackPolling(boolean,java.lang.String):1520:1520 -> N
-    42:48:void startPlaybackPolling(boolean,java.lang.String):1526:1526 -> N
-    49:51:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> N
-    49:51:void startPlaybackPolling(boolean,java.lang.String):1526 -> N
-    52:66:void startPlaybackPolling(boolean,java.lang.String):1527:1527 -> N
-    0:5:void stopPlaybackPolling():1785:1785 -> O
-    6:10:void stopPlaybackPolling():1786:1786 -> O
-    11:13:void kotlinx.coroutines.Job$DefaultImpls.cancel$default(kotlinx.coroutines.Job,java.util.concurrent.CancellationException,int,java.lang.Object):192:192 -> O
-    11:13:void stopPlaybackPolling():1786 -> O
-    14:15:void stopPlaybackPolling():1787:1787 -> O
-    16:22:void stopPlaybackPolling():1788:1788 -> O
-    23:24:void stopPlaybackPolling():1789:1789 -> O
-    25:27:void stopPlaybackPolling():1790:1790 -> O
-    28:29:void stopPlaybackPolling():1791:1791 -> O
-    30:36:void stopPlaybackPolling():1792:1792 -> O
-    37:39:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> O
-    37:39:void stopPlaybackPolling():1792 -> O
-    40:61:void stopPlaybackPolling():1794:1794 -> O
-    28:51:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1852:1852 -> P
+    28:51:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1905:1905 -> N
       # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
-    52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> P
-    52:53:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1852 -> P
-    54:70:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1852:1852 -> P
-    71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> P
-    71:73:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1852 -> P
+    52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> N
+    52:53:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1905 -> N
+    54:70:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1905:1905 -> N
+    71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> N
+    71:73:java.lang.Object skipPrevious-IoAF18A(kotlin.coroutines.Continuation):1905 -> N
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    28:51:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177:1177 -> Q
-      # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/String;LZ4/c;)Ljava/lang/Object;"}
+    3:10:void startPlaybackPolling(boolean,java.lang.String):1512:1512 -> O
+      # {"id":"com.android.tools.r8.residualsignature","signature":"(Z)V"}
+    11:12:void startPlaybackPolling(boolean,java.lang.String):1511:1511 -> O
+    13:19:void startPlaybackPolling(boolean,java.lang.String):1517:1517 -> O
+    20:22:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> O
+    20:22:void startPlaybackPolling(boolean,java.lang.String):1517 -> O
+    23:34:void startPlaybackPolling(boolean,java.lang.String):1519:1519 -> O
+    35:41:void startPlaybackPolling(boolean,java.lang.String):1520:1520 -> O
+    42:48:void startPlaybackPolling(boolean,java.lang.String):1526:1526 -> O
+    49:51:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> O
+    49:51:void startPlaybackPolling(boolean,java.lang.String):1526 -> O
+    52:66:void startPlaybackPolling(boolean,java.lang.String):1527:1527 -> O
+    0:5:void stopPlaybackPolling():1785:1785 -> P
+    6:10:void stopPlaybackPolling():1786:1786 -> P
+    11:13:void kotlinx.coroutines.Job$DefaultImpls.cancel$default(kotlinx.coroutines.Job,java.util.concurrent.CancellationException,int,java.lang.Object):192:192 -> P
+    11:13:void stopPlaybackPolling():1786 -> P
+    14:15:void stopPlaybackPolling():1787:1787 -> P
+    16:22:void stopPlaybackPolling():1788:1788 -> P
+    23:24:void stopPlaybackPolling():1789:1789 -> P
+    25:27:void stopPlaybackPolling():1790:1790 -> P
+    28:29:void stopPlaybackPolling():1791:1791 -> P
+    30:36:void stopPlaybackPolling():1792:1792 -> P
+    37:39:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> P
+    37:39:void stopPlaybackPolling():1792 -> P
+    40:61:void stopPlaybackPolling():1794:1794 -> P
+    28:51:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1862:1862 -> Q
+      # {"id":"com.android.tools.r8.residualsignature","signature":"(LZ4/c;)Ljava/lang/Object;"}
     52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> Q
-    52:53:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177 -> Q
-    54:70:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177:1177 -> Q
+    52:53:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1862 -> Q
+    54:70:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1862:1862 -> Q
     71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> Q
-    71:73:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177 -> Q
+    71:73:java.lang.Object togglePlayPause-IoAF18A(kotlin.coroutines.Continuation):1862 -> Q
+      # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
+    28:51:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177:1177 -> R
+      # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/String;LZ4/c;)Ljava/lang/Object;"}
+    52:53:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> R
+    52:53:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177 -> R
+    54:70:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177:1177 -> R
+    71:73:java.lang.Object kotlin.Result.unbox-impl():0:0 -> R
+    71:73:java.lang.Object transferPlaybackTo-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):1177 -> R
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     28:49:java.lang.Object listFiles-gIAlu-s(java.lang.String,kotlin.coroutines.Continuation):499:499 -> a
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/String;LZ4/c;)Ljava/lang/Object;"}
@@ -511182,12 +511186,12 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     0:2:java.lang.Object access$currentAccessToken(com.powermediaplayer.cloud.SpotifyProvider,kotlin.coroutines.Continuation):113:113 -> b
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lf4/p1;LX4/c;)Ljava/lang/Object;"}
-    3:4:java.lang.Object currentAccessToken(kotlin.coroutines.Continuation):2019:2019 -> b
+    3:4:java.lang.Object currentAccessToken(kotlin.coroutines.Continuation):2029:2029 -> b
     3:4:java.lang.Object access$currentAccessToken(com.powermediaplayer.cloud.SpotifyProvider,kotlin.coroutines.Continuation):113 -> b
     5:6:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> b
-    5:6:java.lang.Object currentAccessToken(kotlin.coroutines.Continuation):2019 -> b
+    5:6:java.lang.Object currentAccessToken(kotlin.coroutines.Continuation):2029 -> b
     5:6:java.lang.Object access$currentAccessToken(com.powermediaplayer.cloud.SpotifyProvider,kotlin.coroutines.Continuation):113 -> b
-    7:17:java.lang.Object currentAccessToken(kotlin.coroutines.Continuation):2019:2019 -> b
+    7:17:java.lang.Object currentAccessToken(kotlin.coroutines.Continuation):2029:2029 -> b
     7:17:java.lang.Object access$currentAccessToken(com.powermediaplayer.cloud.SpotifyProvider,kotlin.coroutines.Continuation):113 -> b
     0:2:com.powermediaplayer.cloud.SpotifyProvider$LrclibFetch access$fetchLyricsLrclib(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String,java.lang.String,long):113:113 -> c
     0:2:f4.SpotifyProvider$LrclibFetch f4.SpotifyProvider.access$fetchLyricsLrclib(f4.SpotifyProvider,java.lang.String,java.lang.String,java.lang.String,long):0 -> c
@@ -511366,11 +511370,11 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     94:102:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
     103:110:java.util.List listDevices(java.lang.String):1203:1203 -> e
     103:110:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
-    111:115:java.util.List listDevices(java.lang.String):2182:2182 -> e
+    111:115:java.util.List listDevices(java.lang.String):2192:2192 -> e
     111:115:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
-    116:129:java.util.List listDevices(java.lang.String):2191:2191 -> e
+    116:129:java.util.List listDevices(java.lang.String):2201:2201 -> e
     116:129:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
-    130:131:java.util.List listDevices(java.lang.String):2190:2190 -> e
+    130:131:java.util.List listDevices(java.lang.String):2200:2200 -> e
     130:131:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
     132:135:java.util.List listDevices(java.lang.String):1206:1206 -> e
     132:135:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
@@ -511381,7 +511385,7 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     166:174:kotlin.Pair kotlin.TuplesKt.to(java.lang.Object,java.lang.Object):43:43 -> e
     166:174:java.util.List listDevices(java.lang.String):1209 -> e
     166:174:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
-    175:178:java.util.List listDevices(java.lang.String):2190:2190 -> e
+    175:178:java.util.List listDevices(java.lang.String):2200:2200 -> e
     175:178:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
     179:189:java.util.List listDevices(java.lang.String):1190:1190 -> e
     179:189:java.util.List access$listDevices(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113 -> e
@@ -511644,31 +511648,31 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     559:559:java.lang.Object access$playRequest-BWLJW6A(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String,java.lang.String,java.lang.String):113 -> g
     0:2:java.lang.Object access$simplePost-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113:113 -> h
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lf4/p1;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;"}
-    3:7:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1978:1978 -> h
+    3:7:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1988:1988 -> h
     3:7:java.lang.Object access$simplePost-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> h
-    8:11:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1979:1979 -> h
+    8:11:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1989:1989 -> h
     8:11:java.lang.Object access$simplePost-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> h
-    12:29:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1980:1980 -> h
+    12:29:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1990:1990 -> h
     12:29:java.lang.Object access$simplePost-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> h
-    30:41:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1981:1981 -> h
+    30:41:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1991:1991 -> h
     30:41:java.lang.Object access$simplePost-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> h
-    42:45:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1982:1982 -> h
+    42:45:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1992:1992 -> h
     42:45:java.lang.Object access$simplePost-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> h
-    46:50:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1983:1983 -> h
+    46:50:java.lang.Object simplePost-gIAlu-s(java.lang.String,java.lang.String):1993:1993 -> h
     46:50:java.lang.Object access$simplePost-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> h
     0:2:java.lang.Object access$simplePut-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113:113 -> i
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lf4/p1;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;"}
-    3:7:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1969:1969 -> i
+    3:7:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1979:1979 -> i
     3:7:java.lang.Object access$simplePut-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> i
-    8:11:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1970:1970 -> i
+    8:11:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1980:1980 -> i
     8:11:java.lang.Object access$simplePut-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> i
-    12:29:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1971:1971 -> i
+    12:29:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1981:1981 -> i
     12:29:java.lang.Object access$simplePut-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> i
-    30:41:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1972:1972 -> i
+    30:41:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1982:1982 -> i
     30:41:java.lang.Object access$simplePut-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> i
-    42:45:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1973:1973 -> i
+    42:45:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1983:1983 -> i
     42:45:java.lang.Object access$simplePut-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> i
-    46:50:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1974:1974 -> i
+    46:50:java.lang.Object simplePut-gIAlu-s(java.lang.String,java.lang.String):1984:1984 -> i
     46:50:java.lang.Object access$simplePut-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113 -> i
     0:2:java.lang.Object access$transferPlayback-gIAlu-s(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String):113:113 -> j
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lf4/p1;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;"}
@@ -511728,16 +511732,16 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     19:25:void clearProvisionalMirror():314:314 -> m
     26:29:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> m
     26:29:void clearProvisionalMirror():314 -> m
-    0:1:java.lang.Object execControl-IoAF18A(okhttp3.Request):1986:1986 -> n
-    2:11:java.lang.Object execControl-IoAF18A(okhttp3.Request):1987:1987 -> n
-    12:24:java.lang.Object execControl-IoAF18A(okhttp3.Request):1993:1993 -> n
-    25:41:java.lang.Object execControl-IoAF18A(okhttp3.Request):1995:1995 -> n
-    42:66:java.lang.Object execControl-IoAF18A(okhttp3.Request):1996:1996 -> n
+    0:1:java.lang.Object execControl-IoAF18A(okhttp3.Request):1996:1996 -> n
+    2:11:java.lang.Object execControl-IoAF18A(okhttp3.Request):1997:1997 -> n
+    12:24:java.lang.Object execControl-IoAF18A(okhttp3.Request):2003:2003 -> n
+    25:41:java.lang.Object execControl-IoAF18A(okhttp3.Request):2005:2005 -> n
+    42:66:java.lang.Object execControl-IoAF18A(okhttp3.Request):2006:2006 -> n
     67:70:void kotlin.io.CloseableKt.closeFinally(java.io.Closeable,java.lang.Throwable):46:46 -> n
-    67:70:java.lang.Object execControl-IoAF18A(okhttp3.Request):1987 -> n
-    71:77:java.lang.Object execControl-IoAF18A(okhttp3.Request):1987:1987 -> n
-    78:87:java.lang.Object execControl-IoAF18A(okhttp3.Request):2000:2000 -> n
-    88:92:java.lang.Object execControl-IoAF18A(okhttp3.Request):2002:2002 -> n
+    67:70:java.lang.Object execControl-IoAF18A(okhttp3.Request):1997 -> n
+    71:77:java.lang.Object execControl-IoAF18A(okhttp3.Request):1997:1997 -> n
+    78:87:java.lang.Object execControl-IoAF18A(okhttp3.Request):2010:2010 -> n
+    88:92:java.lang.Object execControl-IoAF18A(okhttp3.Request):2012:2012 -> n
     0:4:net.openid.appauth.AuthorizationService getAuthService():340:340 -> o
     5:20:net.openid.appauth.AuthorizationService getAuthService():341:341 -> o
     21:25:net.openid.appauth.AuthorizationService getAuthService():340:340 -> o
@@ -511789,10 +511793,10 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     348:353:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):743:743 -> s
     354:379:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):744:744 -> s
     380:391:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):745:745 -> s
-    392:396:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):2165:2165 -> s
-    397:413:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):2166:2166 -> s
+    392:396:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):2175:2175 -> s
+    397:413:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):2176:2176 -> s
     414:419:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):745:745 -> s
-    420:427:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):2166:2166 -> s
+    420:427:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):2176:2176 -> s
     428:440:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):745:745 -> s
     441:447:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):738:738 -> s
     448:452:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):747:747 -> s
@@ -511822,12 +511826,12 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     655:669:com.powermediaplayer.cloud.CloudMediaItem jsonToCloudItem(com.google.gson.JsonObject,java.lang.String):768:768 -> s
     0:11:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):732:732 -> t
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lf4/p1;Lcom/google/gson/JsonObject;)Ljava/lang/String;"}
-    12:16:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2216:2216 -> t
-    17:30:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2225:2225 -> t
-    31:32:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2224:2224 -> t
+    12:16:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2226:2226 -> t
+    17:30:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2235:2235 -> t
+    31:32:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2234:2234 -> t
     33:48:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):734:734 -> t
     49:74:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):735:735 -> t
-    75:80:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2224:2224 -> t
+    75:80:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):2234:2234 -> t
     81:95:java.lang.String jsonToCloudItem$artistNames(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject):737:737 -> t
     0:2:boolean launchSpotifyAndReturn():1040:1040 -> u
     3:6:boolean launchSpotifyAndReturn():1041:1041 -> u
@@ -511893,10 +511897,10 @@ com.powermediaplayer.cloud.SpotifyProvider -> f4.p1:
     161:164:java.util.List parseLrc(java.lang.String):1769 -> z
     165:191:java.util.List parseLrc(java.lang.String):1769:1769 -> z
     192:201:java.util.List parseLrc(java.lang.String):1771:1771 -> z
-    202:204:java.util.List parseLrc(java.lang.String):2205:2205 -> z
+    202:204:java.util.List parseLrc(java.lang.String):2215:2215 -> z
     205:207:void com.powermediaplayer.cloud.SpotifyProvider$parseLrc$$inlined$sortedBy$1.<init>():0:0 -> z
-    205:207:java.util.List parseLrc(java.lang.String):2205 -> z
-    208:212:java.util.List parseLrc(java.lang.String):2205:2205 -> z
+    205:207:java.util.List parseLrc(java.lang.String):2215 -> z
+    208:212:java.util.List parseLrc(java.lang.String):2215:2215 -> z
 com.powermediaplayer.cloud.SpotifyProvider$1$1 -> f4.q0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     com.powermediaplayer.cloud.SpotifyProvider this$0 -> U
@@ -512086,54 +512090,54 @@ com.powermediaplayer.cloud.SpotifyProvider$currentAccessToken$2 -> f4.x0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:30:java.lang.Object invokeSuspend(java.lang.Object):2019:2019 -> invokeSuspend
-    31:32:java.lang.Object invokeSuspend(java.lang.Object):2020:2020 -> invokeSuspend
+    2:30:java.lang.Object invokeSuspend(java.lang.Object):2029:2029 -> invokeSuspend
+    31:32:java.lang.Object invokeSuspend(java.lang.Object):2030:2030 -> invokeSuspend
     33:34:com.powermediaplayer.cloud.SpotifyTokenStore com.powermediaplayer.cloud.SpotifyProvider.access$getTokenStore$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    33:34:java.lang.Object invokeSuspend(java.lang.Object):2020 -> invokeSuspend
-    35:36:java.lang.Object invokeSuspend(java.lang.Object):2020:2020 -> invokeSuspend
+    33:34:java.lang.Object invokeSuspend(java.lang.Object):2030 -> invokeSuspend
+    35:36:java.lang.Object invokeSuspend(java.lang.Object):2030:2030 -> invokeSuspend
     37:38:kotlinx.coroutines.flow.Flow com.powermediaplayer.cloud.SpotifyTokenStore.observe():27:27 -> invokeSuspend
     37:38:java.lang.Object com.powermediaplayer.cloud.SpotifyTokenStore.read(kotlin.coroutines.Continuation):29 -> invokeSuspend
-    37:38:java.lang.Object invokeSuspend(java.lang.Object):2020 -> invokeSuspend
+    37:38:java.lang.Object invokeSuspend(java.lang.Object):2030 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(2)"]}
     39:49:androidx.datastore.core.DataStore com.powermediaplayer.cloud.SpotifyTokenStoreKt.getSpotifyDataStore(android.content.Context):14:14 -> invokeSuspend
     39:49:androidx.datastore.core.DataStore com.powermediaplayer.cloud.SpotifyTokenStoreKt.access$getSpotifyDataStore(android.content.Context):1 -> invokeSuspend
     39:49:kotlinx.coroutines.flow.Flow com.powermediaplayer.cloud.SpotifyTokenStore.observe():27 -> invokeSuspend
     39:49:java.lang.Object com.powermediaplayer.cloud.SpotifyTokenStore.read(kotlin.coroutines.Continuation):29 -> invokeSuspend
-    39:49:java.lang.Object invokeSuspend(java.lang.Object):2020 -> invokeSuspend
+    39:49:java.lang.Object invokeSuspend(java.lang.Object):2030 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(4)"]}
     50:57:kotlinx.coroutines.flow.Flow androidx.datastore.preferences.core.PreferenceDataStore.getData():0:0 -> invokeSuspend
     50:57:kotlinx.coroutines.flow.Flow com.powermediaplayer.cloud.SpotifyTokenStore.observe():27 -> invokeSuspend
     50:57:java.lang.Object com.powermediaplayer.cloud.SpotifyTokenStore.read(kotlin.coroutines.Continuation):29 -> invokeSuspend
-    50:57:java.lang.Object invokeSuspend(java.lang.Object):2020 -> invokeSuspend
+    50:57:java.lang.Object invokeSuspend(java.lang.Object):2030 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(3)"]}
     58:63:kotlinx.coroutines.flow.Flow com.powermediaplayer.cloud.SpotifyTokenStore.observe():40:40 -> invokeSuspend
     58:63:java.lang.Object com.powermediaplayer.cloud.SpotifyTokenStore.read(kotlin.coroutines.Continuation):29 -> invokeSuspend
-    58:63:java.lang.Object invokeSuspend(java.lang.Object):2020 -> invokeSuspend
+    58:63:java.lang.Object invokeSuspend(java.lang.Object):2030 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(2)"]}
     64:70:java.lang.Object com.powermediaplayer.cloud.SpotifyTokenStore.read(kotlin.coroutines.Continuation):29:29 -> invokeSuspend
-    64:70:java.lang.Object invokeSuspend(java.lang.Object):2020 -> invokeSuspend
-    71:76:java.lang.Object invokeSuspend(java.lang.Object):2020:2020 -> invokeSuspend
-    77:78:java.lang.Object invokeSuspend(java.lang.Object):2021:2021 -> invokeSuspend
+    64:70:java.lang.Object invokeSuspend(java.lang.Object):2030 -> invokeSuspend
+    71:76:java.lang.Object invokeSuspend(java.lang.Object):2030:2030 -> invokeSuspend
+    77:78:java.lang.Object invokeSuspend(java.lang.Object):2031:2031 -> invokeSuspend
     79:82:net.openid.appauth.AuthState com.powermediaplayer.cloud.SpotifyProvider.access$getCachedAuthState$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    79:82:java.lang.Object invokeSuspend(java.lang.Object):2021 -> invokeSuspend
-    83:84:java.lang.Object invokeSuspend(java.lang.Object):2021:2021 -> invokeSuspend
+    79:82:java.lang.Object invokeSuspend(java.lang.Object):2031 -> invokeSuspend
+    83:84:java.lang.Object invokeSuspend(java.lang.Object):2031:2031 -> invokeSuspend
     85:86:java.lang.String com.powermediaplayer.cloud.SpotifyProvider.access$getCachedAuthStateJson$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    85:86:java.lang.Object invokeSuspend(java.lang.Object):2021 -> invokeSuspend
+    85:86:java.lang.Object invokeSuspend(java.lang.Object):2031 -> invokeSuspend
     87:95:boolean kotlin.jvm.internal.Intrinsics.areEqual(java.lang.Object,java.lang.Object):169:169 -> invokeSuspend
-    87:95:java.lang.Object invokeSuspend(java.lang.Object):2021 -> invokeSuspend
-    96:101:java.lang.Object invokeSuspend(java.lang.Object):2022:2022 -> invokeSuspend
+    87:95:java.lang.Object invokeSuspend(java.lang.Object):2031 -> invokeSuspend
+    96:101:java.lang.Object invokeSuspend(java.lang.Object):2032:2032 -> invokeSuspend
     102:103:void com.powermediaplayer.cloud.SpotifyProvider.access$setCachedAuthState$p(com.powermediaplayer.cloud.SpotifyProvider,net.openid.appauth.AuthState):113:113 -> invokeSuspend
-    102:103:java.lang.Object invokeSuspend(java.lang.Object):2023 -> invokeSuspend
+    102:103:java.lang.Object invokeSuspend(java.lang.Object):2033 -> invokeSuspend
     104:105:void com.powermediaplayer.cloud.SpotifyProvider.access$setCachedAuthStateJson$p(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113:113 -> invokeSuspend
-    104:105:java.lang.Object invokeSuspend(java.lang.Object):2024 -> invokeSuspend
-    106:107:java.lang.Object invokeSuspend(java.lang.Object):2026:2026 -> invokeSuspend
-    108:109:java.lang.Object invokeSuspend(java.lang.Object):2159:2159 -> invokeSuspend
-    110:118:java.lang.Object invokeSuspend(java.lang.Object):2160:2160 -> invokeSuspend
-    119:121:java.lang.Object invokeSuspend(java.lang.Object):2166:2166 -> invokeSuspend
+    104:105:java.lang.Object invokeSuspend(java.lang.Object):2034 -> invokeSuspend
+    106:107:java.lang.Object invokeSuspend(java.lang.Object):2036:2036 -> invokeSuspend
+    108:109:java.lang.Object invokeSuspend(java.lang.Object):2169:2169 -> invokeSuspend
+    110:118:java.lang.Object invokeSuspend(java.lang.Object):2170:2170 -> invokeSuspend
+    119:121:java.lang.Object invokeSuspend(java.lang.Object):2176:2176 -> invokeSuspend
     122:125:net.openid.appauth.AuthorizationService com.powermediaplayer.cloud.SpotifyProvider.access$getAuthService(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    122:125:java.lang.Object invokeSuspend(java.lang.Object):2027 -> invokeSuspend
-    126:133:java.lang.Object invokeSuspend(java.lang.Object):2027:2027 -> invokeSuspend
-    134:141:java.lang.Object invokeSuspend(java.lang.Object):2168:2168 -> invokeSuspend
+    122:125:java.lang.Object invokeSuspend(java.lang.Object):2037 -> invokeSuspend
+    126:133:java.lang.Object invokeSuspend(java.lang.Object):2037:2037 -> invokeSuspend
+    134:141:java.lang.Object invokeSuspend(java.lang.Object):2178:2178 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$currentAccessToken$2$1$1 -> f4.w0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     net.openid.appauth.AuthState $state -> a
@@ -512143,52 +512147,52 @@ com.powermediaplayer.cloud.SpotifyProvider$currentAccessToken$2$1$1 -> f4.w0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"Ls5/h;"}
     0:9:void <init>(net.openid.appauth.AuthState,com.powermediaplayer.cloud.SpotifyProvider,kotlinx.coroutines.CancellableContinuation):0:0 -> <init>
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lnet/openid/appauth/AuthState;Lf4/p1;Ls5/h;)V"}
-    4:9:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2029:2029 -> execute
-    10:11:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2034:2034 -> execute
+    4:9:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2039:2039 -> execute
+    10:11:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2044:2044 -> execute
     12:13:java.lang.String com.powermediaplayer.cloud.SpotifyProvider.access$getLastSerializedAuthState$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> execute
-    12:13:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2034 -> execute
-    14:19:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2034:2034 -> execute
-    20:21:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2035:2035 -> execute
+    12:13:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2044 -> execute
+    14:19:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2044:2044 -> execute
+    20:21:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2045:2045 -> execute
     22:23:void com.powermediaplayer.cloud.SpotifyProvider.access$setLastSerializedAuthState$p(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113:113 -> execute
-    22:23:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2035 -> execute
-    24:27:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2038:2038 -> execute
+    22:23:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2045 -> execute
+    24:27:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2048:2048 -> execute
     28:29:void com.powermediaplayer.cloud.SpotifyProvider.access$setCachedAuthState$p(com.powermediaplayer.cloud.SpotifyProvider,net.openid.appauth.AuthState):113:113 -> execute
-    28:29:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2038 -> execute
-    30:31:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2039:2039 -> execute
+    28:29:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2048 -> execute
+    30:31:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2049:2049 -> execute
     32:33:void com.powermediaplayer.cloud.SpotifyProvider.access$setCachedAuthStateJson$p(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113:113 -> execute
-    32:33:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2039 -> execute
-    34:35:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2040:2040 -> execute
+    32:33:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2049 -> execute
+    34:35:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2050:2050 -> execute
     36:37:kotlinx.coroutines.CoroutineScope com.powermediaplayer.cloud.SpotifyProvider.access$getPollScope$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> execute
-    36:37:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2040 -> execute
-    38:45:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2040:2040 -> execute
-    46:47:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2042:2042 -> execute
+    36:37:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2050 -> execute
+    38:45:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2050:2050 -> execute
+    46:47:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2052:2052 -> execute
     48:49:kotlinx.coroutines.flow.MutableStateFlow com.powermediaplayer.cloud.SpotifyProvider.access$get_isLoggedIn$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> execute
-    48:49:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2042 -> execute
-    50:54:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2042:2042 -> execute
+    48:49:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2052 -> execute
+    50:54:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2052:2052 -> execute
     55:57:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> execute
-    55:57:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2042 -> execute
-    58:65:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2043:2043 -> execute
-    66:67:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2046:2046 -> execute
+    55:57:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2052 -> execute
+    58:65:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2053:2053 -> execute
+    66:67:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2056:2056 -> execute
     68:69:kotlinx.coroutines.flow.MutableStateFlow com.powermediaplayer.cloud.SpotifyProvider.access$get_isLoggedIn$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> execute
-    68:69:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2046 -> execute
-    70:74:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2046:2046 -> execute
+    68:69:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2056 -> execute
+    70:74:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2056:2056 -> execute
     75:77:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> execute
-    75:77:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2046 -> execute
-    78:87:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2055:2055 -> execute
-    88:89:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2056:2056 -> execute
+    75:77:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2056 -> execute
+    78:87:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2065:2065 -> execute
+    88:89:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2066:2066 -> execute
     90:91:kotlinx.coroutines.CoroutineScope com.powermediaplayer.cloud.SpotifyProvider.access$getPollScope$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> execute
-    90:91:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2056 -> execute
-    92:99:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2056:2056 -> execute
-    100:101:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2057:2057 -> execute
+    90:91:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2066 -> execute
+    92:99:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2066:2066 -> execute
+    100:101:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2067:2067 -> execute
     102:103:void com.powermediaplayer.cloud.SpotifyProvider.access$setLastSerializedAuthState$p(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113:113 -> execute
-    102:103:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2057 -> execute
-    104:105:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2058:2058 -> execute
+    102:103:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2067 -> execute
+    104:105:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2068:2068 -> execute
     106:107:void com.powermediaplayer.cloud.SpotifyProvider.access$setCachedAuthState$p(com.powermediaplayer.cloud.SpotifyProvider,net.openid.appauth.AuthState):113:113 -> execute
-    106:107:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2058 -> execute
-    108:109:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2059:2059 -> execute
+    106:107:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2068 -> execute
+    108:109:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2069:2069 -> execute
     110:111:void com.powermediaplayer.cloud.SpotifyProvider.access$setCachedAuthStateJson$p(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113:113 -> execute
-    110:111:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2059 -> execute
-    112:117:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2066:2066 -> execute
+    110:111:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2069 -> execute
+    112:117:void execute(java.lang.String,java.lang.String,net.openid.appauth.AuthorizationException):2076:2076 -> execute
 com.powermediaplayer.cloud.SpotifyProvider$currentAccessToken$2$1$1$1 -> f4.u0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     int label -> U
@@ -512202,10 +512206,10 @@ com.powermediaplayer.cloud.SpotifyProvider$currentAccessToken$2$1$1$1 -> f4.u0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:31:java.lang.Object invokeSuspend(java.lang.Object):2040:2040 -> invokeSuspend
+    2:31:java.lang.Object invokeSuspend(java.lang.Object):2050:2050 -> invokeSuspend
     32:33:com.powermediaplayer.cloud.SpotifyTokenStore com.powermediaplayer.cloud.SpotifyProvider.access$getTokenStore$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    32:33:java.lang.Object invokeSuspend(java.lang.Object):2040 -> invokeSuspend
-    34:49:java.lang.Object invokeSuspend(java.lang.Object):2040:2040 -> invokeSuspend
+    32:33:java.lang.Object invokeSuspend(java.lang.Object):2050 -> invokeSuspend
+    34:49:java.lang.Object invokeSuspend(java.lang.Object):2050:2050 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$currentAccessToken$2$1$1$2 -> f4.v0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     int label -> U
@@ -512218,10 +512222,10 @@ com.powermediaplayer.cloud.SpotifyProvider$currentAccessToken$2$1$1$2 -> f4.v0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:29:java.lang.Object invokeSuspend(java.lang.Object):2056:2056 -> invokeSuspend
+    2:29:java.lang.Object invokeSuspend(java.lang.Object):2066:2066 -> invokeSuspend
     30:31:com.powermediaplayer.cloud.SpotifyTokenStore com.powermediaplayer.cloud.SpotifyProvider.access$getTokenStore$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    30:31:java.lang.Object invokeSuspend(java.lang.Object):2056 -> invokeSuspend
-    32:48:java.lang.Object invokeSuspend(java.lang.Object):2056:2056 -> invokeSuspend
+    30:31:java.lang.Object invokeSuspend(java.lang.Object):2066 -> invokeSuspend
+    32:48:java.lang.Object invokeSuspend(java.lang.Object):2066:2066 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$currentVolumePercent$2 -> f4.y0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     int label -> U
@@ -512234,29 +512238,29 @@ com.powermediaplayer.cloud.SpotifyProvider$currentVolumePercent$2 -> f4.y0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    4:35:java.lang.Object invokeSuspend(java.lang.Object):1935:1935 -> invokeSuspend
-    36:52:java.lang.Object invokeSuspend(java.lang.Object):1936:1936 -> invokeSuspend
-    53:57:java.lang.Object invokeSuspend(java.lang.Object):1938:1938 -> invokeSuspend
-    58:63:java.lang.Object invokeSuspend(java.lang.Object):1939:1939 -> invokeSuspend
-    64:73:java.lang.Object invokeSuspend(java.lang.Object):1940:1940 -> invokeSuspend
-    74:77:java.lang.Object invokeSuspend(java.lang.Object):1941:1941 -> invokeSuspend
+    4:35:java.lang.Object invokeSuspend(java.lang.Object):1945:1945 -> invokeSuspend
+    36:52:java.lang.Object invokeSuspend(java.lang.Object):1946:1946 -> invokeSuspend
+    53:57:java.lang.Object invokeSuspend(java.lang.Object):1948:1948 -> invokeSuspend
+    58:63:java.lang.Object invokeSuspend(java.lang.Object):1949:1949 -> invokeSuspend
+    64:73:java.lang.Object invokeSuspend(java.lang.Object):1950:1950 -> invokeSuspend
+    74:77:java.lang.Object invokeSuspend(java.lang.Object):1951:1951 -> invokeSuspend
     78:79:okhttp3.OkHttpClient com.powermediaplayer.cloud.SpotifyProvider.access$getHttp$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    78:79:java.lang.Object invokeSuspend(java.lang.Object):1942 -> invokeSuspend
-    80:87:java.lang.Object invokeSuspend(java.lang.Object):1942:1942 -> invokeSuspend
-    88:102:java.lang.Object invokeSuspend(java.lang.Object):1943:1943 -> invokeSuspend
-    103:120:java.lang.Object invokeSuspend(java.lang.Object):1944:1944 -> invokeSuspend
-    121:128:java.lang.Object invokeSuspend(java.lang.Object):1945:1945 -> invokeSuspend
-    129:136:java.lang.Object invokeSuspend(java.lang.Object):1946:1946 -> invokeSuspend
-    137:144:java.lang.Object invokeSuspend(java.lang.Object):1947:1947 -> invokeSuspend
-    145:166:java.lang.Object invokeSuspend(java.lang.Object):1948:1948 -> invokeSuspend
+    78:79:java.lang.Object invokeSuspend(java.lang.Object):1952 -> invokeSuspend
+    80:87:java.lang.Object invokeSuspend(java.lang.Object):1952:1952 -> invokeSuspend
+    88:102:java.lang.Object invokeSuspend(java.lang.Object):1953:1953 -> invokeSuspend
+    103:120:java.lang.Object invokeSuspend(java.lang.Object):1954:1954 -> invokeSuspend
+    121:128:java.lang.Object invokeSuspend(java.lang.Object):1955:1955 -> invokeSuspend
+    129:136:java.lang.Object invokeSuspend(java.lang.Object):1956:1956 -> invokeSuspend
+    137:144:java.lang.Object invokeSuspend(java.lang.Object):1957:1957 -> invokeSuspend
+    145:166:java.lang.Object invokeSuspend(java.lang.Object):1958:1958 -> invokeSuspend
     167:171:java.lang.Integer kotlin.coroutines.jvm.internal.Boxing.boxInt(int):32:32 -> invokeSuspend
-    167:171:java.lang.Object invokeSuspend(java.lang.Object):1948 -> invokeSuspend
+    167:171:java.lang.Object invokeSuspend(java.lang.Object):1958 -> invokeSuspend
     172:175:void kotlin.io.CloseableKt.closeFinally(java.io.Closeable,java.lang.Throwable):46:46 -> invokeSuspend
-    172:175:java.lang.Object invokeSuspend(java.lang.Object):1942 -> invokeSuspend
-    176:182:java.lang.Object invokeSuspend(java.lang.Object):1942:1942 -> invokeSuspend
-    183:186:java.lang.Object invokeSuspend(java.lang.Object):1937:1937 -> invokeSuspend
+    172:175:java.lang.Object invokeSuspend(java.lang.Object):1952 -> invokeSuspend
+    176:182:java.lang.Object invokeSuspend(java.lang.Object):1952:1952 -> invokeSuspend
+    183:186:java.lang.Object invokeSuspend(java.lang.Object):1947:1947 -> invokeSuspend
     187:193:boolean kotlin.Result.isFailure-impl(java.lang.Object):38:38 -> invokeSuspend
-    187:193:java.lang.Object invokeSuspend(java.lang.Object):1950 -> invokeSuspend
+    187:193:java.lang.Object invokeSuspend(java.lang.Object):1960 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$fetchLyricsAsync$1 -> f4.z0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     int label -> U
@@ -512446,24 +512450,24 @@ com.powermediaplayer.cloud.SpotifyProvider$fetchPerType$2 -> f4.C0:
     57:65:java.lang.Object invokeSuspend(java.lang.Object):665 -> invokeSuspend
     66:69:java.lang.Object invokeSuspend(java.lang.Object):665:665 -> invokeSuspend
     70:73:java.lang.Object invokeSuspend(java.lang.Object):662:662 -> invokeSuspend
-    74:84:java.lang.Object invokeSuspend(java.lang.Object):2158:2158 -> invokeSuspend
-    85:98:java.lang.Object invokeSuspend(java.lang.Object):2159:2159 -> invokeSuspend
-    99:100:java.lang.Object invokeSuspend(java.lang.Object):2160:2160 -> invokeSuspend
+    74:84:java.lang.Object invokeSuspend(java.lang.Object):2168:2168 -> invokeSuspend
+    85:98:java.lang.Object invokeSuspend(java.lang.Object):2169:2169 -> invokeSuspend
+    99:100:java.lang.Object invokeSuspend(java.lang.Object):2170:2170 -> invokeSuspend
     101:102:java.lang.Object kotlin.Pair.component1():0:0 -> invokeSuspend
-    101:102:java.lang.Object invokeSuspend(java.lang.Object):2160 -> invokeSuspend
+    101:102:java.lang.Object invokeSuspend(java.lang.Object):2170 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    103:110:java.lang.Object invokeSuspend(java.lang.Object):2160:2160 -> invokeSuspend
+    103:110:java.lang.Object invokeSuspend(java.lang.Object):2170:2170 -> invokeSuspend
     111:112:java.lang.Object invokeSuspend(java.lang.Object):668:668 -> invokeSuspend
     113:114:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> invokeSuspend
     113:114:java.lang.Object invokeSuspend(java.lang.Object):668 -> invokeSuspend
     115:129:java.lang.Object invokeSuspend(java.lang.Object):668:668 -> invokeSuspend
-    130:133:java.lang.Object invokeSuspend(java.lang.Object):2160:2160 -> invokeSuspend
-    134:142:java.lang.Object invokeSuspend(java.lang.Object):2162:2162 -> invokeSuspend
-    143:158:java.lang.Object invokeSuspend(java.lang.Object):2163:2163 -> invokeSuspend
-    159:160:java.lang.Object invokeSuspend(java.lang.Object):2164:2164 -> invokeSuspend
+    130:133:java.lang.Object invokeSuspend(java.lang.Object):2170:2170 -> invokeSuspend
+    134:142:java.lang.Object invokeSuspend(java.lang.Object):2172:2172 -> invokeSuspend
+    143:158:java.lang.Object invokeSuspend(java.lang.Object):2173:2173 -> invokeSuspend
+    159:160:java.lang.Object invokeSuspend(java.lang.Object):2174:2174 -> invokeSuspend
     161:181:java.lang.Object invokeSuspend(java.lang.Object):690:690 -> invokeSuspend
-    182:186:java.lang.Object invokeSuspend(java.lang.Object):2164:2164 -> invokeSuspend
-    187:188:java.lang.Object invokeSuspend(java.lang.Object):2165:2165 -> invokeSuspend
+    182:186:java.lang.Object invokeSuspend(java.lang.Object):2174:2174 -> invokeSuspend
+    187:188:java.lang.Object invokeSuspend(java.lang.Object):2175:2175 -> invokeSuspend
     189:193:java.lang.Object invokeSuspend(java.lang.Object):691:691 -> invokeSuspend
     194:198:java.util.List kotlin.collections.CollectionsKt__IterablesKt.flatten(java.lang.Iterable):47:47 -> invokeSuspend
     194:198:java.lang.Object invokeSuspend(java.lang.Object):691 -> invokeSuspend
@@ -512560,13 +512564,13 @@ com.powermediaplayer.cloud.SpotifyProvider$handleAuthResponse$2 -> f4.F0:
     197:202:java.lang.Object invokeSuspend(java.lang.Object):427:427 -> invokeSuspend
     203:206:java.lang.Object invokeSuspend(java.lang.Object):429:429 -> invokeSuspend
     207:208:java.lang.Object invokeSuspend(java.lang.Object):430:430 -> invokeSuspend
-    209:214:java.lang.Object invokeSuspend(java.lang.Object):2163:2163 -> invokeSuspend
-    215:223:java.lang.Object invokeSuspend(java.lang.Object):2164:2164 -> invokeSuspend
-    224:226:java.lang.Object invokeSuspend(java.lang.Object):2170:2170 -> invokeSuspend
+    209:214:java.lang.Object invokeSuspend(java.lang.Object):2173:2173 -> invokeSuspend
+    215:223:java.lang.Object invokeSuspend(java.lang.Object):2174:2174 -> invokeSuspend
+    224:226:java.lang.Object invokeSuspend(java.lang.Object):2180:2180 -> invokeSuspend
     227:230:net.openid.appauth.AuthorizationService com.powermediaplayer.cloud.SpotifyProvider.access$getAuthService(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
     227:230:java.lang.Object invokeSuspend(java.lang.Object):431 -> invokeSuspend
     231:242:java.lang.Object invokeSuspend(java.lang.Object):431:431 -> invokeSuspend
-    243:249:java.lang.Object invokeSuspend(java.lang.Object):2172:2172 -> invokeSuspend
+    243:249:java.lang.Object invokeSuspend(java.lang.Object):2182:2182 -> invokeSuspend
     250:251:java.lang.Object invokeSuspend(java.lang.Object):430:430 -> invokeSuspend
     252:253:java.lang.Object kotlin.Result.unbox-impl():0:0 -> invokeSuspend
     252:253:java.lang.Object invokeSuspend(java.lang.Object):430 -> invokeSuspend
@@ -512656,7 +512660,7 @@ com.powermediaplayer.cloud.SpotifyProvider$listContainer$2 -> f4.I0:
     0:11:com.google.gson.JsonArray com.powermediaplayer.cloud.SpotifyProvider.access$arrOrNull(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject,java.lang.String):113:113 -> d
     0:11:java.lang.String invokeSuspend$parseAlbumPage(com.powermediaplayer.cloud.SpotifyProvider,java.util.List,com.google.gson.JsonObject):1401 -> d
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lf4/p1;Ljava/util/ArrayList;Lcom/google/gson/JsonObject;)Ljava/lang/String;"}
-    12:27:java.lang.String invokeSuspend$parseAlbumPage(com.powermediaplayer.cloud.SpotifyProvider,java.util.List,com.google.gson.JsonObject):2173:2173 -> d
+    12:27:java.lang.String invokeSuspend$parseAlbumPage(com.powermediaplayer.cloud.SpotifyProvider,java.util.List,com.google.gson.JsonObject):2183:2183 -> d
     28:44:java.lang.String invokeSuspend$parseAlbumPage(com.powermediaplayer.cloud.SpotifyProvider,java.util.List,com.google.gson.JsonObject):1402:1402 -> d
     45:50:com.powermediaplayer.cloud.CloudMediaItem com.powermediaplayer.cloud.SpotifyProvider.access$jsonToCloudItem(com.powermediaplayer.cloud.SpotifyProvider,com.google.gson.JsonObject,java.lang.String):113:113 -> d
     45:50:java.lang.String invokeSuspend$parseAlbumPage(com.powermediaplayer.cloud.SpotifyProvider,java.util.List,com.google.gson.JsonObject):1405 -> d
@@ -512877,7 +512881,7 @@ com.powermediaplayer.cloud.SpotifyProvider$listContainer$2 -> f4.I0:
     785:788:java.util.List kotlin.collections.CollectionsKt__CollectionsKt.listOfNotNull(java.lang.Object[]):137:137 -> invokeSuspend
     785:788:java.lang.Object invokeSuspend(java.lang.Object):1350 -> invokeSuspend
     785:788:java.lang.Object f4.SpotifyProvider$listContainer$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    789:804:java.lang.Object invokeSuspend(java.lang.Object):2167:2167 -> invokeSuspend
+    789:804:java.lang.Object invokeSuspend(java.lang.Object):2177:2177 -> invokeSuspend
     789:804:java.lang.Object f4.SpotifyProvider$listContainer$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     805:823:java.lang.Object invokeSuspend(java.lang.Object):1361:1361 -> invokeSuspend
     805:823:java.lang.Object f4.SpotifyProvider$listContainer$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
@@ -513245,27 +513249,27 @@ com.powermediaplayer.cloud.SpotifyProvider$pause$2 -> f4.O0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:25:java.lang.Object invokeSuspend(java.lang.Object):1880:1880 -> invokeSuspend
+    2:25:java.lang.Object invokeSuspend(java.lang.Object):1890:1890 -> invokeSuspend
     2:25:java.lang.Object f4.SpotifyProvider$pause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.synthesized"}
-    26:38:java.lang.Object invokeSuspend(java.lang.Object):1881:1881 -> invokeSuspend
+    26:38:java.lang.Object invokeSuspend(java.lang.Object):1891:1891 -> invokeSuspend
     26:38:java.lang.Object f4.SpotifyProvider$pause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    39:40:java.lang.Object invokeSuspend(java.lang.Object):1882:1882 -> invokeSuspend
+    39:40:java.lang.Object invokeSuspend(java.lang.Object):1892:1892 -> invokeSuspend
     39:40:java.lang.Object f4.SpotifyProvider$pause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     41:44:java.lang.Object invokeSuspend(java.lang.Object):0:0 -> invokeSuspend
     41:44:java.lang.Object f4.SpotifyProvider$pause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.outlineCallsite","positions":{"0":63,"2":65,"5":68},"outline":"Lcom/google/android/gms/internal/auth/f;h(Ljava/lang/String;)LT4/k;"}
     45:50:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    45:50:java.lang.Object invokeSuspend(java.lang.Object):1881 -> invokeSuspend
+    45:50:java.lang.Object invokeSuspend(java.lang.Object):1891 -> invokeSuspend
     45:50:java.lang.Object f4.SpotifyProvider$pause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    51:56:java.lang.Object invokeSuspend(java.lang.Object):1884:1884 -> invokeSuspend
+    51:56:java.lang.Object invokeSuspend(java.lang.Object):1894:1894 -> invokeSuspend
     51:56:java.lang.Object f4.SpotifyProvider$pause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     57:62:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    57:62:java.lang.Object invokeSuspend(java.lang.Object):1884 -> invokeSuspend
+    57:62:java.lang.Object invokeSuspend(java.lang.Object):1894 -> invokeSuspend
     57:62:java.lang.Object f4.SpotifyProvider$pause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    63:63:java.lang.Object invokeSuspend(java.lang.Object):1882:1882 -> invokeSuspend
-    65:65:java.lang.Object invokeSuspend(java.lang.Object):1882:1882 -> invokeSuspend
-    68:68:java.lang.Object invokeSuspend(java.lang.Object):1881:1881 -> invokeSuspend
+    63:63:java.lang.Object invokeSuspend(java.lang.Object):1892:1892 -> invokeSuspend
+    65:65:java.lang.Object invokeSuspend(java.lang.Object):1892:1892 -> invokeSuspend
+    68:68:java.lang.Object invokeSuspend(java.lang.Object):1891:1891 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$playProvisionalMirror$1 -> f4.P0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     java.lang.Object L$0 -> U
@@ -513486,33 +513490,33 @@ com.powermediaplayer.cloud.SpotifyProvider$resume$2 -> f4.T0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:23:java.lang.Object invokeSuspend(java.lang.Object):1960:1960 -> invokeSuspend
+    2:23:java.lang.Object invokeSuspend(java.lang.Object):1970:1970 -> invokeSuspend
     2:23:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.synthesized"}
-    24:26:java.lang.Object invokeSuspend(java.lang.Object):1961:1961 -> invokeSuspend
+    24:26:java.lang.Object invokeSuspend(java.lang.Object):1971:1971 -> invokeSuspend
     24:26:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     27:28:void com.powermediaplayer.cloud.SpotifyProvider.clearEndPin():143:143 -> invokeSuspend
-    27:28:java.lang.Object invokeSuspend(java.lang.Object):1961 -> invokeSuspend
+    27:28:java.lang.Object invokeSuspend(java.lang.Object):1971 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     27:28:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    29:43:java.lang.Object invokeSuspend(java.lang.Object):1962:1962 -> invokeSuspend
+    29:43:java.lang.Object invokeSuspend(java.lang.Object):1972:1972 -> invokeSuspend
     29:43:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    44:45:java.lang.Object invokeSuspend(java.lang.Object):1963:1963 -> invokeSuspend
+    44:45:java.lang.Object invokeSuspend(java.lang.Object):1973:1973 -> invokeSuspend
     44:45:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     46:49:java.lang.Object invokeSuspend(java.lang.Object):0:0 -> invokeSuspend
     46:49:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.outlineCallsite","positions":{"0":70,"2":72,"5":75},"outline":"Lcom/google/android/gms/internal/auth/f;h(Ljava/lang/String;)LT4/k;"}
     50:55:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    50:55:java.lang.Object invokeSuspend(java.lang.Object):1962 -> invokeSuspend
+    50:55:java.lang.Object invokeSuspend(java.lang.Object):1972 -> invokeSuspend
     50:55:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    56:63:java.lang.Object invokeSuspend(java.lang.Object):1965:1965 -> invokeSuspend
+    56:63:java.lang.Object invokeSuspend(java.lang.Object):1975:1975 -> invokeSuspend
     56:63:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     64:69:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    64:69:java.lang.Object invokeSuspend(java.lang.Object):1965 -> invokeSuspend
+    64:69:java.lang.Object invokeSuspend(java.lang.Object):1975 -> invokeSuspend
     64:69:java.lang.Object f4.SpotifyProvider$resume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    70:70:java.lang.Object invokeSuspend(java.lang.Object):1963:1963 -> invokeSuspend
-    72:72:java.lang.Object invokeSuspend(java.lang.Object):1963:1963 -> invokeSuspend
-    75:75:java.lang.Object invokeSuspend(java.lang.Object):1962:1962 -> invokeSuspend
+    70:70:java.lang.Object invokeSuspend(java.lang.Object):1973:1973 -> invokeSuspend
+    72:72:java.lang.Object invokeSuspend(java.lang.Object):1973:1973 -> invokeSuspend
+    75:75:java.lang.Object invokeSuspend(java.lang.Object):1972:1972 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$search$1 -> f4.U0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     java.lang.Object result -> U
@@ -513624,18 +513628,18 @@ com.powermediaplayer.cloud.SpotifyProvider$search$2 -> f4.V0:
     255:258:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     259:262:java.lang.Object invokeSuspend(java.lang.Object):1474:1474 -> invokeSuspend
     259:262:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    263:278:java.lang.Object invokeSuspend(java.lang.Object):2158:2158 -> invokeSuspend
+    263:278:java.lang.Object invokeSuspend(java.lang.Object):2168:2168 -> invokeSuspend
     263:278:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     279:280:java.lang.Object kotlin.Pair.component1():0:0 -> invokeSuspend
-    279:280:java.lang.Object invokeSuspend(java.lang.Object):2158 -> invokeSuspend
+    279:280:java.lang.Object invokeSuspend(java.lang.Object):2168 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     279:280:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    281:282:java.lang.Object invokeSuspend(java.lang.Object):2158:2158 -> invokeSuspend
+    281:282:java.lang.Object invokeSuspend(java.lang.Object):2168:2168 -> invokeSuspend
     281:282:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     283:284:java.lang.Object kotlin.Pair.component2():0:0 -> invokeSuspend
-    283:284:java.lang.Object invokeSuspend(java.lang.Object):2158 -> invokeSuspend
+    283:284:java.lang.Object invokeSuspend(java.lang.Object):2168 -> invokeSuspend
     283:284:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    285:287:java.lang.Object invokeSuspend(java.lang.Object):2158:2158 -> invokeSuspend
+    285:287:java.lang.Object invokeSuspend(java.lang.Object):2168:2168 -> invokeSuspend
     285:287:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     288:290:java.lang.Object invokeSuspend(java.lang.Object):1478:1478 -> invokeSuspend
     288:290:java.lang.Object f4.SpotifyProvider$search$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
@@ -513700,35 +513704,35 @@ com.powermediaplayer.cloud.SpotifyProvider$seekTo$2 -> f4.X0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:23:java.lang.Object invokeSuspend(java.lang.Object):1903:1903 -> invokeSuspend
+    2:23:java.lang.Object invokeSuspend(java.lang.Object):1913:1913 -> invokeSuspend
     2:23:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.synthesized"}
-    24:26:java.lang.Object invokeSuspend(java.lang.Object):1904:1904 -> invokeSuspend
+    24:26:java.lang.Object invokeSuspend(java.lang.Object):1914:1914 -> invokeSuspend
     24:26:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     27:28:void com.powermediaplayer.cloud.SpotifyProvider.clearEndPin():143:143 -> invokeSuspend
-    27:28:java.lang.Object invokeSuspend(java.lang.Object):1904 -> invokeSuspend
+    27:28:java.lang.Object invokeSuspend(java.lang.Object):1914 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     27:28:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    29:43:java.lang.Object invokeSuspend(java.lang.Object):1905:1905 -> invokeSuspend
+    29:43:java.lang.Object invokeSuspend(java.lang.Object):1915:1915 -> invokeSuspend
     29:43:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    44:45:java.lang.Object invokeSuspend(java.lang.Object):1906:1906 -> invokeSuspend
+    44:45:java.lang.Object invokeSuspend(java.lang.Object):1916:1916 -> invokeSuspend
     44:45:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     46:49:java.lang.Object invokeSuspend(java.lang.Object):0:0 -> invokeSuspend
     46:49:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.outlineCallsite","positions":{"0":84,"2":86,"5":89},"outline":"Lcom/google/android/gms/internal/auth/f;h(Ljava/lang/String;)LT4/k;"}
     50:55:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    50:55:java.lang.Object invokeSuspend(java.lang.Object):1905 -> invokeSuspend
+    50:55:java.lang.Object invokeSuspend(java.lang.Object):1915 -> invokeSuspend
     50:55:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    56:57:java.lang.Object invokeSuspend(java.lang.Object):1910:1910 -> invokeSuspend
+    56:57:java.lang.Object invokeSuspend(java.lang.Object):1920:1920 -> invokeSuspend
     56:57:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    58:77:java.lang.Object invokeSuspend(java.lang.Object):1911:1911 -> invokeSuspend
+    58:77:java.lang.Object invokeSuspend(java.lang.Object):1921:1921 -> invokeSuspend
     58:77:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     78:83:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    78:83:java.lang.Object invokeSuspend(java.lang.Object):1911 -> invokeSuspend
+    78:83:java.lang.Object invokeSuspend(java.lang.Object):1921 -> invokeSuspend
     78:83:java.lang.Object f4.SpotifyProvider$seekTo$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    84:84:java.lang.Object invokeSuspend(java.lang.Object):1906:1906 -> invokeSuspend
-    86:86:java.lang.Object invokeSuspend(java.lang.Object):1906:1906 -> invokeSuspend
-    89:89:java.lang.Object invokeSuspend(java.lang.Object):1905:1905 -> invokeSuspend
+    84:84:java.lang.Object invokeSuspend(java.lang.Object):1916:1916 -> invokeSuspend
+    86:86:java.lang.Object invokeSuspend(java.lang.Object):1916:1916 -> invokeSuspend
+    89:89:java.lang.Object invokeSuspend(java.lang.Object):1915:1915 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$setRepeat$1 -> f4.Y0:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     java.lang.Object result -> U
@@ -513887,29 +513891,29 @@ com.powermediaplayer.cloud.SpotifyProvider$setVolume$2 -> f4.d1:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:25:java.lang.Object invokeSuspend(java.lang.Object):1920:1920 -> invokeSuspend
+    2:25:java.lang.Object invokeSuspend(java.lang.Object):1930:1930 -> invokeSuspend
     2:25:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.synthesized"}
-    26:38:java.lang.Object invokeSuspend(java.lang.Object):1921:1921 -> invokeSuspend
+    26:38:java.lang.Object invokeSuspend(java.lang.Object):1931:1931 -> invokeSuspend
     26:38:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    39:40:java.lang.Object invokeSuspend(java.lang.Object):1922:1922 -> invokeSuspend
+    39:40:java.lang.Object invokeSuspend(java.lang.Object):1932:1932 -> invokeSuspend
     39:40:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     41:44:java.lang.Object invokeSuspend(java.lang.Object):0:0 -> invokeSuspend
     41:44:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.outlineCallsite","positions":{"0":84,"2":86,"5":89},"outline":"Lcom/google/android/gms/internal/auth/f;h(Ljava/lang/String;)LT4/k;"}
     45:52:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    45:52:java.lang.Object invokeSuspend(java.lang.Object):1921 -> invokeSuspend
+    45:52:java.lang.Object invokeSuspend(java.lang.Object):1931 -> invokeSuspend
     45:52:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    53:73:java.lang.Object invokeSuspend(java.lang.Object):1926:1926 -> invokeSuspend
+    53:73:java.lang.Object invokeSuspend(java.lang.Object):1936:1936 -> invokeSuspend
     53:73:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    74:77:java.lang.Object invokeSuspend(java.lang.Object):1924:1924 -> invokeSuspend
+    74:77:java.lang.Object invokeSuspend(java.lang.Object):1934:1934 -> invokeSuspend
     74:77:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     78:83:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    78:83:java.lang.Object invokeSuspend(java.lang.Object):1924 -> invokeSuspend
+    78:83:java.lang.Object invokeSuspend(java.lang.Object):1934 -> invokeSuspend
     78:83:java.lang.Object f4.SpotifyProvider$setVolume$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    84:84:java.lang.Object invokeSuspend(java.lang.Object):1922:1922 -> invokeSuspend
-    86:86:java.lang.Object invokeSuspend(java.lang.Object):1922:1922 -> invokeSuspend
-    89:89:java.lang.Object invokeSuspend(java.lang.Object):1921:1921 -> invokeSuspend
+    84:84:java.lang.Object invokeSuspend(java.lang.Object):1932:1932 -> invokeSuspend
+    86:86:java.lang.Object invokeSuspend(java.lang.Object):1932:1932 -> invokeSuspend
+    89:89:java.lang.Object invokeSuspend(java.lang.Object):1931:1931 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$signOut$1 -> f4.e1:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     java.lang.Object result -> U
@@ -513981,33 +513985,33 @@ com.powermediaplayer.cloud.SpotifyProvider$skipNext$2 -> f4.h1:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:23:java.lang.Object invokeSuspend(java.lang.Object):1887:1887 -> invokeSuspend
+    2:23:java.lang.Object invokeSuspend(java.lang.Object):1897:1897 -> invokeSuspend
     2:23:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.synthesized"}
-    24:26:java.lang.Object invokeSuspend(java.lang.Object):1888:1888 -> invokeSuspend
+    24:26:java.lang.Object invokeSuspend(java.lang.Object):1898:1898 -> invokeSuspend
     24:26:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     27:28:void com.powermediaplayer.cloud.SpotifyProvider.clearEndPin():143:143 -> invokeSuspend
-    27:28:java.lang.Object invokeSuspend(java.lang.Object):1888 -> invokeSuspend
+    27:28:java.lang.Object invokeSuspend(java.lang.Object):1898 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     27:28:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    29:43:java.lang.Object invokeSuspend(java.lang.Object):1889:1889 -> invokeSuspend
+    29:43:java.lang.Object invokeSuspend(java.lang.Object):1899:1899 -> invokeSuspend
     29:43:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    44:45:java.lang.Object invokeSuspend(java.lang.Object):1890:1890 -> invokeSuspend
+    44:45:java.lang.Object invokeSuspend(java.lang.Object):1900:1900 -> invokeSuspend
     44:45:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     46:49:java.lang.Object invokeSuspend(java.lang.Object):0:0 -> invokeSuspend
     46:49:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.outlineCallsite","positions":{"0":70,"2":72,"5":75},"outline":"Lcom/google/android/gms/internal/auth/f;h(Ljava/lang/String;)LT4/k;"}
     50:55:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    50:55:java.lang.Object invokeSuspend(java.lang.Object):1889 -> invokeSuspend
+    50:55:java.lang.Object invokeSuspend(java.lang.Object):1899 -> invokeSuspend
     50:55:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    56:63:java.lang.Object invokeSuspend(java.lang.Object):1892:1892 -> invokeSuspend
+    56:63:java.lang.Object invokeSuspend(java.lang.Object):1902:1902 -> invokeSuspend
     56:63:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     64:69:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    64:69:java.lang.Object invokeSuspend(java.lang.Object):1892 -> invokeSuspend
+    64:69:java.lang.Object invokeSuspend(java.lang.Object):1902 -> invokeSuspend
     64:69:java.lang.Object f4.SpotifyProvider$skipNext$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    70:70:java.lang.Object invokeSuspend(java.lang.Object):1890:1890 -> invokeSuspend
-    72:72:java.lang.Object invokeSuspend(java.lang.Object):1890:1890 -> invokeSuspend
-    75:75:java.lang.Object invokeSuspend(java.lang.Object):1889:1889 -> invokeSuspend
+    70:70:java.lang.Object invokeSuspend(java.lang.Object):1900:1900 -> invokeSuspend
+    72:72:java.lang.Object invokeSuspend(java.lang.Object):1900:1900 -> invokeSuspend
+    75:75:java.lang.Object invokeSuspend(java.lang.Object):1899:1899 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$skipPrevious$1 -> f4.i1:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     java.lang.Object result -> U
@@ -514029,33 +514033,33 @@ com.powermediaplayer.cloud.SpotifyProvider$skipPrevious$2 -> f4.j1:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:23:java.lang.Object invokeSuspend(java.lang.Object):1895:1895 -> invokeSuspend
+    2:23:java.lang.Object invokeSuspend(java.lang.Object):1905:1905 -> invokeSuspend
     2:23:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.synthesized"}
-    24:26:java.lang.Object invokeSuspend(java.lang.Object):1896:1896 -> invokeSuspend
+    24:26:java.lang.Object invokeSuspend(java.lang.Object):1906:1906 -> invokeSuspend
     24:26:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     27:28:void com.powermediaplayer.cloud.SpotifyProvider.clearEndPin():143:143 -> invokeSuspend
-    27:28:java.lang.Object invokeSuspend(java.lang.Object):1896 -> invokeSuspend
+    27:28:java.lang.Object invokeSuspend(java.lang.Object):1906 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     27:28:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    29:43:java.lang.Object invokeSuspend(java.lang.Object):1897:1897 -> invokeSuspend
+    29:43:java.lang.Object invokeSuspend(java.lang.Object):1907:1907 -> invokeSuspend
     29:43:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    44:45:java.lang.Object invokeSuspend(java.lang.Object):1898:1898 -> invokeSuspend
+    44:45:java.lang.Object invokeSuspend(java.lang.Object):1908:1908 -> invokeSuspend
     44:45:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     46:49:java.lang.Object invokeSuspend(java.lang.Object):0:0 -> invokeSuspend
     46:49:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.outlineCallsite","positions":{"0":70,"2":72,"5":75},"outline":"Lcom/google/android/gms/internal/auth/f;h(Ljava/lang/String;)LT4/k;"}
     50:55:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    50:55:java.lang.Object invokeSuspend(java.lang.Object):1897 -> invokeSuspend
+    50:55:java.lang.Object invokeSuspend(java.lang.Object):1907 -> invokeSuspend
     50:55:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    56:63:java.lang.Object invokeSuspend(java.lang.Object):1900:1900 -> invokeSuspend
+    56:63:java.lang.Object invokeSuspend(java.lang.Object):1910:1910 -> invokeSuspend
     56:63:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     64:69:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    64:69:java.lang.Object invokeSuspend(java.lang.Object):1900 -> invokeSuspend
+    64:69:java.lang.Object invokeSuspend(java.lang.Object):1910 -> invokeSuspend
     64:69:java.lang.Object f4.SpotifyProvider$skipPrevious$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    70:70:java.lang.Object invokeSuspend(java.lang.Object):1898:1898 -> invokeSuspend
-    72:72:java.lang.Object invokeSuspend(java.lang.Object):1898:1898 -> invokeSuspend
-    75:75:java.lang.Object invokeSuspend(java.lang.Object):1897:1897 -> invokeSuspend
+    70:70:java.lang.Object invokeSuspend(java.lang.Object):1908:1908 -> invokeSuspend
+    72:72:java.lang.Object invokeSuspend(java.lang.Object):1908:1908 -> invokeSuspend
+    75:75:java.lang.Object invokeSuspend(java.lang.Object):1907:1907 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$startPlaybackPolling$1 -> f4.k1:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     java.lang.Object L$1 -> U
@@ -514149,7 +514153,7 @@ com.powermediaplayer.cloud.SpotifyProvider$startPlaybackPolling$1 -> f4.k1:
     287:301:boolean com.powermediaplayer.cloud.SpotifyProviderKt.shouldEmitSnap(java.lang.String,java.lang.String,long,long):0:0 -> invokeSuspend
     287:301:java.lang.Object invokeSuspend(java.lang.Object):1544 -> invokeSuspend
     302:312:boolean kotlin.jvm.internal.Intrinsics.areEqual(java.lang.Object,java.lang.Object):169:169 -> invokeSuspend
-    302:312:boolean com.powermediaplayer.cloud.SpotifyProviderKt.shouldEmitSnap(java.lang.String,java.lang.String,long,long):2101 -> invokeSuspend
+    302:312:boolean com.powermediaplayer.cloud.SpotifyProviderKt.shouldEmitSnap(java.lang.String,java.lang.String,long,long):2111 -> invokeSuspend
     302:312:java.lang.Object invokeSuspend(java.lang.Object):1544 -> invokeSuspend
     313:314:java.lang.Object invokeSuspend(java.lang.Object):1554:1554 -> invokeSuspend
     315:316:void com.powermediaplayer.cloud.SpotifyProvider.access$setSuppressTrackUri$p(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String):113:113 -> invokeSuspend
@@ -514359,81 +514363,81 @@ com.powermediaplayer.cloud.SpotifyProvider$togglePlayPause$2 -> f4.m1:
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Ljava/lang/Object;LX4/c;)LX4/c;"}
     4:16:java.lang.Object invoke(kotlinx.coroutines.CoroutineScope,kotlin.coroutines.Continuation):0:0 -> invoke
     4:16:java.lang.Object invoke(java.lang.Object,java.lang.Object):0 -> invoke
-    2:29:java.lang.Object invokeSuspend(java.lang.Object):1852:1852 -> invokeSuspend
+    2:29:java.lang.Object invokeSuspend(java.lang.Object):1862:1862 -> invokeSuspend
     2:29:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.synthesized"}
     30:32:java.lang.Object kotlin.Result.unbox-impl():0:0 -> invokeSuspend
-    30:32:java.lang.Object invokeSuspend(java.lang.Object):1852 -> invokeSuspend
+    30:32:java.lang.Object invokeSuspend(java.lang.Object):1862 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     30:32:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    33:35:java.lang.Object invokeSuspend(java.lang.Object):1852:1852 -> invokeSuspend
+    33:35:java.lang.Object invokeSuspend(java.lang.Object):1862:1862 -> invokeSuspend
     33:35:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    36:37:java.lang.Object invokeSuspend(java.lang.Object):1853:1853 -> invokeSuspend
+    36:37:java.lang.Object invokeSuspend(java.lang.Object):1863:1863 -> invokeSuspend
     36:37:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     38:39:void com.powermediaplayer.cloud.SpotifyProvider.clearEndPin():143:143 -> invokeSuspend
-    38:39:java.lang.Object invokeSuspend(java.lang.Object):1853 -> invokeSuspend
+    38:39:java.lang.Object invokeSuspend(java.lang.Object):1863 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     38:39:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    40:41:java.lang.Object invokeSuspend(java.lang.Object):1854:1854 -> invokeSuspend
+    40:41:java.lang.Object invokeSuspend(java.lang.Object):1864:1864 -> invokeSuspend
     40:41:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     42:45:boolean com.powermediaplayer.cloud.SpotifyProvider.access$getProvisionalActive$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    42:45:java.lang.Object invokeSuspend(java.lang.Object):1854 -> invokeSuspend
+    42:45:java.lang.Object invokeSuspend(java.lang.Object):1864 -> invokeSuspend
     42:45:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    46:47:java.lang.Object invokeSuspend(java.lang.Object):1854:1854 -> invokeSuspend
+    46:47:java.lang.Object invokeSuspend(java.lang.Object):1864:1864 -> invokeSuspend
     46:47:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     48:49:kotlinx.coroutines.flow.MutableStateFlow com.powermediaplayer.cloud.SpotifyProvider.access$get_spotifyState$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    48:49:java.lang.Object invokeSuspend(java.lang.Object):1854 -> invokeSuspend
+    48:49:java.lang.Object invokeSuspend(java.lang.Object):1864 -> invokeSuspend
     48:49:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    50:57:java.lang.Object invokeSuspend(java.lang.Object):1854:1854 -> invokeSuspend
+    50:57:java.lang.Object invokeSuspend(java.lang.Object):1864:1864 -> invokeSuspend
     50:57:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     58:62:boolean com.powermediaplayer.cloud.SpotifyPlaybackState.isPlaying():53:53 -> invokeSuspend
-    58:62:java.lang.Object invokeSuspend(java.lang.Object):1854 -> invokeSuspend
+    58:62:java.lang.Object invokeSuspend(java.lang.Object):1864 -> invokeSuspend
     58:62:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    63:73:java.lang.Object invokeSuspend(java.lang.Object):1855:1855 -> invokeSuspend
+    63:73:java.lang.Object invokeSuspend(java.lang.Object):1865:1865 -> invokeSuspend
     63:73:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     74:79:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    74:79:java.lang.Object invokeSuspend(java.lang.Object):1855 -> invokeSuspend
+    74:79:java.lang.Object invokeSuspend(java.lang.Object):1865 -> invokeSuspend
     74:79:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    80:94:java.lang.Object invokeSuspend(java.lang.Object):1857:1857 -> invokeSuspend
+    80:94:java.lang.Object invokeSuspend(java.lang.Object):1867:1867 -> invokeSuspend
     80:94:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    95:96:java.lang.Object invokeSuspend(java.lang.Object):1858:1858 -> invokeSuspend
+    95:96:java.lang.Object invokeSuspend(java.lang.Object):1868:1868 -> invokeSuspend
     95:96:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     97:100:java.lang.Object invokeSuspend(java.lang.Object):0:0 -> invokeSuspend
     97:100:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
       # {"id":"com.android.tools.r8.outlineCallsite","positions":{"0":182,"2":184,"5":187},"outline":"Lcom/google/android/gms/internal/auth/f;h(Ljava/lang/String;)LT4/k;"}
     101:106:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    101:106:java.lang.Object invokeSuspend(java.lang.Object):1857 -> invokeSuspend
+    101:106:java.lang.Object invokeSuspend(java.lang.Object):1867 -> invokeSuspend
     101:106:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    107:108:java.lang.Object invokeSuspend(java.lang.Object):1860:1860 -> invokeSuspend
+    107:108:java.lang.Object invokeSuspend(java.lang.Object):1870:1870 -> invokeSuspend
     107:108:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     109:110:kotlinx.coroutines.flow.MutableStateFlow com.powermediaplayer.cloud.SpotifyProvider.access$get_spotifyState$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    109:110:java.lang.Object invokeSuspend(java.lang.Object):1860 -> invokeSuspend
+    109:110:java.lang.Object invokeSuspend(java.lang.Object):1870 -> invokeSuspend
     109:110:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    111:118:java.lang.Object invokeSuspend(java.lang.Object):1860:1860 -> invokeSuspend
+    111:118:java.lang.Object invokeSuspend(java.lang.Object):1870:1870 -> invokeSuspend
     111:118:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     119:124:boolean com.powermediaplayer.cloud.SpotifyPlaybackState.isPlaying():53:53 -> invokeSuspend
-    119:124:java.lang.Object invokeSuspend(java.lang.Object):1860 -> invokeSuspend
+    119:124:java.lang.Object invokeSuspend(java.lang.Object):1870 -> invokeSuspend
     119:124:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    125:129:java.lang.Object invokeSuspend(java.lang.Object):1861:1861 -> invokeSuspend
+    125:129:java.lang.Object invokeSuspend(java.lang.Object):1871:1871 -> invokeSuspend
     125:129:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    130:141:java.lang.Object invokeSuspend(java.lang.Object):1862:1862 -> invokeSuspend
+    130:141:java.lang.Object invokeSuspend(java.lang.Object):1872:1872 -> invokeSuspend
     130:141:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     142:145:boolean kotlin.Result.isSuccess-impl(java.lang.Object):32:32 -> invokeSuspend
-    142:145:java.lang.Object invokeSuspend(java.lang.Object):1867 -> invokeSuspend
+    142:145:java.lang.Object invokeSuspend(java.lang.Object):1877 -> invokeSuspend
     142:145:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    146:147:java.lang.Object invokeSuspend(java.lang.Object):1868:1868 -> invokeSuspend
+    146:147:java.lang.Object invokeSuspend(java.lang.Object):1878:1878 -> invokeSuspend
     146:147:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     148:149:kotlinx.coroutines.flow.MutableStateFlow com.powermediaplayer.cloud.SpotifyProvider.access$get_spotifyState$p(com.powermediaplayer.cloud.SpotifyProvider):113:113 -> invokeSuspend
-    148:149:java.lang.Object invokeSuspend(java.lang.Object):1868 -> invokeSuspend
+    148:149:java.lang.Object invokeSuspend(java.lang.Object):1878 -> invokeSuspend
     148:149:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    150:175:java.lang.Object invokeSuspend(java.lang.Object):1868:1868 -> invokeSuspend
+    150:175:java.lang.Object invokeSuspend(java.lang.Object):1878:1878 -> invokeSuspend
     150:175:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
     176:181:kotlin.Result kotlin.Result.box-impl(java.lang.Object):0:0 -> invokeSuspend
-    176:181:java.lang.Object invokeSuspend(java.lang.Object):1870 -> invokeSuspend
+    176:181:java.lang.Object invokeSuspend(java.lang.Object):1880 -> invokeSuspend
     176:181:java.lang.Object f4.SpotifyProvider$togglePlayPause$2.invokeSuspend(java.lang.Object):0 -> invokeSuspend
-    182:182:java.lang.Object invokeSuspend(java.lang.Object):1858:1858 -> invokeSuspend
-    184:184:java.lang.Object invokeSuspend(java.lang.Object):1858:1858 -> invokeSuspend
-    187:187:java.lang.Object invokeSuspend(java.lang.Object):1857:1857 -> invokeSuspend
+    182:182:java.lang.Object invokeSuspend(java.lang.Object):1868:1868 -> invokeSuspend
+    184:184:java.lang.Object invokeSuspend(java.lang.Object):1868:1868 -> invokeSuspend
+    187:187:java.lang.Object invokeSuspend(java.lang.Object):1867:1867 -> invokeSuspend
 com.powermediaplayer.cloud.SpotifyProvider$transferPlaybackTo$1 -> f4.n1:
 # {"id":"sourceFile","fileName":"SpotifyProvider.kt"}
     java.lang.Object result -> U
@@ -535661,7 +535665,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator -> p4.g0:
       # {"id":"com.android.tools.r8.residualsignature","signature":"Ll4/a;"}
     java.util.concurrent.atomic.AtomicBoolean started -> r
     java.util.concurrent.atomic.AtomicBoolean coldStartGuard -> s
-    0:8:void <clinit>():1389:1389 -> <clinit>
+    0:8:void <clinit>():1390:1390 -> <clinit>
     105:109:void <init>(android.content.Context,kotlinx.coroutines.CoroutineScope,com.powermediaplayer.service.PlaybackConnection,com.powermediaplayer.cloud.SpotifyProvider,com.powermediaplayer.cloud.SpotifyAppRemoteController,com.powermediaplayer.data.preferences.SettingsDataStore,com.powermediaplayer.data.repository.LastPlayedRepository,com.powermediaplayer.data.repository.MediaOverrideRepository,com.powermediaplayer.subtitles.SubtitleAutoFetcher,com.powermediaplayer.data.db.dao.ReplayGainDao,com.powermediaplayer.replaygain.ReplayGainScanner,com.powermediaplayer.data.db.dao.EnrichmentCacheDao,com.powermediaplayer.podcast.PodcastOfflineResolver,com.powermediaplayer.cloud.DriveOfflineResolver,com.powermediaplayer.cloud.DriveTagEnricher):25:25 -> <init>
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Landroid/content/Context;Ls5/v;Lt4/J;Lf4/p1;Lf4/l0;Li4/B5;Lj4/u;Lj4/w;Lu4/f;Lh4/P;Ls4/b;Lh4/e;Lr4/s;Lf4/I;Lf4/O;)V"}
     110:111:void <init>(android.content.Context,kotlinx.coroutines.CoroutineScope,com.powermediaplayer.service.PlaybackConnection,com.powermediaplayer.cloud.SpotifyProvider,com.powermediaplayer.cloud.SpotifyAppRemoteController,com.powermediaplayer.data.preferences.SettingsDataStore,com.powermediaplayer.data.repository.LastPlayedRepository,com.powermediaplayer.data.repository.MediaOverrideRepository,com.powermediaplayer.subtitles.SubtitleAutoFetcher,com.powermediaplayer.data.db.dao.ReplayGainDao,com.powermediaplayer.replaygain.ReplayGainScanner,com.powermediaplayer.data.db.dao.EnrichmentCacheDao,com.powermediaplayer.podcast.PodcastOfflineResolver,com.powermediaplayer.cloud.DriveOfflineResolver,com.powermediaplayer.cloud.DriveTagEnricher):26:26 -> <init>
@@ -535859,7 +535863,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator -> p4.g0:
     4:16:void attemptColdStartRestore():73 -> h
     0:13:boolean audioSinkPresent(java.util.Set):770:770 -> i
     14:19:boolean audioSinkPresent(java.util.Set):771:771 -> i
-    20:25:boolean audioSinkPresent(java.util.Set):1412:1412 -> i
+    20:25:boolean audioSinkPresent(java.util.Set):1413:1413 -> i
     26:56:boolean audioSinkPresent(java.util.Set):772:772 -> i
     57:60:boolean audioSinkPresent(java.util.Set):769:769 -> i
     61:62:boolean audioSinkPresent(java.util.Set):773:773 -> i
@@ -536164,7 +536168,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startColdStartRestore$1
     740:741:java.lang.Object invokeSuspend(java.lang.Object):907:907 -> invokeSuspend
     742:743:java.lang.Object invokeSuspend(java.lang.Object):908:908 -> invokeSuspend
     744:746:java.lang.Object invokeSuspend(java.lang.Object):907:907 -> invokeSuspend
-    747:750:java.lang.Object invokeSuspend(java.lang.Object):1298:1298 -> invokeSuspend
+    747:750:java.lang.Object invokeSuspend(java.lang.Object):1299:1299 -> invokeSuspend
     751:754:java.lang.Object invokeSuspend(java.lang.Object):918:918 -> invokeSuspend
     755:756:androidx.media3.common.Player com.powermediaplayer.service.PlaybackConnection.getPlayer():396:396 -> invokeSuspend
     755:756:java.lang.Object invokeSuspend(java.lang.Object):918 -> invokeSuspend
@@ -536178,7 +536182,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startColdStartRestore$1
     779:780:java.lang.Object invokeSuspend(java.lang.Object):922:922 -> invokeSuspend
     781:782:java.lang.Object invokeSuspend(java.lang.Object):924:924 -> invokeSuspend
     783:785:java.lang.Object invokeSuspend(java.lang.Object):922:922 -> invokeSuspend
-    786:789:java.lang.Object invokeSuspend(java.lang.Object):1298:1298 -> invokeSuspend
+    786:789:java.lang.Object invokeSuspend(java.lang.Object):1299:1299 -> invokeSuspend
     790:791:com.powermediaplayer.data.preferences.SettingsDataStore com.powermediaplayer.playback.PlaybackSessionCoordinator.access$getSettingsDataStore$p(com.powermediaplayer.playback.PlaybackSessionCoordinator):24:24 -> invokeSuspend
     790:791:java.lang.Object invokeSuspend(java.lang.Object):934 -> invokeSuspend
     792:821:java.lang.Object invokeSuspend(java.lang.Object):934:934 -> invokeSuspend
@@ -536197,7 +536201,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startColdStartRestore$1
     881:882:java.lang.Object invokeSuspend(java.lang.Object):952:952 -> invokeSuspend
     883:884:java.lang.Object invokeSuspend(java.lang.Object):953:953 -> invokeSuspend
     885:887:java.lang.Object invokeSuspend(java.lang.Object):952:952 -> invokeSuspend
-    888:891:java.lang.Object invokeSuspend(java.lang.Object):1298:1298 -> invokeSuspend
+    888:891:java.lang.Object invokeSuspend(java.lang.Object):1299:1299 -> invokeSuspend
     892:893:java.lang.Object invokeSuspend(java.lang.Object):958:958 -> invokeSuspend
     894:895:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> invokeSuspend
     894:895:java.lang.Object invokeSuspend(java.lang.Object):958 -> invokeSuspend
@@ -536206,7 +536210,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startColdStartRestore$1
     921:922:java.lang.Object invokeSuspend(java.lang.Object):962:962 -> invokeSuspend
     923:924:java.lang.Object invokeSuspend(java.lang.Object):963:963 -> invokeSuspend
     925:927:java.lang.Object invokeSuspend(java.lang.Object):962:962 -> invokeSuspend
-    928:931:java.lang.Object invokeSuspend(java.lang.Object):1298:1298 -> invokeSuspend
+    928:931:java.lang.Object invokeSuspend(java.lang.Object):1299:1299 -> invokeSuspend
     932:935:java.lang.Object invokeSuspend(java.lang.Object):967:967 -> invokeSuspend
     936:939:androidx.media3.common.Player com.powermediaplayer.service.PlaybackConnection.getPlayer():396:396 -> invokeSuspend
     936:939:java.lang.Object invokeSuspend(java.lang.Object):967 -> invokeSuspend
@@ -536214,7 +536218,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startColdStartRestore$1
     940:941:java.lang.Object invokeSuspend(java.lang.Object):969:969 -> invokeSuspend
     942:943:java.lang.Object invokeSuspend(java.lang.Object):970:970 -> invokeSuspend
     944:946:java.lang.Object invokeSuspend(java.lang.Object):969:969 -> invokeSuspend
-    947:950:java.lang.Object invokeSuspend(java.lang.Object):1298:1298 -> invokeSuspend
+    947:950:java.lang.Object invokeSuspend(java.lang.Object):1299:1299 -> invokeSuspend
     951:960:java.lang.Object invokeSuspend(java.lang.Object):974:974 -> invokeSuspend
     961:962:java.lang.Object invokeSuspend(java.lang.Object):975:975 -> invokeSuspend
     963:966:java.lang.Object invokeSuspend(java.lang.Object):977:977 -> invokeSuspend
@@ -536356,33 +536360,34 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startColdStartRestore$1
     2363:2374:java.lang.Object invokeSuspend(java.lang.Object):1244:1244 -> invokeSuspend
     2375:2381:java.lang.Object invokeSuspend(java.lang.Object):1236:1236 -> invokeSuspend
     2382:2386:java.lang.Object invokeSuspend(java.lang.Object):1235:1235 -> invokeSuspend
-    2387:2397:java.lang.Object invokeSuspend(java.lang.Object):1252:1252 -> invokeSuspend
-    2398:2399:java.lang.Object invokeSuspend(java.lang.Object):1253:1253 -> invokeSuspend
-    2400:2434:java.lang.Object invokeSuspend(java.lang.Object):1255:1255 -> invokeSuspend
-    2435:2437:java.lang.Object invokeSuspend(java.lang.Object):1253:1253 -> invokeSuspend
-    2438:2441:java.lang.Object invokeSuspend(java.lang.Object):1298:1298 -> invokeSuspend
-    2442:2449:java.lang.Object invokeSuspend(java.lang.Object):1259:1259 -> invokeSuspend
-    2450:2453:java.lang.Object invokeSuspend(java.lang.Object):1261:1261 -> invokeSuspend
-    2454:2472:java.lang.Object invokeSuspend(java.lang.Object):1262:1262 -> invokeSuspend
-    2473:2489:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.playTrackOnConnectDevice-0E7RQCE$default(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String,kotlin.coroutines.Continuation,int,java.lang.Object):827:827 -> invokeSuspend
-    2473:2489:java.lang.Object invokeSuspend(java.lang.Object):1262 -> invokeSuspend
-    2490:2493:boolean kotlin.Result.isSuccess-impl(java.lang.Object):32:32 -> invokeSuspend
-    2490:2493:java.lang.Object invokeSuspend(java.lang.Object):1263 -> invokeSuspend
-    2494:2497:java.lang.Object invokeSuspend(java.lang.Object):1267:1267 -> invokeSuspend
-    2498:2501:java.lang.Object invokeSuspend(java.lang.Object):1268:1268 -> invokeSuspend
-    2502:2504:java.lang.Object invokeSuspend(java.lang.Object):1267:1267 -> invokeSuspend
-    2505:2512:java.lang.Object invokeSuspend(java.lang.Object):1270:1270 -> invokeSuspend
-    2513:2540:java.lang.Object invokeSuspend(java.lang.Object):1271:1271 -> invokeSuspend
-    2541:2591:java.lang.Object invokeSuspend(java.lang.Object):1272:1272 -> invokeSuspend
-    2592:2629:java.lang.Object invokeSuspend(java.lang.Object):1274:1274 -> invokeSuspend
-    2630:2640:java.lang.Object invokeSuspend(java.lang.Object):1275:1275 -> invokeSuspend
-    2641:2643:java.lang.Object invokeSuspend(java.lang.Object):1278:1278 -> invokeSuspend
-    2644:2650:java.lang.Object invokeSuspend(java.lang.Object):1279:1279 -> invokeSuspend
-    2651:2665:java.lang.Object invokeSuspend(java.lang.Object):1285:1285 -> invokeSuspend
-    2666:2670:java.lang.Object invokeSuspend(java.lang.Object):1260:1260 -> invokeSuspend
-    2671:2683:java.lang.Object invokeSuspend(java.lang.Object):1292:1292 -> invokeSuspend
-    2684:2696:java.lang.Object invokeSuspend(java.lang.Object):1293:1293 -> invokeSuspend
-    2697:2705:java.lang.Object invokeSuspend(java.lang.Object):1298:1298 -> invokeSuspend
+    2387:2393:java.lang.Object invokeSuspend(java.lang.Object):1252:1252 -> invokeSuspend
+    2394:2404:java.lang.Object invokeSuspend(java.lang.Object):1253:1253 -> invokeSuspend
+    2405:2406:java.lang.Object invokeSuspend(java.lang.Object):1254:1254 -> invokeSuspend
+    2407:2441:java.lang.Object invokeSuspend(java.lang.Object):1256:1256 -> invokeSuspend
+    2442:2444:java.lang.Object invokeSuspend(java.lang.Object):1254:1254 -> invokeSuspend
+    2445:2448:java.lang.Object invokeSuspend(java.lang.Object):1299:1299 -> invokeSuspend
+    2449:2456:java.lang.Object invokeSuspend(java.lang.Object):1260:1260 -> invokeSuspend
+    2457:2460:java.lang.Object invokeSuspend(java.lang.Object):1262:1262 -> invokeSuspend
+    2461:2479:java.lang.Object invokeSuspend(java.lang.Object):1263:1263 -> invokeSuspend
+    2480:2496:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.playTrackOnConnectDevice-0E7RQCE$default(com.powermediaplayer.cloud.SpotifyProvider,java.lang.String,java.lang.String,kotlin.coroutines.Continuation,int,java.lang.Object):827:827 -> invokeSuspend
+    2480:2496:java.lang.Object invokeSuspend(java.lang.Object):1263 -> invokeSuspend
+    2497:2500:boolean kotlin.Result.isSuccess-impl(java.lang.Object):32:32 -> invokeSuspend
+    2497:2500:java.lang.Object invokeSuspend(java.lang.Object):1264 -> invokeSuspend
+    2501:2504:java.lang.Object invokeSuspend(java.lang.Object):1268:1268 -> invokeSuspend
+    2505:2508:java.lang.Object invokeSuspend(java.lang.Object):1269:1269 -> invokeSuspend
+    2509:2511:java.lang.Object invokeSuspend(java.lang.Object):1268:1268 -> invokeSuspend
+    2512:2519:java.lang.Object invokeSuspend(java.lang.Object):1271:1271 -> invokeSuspend
+    2520:2547:java.lang.Object invokeSuspend(java.lang.Object):1272:1272 -> invokeSuspend
+    2548:2598:java.lang.Object invokeSuspend(java.lang.Object):1273:1273 -> invokeSuspend
+    2599:2636:java.lang.Object invokeSuspend(java.lang.Object):1275:1275 -> invokeSuspend
+    2637:2647:java.lang.Object invokeSuspend(java.lang.Object):1276:1276 -> invokeSuspend
+    2648:2650:java.lang.Object invokeSuspend(java.lang.Object):1279:1279 -> invokeSuspend
+    2651:2657:java.lang.Object invokeSuspend(java.lang.Object):1280:1280 -> invokeSuspend
+    2658:2672:java.lang.Object invokeSuspend(java.lang.Object):1286:1286 -> invokeSuspend
+    2673:2677:java.lang.Object invokeSuspend(java.lang.Object):1261:1261 -> invokeSuspend
+    2678:2690:java.lang.Object invokeSuspend(java.lang.Object):1293:1293 -> invokeSuspend
+    2691:2703:java.lang.Object invokeSuspend(java.lang.Object):1294:1294 -> invokeSuspend
+    2704:2711:java.lang.Object invokeSuspend(java.lang.Object):1299:1299 -> invokeSuspend
 com.powermediaplayer.playback.PlaybackSessionCoordinator$startColdStartRestore$1$2$chapterExtras$1 -> p4.r:
 # {"id":"sourceFile","fileName":"PlaybackSessionCoordinator.kt"}
     java.lang.Object L$0 -> U
@@ -536554,8 +536559,8 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startEnrichment$1 -> p4
     42:46:kotlinx.coroutines.flow.Flow kotlinx.coroutines.flow.FlowKt__ZipKt.flowCombine(kotlinx.coroutines.flow.Flow,kotlinx.coroutines.flow.Flow,kotlin.jvm.functions.Function3):329:329 -> invokeSuspend
     42:46:kotlinx.coroutines.flow.Flow kotlinx.coroutines.flow.FlowKt.flowCombine(kotlinx.coroutines.flow.Flow,kotlinx.coroutines.flow.Flow,kotlin.jvm.functions.Function3):1 -> invokeSuspend
     42:46:java.lang.Object invokeSuspend(java.lang.Object):383 -> invokeSuspend
-    47:52:java.lang.Object invokeSuspend(java.lang.Object):1414:1414 -> invokeSuspend
-    53:58:java.lang.Object invokeSuspend(java.lang.Object):1419:1419 -> invokeSuspend
+    47:52:java.lang.Object invokeSuspend(java.lang.Object):1415:1415 -> invokeSuspend
+    53:58:java.lang.Object invokeSuspend(java.lang.Object):1420:1420 -> invokeSuspend
     59:62:java.lang.Object invokeSuspend(java.lang.Object):390:390 -> invokeSuspend
     63:77:java.lang.Object invokeSuspend(java.lang.Object):391:391 -> invokeSuspend
     78:80:java.lang.Object invokeSuspend(java.lang.Object):468:468 -> invokeSuspend
@@ -536620,75 +536625,75 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startEnrichment$1$4 -> 
     140:142:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24:24 -> a
     140:142:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     140:142:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    143:151:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1311:1311 -> a
+    143:151:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1312:1312 -> a
     143:151:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     143:151:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     143:151:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    152:158:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1312:1312 -> a
+    152:158:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1313:1313 -> a
     152:158:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     152:158:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     152:158:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    159:169:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1313:1313 -> a
+    159:169:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1314:1314 -> a
     159:169:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     159:169:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     159:169:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    170:172:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1314:1314 -> a
+    170:172:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1315:1315 -> a
     170:172:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     170:172:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     170:172:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    173:174:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1315:1315 -> a
+    173:174:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1316:1316 -> a
     173:174:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     173:174:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     173:174:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    175:178:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1316:1316 -> a
+    175:178:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1317:1317 -> a
     175:178:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     175:178:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     175:178:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    179:181:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1315:1315 -> a
+    179:181:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1316:1316 -> a
     179:181:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     179:181:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     179:181:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    182:187:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1318:1318 -> a
+    182:187:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1319:1319 -> a
     182:187:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     182:187:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     182:187:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    188:193:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1319:1319 -> a
+    188:193:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1320:1320 -> a
     188:193:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     188:193:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     188:193:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    194:199:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1320:1320 -> a
+    194:199:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1321:1321 -> a
     194:199:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     194:199:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     194:199:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    200:203:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1321:1321 -> a
+    200:203:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1322:1322 -> a
     200:203:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     200:203:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     200:203:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    204:212:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1322:1322 -> a
+    204:212:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1323:1323 -> a
     204:212:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     204:212:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     204:212:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    213:216:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1323:1323 -> a
+    213:216:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1324:1324 -> a
     213:216:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     213:216:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     213:216:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    217:224:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1324:1324 -> a
+    217:224:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1325:1325 -> a
     217:224:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     217:224:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     217:224:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    225:231:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1325:1325 -> a
+    225:231:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1326:1326 -> a
     225:231:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     225:231:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     225:231:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    232:234:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1327:1327 -> a
+    232:234:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1328:1328 -> a
     232:234:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     232:234:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     232:234:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    235:239:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1329:1329 -> a
+    235:239:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1330:1330 -> a
     235:239:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     235:239:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     235:239:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
-    240:244:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1326:1326 -> a
+    240:244:void com.powermediaplayer.playback.PlaybackSessionCoordinator.attachSubtitle(java.io.File):1327:1327 -> a
     240:244:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$attachSubtitle(com.powermediaplayer.playback.PlaybackSessionCoordinator,java.io.File):24 -> a
     240:244:java.lang.Object com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$1$2.emit(kotlin.Pair,kotlin.coroutines.Continuation):500 -> a
     240:244:java.lang.Object p4.PlaybackSessionCoordinator$startEnrichment$1$4.emit(T4.Pair,X4.Continuation):0 -> a
@@ -536905,72 +536910,72 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startEnrichment$1$4$1 -
     9:13:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24:24 -> invokeSuspend
     9:13:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     14:15:java.lang.String com.powermediaplayer.enrichment.EnrichmentResult.getArtist():120:120 -> invokeSuspend
-    14:15:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
+    14:15:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1336 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
     14:15:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     14:15:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
-    16:22:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335:1335 -> invokeSuspend
+    16:22:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1336:1336 -> invokeSuspend
     16:22:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     16:22:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
-    23:27:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1336:1336 -> invokeSuspend
+    23:27:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1337:1337 -> invokeSuspend
     23:27:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     23:27:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
-    28:37:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1337:1337 -> invokeSuspend
+    28:37:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1338:1338 -> invokeSuspend
     28:37:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     28:37:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
-    38:43:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1338:1338 -> invokeSuspend
+    38:43:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1339:1339 -> invokeSuspend
     38:43:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     38:43:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
-    44:48:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334:1334 -> invokeSuspend
+    44:48:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335:1335 -> invokeSuspend
     44:48:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     44:48:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     49:57:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):911:911 -> invokeSuspend
-    49:57:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    49:57:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     49:57:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     49:57:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     58:59:java.lang.String com.powermediaplayer.service.PlayerState.getArtist():47:47 -> invokeSuspend
     58:59:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):912 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    58:59:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    58:59:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     58:59:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     58:59:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     60:76:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):912:912 -> invokeSuspend
-    60:76:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    60:76:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     60:76:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     60:76:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     77:93:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):913:913 -> invokeSuspend
-    77:93:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    77:93:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     77:93:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     77:93:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     94:101:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):914:914 -> invokeSuspend
-    94:101:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    94:101:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     94:101:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     94:101:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     102:117:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):915:915 -> invokeSuspend
-    102:117:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    102:117:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     102:117:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     102:117:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     118:123:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):916:916 -> invokeSuspend
-    118:123:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    118:123:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     118:123:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     118:123:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     124:131:boolean kotlin.jvm.internal.Intrinsics.areEqual(java.lang.Object,java.lang.Object):169:169 -> invokeSuspend
     124:131:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):916 -> invokeSuspend
-    124:131:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    124:131:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     124:131:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     124:131:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     132:161:boolean kotlin.jvm.internal.Intrinsics.areEqual(java.lang.Object,java.lang.Object):169:169 -> invokeSuspend
     132:161:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):917 -> invokeSuspend
-    132:161:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    132:161:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     132:161:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     132:161:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     162:166:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):919:919 -> invokeSuspend
-    162:166:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    162:166:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     162:166:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     162:166:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     167:169:void kotlinx.coroutines.flow.StateFlowImpl.setValue(java.lang.Object):321:321 -> invokeSuspend
     167:169:void com.powermediaplayer.service.PlaybackConnection.patchPlayerStateMetadata(java.lang.String,java.lang.String,int,java.lang.String):919 -> invokeSuspend
-    167:169:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1334 -> invokeSuspend
+    167:169:void com.powermediaplayer.playback.PlaybackSessionCoordinator.applyEnrichment(com.powermediaplayer.enrichment.EnrichmentResult):1335 -> invokeSuspend
     167:169:void com.powermediaplayer.playback.PlaybackSessionCoordinator.access$applyEnrichment(com.powermediaplayer.playback.PlaybackSessionCoordinator,com.powermediaplayer.enrichment.EnrichmentResult):24 -> invokeSuspend
     167:169:java.lang.Object invokeSuspend(java.lang.Object):465 -> invokeSuspend
     170:172:java.lang.Object invokeSuspend(java.lang.Object):466:466 -> invokeSuspend
@@ -537325,7 +537330,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startReplayGainApply$1 
     28:29:kotlinx.coroutines.flow.StateFlow com.powermediaplayer.service.PlaybackConnection.getPlayerState():191:191 -> invokeSuspend
     28:29:java.lang.Object invokeSuspend(java.lang.Object):552 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    30:35:java.lang.Object invokeSuspend(java.lang.Object):1414:1414 -> invokeSuspend
+    30:35:java.lang.Object invokeSuspend(java.lang.Object):1415:1415 -> invokeSuspend
     36:39:java.lang.Object invokeSuspend(java.lang.Object):554:554 -> invokeSuspend
     40:43:kotlinx.coroutines.flow.Flow com.powermediaplayer.data.preferences.SettingsDataStore.getReplayGainEnabled():1711:1711 -> invokeSuspend
     40:43:java.lang.Object invokeSuspend(java.lang.Object):555 -> invokeSuspend
@@ -537638,7 +537643,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startReplayGainAutoScan
     37:40:kotlinx.coroutines.flow.StateFlow com.powermediaplayer.service.PlaybackConnection.getPlayerState():191:191 -> invokeSuspend
     37:40:java.lang.Object invokeSuspend(java.lang.Object):512 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    41:45:java.lang.Object invokeSuspend(java.lang.Object):1414:1414 -> invokeSuspend
+    41:45:java.lang.Object invokeSuspend(java.lang.Object):1415:1415 -> invokeSuspend
     46:49:java.lang.Object invokeSuspend(java.lang.Object):514:514 -> invokeSuspend
     50:52:java.lang.Object invokeSuspend(java.lang.Object):512:512 -> invokeSuspend
     53:55:void com.powermediaplayer.playback.PlaybackSessionCoordinator$startReplayGainAutoScan$1$2.<init>(kotlin.coroutines.Continuation):0:0 -> invokeSuspend
@@ -538380,7 +538385,7 @@ com.powermediaplayer.playback.PlaybackSessionCoordinator$startSubtitleAutoFetch$
     28:29:kotlinx.coroutines.flow.StateFlow com.powermediaplayer.service.PlaybackConnection.getPlayerState():191:191 -> invokeSuspend
     28:29:java.lang.Object invokeSuspend(java.lang.Object):477 -> invokeSuspend
       # {"id":"com.android.tools.r8.rewriteFrame","conditions":["throws(Ljava/lang/NullPointerException;)"],"actions":["removeInnerFrames(1)"]}
-    30:35:java.lang.Object invokeSuspend(java.lang.Object):1414:1414 -> invokeSuspend
+    30:35:java.lang.Object invokeSuspend(java.lang.Object):1415:1415 -> invokeSuspend
     36:39:java.lang.Object invokeSuspend(java.lang.Object):479:479 -> invokeSuspend
     40:54:java.lang.Object invokeSuspend(java.lang.Object):480:480 -> invokeSuspend
     55:57:java.lang.Object invokeSuspend(java.lang.Object):503:503 -> invokeSuspend
@@ -543193,16 +543198,16 @@ com.powermediaplayer.service.PlaybackConnection$connectInternal$2 -> t4.A:
     7:8:void onDisconnected(androidx.media3.session.MediaController):320:320 -> onDisconnected
     9:11:void onDisconnected(androidx.media3.session.MediaController):319:319 -> onDisconnected
     12:15:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator.access$getColdStartGuard$cp():24:24 -> onDisconnected
-    12:15:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.getColdStartGuard():1389 -> onDisconnected
-    12:15:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1392 -> onDisconnected
+    12:15:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.getColdStartGuard():1390 -> onDisconnected
+    12:15:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1393 -> onDisconnected
     12:15:void onDisconnected(androidx.media3.session.MediaController):327 -> onDisconnected
-    16:21:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1392:1392 -> onDisconnected
+    16:21:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1393:1393 -> onDisconnected
     16:21:void onDisconnected(androidx.media3.session.MediaController):327 -> onDisconnected
-    22:23:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1394:1394 -> onDisconnected
+    22:23:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1395:1395 -> onDisconnected
     22:23:void onDisconnected(androidx.media3.session.MediaController):327 -> onDisconnected
-    24:25:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1395:1395 -> onDisconnected
+    24:25:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1396:1396 -> onDisconnected
     24:25:void onDisconnected(androidx.media3.session.MediaController):327 -> onDisconnected
-    26:28:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1393:1393 -> onDisconnected
+    26:28:void com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.resetColdStartGuard():1394:1394 -> onDisconnected
     26:28:void onDisconnected(androidx.media3.session.MediaController):327 -> onDisconnected
     29:35:kotlinx.coroutines.Job com.powermediaplayer.service.PlaybackConnection.access$getPositionPollingJob$p(com.powermediaplayer.service.PlaybackConnection):154:154 -> onDisconnected
     29:35:void onDisconnected(androidx.media3.session.MediaController):334 -> onDisconnected
@@ -630057,14 +630062,14 @@ com.powermediaplayer.ui.player.PlayerViewModel -> F4.D1:
     89:97:java.lang.Object access$beginRemoteFadeCaptureIfNeeded(com.powermediaplayer.ui.player.PlayerViewModel,kotlin.coroutines.Continuation):30 -> b
     98:99:java.lang.Object beginRemoteFadeCaptureIfNeeded(kotlin.coroutines.Continuation):1241:1241 -> b
     98:99:java.lang.Object access$beginRemoteFadeCaptureIfNeeded(com.powermediaplayer.ui.player.PlayerViewModel,kotlin.coroutines.Continuation):30 -> b
-    100:101:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.currentVolumePercent(kotlin.coroutines.Continuation):1935:1935 -> b
+    100:101:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.currentVolumePercent(kotlin.coroutines.Continuation):1945:1945 -> b
     100:101:java.lang.Object beginRemoteFadeCaptureIfNeeded(kotlin.coroutines.Continuation):1241 -> b
     100:101:java.lang.Object access$beginRemoteFadeCaptureIfNeeded(com.powermediaplayer.ui.player.PlayerViewModel,kotlin.coroutines.Continuation):30 -> b
     102:103:kotlinx.coroutines.CoroutineDispatcher kotlinx.coroutines.Dispatchers.getIO():65:65 -> b
-    102:103:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.currentVolumePercent(kotlin.coroutines.Continuation):1935 -> b
+    102:103:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.currentVolumePercent(kotlin.coroutines.Continuation):1945 -> b
     102:103:java.lang.Object beginRemoteFadeCaptureIfNeeded(kotlin.coroutines.Continuation):1241 -> b
     102:103:java.lang.Object access$beginRemoteFadeCaptureIfNeeded(com.powermediaplayer.ui.player.PlayerViewModel,kotlin.coroutines.Continuation):30 -> b
-    104:116:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.currentVolumePercent(kotlin.coroutines.Continuation):1935:1935 -> b
+    104:116:java.lang.Object com.powermediaplayer.cloud.SpotifyProvider.currentVolumePercent(kotlin.coroutines.Continuation):1945:1945 -> b
     104:116:java.lang.Object beginRemoteFadeCaptureIfNeeded(kotlin.coroutines.Continuation):1241 -> b
     104:116:java.lang.Object access$beginRemoteFadeCaptureIfNeeded(com.powermediaplayer.ui.player.PlayerViewModel,kotlin.coroutines.Continuation):30 -> b
     117:120:java.lang.Object beginRemoteFadeCaptureIfNeeded(kotlin.coroutines.Continuation):1235:1235 -> b
@@ -694710,7 +694715,7 @@ kotlin.collections.ArraysKt__ArraysJVMKt -> U4.o:
     12:17:boolean kotlin.text.CharsKt__CharKt.equals(char,char,boolean):238:238 -> v
     18:30:boolean kotlin.text.CharsKt__CharKt.equals(char,char,boolean):240:240 -> v
     0:2:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator.access$getColdStartGuard$cp():24:24 -> w
-    0:2:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.getColdStartGuard():1389 -> w
+    0:2:java.util.concurrent.atomic.AtomicBoolean com.powermediaplayer.playback.PlaybackSessionCoordinator$Companion.getColdStartGuard():1390 -> w
     0:9:android.view.ViewParent androidx.core.viewtree.ViewTree.getParentOrViewTreeDisjointParent(android.view.View):68:68 -> x
     10:13:android.view.ViewParent androidx.core.viewtree.ViewTree.getParentOrViewTreeDisjointParent(android.view.View):71:71 -> x
     14:22:android.view.ViewParent androidx.core.viewtree.ViewTree.getParentOrViewTreeDisjointParent(android.view.View):72:72 -> x
@@ -696175,7 +696180,7 @@ kotlin.collections.MapsKt__MapWithDefaultKt -> U4.I:
     9:12:void androidx.core.view.inputmethod.EditorInfoCompat.setStylusHandwritingEnabled(android.view.inputmethod.EditorInfo,boolean):216:216 -> B
     13:19:void androidx.core.view.inputmethod.EditorInfoCompat.setStylusHandwritingEnabled(android.view.inputmethod.EditorInfo,boolean):217:217 -> B
     20:27:void androidx.core.view.inputmethod.EditorInfoCompat.setStylusHandwritingEnabled(android.view.inputmethod.EditorInfo,boolean):219:219 -> B
-    0:22:java.lang.String com.powermediaplayer.cloud.SpotifyProviderKt.strOrNull(com.google.gson.JsonObject,java.lang.String):2130:2130 -> C
+    0:22:java.lang.String com.powermediaplayer.cloud.SpotifyProviderKt.strOrNull(com.google.gson.JsonObject,java.lang.String):2140:2140 -> C
     4:6:void com.google.android.gms.common.internal.safeparcel.SafeParcelWriter.writeBooleanObject(android.os.Parcel,int,java.lang.Boolean,boolean):2:2 -> D
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Landroid/os/Parcel;ILjava/lang/Boolean;)V"}
     7:14:void com.google.android.gms.common.internal.safeparcel.SafeParcelWriter.writeBooleanObject(android.os.Parcel,int,java.lang.Boolean,boolean):3:3 -> D
@@ -696601,32 +696606,32 @@ kotlin.collections.MapsKt__MapWithDefaultKt -> U4.I:
     67:77:com.powermediaplayer.data.db.entity.PodcastShowEntity com.powermediaplayer.podcast.PodcastFeedRefresherKt.mergeShowRefresh(com.powermediaplayer.data.db.entity.PodcastShowEntity,com.powermediaplayer.data.db.entity.PodcastShowEntity):198:198 -> t
     78:101:com.powermediaplayer.data.db.entity.PodcastShowEntity com.powermediaplayer.podcast.PodcastFeedRefresherKt.mergeShowRefresh(com.powermediaplayer.data.db.entity.PodcastShowEntity,com.powermediaplayer.data.db.entity.PodcastShowEntity):199:199 -> t
     102:106:com.powermediaplayer.data.db.entity.PodcastShowEntity com.powermediaplayer.podcast.PodcastFeedRefresherKt.mergeShowRefresh(com.powermediaplayer.data.db.entity.PodcastShowEntity,com.powermediaplayer.data.db.entity.PodcastShowEntity):189:189 -> t
-    0:22:com.google.gson.JsonObject com.powermediaplayer.cloud.SpotifyProviderKt.objOrNullTop(com.google.gson.JsonObject,java.lang.String):2126:2126 -> u
-    3:12:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2133:2133 -> v
+    0:22:com.google.gson.JsonObject com.powermediaplayer.cloud.SpotifyProviderKt.objOrNullTop(com.google.gson.JsonObject,java.lang.String):2136:2136 -> u
+    3:12:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2143:2143 -> v
       # {"id":"com.android.tools.r8.residualsignature","signature":"(Lcom/google/gson/JsonObject;)Lf4/o0;"}
-    13:39:com.google.gson.JsonArray com.powermediaplayer.cloud.SpotifyProviderKt.arrOrNullTop(com.google.gson.JsonObject,java.lang.String):2128:2128 -> v
-    13:39:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2134 -> v
-    40:58:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2135:2135 -> v
-    59:69:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2134:2134 -> v
-    70:81:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2138:2138 -> v
-    82:91:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2134:2134 -> v
-    92:98:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2138:2138 -> v
-    99:106:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2139:2139 -> v
-    107:132:com.google.gson.JsonArray com.powermediaplayer.cloud.SpotifyProviderKt.arrOrNullTop(com.google.gson.JsonObject,java.lang.String):2128:2128 -> v
-    107:132:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2140 -> v
-    133:140:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2140:2140 -> v
-    141:159:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2141:2141 -> v
-    160:165:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2142:2142 -> v
-    166:176:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2144:2144 -> v
-    177:185:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2146:2146 -> v
-    186:211:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2148:2148 -> v
-    212:233:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2149:2149 -> v
-    234:255:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2150:2150 -> v
-    256:270:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2151:2151 -> v
-    271:281:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2152:2152 -> v
-    282:292:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2153:2153 -> v
-    293:306:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2154:2154 -> v
-    307:322:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2143:2143 -> v
+    13:39:com.google.gson.JsonArray com.powermediaplayer.cloud.SpotifyProviderKt.arrOrNullTop(com.google.gson.JsonObject,java.lang.String):2138:2138 -> v
+    13:39:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2144 -> v
+    40:58:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2145:2145 -> v
+    59:69:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2144:2144 -> v
+    70:81:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2148:2148 -> v
+    82:91:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2144:2144 -> v
+    92:98:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2148:2148 -> v
+    99:106:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2149:2149 -> v
+    107:132:com.google.gson.JsonArray com.powermediaplayer.cloud.SpotifyProviderKt.arrOrNullTop(com.google.gson.JsonObject,java.lang.String):2138:2138 -> v
+    107:132:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2150 -> v
+    133:140:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2150:2150 -> v
+    141:159:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2151:2151 -> v
+    160:165:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2152:2152 -> v
+    166:176:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2154:2154 -> v
+    177:185:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2156:2156 -> v
+    186:211:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2158:2158 -> v
+    212:233:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2159:2159 -> v
+    234:255:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2160:2160 -> v
+    256:270:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2161:2161 -> v
+    271:281:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2162:2162 -> v
+    282:292:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2163:2163 -> v
+    293:306:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2164:2164 -> v
+    307:322:com.powermediaplayer.cloud.SpotifyPlaybackState com.powermediaplayer.cloud.SpotifyProviderKt.parseSpotifyPlaybackState(com.google.gson.JsonObject):2153:2153 -> v
     int com.google.crypto.tink.shaded.protobuf.Utf8$Processor.partialIsValidUtf8(int,byte[],int,int) -> w
       # {"id":"com.android.tools.r8.residualsignature","signature":"([BII)I"}
     0:14:byte[] kotlin.io.ByteStreamsKt.readBytes(java.io.InputStream):135:135 -> x
