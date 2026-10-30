@@ -183,6 +183,9 @@ Scope: every commit from vc121 (podcast tap resumes, skip accumulator) to vc133 
 | V42 | AU3 unit suite after the fix pass | `gradlew :app:testDebugUnitTest` | tests=421 skipped=0 failures=0 errors=0 (NotificationTargets 5, OwnerEpoch 4, ScrubPreview 7, LibraryPermissions 5 among them) | PASS |
 | V43 | OPEN-VIEW handler | Phone 17:59, cold start via ACTION_VIEW of the audio fixture while the last-played item was a video | `MainActivity VIEW uri=content:11512`, `cold-start … VIEW launch pending → restore skipped`, Player title = the fixture at 0:08 | PASS |
 | V44 | FOLDER-CH chapter maths | Unit | `chapterRelativePosition(true, file 10 s, playlist 70 s, start 60 s)` = 10 s; the old maths = 0 | PASS (unit); user device check: folder-as-book file 2 |
+| V45 | RT2 Video tab permission prompt | Emulator 20:05, video permission revoked | System prompt "Allow Power Test to access photos and videos" on the Video tab; Allow all → granted, `Video (0)` | PASS |
+| V46 | RT1 picker above the app + Now Playing tap | Emulator 20:06 | `MainActivity / PickActivity / MainActivity` after the tap, Player front; BACK → picker; BACK → app | PASS |
+| V47 | RT4 + FOLDER-CH on device | Emulator 20:07, three mp3s in one folder | "Play folder as book" in the row sheet → Player on file 2 with the bar at 0:05 / -0:14 / 0:20 | PASS |
 | V37 | Spotify handoff untouched by VID5 | Phone log 16:21:24–27 on 1.5.80-test | AuthorizationManagementActivity → RedirectUriReceiverActivity → SpotifyAuthCompleteActivity (CLEAR_TOP\|SINGLE_TOP, since vc85) → `MainActivity.onResume`, no `onCreate` between; history grep: no recorded link between the handoff and MainActivity recreation | PASS |
 
 ### Open questions for the user (recorded, not decided)

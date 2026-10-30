@@ -2333,7 +2333,10 @@ private fun PositionSection(
     val abEnd by viewModel.abLoopEnd.collectAsStateWithLifecycle()
     fun abFraction(ms: Long?): Float? {
         if (ms == null || pos.durationMs <= 0L) return null
-        val f = (ms - pos.chapterStartMs).toFloat() / pos.durationMs.toFloat()
+        // SW7: A/B are file-relative; in a folder book the bar IS the file (chapter start is
+        // queue-absolute there), so no chapter offset applies.
+        val base = if (pos.isFolderBook) 0L else pos.chapterStartMs
+        val f = (ms - base).toFloat() / pos.durationMs.toFloat()
         return if (f in 0f..1f) f else null
     }
     // #4 — pending numeric-seek dialog (which bar + which end), shown once.

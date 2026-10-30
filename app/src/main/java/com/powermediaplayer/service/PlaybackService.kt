@@ -2071,7 +2071,7 @@ class PlaybackService : MediaLibraryService() {
         // would finish a sign-in Custom Tab / picker sitting above MainActivity (AU3 #2).
         val sessionActivityIntent = PendingIntent.getActivity(
             this,
-            0,
+            1,   // SW9: own request code — the widget (0) and the bounce service (2) must not share this record
             Intent(this, MainActivity::class.java)
                 .setAction(com.powermediaplayer.widget.NowPlayingWidgetProvider.actionFor(
                     com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_PLAYER

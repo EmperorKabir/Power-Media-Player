@@ -34,7 +34,7 @@ class SpotifyBounceService : Service() {
         ensureChannel()
         // 2026-10-30: a tap brings the player back (it had no tap action).
         val openPlayer = android.app.PendingIntent.getActivity(
-            this, 0,
+            this, 2,   // SW9: own request code (widget 0, media notification 1)
             Intent(this, com.powermediaplayer.MainActivity::class.java)
                 .setAction(com.powermediaplayer.widget.NowPlayingWidgetProvider.actionFor(
                     com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_PLAYER

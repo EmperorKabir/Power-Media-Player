@@ -480,8 +480,12 @@ fun CloudBrowserScreen(
         val pendingPodcastFeed by com.powermediaplayer.ui.navigation.DeepLinkBus.podcastFeed
             .collectAsStateWithLifecycle()
         val cloudListState = androidx.compose.foundation.lazy.rememberLazyListState()
-        androidx.compose.runtime.LaunchedEffect(pendingPodcastFeed) {
-            val feed = pendingPodcastFeed ?: return@LaunchedEffect
+        // SW5: PodcastsSection consumes the bus on arrival, which would restart an effect keyed
+        // on the bus value and cancel the scroll mid-flight — so the reveal runs on a local copy.
+        var revealFeed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+        androidx.compose.runtime.LaunchedEffect(pendingPodcastFeed) { pendingPodcastFeed?.let { revealFeed = it } }
+        androidx.compose.runtime.LaunchedEffect(revealFeed) {
+            val feed = revealFeed ?: return@LaunchedEffect
             if (uiState.activeProvider != null) viewModel.navigateToRoot()
             // Let the top-level list compose, then bring the Podcasts item into view: jump to
             // the end and walk back a viewport at a time until the item is composed (AU3 #7:
@@ -501,6 +505,7 @@ fun CloudBrowserScreen(
             // release the request here so later Cloud visits do not replay the jump.
             kotlinx.coroutines.delay(2500)
             com.powermediaplayer.ui.navigation.DeepLinkBus.consumePodcast(feed)
+            revealFeed = null
         }
         if (uiState.activeProvider == null) {
             // Provider selection / sign-in state

@@ -53,6 +53,13 @@ class ScrubPreviewTest {
         assertEquals("1:00", p.durationFormatted)
         assertEquals("-0:30", p.remainingFormatted)
         assertEquals(0.5f, p.trackProgress, 1e-6f)
+        assertEquals(0L, p.chapterStartMs)   // SW10: the previewed chapter's start, not the live one
+    }
+
+    @Test fun folderBookFlagReachesTheUiModel() {
+        val folder = base.copy(isFolderBook = true)
+        assertTrue(folder.format().isFolderBook)
+        assertTrue(applyScrubPreview(folder, chapters, ScrubBar.TRACK to 0.1f).format().isFolderBook)
     }
 
     @Test fun fullPreviewAtTheEndStaysInBounds() {

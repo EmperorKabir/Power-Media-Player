@@ -45,6 +45,13 @@ object MainActivityHolder {
     fun set(a: android.app.Activity) { ref = java.lang.ref.WeakReference(a) }
     fun get(): android.app.Activity? = ref?.get()
 
+    /** SW4: live MainActivity instances (two exist while a SINGLE_TOP tap stacks a second one
+     *  above a picker / Custom Tab). The shared PlaybackConnection is released only by the last. */
+    private val live = java.util.concurrent.atomic.AtomicInteger(0)
+    fun instanceCreated(): Int = live.incrementAndGet()
+    fun instanceDestroyed(): Int = live.decrementAndGet().coerceAtLeast(0)
+    fun liveInstances(): Int = live.get()
+
     /**
      * True the WHOLE time video is on the Player screen (not only when the
      * controls are hidden). The activity root drops its systemBarsPadding so
@@ -260,6 +267,7 @@ class MainActivity : FragmentActivity() {
             )
         )
         MainActivityHolder.set(this)
+        MainActivityHolder.instanceCreated()
         // I4d precise-stop — auto-launch Spotify's SSO grant for app-remote-control the
         // first time App Remote reports it isn't authorised (a generic OAuth token carrying
         // the scope is NOT enough for the App Remote SDK — device-proven). One-time per
@@ -269,6 +277,13 @@ class MainActivity : FragmentActivity() {
                 spotifyAppRemote.needsReauth.collect { needs ->
                     if (needs && !spotifySsoPrompted) {
                         spotifySsoPrompted = true
+                        // SW3: the auth-lib's Custom-Tab fallback (no Spotify app) redirects to
+                        // AppAuth's receiver and can never complete; App Remote needs the app
+                        // anyway, so do not open a flow that cannot finish.
+                        if (packageManager.getLaunchIntentForPackage("com.spotify.music") == null) {
+                            com.powermediaplayer.diag.DiagLog.event("APPREMOTE", "SSO skipped: Spotify app not installed")
+                            return@collect
+                        }
                         runCatching {
                             @Suppress("DEPRECATION")
                             startActivityForResult(
@@ -442,7 +457,12 @@ class MainActivity : FragmentActivity() {
                             AppNavigation(
                                 windowSizeClass = windowSizeClass,
                                 initialOpenTab = pendingOpenTab.value,
-                                onOpenTabConsumed = { consumeOpenTab() }
+                                onOpenTabConsumed = { consumeOpenTab() },
+                                onOpenFailed = {
+                                    com.powermediaplayer.diag.DiagLog.dec(branch = "cold-start", reason = "VIEW uri unresolved → restoring the last item")
+                                    android.widget.Toast.makeText(this@MainActivity, "Couldn't open that file", android.widget.Toast.LENGTH_SHORT).show()
+                                    sessionCoordinator.attemptColdStartRestore()
+                                }
                             )
                         }
                     }
@@ -564,10 +584,14 @@ class MainActivity : FragmentActivity() {
         com.powermediaplayer.diag.DiagLog.lifecycle(
             "MainActivity.onDestroy isFinishing=$isFinishing"
         )
-        if (isFinishing) {
-            // Pass our epoch: after a CLEAR_TOP replacement the NEW instance owns the
-            // connection and this (finishing) instance must leave it alone.
+        val remaining = MainActivityHolder.instanceDestroyed()
+        if (isFinishing && remaining == 0) {
+            // Pass our epoch: when a SINGLE_TOP tap stacked a newer instance, that instance owns
+            // the connection and this (finishing) one must leave it alone. SW4: likewise when
+            // ANOTHER instance is still alive beneath a picker / Custom Tab.
             playbackConnection.disconnect(connectionEpoch)
+        } else if (isFinishing) {
+            com.powermediaplayer.diag.DiagLog.lifecycle("MainActivity.onDestroy: $remaining live instance(s) remain → connection kept")
         }
     }
 

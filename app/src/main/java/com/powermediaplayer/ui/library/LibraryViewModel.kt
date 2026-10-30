@@ -1189,6 +1189,32 @@ class LibraryViewModel @Inject constructor(
      * Handle a file picked via SAF (ACTION_OPEN_DOCUMENT).
      * Creates a MediaFileInfo from the picked URI and adds it to the appropriate list.
      */
+    /**
+     * OPEN-VIEW / SW2: play a uri handed over by another app. Returns false when the uri cannot
+     * be resolved (no provider, empty cursor, exception) so the caller can fall back to the
+     * last-played restore instead of leaving the player empty. Best-effort persistable grant so
+     * a later restore / Last Played tap of the same uri still has access.
+     */
+    suspend fun openExternalUri(uri: Uri): Boolean {
+        val fileInfo = withContext(Dispatchers.IO) { runCatching { resolvePickedFile(uri) }.getOrNull() }
+            ?: return false
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        if (fileInfo.isVideo) {
+            rawVideo = listOf(fileInfo) + rawVideo
+            _uiState.value = _uiState.value.copy(selectedTab = 1)
+        } else {
+            rawAudio = listOf(fileInfo) + rawAudio
+            _uiState.value = _uiState.value.copy(selectedTab = 0)
+        }
+        recomputeDisplayed()
+        playSingle(fileInfo)
+        return true
+    }
+
     fun handlePickedFile(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
             val fileInfo = resolvePickedFile(uri) ?: return@launch

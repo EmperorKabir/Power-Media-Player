@@ -158,7 +158,9 @@ data class PositionUi(
     /** True while a bar is being dragged: the labels show the previewed point, not the player. */
     val scrubbing: Boolean = false,
     /** While the Full bar is dragged inside the current file: the chapter it would land in. */
-    val scrubChapterTitle: String? = null
+    val scrubChapterTitle: String? = null,
+    /** FOLDER-CH: the Track bar spans one FILE of a folder book (chapter times queue-absolute). */
+    val isFolderBook: Boolean = false
 )
 
 /**

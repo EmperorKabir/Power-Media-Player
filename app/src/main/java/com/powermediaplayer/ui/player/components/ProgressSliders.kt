@@ -267,9 +267,12 @@ private fun PositionSlider(
                                     // scrollable take the (still unconsumed) moves.
                                     val dy = kotlin.math.abs(change.position.y - startY)
                                     if (dy > touchSlopPx && dy > travelled) { abandoned = true; break }
-                                    if (ScrubMath.isTap(travelled, touchSlopPx)) {
-                                        change.consume(); continue
-                                    }
+                                    // SW1: sub-slop moves are left UNCONSUMED — the parent
+                                    // verticalScroll's slop detector gives up on the first
+                                    // consumed move, which killed slow vertical swipes. The
+                                    // DOWN is consumed (the Slider never starts) and the first
+                                    // move past horizontal slop is consumed below.
+                                    if (ScrubMath.isTap(travelled, touchSlopPx)) continue
                                     moved = true
                                     isDragging = true
                                     dragValue = value

@@ -687,9 +687,14 @@ class PlaybackConnection @Inject constructor(
         val timeline = c.currentTimeline
         val window = Timeline.Window()
         var cursor = 0L
+        val fc = folderChapters
         for (i in 0 until timeline.windowCount) {
             timeline.getWindow(i, window)
-            val winDur = window.durationMs
+            // SW8: a not-yet-prepared window reports TIME_UNSET; in a folder book the
+            // aggregator knows its length, so the seek lands in the right file.
+            val winDur = window.durationMs.takeIf { it > 0 }
+                ?: fc?.firstOrNull { it.index == i }?.let { it.endTimeMs - it.startTimeMs }
+                ?: 0L
             if (winDur <= 0) continue
             if (absolutePositionMs < cursor + winDur) {
                 c.seekTo(i, absolutePositionMs - cursor)

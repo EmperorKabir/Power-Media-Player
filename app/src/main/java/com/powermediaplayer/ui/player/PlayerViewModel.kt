@@ -735,7 +735,8 @@ class PlayerViewModel @Inject constructor(
             playlistProgress = playlistProgress,
             playlistPositionMs = ps.totalPlaylistPosition,
             playlistDurationMs = ps.totalPlaylistDuration,
-            chapterStartMs = chapterStart
+            chapterStartMs = chapterStart,
+            isFolderBook = ps.isFolderBook
         )
     }
 

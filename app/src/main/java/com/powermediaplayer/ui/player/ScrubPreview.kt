@@ -25,7 +25,9 @@ data class RawPosition(
      *  synced-lyrics panel keeps following playback instead of chasing the finger (AU3 #2). */
     val livePositionMs: Long = positionMs,
     val scrubbing: Boolean = false,
-    val scrubChapterTitle: String? = null
+    val scrubChapterTitle: String? = null,
+    /** FOLDER-CH: chapter times are queue-absolute (folder-as-book); A/B markers are file-relative. */
+    val isFolderBook: Boolean = false
 ) {
     fun format(): PositionUi = PositionUi(
         trackProgress = trackProgress,
@@ -43,7 +45,8 @@ data class RawPosition(
         totalPlaylistDurationMs = playlistDurationMs,
         positionMs = livePositionMs,
         scrubbing = scrubbing,
-        scrubChapterTitle = scrubChapterTitle
+        scrubChapterTitle = scrubChapterTitle,
+        isFolderBook = isFolderBook
     )
 }
 
@@ -99,6 +102,7 @@ fun applyScrubPreview(
                         trackProgress = if (chDur > 0) (pos.toFloat() / chDur).coerceIn(0f, 1f) else 0f,
                         positionMs = pos,
                         durationMs = chDur,
+                        chapterStartMs = ch.startTimeMs,   // SW10: same basis as the previewed bar
                         scrubChapterTitle = ch.title
                     )
                 }

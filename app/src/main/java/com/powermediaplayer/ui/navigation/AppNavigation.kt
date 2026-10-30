@@ -90,7 +90,9 @@ internal val ImmersiveVideoRailWidth = 80.dp
 fun AppNavigation(
     windowSizeClass: WindowSizeClass,
     initialOpenTab: String? = null,
-    onOpenTabConsumed: () -> Unit = {}
+    onOpenTabConsumed: () -> Unit = {},
+    /** OPEN-VIEW / SW2: the handed-over file could not be resolved — restore the last item. */
+    onOpenFailed: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -148,7 +150,7 @@ fun AppNavigation(
     androidx.compose.runtime.LaunchedEffect(openUri) {
         val uri = openUri ?: return@LaunchedEffect
         DeepLinkBus.consumeOpen(uri)
-        libraryViewModel.handlePickedFile(uri)
+        if (!libraryViewModel.openExternalUri(uri)) { onOpenFailed(); return@LaunchedEffect }
         navController.navigate(Screen.Player.route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true

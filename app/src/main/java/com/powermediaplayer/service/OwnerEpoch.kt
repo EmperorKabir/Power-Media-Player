@@ -3,8 +3,10 @@ package com.powermediaplayer.service
 /**
  * 2026-10-30 — who owns the shared [PlaybackConnection] right now.
  *
- * MainActivity is launchMode=standard, so a CLEAR_TOP launch (notification / widget tap while
- * the app is open) creates a NEW instance and finishes the old one, in that order:
+ * MainActivity is launchMode=standard. Two instances arise in normal use: a SINGLE_TOP tap while
+ * something (picker, sign-in tab) sits above MainActivity stacks a new instance on top, and a
+ * launcher-icon tap on a notification-rooted task adds one (AOSP isSameIntentFilter). Before vc135
+ * the launchers used CLEAR_TOP, which recreated the activity in the order
  * new.onCreate → new.onStart → new.onResume → old.onStop → old.onDestroy(isFinishing=true).
  * The old instance's onDestroy used to call disconnect() unconditionally and tore down the
  * MediaController the new instance had already adopted — every Library tap after that was

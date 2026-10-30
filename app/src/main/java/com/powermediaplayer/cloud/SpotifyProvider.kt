@@ -1583,6 +1583,9 @@ class SpotifyProvider @Inject constructor(
                                     "PMP_DIAG",
                                     "Spotify lyrics fetch START (banner ON) track=${snap.title}"
                                 )
+                                // SW11: a new lookup for this track starts with a fresh retry budget
+                                if (lyricsRetryAttempts.size > 256) lyricsRetryAttempts.clear()
+                                lyricsRetryAttempts.remove(key)
                                 fetchLyricsAsync(gen, snap)
                             }
                         }

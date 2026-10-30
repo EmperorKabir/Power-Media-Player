@@ -214,11 +214,15 @@ episode → show → global) via the Tune popup; see §4.
   `pm query-activities -a android.intent.action.VIEW -d 'powermediaplayer://callback?code=x'`
   (must list ONLY the AppAuth activity). The app-SSO path returns via startActivityForResult and
   never uses the filter, so the `sso` host is inert. The auth-lib's Custom-Tab FALLBACK (Spotify app
-  absent) cannot complete a grant (it redirects to `…://callback`, AppAuth's) — accepted: it was
-  already broken (it produced the chooser) and App Remote needs the Spotify app anyway.
+  absent) now cannot complete a grant (it redirects to `…://callback`, AppAuth's receiver); before
+  the change the chooser let the user pick the auth-lib entry. Accepted because App Remote needs
+  the Spotify app anyway, and MainActivity no longer opens the SSO when the app is absent (SW3).
 - **Every launch intent to MainActivity carries `NEW_TASK|SINGLE_TOP` + a per-target ACTION
   (`NowPlayingWidgetProvider.actionFor(tab)`) + `EXTRA_OPEN_TAB` — and NO CLEAR_TOP (vc135,
-  AU3).** CLEAR_TOP finished whatever sat above MainActivity in our task (a sign-in Custom Tab +
+  AU3). Deliberate exceptions: the two Spotify RETURN intents (`SpotifyAuthCompleteActivity`,
+  `SpotifyBounceBridgeActivity`) keep CLEAR_TOP|SINGLE_TOP at completion time. The shared
+  PlaybackConnection is released only by the LAST live MainActivity (`MainActivityHolder`
+  instance counter, SW4).** CLEAR_TOP finished whatever sat above MainActivity in our task (a sign-in Custom Tab +
   AppAuth's AuthorizationManagementActivity → cancel never fired → `oauthInFlight` stuck 5 min; the
   SAF picker; a permission dialog). The per-target action keeps PendingIntent records distinct
   (`filterEquals` ignores extras; `FLAG_UPDATE_CURRENT` rewrote a shared record). MainActivity is
@@ -243,7 +247,8 @@ episode → show → global) via the Tune popup; see §4.
   and the seek is issued on release; the preview is HELD after release until the live position
   lands near the target (≤2 s) so remote players (Spotify/Cast) do not snap the labels back. The
   thumb half-width is MEASURED from `SliderDefaults.Thumb` (material3 1.3.2 draws a 4 dp handle —
-  never assume 10 dp). A vertical swipe on the bar is handed to the parent scroll, RTL mirrors.
+  never assume 10 dp). A vertical swipe on the bar is handed to the parent scroll — sub-slop moves
+  must stay UNCONSUMED or the parent's slop detector gives up (SW1); RTL mirrors.
   The iOS "drag away from the bar for precision" pattern was proposed and REJECTED ("not
   remotely intuitive") — do not reintroduce it.
 - **LRCLib (lyrics) failures are classified (vc135, RT3).** FOUND / NOT_FOUND are cached; a SERVICE_ERROR
