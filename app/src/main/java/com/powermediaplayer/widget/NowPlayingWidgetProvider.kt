@@ -182,7 +182,10 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
      */
     private fun openPlayerIntent(context: Context): Intent =
         Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
             .putExtra(EXTRA_OPEN_TAB, TAB_PLAYER)
 
     private fun piSelf(context: Context, code: Int, action: String): PendingIntent {
@@ -201,6 +204,12 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
         const val ACTION_NEXT = "com.powermediaplayer.widget.NEXT"
         const val EXTRA_OPEN_TAB = "com.powermediaplayer.widget.OPEN_TAB"
         const val TAB_PLAYER = "player"
+        /** Offline-download notifications (2026-10-30): open the Library tab, Audio list. */
+        const val TAB_LIBRARY = "library"
+        /** Cloud tab (podcast + Drive download notifications). */
+        const val TAB_CLOUD = "cloud"
+        /** With TAB_CLOUD: the subscribed show (feed url) to reveal in the Podcasts section. */
+        const val EXTRA_PODCAST_FEED = "com.powermediaplayer.widget.PODCAST_FEED"
 
         /** Fired by the playback layer when state changes. */
         fun refresh(context: Context) {

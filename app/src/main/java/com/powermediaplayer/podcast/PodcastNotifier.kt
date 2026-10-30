@@ -54,14 +54,22 @@ object PodcastNotifier {
             return
         }
         ensureChannel(context)
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP) }
-        val pi = launch?.let {
-            PendingIntent.getActivity(
-                context, show.feedUrl.hashCode(), it,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        // 2026-10-30: a tap opens the Cloud tab with THIS show expanded in the Podcasts
+        // section (was the bare launch intent → whatever tab was last open).
+        val launch = Intent(context, com.powermediaplayer.MainActivity::class.java)
+            .addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
             )
-        }
+            .putExtra(
+                com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB,
+                com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_CLOUD
+            )
+            .putExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_PODCAST_FEED, show.feedUrl)
+        val pi: PendingIntent? = PendingIntent.getActivity(
+            context, show.feedUrl.hashCode(), launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val text = if (count == 1) (newestTitle ?: "1 new episode")
             else "$count new episodes" + (newestTitle?.let { ", latest: $it" } ?: "")
         val n = NotificationCompat.Builder(context, CHANNEL_ID)

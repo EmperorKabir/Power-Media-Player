@@ -781,6 +781,17 @@ fun PodcastsSection(
         } else {
             val counts by vm.feedCounts.collectAsStateWithLifecycle()
             var expandedFeed by remember { mutableStateOf<String?>(null) }
+            // 2026-10-30: a new-episode notification names its show — expand it, scroll the
+            // show list to it, then consume the deep link.
+            val pendingFeed by com.powermediaplayer.ui.navigation.DeepLinkBus.podcastFeed
+                .collectAsStateWithLifecycle()
+            androidx.compose.runtime.LaunchedEffect(pendingFeed, shows.size) {
+                val feed = pendingFeed ?: return@LaunchedEffect
+                if (shows.none { it.feedUrl == feed }) return@LaunchedEffect
+                expandedFeed = feed
+                kotlinx.coroutines.delay(700)   // give the list scroll (ReorderableShowList) time to land
+                com.powermediaplayer.ui.navigation.DeepLinkBus.consumePodcast(feed)
+            }
             var overrideEpisode by remember { mutableStateOf<PodcastEpisodeEntity?>(null) }
             var overrideShow by remember { mutableStateOf<PodcastShowEntity?>(null) }
             // #5 — reorderable subscribed shows (bounded list; the nested scroll
@@ -791,6 +802,7 @@ fun PodcastsSection(
                 shows = shows,
                 counts = counts,
                 expandedFeed = expandedFeed,
+                revealFeed = pendingFeed,
                 onToggleExpand = { feed -> expandedFeed = if (expandedFeed == feed) null else feed },
                 onUnsubscribe = { vm.unsubscribe(it) },
                 onOverrideShow = { overrideShow = it },

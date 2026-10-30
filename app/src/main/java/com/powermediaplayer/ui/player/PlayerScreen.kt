@@ -1202,7 +1202,7 @@ private fun OverlayContent(
         Spacer(modifier = Modifier.weight(1f))
         TrackInfoSection(uiState, coverColors)
         Spacer(modifier = Modifier.height(12.dp))
-        ChapterPickerChip(uiState, onShowChapterPicker)
+        ChapterPickerChip(uiState, onShowChapterPicker, viewModel)
         Spacer(modifier = Modifier.height(4.dp))
         PositionSection(
             viewModel = viewModel,
@@ -1544,7 +1544,7 @@ private fun PlayerScreenExpanded(
         ) {
             TrackInfoSection(uiState, coverColors)
             Spacer(modifier = Modifier.height(12.dp))
-            ChapterPickerChip(uiState, onShowChapterPicker)
+            ChapterPickerChip(uiState, onShowChapterPicker, viewModel)
             Spacer(modifier = Modifier.height(8.dp))
             PositionSection(
                 viewModel = viewModel,
@@ -2039,8 +2039,10 @@ private fun SyncedLyricsPanel(
  * Visible when chapters or playlist are available.
  */
 @Composable
-private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit) {
+private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit, viewModel: PlayerViewModel) {
     val hasChapters = uiState.hasChapters
+    // While the Full bar is dragged inside this file, show the chapter it would land in.
+    val scrubChapterTitle by viewModel.scrubChapterTitle.collectAsStateWithLifecycle()
     val hasPlaylist = uiState.totalTracks > 1
 
     if (!hasChapters && !hasPlaylist) {
@@ -2074,6 +2076,7 @@ private fun ChapterPickerChip(uiState: PlayerUiState, onClick: () -> Unit) {
     }
 
     val label = when {
+        scrubChapterTitle != null -> scrubChapterTitle!!
         hasChapters -> {
             val idx = uiState.currentChapterIndex
             val chapter = uiState.chapters.getOrNull(idx)
@@ -2343,6 +2346,11 @@ private fun PositionSection(
         onTrackSeek = { fraction ->
             viewModel.seekTo(pos.chapterStartMs + (fraction * pos.durationMs).toLong())
         },
+        // 2026-10-30: labels / time bubble / chapter chip follow the drag (see applyScrubPreview).
+        onTrackScrub = { viewModel.setScrubPreview(ScrubBar.TRACK, it) },
+        onTrackScrubEnd = { viewModel.clearScrubPreview() },
+        onPlaylistScrub = { viewModel.setScrubPreview(ScrubBar.FULL, it) },
+        onPlaylistScrubEnd = { viewModel.clearScrubPreview() },
         // #4 — Track time taps. Math mirrors onTrackSeek (chapterStartMs + ms).
         onTrackSeekToElapsedMs = {
             seekDialog = SeekDialogReq("Jump to time", pos.positionFormatted, pos.durationMs) { ms ->

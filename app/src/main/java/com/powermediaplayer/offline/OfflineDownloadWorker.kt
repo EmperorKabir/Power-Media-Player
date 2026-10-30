@@ -128,6 +128,7 @@ object OfflineDownloadNotifier {
             .setContentText(if (pct != null) "$title  ·  $pct%" else title)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
+            .setContentIntent(openTabIntent(context, uri, com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_CLOUD))
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         // Determinate bar once we know the size, so the user sees HOW FAR the
         // download got (survives leaving/closing the app); indeterminate until then.
@@ -140,6 +141,27 @@ object OfflineDownloadNotifier {
         else ForegroundInfo(id, n)
     }
 
+    /**
+     * 2026-10-30 (user video, issue 1): these notifications had NO content intent, so tapping
+     * "Saved offline" did nothing. Each one now opens its own section: a finished download opens
+     * the Library (Audio) tab, whose "Downloaded" section lists the saved file; a download in
+     * progress or a failed one opens the Cloud tab, where the Drive row shows the progress and
+     * offers the retry. Same deep-link extra the widget uses; NotificationTargetsTest asserts it.
+     */
+    private fun openTabIntent(context: Context, uri: String, tab: String): android.app.PendingIntent =
+        android.app.PendingIntent.getActivity(
+            context,
+            notifId(DONE_BASE, uri),
+            android.content.Intent(context, com.powermediaplayer.MainActivity::class.java)
+                .addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+                .putExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB, tab),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
     fun completed(context: Context, uri: String, title: String) {
         ensureChannel(context)
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -150,6 +172,7 @@ object OfflineDownloadNotifier {
                 .setContentText(title)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 .setAutoCancel(true)
+                .setContentIntent(openTabIntent(context, uri, com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_LIBRARY))
                 .build()
         )
     }
@@ -164,6 +187,7 @@ object OfflineDownloadNotifier {
                 .setContentText(reason?.let { "$title — $it" } ?: title)
                 .setSmallIcon(android.R.drawable.stat_notify_error)
                 .setAutoCancel(true)
+                .setContentIntent(openTabIntent(context, uri, com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_CLOUD))
                 .build()
         )
     }

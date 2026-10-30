@@ -102,6 +102,10 @@ fun AppNavigation(
     // recreation — fold/unfold density change, theme switch, font-size
     // change — re-fired the navigation and dumped the user onto the
     // Player tab from wherever they were).
+    // Shared ViewModel scoped to the NavGraph host — allows LibraryScreen to
+    // trigger playback and then navigate to the Player tab in one tap.
+    val libraryViewModel: LibraryViewModel = hiltViewModel()
+
     androidx.compose.runtime.LaunchedEffect(initialOpenTab) {
         when (initialOpenTab) {
             "player" -> {
@@ -112,12 +116,29 @@ fun AppNavigation(
                 }
                 onOpenTabConsumed()
             }
+            // 2026-10-30: the "Saved offline" / "Download failed" notifications land on the
+            // Library's Audio list, where the Downloaded section shows the file.
+            "library" -> {
+                navController.navigate(Screen.Library.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                libraryViewModel.setSelectedTab(0)
+                onOpenTabConsumed()
+            }
+            // New-episode and Drive download notifications land on the Cloud tab; the
+            // Cloud screen then reveals the show / section from the DeepLinkBus.
+            "cloud" -> {
+                navController.navigate(Screen.Cloud.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+                onOpenTabConsumed()
+            }
         }
     }
-
-    // Shared ViewModel scoped to the NavGraph host — allows LibraryScreen to
-    // trigger playback and then navigate to the Player tab in one tap.
-    val libraryViewModel: LibraryViewModel = hiltViewModel()
 
     // vc32: drill-ins PUSH the Player so back returns to the list the
     // user came from (Last Played / Library / Cloud / mini-player). The

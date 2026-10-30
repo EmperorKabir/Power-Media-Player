@@ -627,14 +627,31 @@ class PlayerViewModel @Inject constructor(
         playlistProgress = 0f
     )
 
+    /** 2026-10-30: while a bar is dragged the slider reports the fraction here; the labels,
+     *  time bubble and chapter chip follow it (see applyScrubPreview). Seek still fires on
+     *  release through the existing seekTo paths. */
+    private val _scrubPreview = MutableStateFlow<Pair<ScrubBar, Float>?>(null)
+    fun setScrubPreview(bar: ScrubBar, fraction: Float) { _scrubPreview.value = bar to fraction }
+    fun clearScrubPreview() { _scrubPreview.value = null }
+
     /** Position-derived state at full tick rate — collected ONLY by the
      *  slider section and the synced-lyrics panel (audit 3.3). */
     val positionUi: StateFlow<PositionUi> = combine(
         playbackConnection.playerState,
-        spotifyProvider.spotifyState
-    ) { ps, spotify -> computePositionUi(ps, spotify) }
+        spotifyProvider.spotifyState,
+        _scrubPreview
+    ) { ps, spotify, preview -> applyScrubPreview(computePositionUi(ps, spotify), ps.chapters, preview) }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PositionUi())
+
+    /** The chapter the Full bar would land in while it is dragged; null otherwise. Low-rate
+     *  (changes only during a drag) so the chapter chip can collect it without the tick-rate
+     *  recomposition the full positionUi would cause (audit 3.3). */
+    val scrubChapterTitle: StateFlow<String?> = positionUi
+        .map { it.scrubChapterTitle }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
 
     private fun computePositionUi(
         ps: PlayerState,

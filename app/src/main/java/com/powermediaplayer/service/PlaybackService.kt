@@ -2064,11 +2064,22 @@ class PlaybackService : MediaLibraryService() {
 
         com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackService.onCreate DONE")
 
-        // Create session activity intent for notification tap
+        // Create session activity intent for notification tap. 2026-10-30: it names the
+        // Player tab explicitly (it used to land on whatever tab was last open) and carries
+        // CLEAR_TOP|SINGLE_TOP so an OPEN app receives it via onNewIntent — with no flags the
+        // OS only brought the task forward and dropped the extra.
         val sessionActivityIntent = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            Intent(this, MainActivity::class.java)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+                .putExtra(
+                    com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB,
+                    com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_PLAYER
+                ),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 

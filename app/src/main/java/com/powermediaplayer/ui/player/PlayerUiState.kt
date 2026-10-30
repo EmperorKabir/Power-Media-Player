@@ -152,7 +152,11 @@ data class PositionUi(
     val chapterStartMs: Long = 0L,
     val durationMs: Long = 0L,
     val totalPlaylistDurationMs: Long = 0L,
-    val positionMs: Long = 0L
+    val positionMs: Long = 0L,
+    /** True while a bar is being dragged: the labels show the previewed point, not the player. */
+    val scrubbing: Boolean = false,
+    /** While the Full bar is dragged inside the current file: the chapter it would land in. */
+    val scrubChapterTitle: String? = null
 )
 
 /**

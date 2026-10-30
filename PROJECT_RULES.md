@@ -23,7 +23,10 @@
 
 ## 2. Current build coordinates (verify against `app/build.gradle.kts`)
 
-- **versionCode 134 / versionName 1.5.79** — current HEAD. Each Play upload MUST be a higher
+- **versionCode 135 / versionName 1.5.80** — current HEAD (vc135: the four phone-video fixes —
+  notification deep links to their own section, jump-dialog caret, speed-based scrub precision
+  with live labels, Spotify redirect-host clash — plus the OwnerEpoch controller guard; vc134
+  was the last Play closed-testing upload). Each Play upload MUST be a higher
   versionCode than whatever is live, and a distinct versionName. (Recent trail: vc85 Spotify
   sticky-sign-in PendingIntent fix; vc86-92 autoplay-off Spotify stop + App Remote scaffolding;
   vc93-96 App Remote SDK precise on-phone stop-at-end — BLOCKED on a Spotify-dashboard package+SHA-1
@@ -201,6 +204,36 @@ episode → show → global) via the Tune popup; see §4.
   → unsigned AAB rather than build failure (intended). AAB bundles `ndk.debugSymbolLevel = "SYMBOL_TABLE"`.
 - **Subtitle delay slider is UI-only** (logged placeholder) until a custom subtitle pipeline exists.
 - **Audio delay is positive-only** by design (a processor cannot pull audio earlier than video).
+- **Spotify redirect URI has exactly ONE handler (vc135).** AppAuth's `RedirectUriReceiverActivity`
+  owns `powermediaplayer://callback` (scheme-only filter, placeholder `appAuthRedirectScheme`). The
+  Spotify auth-lib 2.1.0 `LoginActivity` also registers a VIEW filter from the placeholders
+  `redirectSchemeName`/`redirectHostName`; its host is pinned to `sso` so it can never match the
+  AppAuth callback. If both match, the OS shows an "open with" chooser between two Power Media
+  Player entries and the AppAuth completion PendingIntent (SpotifyAuthCompleteActivity, vc85) is
+  dropped → sign-in sticks. Check with
+  `pm query-activities -a android.intent.action.VIEW -d 'powermediaplayer://callback?code=x'`
+  (must list ONLY the AppAuth activity). The app-SSO path returns via startActivityForResult and
+  never uses the filter, so the `sso` host is inert.
+- **Every launch intent to MainActivity carries `NEW_TASK|CLEAR_TOP|SINGLE_TOP` + `EXTRA_OPEN_TAB`
+  (vc135).** MainActivity is launchMode=standard: without SINGLE_TOP a CLEAR_TOP tap on an OPEN app
+  recreates the activity, and the old instance's `onDestroy(isFinishing=true)` ran AFTER the new
+  one adopted the shared MediaController — `PlaybackConnection.disconnect()` killed it and every
+  Library tap parked as "setMediaItems deferred: controller not bound" until the app was
+  backgrounded (phone-proven). Guard = `OwnerEpoch`: `connect(): Int` claims an epoch, MainActivity
+  stores it, `disconnect(epoch)` is ignored for a superseded owner. Without any flags the OS only
+  brings the task forward and DROPS the extra (the media notification did this). Tab vocabulary:
+  `TAB_PLAYER` / `TAB_LIBRARY` / `TAB_CLOUD` (+ `EXTRA_PODCAST_FEED` via `DeepLinkBus`). Targets:
+  Saved offline → Library/Audio (Downloaded); Saving/failed + new episodes → Cloud (show expanded);
+  media notification, widget, Spotify bounce → Player; alarm → its own full-screen activity.
+- **Scrub model (user-specified, vc135): finger speed = precision.** `ScrubMath.gain(v) =
+  (|v| / 400 dp/s).coerceIn(0.05, 1)`, EMA-smoothed; the drag is RELATIVE to the current position,
+  a tap still jumps, labels + chapter chip + a time bubble follow the finger (VM `_scrubPreview`),
+  and the seek is issued on release. The iOS "drag away from the bar for precision" pattern was
+  proposed and REJECTED ("not remotely intuitive") — do not reintroduce it.
+- **Jump-to dialog keeps the caret at the end (vc135).** `SeekTimeDialog` uses `TextFieldValue`
+  with `TextRange(masked.length)`; a plain `String` state let Compose restore the caret to its old
+  numeric index after `maskTimeDigits` inserted the colon, so digits typed after it landed
+  mid-string (1,4,2,6 → "14:62"). `SeekTimeInputTest` simulates IME insertion at the caret.
 
 ## 6. Working preferences (binding)
 

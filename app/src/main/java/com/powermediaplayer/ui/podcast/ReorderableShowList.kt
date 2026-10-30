@@ -56,9 +56,16 @@ fun ReorderableShowList(
     onUnsubscribe: (String) -> Unit,
     onOverrideShow: (PodcastShowEntity) -> Unit,
     onMove: (Int, Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 2026-10-30: a show to scroll into view inside the capped list (notification deep link). */
+    revealFeed: String? = null
 ) {
     val listState = rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(revealFeed, shows.size) {
+        val feed = revealFeed ?: return@LaunchedEffect
+        val idx = shows.indexOfFirst { it.feedUrl == feed }
+        if (idx >= 0) listState.animateScrollToItem(idx)
+    }
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
         onMove(from.index, to.index)
     }

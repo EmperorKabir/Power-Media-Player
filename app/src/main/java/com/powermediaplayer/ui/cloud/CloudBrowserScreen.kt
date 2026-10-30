@@ -474,9 +474,26 @@ fun CloudBrowserScreen(
             }
         )
 
+        // 2026-10-30 notification deep link: a new-episode notification names a show. Leave any
+        // provider browse, then scroll the top-level list to the Podcasts section; the section
+        // itself expands the show (and consumes the target) once it is composed.
+        val pendingPodcastFeed by com.powermediaplayer.ui.navigation.DeepLinkBus.podcastFeed
+            .collectAsStateWithLifecycle()
+        val cloudListState = androidx.compose.foundation.lazy.rememberLazyListState()
+        androidx.compose.runtime.LaunchedEffect(pendingPodcastFeed) {
+            if (pendingPodcastFeed == null) return@LaunchedEffect
+            if (uiState.activeProvider != null) viewModel.navigateToRoot()
+            // Let the top-level list compose, then bring the Podcasts item into view.
+            kotlinx.coroutines.delay(150)
+            val total = cloudListState.layoutInfo.totalItemsCount
+            if (total > 0) cloudListState.scrollToItem(total - 1)
+            cloudListState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "podcasts_cloud" }
+                ?.let { cloudListState.animateScrollToItem(it.index) }
+        }
         if (uiState.activeProvider == null) {
             // Provider selection / sign-in state
             androidx.compose.foundation.lazy.LazyColumn(
+                state = cloudListState,
                 modifier = Modifier.fillMaxSize()
             ) {
                 // Drive box FIRST, then §1 Drive favourites directly under it

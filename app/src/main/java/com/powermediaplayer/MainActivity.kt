@@ -141,6 +141,8 @@ class MainActivity : FragmentActivity() {
      * from racing the cold-start restore onCreate has already armed.
      */
     private var hasBeenBackgrounded = false
+    /** This instance's ownership of the shared PlaybackConnection (see OwnerEpoch). */
+    private var connectionEpoch = -1
 
     /** One warm-resume restore attempt at a time (onStart can re-enter). */
     private val foregroundRestoreInFlight =
@@ -155,7 +157,7 @@ class MainActivity : FragmentActivity() {
         // survived that kill NOTHING rebuilt the controller — the UI sat on a
         // dead connection until the process itself was killed. connect() early
         // -returns while a future is in flight, so calling it here is idempotent.
-        playbackConnection.connect()
+        connectionEpoch = playbackConnection.connect()
         if (hasBeenBackgrounded) {
             hasBeenBackgrounded = false
             maybeRestoreOnForeground("returned to foreground")
@@ -279,7 +281,7 @@ class MainActivity : FragmentActivity() {
             }
         }
         // (helpers for the deep-link lifecycle live below onCreate)
-        playbackConnection.connect()
+        connectionEpoch = playbackConnection.connect()
         // Playback-session side effects run exactly once per process
         // (audit 3.1/8.4) — idempotent ignition, not lifecycle-bound.
         sessionCoordinator.start()
@@ -475,6 +477,14 @@ class MainActivity : FragmentActivity() {
             // Recreation re-reads this intent — never re-navigate.
             i.removeExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB)
         }
+        // 2026-10-30: a notification's finer target (e.g. which podcast show) rides on the
+        // DeepLinkBus; the Cloud screen reveals it once composed and consumes it.
+        i.getStringExtra(
+            com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_PODCAST_FEED
+        )?.let {
+            com.powermediaplayer.ui.navigation.DeepLinkBus.revealPodcast(it)
+            i.removeExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_PODCAST_FEED)
+        }
     }
 
     /** Called by AppNavigation once the deep-link navigation has fired. */
@@ -535,7 +545,9 @@ class MainActivity : FragmentActivity() {
             "MainActivity.onDestroy isFinishing=$isFinishing"
         )
         if (isFinishing) {
-            playbackConnection.disconnect()
+            // Pass our epoch: after a CLEAR_TOP replacement the NEW instance owns the
+            // connection and this (finishing) instance must leave it alone.
+            playbackConnection.disconnect(connectionEpoch)
         }
     }
 

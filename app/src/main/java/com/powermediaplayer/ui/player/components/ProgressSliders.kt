@@ -6,8 +6,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.powermediaplayer.ui.theme.*
@@ -34,6 +39,9 @@ fun ProgressSliders(
     trackRemainingFormatted: String,
     trackSliderEnabled: Boolean,
     onTrackSeek: (Float) -> Unit,
+    // 2026-10-30: live scrub preview (fraction while dragging; end on release).
+    onTrackScrub: ((Float) -> Unit)? = null,
+    onTrackScrubEnd: (() -> Unit)? = null,
     // Full / playlist slider
     playlistPosition: Float,
     playlistPositionFormatted: String,
@@ -41,6 +49,8 @@ fun ProgressSliders(
     playlistRemainingFormatted: String,
     playlistSliderEnabled: Boolean,
     onPlaylistSeek: (Float) -> Unit,
+    onPlaylistScrub: ((Float) -> Unit)? = null,
+    onPlaylistScrubEnd: (() -> Unit)? = null,
     // #4 — tapping a time label opens the numeric-jump dialog (handled upward,
     // since this composable only knows fractions). Track + Full each get a pair.
     onTrackSeekToElapsedMs: (() -> Unit)? = null,
@@ -73,6 +83,8 @@ fun ProgressSliders(
             remainingFormatted = trackRemainingFormatted,
             enabled = trackSliderEnabled,
             onSeek = onTrackSeek,
+            onScrub = onTrackScrub,
+            onScrubEnd = onTrackScrubEnd,
             onSeekToElapsedMs = onTrackSeekToElapsedMs,
             onSeekToRemainingMs = onTrackSeekToRemainingMs,
             activeColor = TealAccent,
@@ -111,6 +123,8 @@ fun ProgressSliders(
             remainingFormatted = playlistRemainingFormatted,
             enabled = playlistSliderEnabled,
             onSeek = onPlaylistSeek,
+            onScrub = onPlaylistScrub,
+            onScrubEnd = onPlaylistScrubEnd,
             onSeekToElapsedMs = onPlaylistSeekToElapsedMs,
             onSeekToRemainingMs = onPlaylistSeekToRemainingMs,
             activeColor = Teal300
@@ -120,8 +134,14 @@ fun ProgressSliders(
 
 /**
  * Single slider with labelled time positions.
- * Only fires [onSeek] when the user lifts their finger (onValueChangeFinished),
- * avoiding stuttering from rapid intermediate seeks.
+ * Only fires [onSeek] when the user lifts their finger, avoiding stuttering from rapid
+ * intermediate seeks. 2026-10-30 (user video, issue 3): the drag is now handled by this
+ * composable itself (the Material slider only draws): the thumb moves RELATIVE to the finger
+ * with a gain that depends on the finger's speed — a quick sweep tracks the finger 1:1, a slow
+ * deliberate drag moves the thumb a fraction of the finger distance (down to 5%), so slow =
+ * precise. The drag fraction is reported through [onScrub] so the labels, a time bubble above
+ * the thumb and the chapter chip follow the finger; [onScrubEnd] fires on release. A press
+ * that never moves past the touch slop is still a tap-to-seek. See ScrubMath / ScrubMathTest.
  */
 @Composable
 private fun PositionSlider(
@@ -131,6 +151,8 @@ private fun PositionSlider(
     remainingFormatted: String,
     enabled: Boolean,
     onSeek: (Float) -> Unit,
+    onScrub: ((Float) -> Unit)? = null,
+    onScrubEnd: (() -> Unit)? = null,
     onSeekToElapsedMs: (() -> Unit)? = null,
     onSeekToRemainingMs: (() -> Unit)? = null,
     activeColor: androidx.compose.ui.graphics.Color = TealAccent,
@@ -169,19 +191,86 @@ private fun PositionSlider(
         9.sp.toPx()
     }
 
+    // Precision-scrub gesture state (see the composable KDoc).
+    var widthPx by remember { mutableFloatStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val touchSlopPx = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
+    val thumbHalfPx = with(density) { 10.dp.toPx() }
+    val shownValue = if (isDragging) dragValue else (pendingSeek ?: position)
+    // Latest display value for the gesture handler (a drag starts from what is on screen).
+    val shownValueState = androidx.compose.runtime.rememberUpdatedState(shownValue)
+    val onSeekState = androidx.compose.runtime.rememberUpdatedState(onSeek)
+    val onScrubState = androidx.compose.runtime.rememberUpdatedState(onScrub)
+    val onScrubEndState = androidx.compose.runtime.rememberUpdatedState(onScrubEnd)
+
     Column(modifier = modifier.fillMaxWidth()) {
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { widthPx = it.width.toFloat() }
+                .pointerInput(enabled) {
+                    if (!enabled) return@pointerInput
+                    awaitEachGesture {
+                        // Initial pass + consume: the Material slider below never sees the
+                        // touch, so it cannot snap the thumb under the finger.
+                        val down = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
+                        )
+                        down.consume()
+                        val startX = down.position.x
+                        var lastX = startX
+                        var lastT = down.uptimeMillis
+                        var travelled = 0f
+                        var velocityDpPerS = 0f
+                        var moved = false
+                        var value = shownValueState.value
+                        val trackPx = (widthPx - 2f * thumbHalfPx).coerceAtLeast(1f)
+                        while (true) {
+                            val event = awaitPointerEvent(
+                                androidx.compose.ui.input.pointer.PointerEventPass.Initial
+                            )
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) { change.consume(); break }
+                            val dx = change.position.x - lastX
+                            val dtMs = (change.uptimeMillis - lastT).coerceAtLeast(1L)
+                            lastX = change.position.x
+                            lastT = change.uptimeMillis
+                            travelled += kotlin.math.abs(dx)
+                            if (!moved && ScrubMath.isTap(travelled, touchSlopPx)) {
+                                change.consume(); continue
+                            }
+                            if (!moved) {
+                                moved = true
+                                isDragging = true
+                                dragValue = value
+                            }
+                            val sampleDpPerS = (kotlin.math.abs(dx) / density.density) / (dtMs / 1000f)
+                            velocityDpPerS = ScrubMath.smoothVelocity(velocityDpPerS, sampleDpPerS)
+                            value = ScrubMath.step(value, dx, trackPx, ScrubMath.gain(velocityDpPerS))
+                            dragValue = value
+                            onScrubState.value?.invoke(value)
+                            change.consume()
+                        }
+                        if (!moved) {
+                            // Tap: jump to the tapped point (the Material slider's old behaviour).
+                            val f = ScrubMath.fractionAt(startX, widthPx, thumbHalfPx)
+                            onSeekState.value(f)
+                            pendingSeek = f
+                        } else {
+                            onSeekState.value(dragValue)
+                            pendingSeek = dragValue
+                            isDragging = false
+                        }
+                        onScrubEndState.value?.invoke()
+                    }
+                }
+        ) {
         Slider(
-            value = if (isDragging) dragValue else (pendingSeek ?: position),
-            onValueChange = { value ->
-                isDragging = true
-                dragValue = value
-            },
-            onValueChangeFinished = {
-                onSeek(dragValue)
-                pendingSeek = dragValue
-                isDragging = false
-            },
+            value = shownValue,
+            // Touches are consumed above; this only serves accessibility actions
+            // (TalkBack "adjust"), which still seek directly.
+            onValueChange = { value -> if (!isDragging) { onSeek(value); pendingSeek = value } },
             enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
@@ -246,6 +335,27 @@ private fun PositionSlider(
                 }
                 abStartFraction?.let { marker(it, aColor, "A") }
                 abEndFraction?.let { marker(it, activeColor, "B") }
+            }
+        }
+        // Time bubble above the thumb while dragging: the previewed time (the labels
+        // below follow too, but the eye is on the bar).
+        if (isDragging && widthPx > 0f) {
+            val trackPx = (widthPx - 2f * thumbHalfPx).coerceAtLeast(1f)
+            val x = thumbHalfPx + shownValue.coerceIn(0f, 1f) * trackPx
+            Surface(
+                color = activeColor,
+                shape = MaterialTheme.shapes.small,
+                tonalElevation = 2.dp,
+                modifier = Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(0, -34.dp.roundToPx()) }
+                    .graphicsLayer { translationX = x - size.width / 2f }
+            ) {
+                Text(
+                    text = positionFormatted,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.ui.graphics.Color.Black,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
             }
         }
         }

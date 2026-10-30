@@ -14,7 +14,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.powermediaplayer.ui.theme.DisabledGrey
 import com.powermediaplayer.ui.theme.SurfaceElevated
@@ -62,6 +64,18 @@ fun maskTimeDigits(raw: String): String {
 }
 
 /**
+ * The field's next (text, caret) after any edit: the masked text with the caret at its END.
+ * 2026-10-30 (user video): with a plain String state, the mask growing "14"+"2" into "1:42"
+ * left the caret at its old index 3, i.e. BEFORE the last digit, so the next digit was
+ * inserted in the middle ("14:62" for 1,4,2,6). Digits fill in from the right, so the only
+ * sensible caret is the end. Pure; see SeekTimeInputTest.
+ */
+fun timeInputAfterEdit(raw: String): Pair<String, Int> {
+    val masked = maskTimeDigits(raw)
+    return masked to masked.length
+}
+
+/**
  * #4 — numeric time-entry dialog. Tapping the elapsed/remaining time labels on
  * either player layout opens this; the caller supplies the title, the current
  * formatted value as a hint, the seekable ceiling, and the seek action. One
@@ -75,7 +89,8 @@ fun SeekTimeDialog(
     onConfirmMs: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var text by remember { mutableStateOf("") }
+    var field by remember { mutableStateOf(TextFieldValue("")) }
+    val text = field.text
     val parsed = parseTimeToMs(text)
     val valid = parsed != null && parsed in 0..maxMs
     AlertDialog(
@@ -91,10 +106,14 @@ fun SeekTimeDialog(
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
                 OutlinedTextField(
-                    value = text,
+                    value = field,
                     // Numeric keypad has no colon key; auto-insert colons from the
-                    // digits the user types so h:mm:ss is enterable without one.
-                    onValueChange = { text = maskTimeDigits(it) },
+                    // digits the user types so h:mm:ss is enterable without one. The
+                    // caret is pinned to the end after every edit (see timeInputAfterEdit).
+                    onValueChange = { v ->
+                        val (masked, caret) = timeInputAfterEdit(v.text)
+                        field = TextFieldValue(masked, TextRange(caret))
+                    },
                     singleLine = true,
                     isError = text.isNotEmpty() && !valid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

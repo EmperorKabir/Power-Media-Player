@@ -33,8 +33,8 @@ android {
         // orientation locks to trip the large-screen rule, no native .so
         // (16 KB page rule moot), WorkManager unaffected.
         targetSdk = 36
-        versionCode = 134
-        versionName = "1.5.79"
+        versionCode = 135
+        versionName = "1.5.80"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -56,11 +56,20 @@ android {
         // placeholder so its RedirectUriReceiverActivity can be auto-merged.
         manifestPlaceholders["appAuthRedirectScheme"] = "powermediaplayer"
         // Spotify auth-lib (SSO) requires the redirect scheme + host as placeholders
-        // (since 2.0.0). Reuses the dashboard-registered powermediaplayer://callback;
-        // SSO returns via onActivityResult (Spotify app path), so its AuthCallbackActivity
-        // does not clash with AppAuth's receiver at runtime.
+        // (since 2.0.0); they feed the intent-filter of its exported LoginActivity.
+        // 2026-10-30 (user video, issue 4): with host "callback" that filter matched the
+        // SAME uri as AppAuth's RedirectUriReceiverActivity (scheme-only filter), so the
+        // browser redirect of the MAIN Spotify sign-in resolved to TWO exported activities
+        // and Android showed a chooser ("2 Power Media Player apps"); picking the auth-lib
+        // one dropped the AppAuth completion → "stuck signing in". Device-proven:
+        // `pm query-activities -a VIEW -d powermediaplayer://callback` listed both.
+        // The auth-lib's app-SSO path (the one App Remote needs) returns through
+        // startActivityForResult inside LoginActivity and never uses this filter
+        // (decompiled 2.1.0: SpotifyNativeAuthUtil passes REDIRECT_URI as an intent extra),
+        // so the filter only needs a host that AppAuth never redirects to. The SSO request
+        // itself keeps the dashboard-registered powermediaplayer://callback.
         manifestPlaceholders["redirectSchemeName"] = "powermediaplayer"
-        manifestPlaceholders["redirectHostName"] = "callback"
+        manifestPlaceholders["redirectHostName"] = "sso"
     }
 
     // Release signing configured from local.properties (gitignored). When

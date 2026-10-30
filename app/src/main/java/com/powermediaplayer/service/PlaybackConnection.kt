@@ -152,6 +152,8 @@ class PlaybackConnection @Inject constructor(
 ) {
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
+    /** Which Activity instance owns this connection (see [OwnerEpoch]). */
+    private val owner = OwnerEpoch()
     /** I3b — a play request that arrived BEFORE the MediaController finished binding
      *  (e.g. tapping a Library track immediately after a cold launch). Without this the
      *  `controller?.let{}` guard silently dropped it and the user landed on an empty player.
@@ -266,13 +268,17 @@ class PlaybackConnection @Inject constructor(
 
     /**
      * Connect to the PlaybackService. Call from Activity onCreate.
+     *
+     * @return the caller's ownership epoch — pass it to [disconnect] so a superseded Activity
+     *   instance (CLEAR_TOP replacement) cannot tear down the connection its successor adopted.
      */
-    fun connect() {
+    fun connect(): Int {
+        val epoch = owner.claim()
         if (controllerFuture != null) {
             com.powermediaplayer.diag.DiagLog.lifecycle(
-                "PlaybackConnection.connect() skipped, future already in flight"
+                "PlaybackConnection.connect() skipped, future already in flight (owner epoch=$epoch)"
             )
-            return
+            return epoch
         }
         com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackConnection.connect() START")
 
@@ -337,13 +343,22 @@ class PlaybackConnection @Inject constructor(
                 )
             }
         }, MoreExecutors.directExecutor())
+        return epoch
     }
 
     /**
-     * Disconnect from the PlaybackService. Call from Activity onDestroy.
+     * Disconnect from the PlaybackService. Call from Activity onDestroy with the epoch that
+     * instance's [connect] returned; a stale epoch means a newer instance owns the connection
+     * now (CLEAR_TOP replacement) and the call is ignored. `-1` (no epoch) always disconnects.
      */
-    fun disconnect() {
-        com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackConnection.disconnect() called")
+    fun disconnect(epoch: Int = -1) {
+        if (epoch != -1 && !owner.isCurrent(epoch)) {
+            com.powermediaplayer.diag.DiagLog.lifecycle(
+                "PlaybackConnection.disconnect() ignored: epoch=$epoch superseded by a newer owner"
+            )
+            return
+        }
+        com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackConnection.disconnect() called (epoch=$epoch)")
         positionPollingJob?.cancel()
         controllerFuture?.let {
             MediaController.releaseFuture(it)

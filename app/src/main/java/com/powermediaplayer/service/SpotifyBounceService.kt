@@ -32,10 +32,25 @@ class SpotifyBounceService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
+        // 2026-10-30: a tap brings the player back (it had no tap action).
+        val openPlayer = android.app.PendingIntent.getActivity(
+            this, 0,
+            Intent(this, com.powermediaplayer.MainActivity::class.java)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+                .putExtra(
+                    com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB,
+                    com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_PLAYER
+                ),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("Switching to Spotify…")
             .setContentText("Bringing the app back in a moment.")
+            .setContentIntent(openPlayer)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)
