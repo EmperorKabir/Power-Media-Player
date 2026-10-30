@@ -57,10 +57,10 @@ object PodcastNotifier {
         // 2026-10-30: a tap opens the Cloud tab with THIS show expanded in the Podcasts
         // section (was the bare launch intent → whatever tab was last open).
         val launch = Intent(context, com.powermediaplayer.MainActivity::class.java)
-            .addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-            )
+            // One action per show: distinct PendingIntent records even if two request codes
+            // collide (AU3 #6). No CLEAR_TOP (see NowPlayingWidgetProvider.openPlayerIntent).
+            .setAction(com.powermediaplayer.widget.NowPlayingWidgetProvider.ACTION_OPEN_TAB_PREFIX + "podcast:" + show.feedUrl)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(
                 com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB,
                 com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_CLOUD

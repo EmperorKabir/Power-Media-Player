@@ -41,13 +41,23 @@ class NotificationTargetsTest {
     }
 
     /**
-     * CLEAR_TOP|SINGLE_TOP: an OPEN app receives the tap via onNewIntent instead of being
-     * recreated (the recreate let the finishing instance tear down the player connection —
-     * see OwnerEpoch). Same flag pair the Spotify handoff uses.
+     * SINGLE_TOP (an OPEN app receives the tap via onNewIntent instead of being recreated) and
+     * deliberately NO CLEAR_TOP (it would finish a sign-in Custom Tab / picker sitting above
+     * MainActivity — AU3 #2). Each target carries its own action (AU3 #6).
      */
     private fun assertReusesOpenActivity(i: android.content.Intent) {
-        val want = android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
-        assertEquals("CLEAR_TOP|SINGLE_TOP on the launch intent", want, i.flags and want)
+        assertEquals("SINGLE_TOP set", android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            i.flags and android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        assertEquals("CLEAR_TOP must NOT be set", 0, i.flags and android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        assertNotNull("a per-target action", i.action)
+    }
+
+    /** AU3 #6: the progress (Cloud) record for a uri must not overwrite its "Saved offline" (Library) record. */
+    @Test fun savedOfflineKeepsItsTargetWhenTheSameFileIsSavedAgain() {
+        OfflineDownloadNotifier.completed(ctx, "drive://file-9", "A book")
+        OfflineDownloadNotifier.progressForeground(ctx, "drive://file-9", "A book", 10)   // re-save starts
+        val extras = postedIntentExtras(idFor(200000, "drive://file-9"))
+        assertEquals(NowPlayingWidgetProvider.TAB_LIBRARY, extras.getString(NowPlayingWidgetProvider.EXTRA_OPEN_TAB))
     }
 
     private fun idFor(base: Int, uri: String) = base + (uri.hashCode() and 0xFFFF)

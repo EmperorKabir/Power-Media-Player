@@ -139,7 +139,8 @@ data class LocalMetadataOverride(
 /**
  * Singleton connection manager between the UI and PlaybackService.
  * Manages the MediaController lifecycle and exposes reactive player state via StateFlow.
- * Position updates use coroutine polling (250ms) to avoid callback storms on the UI thread.
+ * Position updates use coroutine polling (500 ms, see startPositionPolling) to avoid callback
+ * storms on the UI thread.
  */
 private val VIDEO_EXTENSIONS = setOf(
     "mp4", "m4v", "mkv", "webm", "mov", "avi", "wmv", "flv",
@@ -367,7 +368,7 @@ class PlaybackConnection @Inject constructor(
      * now (CLEAR_TOP replacement) and the call is ignored. `-1` (no epoch) always disconnects.
      */
     fun disconnect(epoch: Int = -1) {
-        if (epoch != -1 && !owner.isCurrent(epoch)) {
+        if (!owner.mayDisconnect(epoch)) {
             com.powermediaplayer.diag.DiagLog.lifecycle(
                 "PlaybackConnection.disconnect() ignored: epoch=$epoch superseded by a newer owner"
             )

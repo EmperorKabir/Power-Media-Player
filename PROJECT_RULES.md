@@ -213,14 +213,23 @@ episode → show → global) via the Tune popup; see §4.
   dropped → sign-in sticks. Check with
   `pm query-activities -a android.intent.action.VIEW -d 'powermediaplayer://callback?code=x'`
   (must list ONLY the AppAuth activity). The app-SSO path returns via startActivityForResult and
-  never uses the filter, so the `sso` host is inert.
-- **Every launch intent to MainActivity carries `NEW_TASK|CLEAR_TOP|SINGLE_TOP` + `EXTRA_OPEN_TAB`
-  (vc135).** MainActivity is launchMode=standard: without SINGLE_TOP a CLEAR_TOP tap on an OPEN app
-  recreates the activity, and the old instance's `onDestroy(isFinishing=true)` ran AFTER the new
-  one adopted the shared MediaController — `PlaybackConnection.disconnect()` killed it and every
+  never uses the filter, so the `sso` host is inert. The auth-lib's Custom-Tab FALLBACK (Spotify app
+  absent) cannot complete a grant (it redirects to `…://callback`, AppAuth's) — accepted: it was
+  already broken (it produced the chooser) and App Remote needs the Spotify app anyway.
+- **Every launch intent to MainActivity carries `NEW_TASK|SINGLE_TOP` + a per-target ACTION
+  (`NowPlayingWidgetProvider.actionFor(tab)`) + `EXTRA_OPEN_TAB` — and NO CLEAR_TOP (vc135,
+  AU3).** CLEAR_TOP finished whatever sat above MainActivity in our task (a sign-in Custom Tab +
+  AppAuth's AuthorizationManagementActivity → cancel never fired → `oauthInFlight` stuck 5 min; the
+  SAF picker; a permission dialog). The per-target action keeps PendingIntent records distinct
+  (`filterEquals` ignores extras; `FLAG_UPDATE_CURRENT` rewrote a shared record). MainActivity is
+  launchMode=standard: a CLEAR_TOP tap on an OPEN app recreated the activity, and the old
+  instance's `onDestroy(isFinishing=true)` ran AFTER the new one adopted the shared MediaController — `PlaybackConnection.disconnect()` killed it and every
   Library tap parked as "setMediaItems deferred: controller not bound" until the app was
   backgrounded (phone-proven). Guard = `OwnerEpoch`: `connect(): Int` claims an epoch, MainActivity
-  stores it, `disconnect(epoch)` is ignored for a superseded owner. ONLY MainActivity calls
+  stores it, `disconnect(epoch)` is ignored for a superseded owner (`OwnerEpoch.mayDisconnect`).
+  Two instances DO still happen in normal use — a task rooted by a notification tap plus a later
+  launcher-icon tap (AOSP `isSameIntentFilter`), or a SINGLE_TOP tap while something sits above
+  MainActivity — phone-proven 2026-10-30; the guard is what keeps the player alive then. ONLY MainActivity calls
   `connect()`; the service's external-controller path calls `ensureConnected()` (no claim) — a
   claiming caller there would make the Activity's exit disconnect look superseded and leak the
   controller. Without any flags the OS only
@@ -231,8 +240,15 @@ episode → show → global) via the Tune popup; see §4.
 - **Scrub model (user-specified, vc135): finger speed = precision.** `ScrubMath.gain(v) =
   (|v| / 400 dp/s).coerceIn(0.05, 1)`, EMA-smoothed; the drag is RELATIVE to the current position,
   a tap still jumps, labels + chapter chip + a time bubble follow the finger (VM `_scrubPreview`),
-  and the seek is issued on release. The iOS "drag away from the bar for precision" pattern was
-  proposed and REJECTED ("not remotely intuitive") — do not reintroduce it.
+  and the seek is issued on release; the preview is HELD after release until the live position
+  lands near the target (≤2 s) so remote players (Spotify/Cast) do not snap the labels back. The
+  thumb half-width is MEASURED from `SliderDefaults.Thumb` (material3 1.3.2 draws a 4 dp handle —
+  never assume 10 dp). A vertical swipe on the bar is handed to the parent scroll, RTL mirrors.
+  The iOS "drag away from the bar for precision" pattern was proposed and REJECTED ("not
+  remotely intuitive") — do not reintroduce it.
+- **Library permissions are per tab (vc135, LIB-PERM):** `LibraryPermissions` — the Audio tab gates
+  on READ_MEDIA_AUDIO, the Video tab on READ_MEDIA_VIDEO; each tab prompts for exactly what it
+  lacks when shown (both at once on a fresh install). Never gate both tabs on one flag again.
 - **Jump-to dialog keeps the caret at the end (vc135).** `SeekTimeDialog` uses `TextFieldValue`
   with `TextRange(masked.length)`; a plain `String` state let Compose restore the caret to its old
   numeric index after `maskTimeDigits` inserted the colon, so digits typed after it landed

@@ -222,37 +222,37 @@ fun LibraryScreen(
         )
     }
 
-    // Permission handling
-    var hasPermission by remember {
-        val permission = if (Build.VERSION.SDK_INT >= 33) {
-            Manifest.permission.READ_MEDIA_AUDIO
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
-        )
+    // Permission handling — LIB-PERM (2026-10-30): one state per media permission; each tab
+    // gates on its own and prompts for what it lacks (see LibraryPermissions).
+    fun granted(perm: String) =
+        ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+    var hasAudio by remember {
+        mutableStateOf(granted(LibraryPermissions.permissionFor(LibraryPermissions.TAB_AUDIO)))
     }
+    var hasVideo by remember {
+        mutableStateOf(granted(LibraryPermissions.permissionFor(LibraryPermissions.TAB_VIDEO)))
+    }
+    // Either media permission unlocks the Library-wide features (first-run deep-scan prompt).
+    val hasPermission = hasAudio || hasVideo
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        hasPermission = results.values.any { it }
-        if (hasPermission) viewModel.refreshMedia()
+        if (Build.VERSION.SDK_INT >= 33) {
+            results[Manifest.permission.READ_MEDIA_AUDIO]?.let { hasAudio = it }
+            results[Manifest.permission.READ_MEDIA_VIDEO]?.let { hasVideo = it }
+        } else {
+            results[Manifest.permission.READ_EXTERNAL_STORAGE]?.let { hasAudio = it; hasVideo = it }
+        }
+        if (results.values.any { it }) viewModel.refreshMedia()
     }
 
-    LaunchedEffect(Unit) {
-        if (!hasPermission) {
-            val permissions = if (Build.VERSION.SDK_INT >= 33) {
-                arrayOf(
-                    Manifest.permission.READ_MEDIA_AUDIO,
-                    Manifest.permission.READ_MEDIA_VIDEO
-                )
-            } else {
-                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-            permissionLauncher.launch(permissions)
-        }
+    // Prompt when a tab is shown without its permission: both at once on a fresh install (the
+    // original single prompt), otherwise just the missing one. A permanently denied permission
+    // returns at once with no dialog, and the tab's "permission required" panel takes over.
+    LaunchedEffect(uiState.selectedTab) {
+        val ask = LibraryPermissions.toRequest(uiState.selectedTab, hasAudio, hasVideo)
+        if (ask.isNotEmpty()) permissionLauncher.launch(ask)
     }
 
     // SAF File Picker
@@ -540,8 +540,8 @@ fun LibraryScreen(
         }
 
         // ── Content ──────────────────────────────────────────────
-        if (!hasPermission) {
-            // Permission not granted
+        if (!LibraryPermissions.granted(uiState.selectedTab, hasAudio, hasVideo)) {
+            // This tab's permission is not granted
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -555,22 +555,18 @@ fun LibraryScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Storage permission required",
+                        text = LibraryPermissions.title(uiState.selectedTab),
                         style = MaterialTheme.typography.titleMedium,
                         color = TextSecondary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     FilledTonalButton(
                         onClick = {
-                            val permissions = if (Build.VERSION.SDK_INT >= 33) {
-                                arrayOf(
-                                    Manifest.permission.READ_MEDIA_AUDIO,
-                                    Manifest.permission.READ_MEDIA_VIDEO
-                                )
-                            } else {
-                                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-                            }
-                            permissionLauncher.launch(permissions)
+                            val ask = LibraryPermissions.toRequest(uiState.selectedTab, hasAudio, hasVideo)
+                            permissionLauncher.launch(
+                                if (ask.isNotEmpty()) ask
+                                else arrayOf(LibraryPermissions.permissionFor(uiState.selectedTab))
+                            )
                         },
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = Teal800,

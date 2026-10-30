@@ -41,7 +41,7 @@ fun ProgressSliders(
     onTrackSeek: (Float) -> Unit,
     // 2026-10-30: live scrub preview (fraction while dragging; end on release).
     onTrackScrub: ((Float) -> Unit)? = null,
-    onTrackScrubEnd: (() -> Unit)? = null,
+    onTrackScrubEnd: ((seeked: Boolean) -> Unit)? = null,
     // Full / playlist slider
     playlistPosition: Float,
     playlistPositionFormatted: String,
@@ -50,7 +50,7 @@ fun ProgressSliders(
     playlistSliderEnabled: Boolean,
     onPlaylistSeek: (Float) -> Unit,
     onPlaylistScrub: ((Float) -> Unit)? = null,
-    onPlaylistScrubEnd: (() -> Unit)? = null,
+    onPlaylistScrubEnd: ((seeked: Boolean) -> Unit)? = null,
     // #4 — tapping a time label opens the numeric-jump dialog (handled upward,
     // since this composable only knows fractions). Track + Full each get a pair.
     onTrackSeekToElapsedMs: (() -> Unit)? = null,
@@ -143,6 +143,7 @@ fun ProgressSliders(
  * the thumb and the chapter chip follow the finger; [onScrubEnd] fires on release. A press
  * that never moves past the touch slop is still a tap-to-seek. See ScrubMath / ScrubMathTest.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun PositionSlider(
     position: Float,
@@ -152,7 +153,7 @@ private fun PositionSlider(
     enabled: Boolean,
     onSeek: (Float) -> Unit,
     onScrub: ((Float) -> Unit)? = null,
-    onScrubEnd: (() -> Unit)? = null,
+    onScrubEnd: ((seeked: Boolean) -> Unit)? = null,
     onSeekToElapsedMs: (() -> Unit)? = null,
     onSeekToRemainingMs: (() -> Unit)? = null,
     activeColor: androidx.compose.ui.graphics.Color = TealAccent,
@@ -195,13 +196,28 @@ private fun PositionSlider(
     var widthPx by remember { mutableFloatStateOf(0f) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val touchSlopPx = androidx.compose.ui.platform.LocalViewConfiguration.current.touchSlop
-    val thumbHalfPx = with(density) { 10.dp.toPx() }
+    // AU3 #4: the thumb is MEASURED (Material 3 1.3's default handle is 4 dp wide, not the
+    // 20 dp disc the old constant assumed), so tap-to-seek and the bubble line up with the
+    // track the Slider actually draws. Until the first layout, assume the 4 dp handle.
+    val interactionSource = androidx.compose.runtime.remember {
+        androidx.compose.foundation.interaction.MutableInteractionSource()
+    }
+    var thumbWidthPx by androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val thumbHalfPx = if (thumbWidthPx > 0f) thumbWidthPx / 2f else with(density) { 2.dp.toPx() }
+    // AU3 #10: RTL mirrors the bar (0 on the right).
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current ==
+        androidx.compose.ui.unit.LayoutDirection.Rtl
     val shownValue = if (isDragging) dragValue else (pendingSeek ?: position)
     // Latest display value for the gesture handler (a drag starts from what is on screen).
     val shownValueState = androidx.compose.runtime.rememberUpdatedState(shownValue)
     val onSeekState = androidx.compose.runtime.rememberUpdatedState(onSeek)
     val onScrubState = androidx.compose.runtime.rememberUpdatedState(onScrub)
     val onScrubEndState = androidx.compose.runtime.rememberUpdatedState(onScrubEnd)
+    // Leaving composition mid-drag (tab switch from a notification, player layout swap):
+    // release the preview so the labels and chip go back to live playback.
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose { if (isDragging) { isDragging = false; onScrubEndState.value?.invoke(false) } }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
@@ -219,53 +235,86 @@ private fun PositionSlider(
                         )
                         down.consume()
                         val startX = down.position.x
+                        val startY = down.position.y
                         var lastX = startX
                         var lastT = down.uptimeMillis
                         var travelled = 0f
                         var velocityDpPerS = 0f
                         var moved = false
+                        var abandoned = false
+                        var completed = false   // set only when the gesture ends normally (release)
                         var value = shownValueState.value
                         val trackPx = (widthPx - 2f * thumbHalfPx).coerceAtLeast(1f)
-                        while (true) {
-                            val event = awaitPointerEvent(
-                                androidx.compose.ui.input.pointer.PointerEventPass.Initial
-                            )
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) { change.consume(); break }
-                            val dx = change.position.x - lastX
-                            val dtMs = (change.uptimeMillis - lastT).coerceAtLeast(1L)
-                            lastX = change.position.x
-                            lastT = change.uptimeMillis
-                            travelled += kotlin.math.abs(dx)
-                            if (!moved && ScrubMath.isTap(travelled, touchSlopPx)) {
-                                change.consume(); continue
-                            }
-                            if (!moved) {
-                                moved = true
-                                isDragging = true
+                        // AU3 #3: whatever ends this gesture — release, a pointerInput restart
+                        // when `enabled` flips mid-drag, or the slider leaving composition —
+                        // the drag state and the view-model preview are released in `finally`.
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent(
+                                    androidx.compose.ui.input.pointer.PointerEventPass.Initial
+                                )
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) { change.consume(); break }
+                                val dxRaw = change.position.x - lastX
+                                val dx = if (rtl) -dxRaw else dxRaw
+                                val dtMs = (change.uptimeMillis - lastT).coerceAtLeast(1L)
+                                lastX = change.position.x
+                                lastT = change.uptimeMillis
+                                travelled += kotlin.math.abs(dxRaw)
+                                if (!moved) {
+                                    // AU3 #9: a vertical swipe that starts on the bar is a
+                                    // scroll, not a seek — stop consuming and let the parent
+                                    // scrollable take the (still unconsumed) moves.
+                                    val dy = kotlin.math.abs(change.position.y - startY)
+                                    if (dy > touchSlopPx && dy > travelled) { abandoned = true; break }
+                                    if (ScrubMath.isTap(travelled, touchSlopPx)) {
+                                        change.consume(); continue
+                                    }
+                                    moved = true
+                                    isDragging = true
+                                    dragValue = value
+                                }
+                                val sampleDpPerS = (kotlin.math.abs(dx) / density.density) / (dtMs / 1000f)
+                                velocityDpPerS = ScrubMath.smoothVelocity(velocityDpPerS, sampleDpPerS)
+                                value = ScrubMath.step(value, dx, trackPx, ScrubMath.gain(velocityDpPerS))
                                 dragValue = value
+                                onScrubState.value?.invoke(value)
+                                change.consume()
                             }
-                            val sampleDpPerS = (kotlin.math.abs(dx) / density.density) / (dtMs / 1000f)
-                            velocityDpPerS = ScrubMath.smoothVelocity(velocityDpPerS, sampleDpPerS)
-                            value = ScrubMath.step(value, dx, trackPx, ScrubMath.gain(velocityDpPerS))
-                            dragValue = value
-                            onScrubState.value?.invoke(value)
-                            change.consume()
-                        }
-                        if (!moved) {
-                            // Tap: jump to the tapped point (the Material slider's old behaviour).
-                            val f = ScrubMath.fractionAt(startX, widthPx, thumbHalfPx)
-                            onSeekState.value(f)
-                            pendingSeek = f
-                        } else {
-                            onSeekState.value(dragValue)
-                            pendingSeek = dragValue
+                            if (abandoned) return@awaitEachGesture
+                            if (!moved) {
+                                // Tap: jump to the tapped point (the Material slider's old behaviour).
+                                val raw = ScrubMath.fractionAt(startX, widthPx, thumbHalfPx)
+                                val f = if (rtl) 1f - raw else raw
+                                onSeekState.value(f)
+                                pendingSeek = f
+                            } else {
+                                onSeekState.value(dragValue)
+                                pendingSeek = dragValue
+                            }
+                            completed = true
+                        } finally {
+                            val wasDragging = isDragging
                             isDragging = false
+                            // seeked = the drag completed normally (seek issued above); a
+                            // cancelled drag (pointerInput restart / disposal) releases the
+                            // preview without a seek.
+                            if (wasDragging) onScrubEndState.value?.invoke(moved && !abandoned && completed)
                         }
-                        onScrubEndState.value?.invoke()
                     }
                 }
         ) {
+        val sliderColors = SliderDefaults.colors(
+            thumbColor = activeColor,
+            activeTrackColor = activeColor,
+            // Tinted teal instead of plain grey so the unfilled
+            // portion reads as part of the same control surface.
+            inactiveTrackColor = if (enabled) activeColor.copy(alpha = 0.25f)
+                else activeColor.copy(alpha = 0.12f),
+            disabledThumbColor = DisabledGrey,
+            disabledActiveTrackColor = DisabledGrey.copy(alpha = 0.5f),
+            disabledInactiveTrackColor = activeColor.copy(alpha = 0.12f)
+        )
         Slider(
             value = shownValue,
             // Touches are consumed above; this only serves accessibility actions
@@ -275,17 +324,18 @@ private fun PositionSlider(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(28.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = activeColor,
-                activeTrackColor = activeColor,
-                // Tinted teal instead of plain grey so the unfilled
-                // portion reads as part of the same control surface.
-                inactiveTrackColor = if (enabled) activeColor.copy(alpha = 0.25f)
-                    else activeColor.copy(alpha = 0.12f),
-                disabledThumbColor = DisabledGrey,
-                disabledActiveTrackColor = DisabledGrey.copy(alpha = 0.5f),
-                disabledInactiveTrackColor = activeColor.copy(alpha = 0.12f)
-            )
+            colors = sliderColors,
+            interactionSource = interactionSource,
+            // The default thumb, measured: its real width drives tap-to-seek, the bubble and
+            // the A-B markers (AU3 #4).
+            thumb = {
+                SliderDefaults.Thumb(
+                    interactionSource = interactionSource,
+                    colors = sliderColors,
+                    enabled = enabled,
+                    modifier = Modifier.onSizeChanged { thumbWidthPx = it.width.toFloat() }
+                )
+            }
         )
         // ── Live A-B loop markers ────────────────────────────────
         // Drawn ON the track: a labelled tick at A and B, plus a tinted
@@ -296,7 +346,7 @@ private fun PositionSlider(
             val pendingColor = androidx.compose.ui.graphics.Color(0xFFFFB300)
             val aColor = if (loopActive) activeColor else pendingColor
             androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
-                val thumb = 10.dp.toPx()
+                val thumb = thumbHalfPx
                 val trackW = (size.width - 2 * thumb).coerceAtLeast(1f)
                 val cy = size.height / 2f
                 val topY = cy - 7.dp.toPx()
@@ -340,15 +390,19 @@ private fun PositionSlider(
         // Time bubble above the thumb while dragging: the previewed time (the labels
         // below follow too, but the eye is on the bar).
         if (isDragging && widthPx > 0f) {
-            val trackPx = (widthPx - 2f * thumbHalfPx).coerceAtLeast(1f)
-            val x = thumbHalfPx + shownValue.coerceIn(0f, 1f) * trackPx
             Surface(
                 color = activeColor,
                 shape = MaterialTheme.shapes.small,
                 tonalElevation = 2.dp,
                 modifier = Modifier
                     .offset { androidx.compose.ui.unit.IntOffset(0, -34.dp.roundToPx()) }
-                    .graphicsLayer { translationX = x - size.width / 2f }
+                    .graphicsLayer {
+                        // State reads here run in the layer, not in composition (AU3 eff #4).
+                        val trackPx = (widthPx - 2f * thumbHalfPx).coerceAtLeast(1f)
+                        val f = dragValue.coerceIn(0f, 1f)
+                        val x = thumbHalfPx + (if (rtl) 1f - f else f) * trackPx
+                        translationX = x - size.width / 2f
+                    }
             ) {
                 Text(
                     text = positionFormatted,

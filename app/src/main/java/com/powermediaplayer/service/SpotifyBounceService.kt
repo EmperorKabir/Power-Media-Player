@@ -36,10 +36,11 @@ class SpotifyBounceService : Service() {
         val openPlayer = android.app.PendingIntent.getActivity(
             this, 0,
             Intent(this, com.powermediaplayer.MainActivity::class.java)
-                .addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP
-                )
+                .setAction(com.powermediaplayer.widget.NowPlayingWidgetProvider.actionFor(
+                    com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_PLAYER
+                ))
+                // No CLEAR_TOP (see NowPlayingWidgetProvider.openPlayerIntent).
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra(
                     com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB,
                     com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_PLAYER

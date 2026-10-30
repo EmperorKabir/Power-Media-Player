@@ -481,14 +481,26 @@ fun CloudBrowserScreen(
             .collectAsStateWithLifecycle()
         val cloudListState = androidx.compose.foundation.lazy.rememberLazyListState()
         androidx.compose.runtime.LaunchedEffect(pendingPodcastFeed) {
-            if (pendingPodcastFeed == null) return@LaunchedEffect
+            val feed = pendingPodcastFeed ?: return@LaunchedEffect
             if (uiState.activeProvider != null) viewModel.navigateToRoot()
-            // Let the top-level list compose, then bring the Podcasts item into view.
+            // Let the top-level list compose, then bring the Podcasts item into view: jump to
+            // the end and walk back a viewport at a time until the item is composed (AU3 #7:
+            // an expanded Downloads section taller than the screen hid it before).
             kotlinx.coroutines.delay(150)
             val total = cloudListState.layoutInfo.totalItemsCount
             if (total > 0) cloudListState.scrollToItem(total - 1)
-            cloudListState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == "podcasts_cloud" }
-                ?.let { cloudListState.animateScrollToItem(it.index) }
+            for (step in 0 until 8) {
+                val info = cloudListState.layoutInfo.visibleItemsInfo
+                val hit = info.firstOrNull { it.key == "podcasts_cloud" }
+                if (hit != null) { cloudListState.animateScrollToItem(hit.index); break }
+                val first = info.firstOrNull()?.index ?: 0
+                if (first == 0) break
+                cloudListState.scrollToItem((first - info.size).coerceAtLeast(0))
+            }
+            // Safety net (AU3 #1): PodcastsSection consumes on arrival; if it never composed,
+            // release the request here so later Cloud visits do not replay the jump.
+            kotlinx.coroutines.delay(2500)
+            com.powermediaplayer.ui.navigation.DeepLinkBus.consumePodcast(feed)
         }
         if (uiState.activeProvider == null) {
             // Provider selection / sign-in state

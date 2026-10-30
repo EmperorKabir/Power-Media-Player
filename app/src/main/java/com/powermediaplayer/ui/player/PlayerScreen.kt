@@ -2348,9 +2348,9 @@ private fun PositionSection(
         },
         // 2026-10-30: labels / time bubble / chapter chip follow the drag (see applyScrubPreview).
         onTrackScrub = { viewModel.setScrubPreview(ScrubBar.TRACK, it) },
-        onTrackScrubEnd = { viewModel.clearScrubPreview() },
+        onTrackScrubEnd = { seeked -> viewModel.clearScrubPreview(seeked) },
         onPlaylistScrub = { viewModel.setScrubPreview(ScrubBar.FULL, it) },
-        onPlaylistScrubEnd = { viewModel.clearScrubPreview() },
+        onPlaylistScrubEnd = { seeked -> viewModel.clearScrubPreview(seeked) },
         // #4 — Track time taps. Math mirrors onTrackSeek (chapterStartMs + ms).
         onTrackSeekToElapsedMs = {
             seekDialog = SeekDialogReq("Jump to time", pos.positionFormatted, pos.durationMs) { ms ->

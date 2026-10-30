@@ -51,6 +51,9 @@ class OfflineDownloadWorker @AssistedInject constructor(
         // an indeterminate spinner that gave no "part downloaded" feedback.
         val r = kotlinx.coroutines.coroutineScope {
             val progressId = runCatching { offlineMediaManager.progressIdFor(uri) }.getOrNull()
+            val progressTap = OfflineDownloadNotifier.openTabIntent(
+                appContext, uri, com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_CLOUD
+            )
             val pj = if (progressId != null) launch {
                 var lastPct = -1
                 com.powermediaplayer.util.DownloadProgressBus.progressFor(progressId).collect { p ->
@@ -60,7 +63,7 @@ class OfflineDownloadWorker @AssistedInject constructor(
                             lastPct = pct
                             runCatching {
                                 setForeground(
-                                    OfflineDownloadNotifier.progressForeground(appContext, uri, title, pct)
+                                    OfflineDownloadNotifier.progressForeground(appContext, uri, title, pct, progressTap)
                                 )
                             }
                         }
@@ -121,14 +124,21 @@ object OfflineDownloadNotifier {
         }
     }
 
-    fun progressForeground(context: Context, uri: String, title: String, pct: Int? = null): ForegroundInfo {
+    /** [contentIntent]: the worker builds the tap action once per download and passes it in
+     *  (AU3 eff #5: one ActivityManager round-trip per 1 % tick otherwise); null builds one. */
+    fun progressForeground(
+        context: Context, uri: String, title: String, pct: Int? = null,
+        contentIntent: android.app.PendingIntent? = null
+    ): ForegroundInfo {
         ensureChannel(context)
         val builder = NotificationCompat.Builder(context, CHANNEL)
             .setContentTitle("Saving offline")
             .setContentText(if (pct != null) "$title  ·  $pct%" else title)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
-            .setContentIntent(openTabIntent(context, uri, com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_CLOUD))
+            .setContentIntent(
+                contentIntent ?: openTabIntent(context, uri, com.powermediaplayer.widget.NowPlayingWidgetProvider.TAB_CLOUD)
+            )
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         // Determinate bar once we know the size, so the user sees HOW FAR the
         // download got (survives leaving/closing the app); indeterminate until then.
@@ -148,14 +158,16 @@ object OfflineDownloadNotifier {
      * progress or a failed one opens the Cloud tab, where the Drive row shows the progress and
      * offers the retry. Same deep-link extra the widget uses; NotificationTargetsTest asserts it.
      */
-    private fun openTabIntent(context: Context, uri: String, tab: String): android.app.PendingIntent =
+    fun openTabIntent(context: Context, uri: String, tab: String): android.app.PendingIntent =
         android.app.PendingIntent.getActivity(
             context,
             notifId(DONE_BASE, uri),
             android.content.Intent(context, com.powermediaplayer.MainActivity::class.java)
+                // Per-target ACTION: the progress (Cloud) and completed (Library) records for
+                // one uri no longer overwrite each other (AU3 #6). No CLEAR_TOP (AU3 #2).
+                .setAction(com.powermediaplayer.widget.NowPlayingWidgetProvider.actionFor(tab))
                 .addFlags(
                     android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
-                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or
                         android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP
                 )
                 .putExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB, tab),

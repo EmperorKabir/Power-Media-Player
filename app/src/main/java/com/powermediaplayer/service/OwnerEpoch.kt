@@ -22,4 +22,7 @@ class OwnerEpoch {
 
     /** True while no later claim has happened. */
     fun isCurrent(epoch: Int): Boolean = epoch == current
+
+    /** The disconnect rule: `-1` (no epoch) always may; otherwise only the current owner may. */
+    fun mayDisconnect(epoch: Int): Boolean = epoch == -1 || isCurrent(epoch)
 }

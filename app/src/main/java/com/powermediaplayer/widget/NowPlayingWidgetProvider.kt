@@ -182,10 +182,14 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
      */
     private fun openPlayerIntent(context: Context): Intent =
         Intent(context, MainActivity::class.java)
-            .addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                    Intent.FLAG_ACTIVITY_SINGLE_TOP
-            )
+            .setAction(actionFor(TAB_PLAYER))
+            // NEW_TASK|SINGLE_TOP, deliberately WITHOUT CLEAR_TOP (AU3 #2): CLEAR_TOP finished
+            // whatever sat above MainActivity in our task — an in-progress sign-in Custom Tab,
+            // the SAF picker, a permission dialog — and AppAuth's cancel never fired, so a
+            // sign-in stuck for its 5 min deadline. SINGLE_TOP alone reuses an open
+            // MainActivity via onNewIntent; if something is above it, Android stacks a new
+            // instance on top and OwnerEpoch keeps the player connection intact.
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(EXTRA_OPEN_TAB, TAB_PLAYER)
 
     private fun piSelf(context: Context, code: Int, action: String): PendingIntent {
@@ -208,6 +212,14 @@ class NowPlayingWidgetProvider : AppWidgetProvider() {
         const val TAB_LIBRARY = "library"
         /** Cloud tab (podcast + Drive download notifications). */
         const val TAB_CLOUD = "cloud"
+        /**
+         * AU3 #6: launch intents that differ only by extras are `filterEquals`-identical, so a
+         * `FLAG_UPDATE_CURRENT` for one notification rewrote the record another one still held
+         * (a re-saved file flipped the old "Saved offline" tap to the Cloud tab). Each target
+         * gets its own ACTION (MainActivity ignores the action; it reads the extras).
+         */
+        const val ACTION_OPEN_TAB_PREFIX = "com.powermediaplayer.action.OPEN_TAB."
+        fun actionFor(tab: String) = ACTION_OPEN_TAB_PREFIX + tab
         /** With TAB_CLOUD: the subscribed show (feed url) to reveal in the Podcasts section. */
         const val EXTRA_PODCAST_FEED = "com.powermediaplayer.widget.PODCAST_FEED"
 

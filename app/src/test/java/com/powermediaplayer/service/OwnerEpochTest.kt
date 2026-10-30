@@ -20,16 +20,15 @@ class OwnerEpochTest {
         assertTrue(o.isCurrent(new))
     }
 
-    /**
-     * The service's external-controller path (Bluetooth / system UI / car) must NOT claim: it
-     * calls ensureConnected(), which never touches the epoch, so the Activity's final
-     * disconnect(epoch) still releases the controller.
-     */
-    @Test fun nonOwnerEnsureConnectedDoesNotSupersedeTheOwner() {
+    /** The exact rule PlaybackConnection.disconnect(epoch) applies. */
+    @Test fun disconnectRule() {
         val o = OwnerEpoch()
-        val activity = o.claim()
-        // ensureConnected() performs no claim — nothing to call on the epoch here, by design
-        assertTrue(o.isCurrent(activity))
+        val old = o.claim()
+        assertTrue("sole owner may disconnect", o.mayDisconnect(old))
+        assertTrue("no-epoch caller always may", o.mayDisconnect(-1))
+        val new = o.claim()
+        assertFalse("superseded owner may not", o.mayDisconnect(old))
+        assertTrue("current owner may", o.mayDisconnect(new))
     }
 
     @Test fun reconnectByTheSameOwnerMovesTheEpochForward() {

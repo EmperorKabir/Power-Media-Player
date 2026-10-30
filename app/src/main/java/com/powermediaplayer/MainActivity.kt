@@ -242,7 +242,11 @@ class MainActivity : FragmentActivity() {
         // §C20 — first-launch deep-link extra (the widget tap path).
         // Strip it from the sticky intent too: recreation re-reads the
         // SAME intent and would re-arm the navigation (audit 6.2).
-        readOpenTabExtra(intent)
+        // AU3 #8: a task ROOTED by a notification tap re-delivers the same intent when the
+        // user reopens it from Recents after a process death (system_server keeps its own
+        // copy; removeExtra below only edits ours). That relaunch arrives WITH saved state,
+        // so the extras are honoured only on a genuine first create and stripped otherwise.
+        readOpenTabExtra(intent, honour = savedInstanceState == null)
         // Audit 6.5 — bare enableEdgeToEdge() keys bar-icon appearance
         // off the SYSTEM theme; the app is hard-forced dark, so a
         // system-light device got dark icons over pure black. Explicit
@@ -469,11 +473,11 @@ class MainActivity : FragmentActivity() {
         readOpenTabExtra(intent)
     }
 
-    private fun readOpenTabExtra(i: android.content.Intent) {
+    private fun readOpenTabExtra(i: android.content.Intent, honour: Boolean = true) {
         i.getStringExtra(
             com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB
         )?.let {
-            pendingOpenTab.value = it
+            if (honour) pendingOpenTab.value = it
             // Recreation re-reads this intent — never re-navigate.
             i.removeExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_OPEN_TAB)
         }
@@ -482,7 +486,7 @@ class MainActivity : FragmentActivity() {
         i.getStringExtra(
             com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_PODCAST_FEED
         )?.let {
-            com.powermediaplayer.ui.navigation.DeepLinkBus.revealPodcast(it)
+            if (honour) com.powermediaplayer.ui.navigation.DeepLinkBus.revealPodcast(it)
             i.removeExtra(com.powermediaplayer.widget.NowPlayingWidgetProvider.EXTRA_PODCAST_FEED)
         }
     }

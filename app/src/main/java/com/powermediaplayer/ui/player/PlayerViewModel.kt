@@ -1,5 +1,9 @@
 package com.powermediaplayer.ui.player
 
+import kotlinx.coroutines.withTimeoutOrNull
+
+import kotlinx.coroutines.flow.first
+
 import android.media.AudioManager
 import android.content.Context
 import androidx.lifecycle.ViewModel
@@ -631,8 +635,41 @@ class PlayerViewModel @Inject constructor(
      *  time bubble and chapter chip follow it (see applyScrubPreview). Seek still fires on
      *  release through the existing seekTo paths. */
     private val _scrubPreview = MutableStateFlow<Pair<ScrubBar, Float>?>(null)
-    fun setScrubPreview(bar: ScrubBar, fraction: Float) { _scrubPreview.value = bar to fraction }
-    fun clearScrubPreview() { _scrubPreview.value = null }
+    private var scrubReleaseJob: kotlinx.coroutines.Job? = null
+    fun setScrubPreview(bar: ScrubBar, fraction: Float) {
+        scrubReleaseJob?.cancel()
+        _scrubPreview.value = bar to fraction
+    }
+
+    /**
+     * Finger lifted. [seeked] = a seek was issued for the previewed point: keep the preview until
+     * the player reports a position near it (local Media3 masks the seek within a tick, Spotify
+     * polls ~1 s, Cast later still) or 2 s pass — otherwise the labels snapped back to the old
+     * position and then jumped (AU3 #5). A cancelled gesture (no seek) clears at once; a new
+     * drag replaces the preview outright.
+     */
+    fun clearScrubPreview(seeked: Boolean = false) {
+        val p = _scrubPreview.value ?: return
+        scrubReleaseJob?.cancel()
+        if (!seeked) { _scrubPreview.value = null; return }
+        val (bar, f) = p
+        scrubReleaseJob = viewModelScope.launch {
+            withTimeoutOrNull(2000) {
+                combine(playbackConnection.playerState, spotifyProvider.spotifyState) { ps, s ->
+                    val raw = computeRawPosition(ps, s)
+                    val target = if (bar == ScrubBar.TRACK) raw.chapterStartMs + (f * raw.durationMs).toLong()
+                        else (f * raw.playlistDurationMs).toLong()
+                    val live = when {
+                        s != null -> s.positionMs
+                        bar == ScrubBar.TRACK -> ps.currentPosition
+                        else -> ps.totalPlaylistPosition
+                    }
+                    kotlin.math.abs(live - target) <= 1500L
+                }.first { it }
+            }
+            if (_scrubPreview.value === p) _scrubPreview.value = null
+        }
+    }
 
     /** Position-derived state at full tick rate — collected ONLY by the
      *  slider section and the synced-lyrics panel (audit 3.3). */
@@ -640,7 +677,7 @@ class PlayerViewModel @Inject constructor(
         playbackConnection.playerState,
         spotifyProvider.spotifyState,
         _scrubPreview
-    ) { ps, spotify, preview -> applyScrubPreview(computePositionUi(ps, spotify), ps.chapters, preview) }
+    ) { ps, spotify, preview -> applyScrubPreview(computeRawPosition(ps, spotify), ps.chapters, preview).format() }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PositionUi())
 
@@ -653,28 +690,23 @@ class PlayerViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
 
-    private fun computePositionUi(
+    /** Raw (unformatted) position model; formatted once per emission by [RawPosition.format]. */
+    private fun computeRawPosition(
         ps: PlayerState,
         s: SpotifyPlaybackState?
-    ): PositionUi {
+    ): RawPosition {
         if (s != null) {
             val pos = s.positionMs.coerceAtLeast(0L)
             val dur = s.durationMs.coerceAtLeast(0L)
-            val rem = (dur - pos).coerceAtLeast(0L)
             val prog = if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
-            return PositionUi(
+            return RawPosition(
                 trackProgress = prog,
-                positionFormatted = TimeFormatter.formatDuration(pos),
-                durationFormatted = TimeFormatter.formatDuration(dur),
-                remainingFormatted = "-" + TimeFormatter.formatDuration(rem),
-                playlistProgress = prog,
-                playlistPositionFormatted = TimeFormatter.formatDuration(pos),
-                playlistDurationFormatted = TimeFormatter.formatDuration(dur),
-                playlistRemainingFormatted = "-" + TimeFormatter.formatDuration(rem),
-                chapterStartMs = 0L,
+                positionMs = pos,
                 durationMs = dur,
-                totalPlaylistDurationMs = dur,
-                positionMs = pos
+                playlistProgress = prog,
+                playlistPositionMs = pos,
+                playlistDurationMs = dur,
+                chapterStartMs = 0L
             )
         }
         // Chapter-relative maths — mirrors mapToUiState's slider scope.
@@ -694,22 +726,14 @@ class PlayerViewModel @Inject constructor(
         } else 0f
         val displayedPos = if (inChapter) chapterPos else ps.currentPosition
         val displayedDur = if (inChapter) chapterDuration else ps.duration
-        val trackRemaining = (displayedDur - displayedPos).coerceAtLeast(0L)
-        val playlistRemaining =
-            (ps.totalPlaylistDuration - ps.totalPlaylistPosition).coerceAtLeast(0L)
-        return PositionUi(
+        return RawPosition(
             trackProgress = trackProgress,
-            positionFormatted = TimeFormatter.formatDuration(displayedPos),
-            durationFormatted = TimeFormatter.formatDuration(displayedDur),
-            remainingFormatted = "-" + TimeFormatter.formatDuration(trackRemaining),
-            playlistProgress = playlistProgress,
-            playlistPositionFormatted = TimeFormatter.formatDuration(ps.totalPlaylistPosition),
-            playlistDurationFormatted = TimeFormatter.formatDuration(ps.totalPlaylistDuration),
-            playlistRemainingFormatted = "-" + TimeFormatter.formatDuration(playlistRemaining),
-            chapterStartMs = chapterStart,
+            positionMs = displayedPos,
             durationMs = displayedDur,
-            totalPlaylistDurationMs = ps.totalPlaylistDuration,
-            positionMs = displayedPos
+            playlistProgress = playlistProgress,
+            playlistPositionMs = ps.totalPlaylistPosition,
+            playlistDurationMs = ps.totalPlaylistDuration,
+            chapterStartMs = chapterStart
         )
     }
 

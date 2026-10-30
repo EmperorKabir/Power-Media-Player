@@ -7,6 +7,47 @@ import com.powermediaplayer.util.TimeFormatter
 enum class ScrubBar { TRACK, FULL }
 
 /**
+ * Position model in raw milliseconds. The view model derives it per tick / per pointer move,
+ * applies a scrub preview to it, and formats it ONCE with [format] (AU3 efficiency #3: the old
+ * path formatted eight labels and then overwrote up to six of them per pointer event).
+ */
+data class RawPosition(
+    val trackProgress: Float,
+    /** Displayed Track-bar position: chapter-relative inside a chapter, else file-relative. */
+    val positionMs: Long,
+    /** Displayed Track-bar length (chapter or file). */
+    val durationMs: Long,
+    val playlistProgress: Float,
+    val playlistPositionMs: Long,
+    val playlistDurationMs: Long,
+    val chapterStartMs: Long,
+    /** The LIVE displayed position. A TRACK preview moves [positionMs] but not this, so the
+     *  synced-lyrics panel keeps following playback instead of chasing the finger (AU3 #2). */
+    val livePositionMs: Long = positionMs,
+    val scrubbing: Boolean = false,
+    val scrubChapterTitle: String? = null
+) {
+    fun format(): PositionUi = PositionUi(
+        trackProgress = trackProgress,
+        positionFormatted = TimeFormatter.formatDuration(positionMs),
+        durationFormatted = TimeFormatter.formatDuration(durationMs),
+        remainingFormatted = "-" + TimeFormatter.formatDuration((durationMs - positionMs).coerceAtLeast(0L)),
+        playlistProgress = playlistProgress,
+        playlistPositionFormatted = TimeFormatter.formatDuration(playlistPositionMs),
+        playlistDurationFormatted = TimeFormatter.formatDuration(playlistDurationMs),
+        playlistRemainingFormatted = "-" + TimeFormatter.formatDuration(
+            (playlistDurationMs - playlistPositionMs).coerceAtLeast(0L)
+        ),
+        chapterStartMs = chapterStartMs,
+        durationMs = durationMs,
+        totalPlaylistDurationMs = playlistDurationMs,
+        positionMs = livePositionMs,
+        scrubbing = scrubbing,
+        scrubChapterTitle = scrubChapterTitle
+    )
+}
+
+/**
  * 2026-10-30 (user video, issue 3): while the user drags a bar, the time labels only showed the
  * LIVE player position because the slider kept its drag value private and nothing re-derived
  * the labels until the finger lifted. The slider now reports the drag fraction to the view
@@ -19,44 +60,34 @@ enum class ScrubBar { TRACK, FULL }
  * the current file, the Track bar and the chapter chip show the chapter it would land in.
  */
 fun applyScrubPreview(
-    base: PositionUi,
+    base: RawPosition,
     chapters: List<ChapterInfo>,
     preview: Pair<ScrubBar, Float>?
-): PositionUi {
+): RawPosition {
     if (preview == null) return base
     val (bar, rawFraction) = preview
     val f = rawFraction.coerceIn(0f, 1f)
-    val total = base.totalPlaylistDurationMs
+    val total = base.playlistDurationMs
     // Where the current file starts inside the playlist: the playlist position minus the
     // absolute position inside the file (chapter start + chapter-relative position).
     val fileAbsNow = base.chapterStartMs + base.positionMs
-    val playlistNow = (base.playlistProgress * total).toLong()
-    val itemStart = (playlistNow - fileAbsNow).coerceAtLeast(0L)
+    val itemStart = (base.playlistPositionMs - fileAbsNow).coerceAtLeast(0L)
     return when (bar) {
         ScrubBar.TRACK -> {
             val dur = base.durationMs
             val pos = (f * dur).toLong().coerceIn(0L, dur)
-            val fileAbs = base.chapterStartMs + pos
-            val playlistPos = (itemStart + fileAbs).coerceIn(0L, total)
+            val playlistPos = (itemStart + base.chapterStartMs + pos).coerceIn(0L, total)
             base.copy(
                 trackProgress = f,
-                positionFormatted = TimeFormatter.formatDuration(pos),
-                remainingFormatted = "-" + TimeFormatter.formatDuration((dur - pos).coerceAtLeast(0L)),
-                playlistProgress = if (total > 0) (playlistPos.toFloat() / total).coerceIn(0f, 1f) else base.playlistProgress,
-                playlistPositionFormatted = TimeFormatter.formatDuration(playlistPos),
-                playlistRemainingFormatted = "-" + TimeFormatter.formatDuration((total - playlistPos).coerceAtLeast(0L)),
                 positionMs = pos,
+                playlistProgress = if (total > 0) (playlistPos.toFloat() / total).coerceIn(0f, 1f) else base.playlistProgress,
+                playlistPositionMs = playlistPos,
                 scrubbing = true
             )
         }
         ScrubBar.FULL -> {
             val playlistPos = (f * total).toLong().coerceIn(0L, total)
-            var out = base.copy(
-                playlistProgress = f,
-                playlistPositionFormatted = TimeFormatter.formatDuration(playlistPos),
-                playlistRemainingFormatted = "-" + TimeFormatter.formatDuration((total - playlistPos).coerceAtLeast(0L)),
-                scrubbing = true
-            )
+            var out = base.copy(playlistProgress = f, playlistPositionMs = playlistPos, scrubbing = true)
             val fileAbs = playlistPos - itemStart
             // Inside the current file? Then the Track bar and the chapter chip can preview too.
             if (chapters.isNotEmpty()) {
@@ -66,18 +97,15 @@ fun applyScrubPreview(
                     val pos = (fileAbs - ch.startTimeMs).coerceIn(0L, chDur)
                     out = out.copy(
                         trackProgress = if (chDur > 0) (pos.toFloat() / chDur).coerceIn(0f, 1f) else 0f,
-                        positionFormatted = TimeFormatter.formatDuration(pos),
-                        durationFormatted = TimeFormatter.formatDuration(chDur),
-                        remainingFormatted = "-" + TimeFormatter.formatDuration((chDur - pos).coerceAtLeast(0L)),
+                        positionMs = pos,
+                        durationMs = chDur,
                         scrubChapterTitle = ch.title
                     )
                 }
             } else if (base.durationMs > 0 && fileAbs in 0L..base.durationMs) {
-                val dur = base.durationMs
                 out = out.copy(
-                    trackProgress = (fileAbs.toFloat() / dur).coerceIn(0f, 1f),
-                    positionFormatted = TimeFormatter.formatDuration(fileAbs),
-                    remainingFormatted = "-" + TimeFormatter.formatDuration((dur - fileAbs).coerceAtLeast(0L))
+                    trackProgress = (fileAbs.toFloat() / base.durationMs).coerceIn(0f, 1f),
+                    positionMs = fileAbs
                 )
             }
             out
