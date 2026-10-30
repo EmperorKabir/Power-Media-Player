@@ -249,6 +249,9 @@ episode → show → global) via the Tune popup; see §4.
   thumb half-width is MEASURED from `SliderDefaults.Thumb` (material3 1.3.2 draws a 4 dp handle —
   never assume 10 dp). A vertical swipe on the bar is handed to the parent scroll — sub-slop moves
   must stay UNCONSUMED or the parent's slop detector gives up (SW1); RTL mirrors.
+  The gesture is keyed on `Unit`, never on `enabled`: Spotify flips the Track bar's enabled
+  state for ~1 s on every track change (poll `dur=0`), and a keyed pointerInput would restart
+  and cancel a drag in flight (SCRUB-FLIP, phone-proven); `SpotifySliderGate` hides the gap.
   The iOS "drag away from the bar for precision" pattern was proposed and REJECTED ("not
   remotely intuitive") — do not reintroduce it.
 - **LRCLib (lyrics) failures are classified (vc135, RT3).** FOUND / NOT_FOUND are cached; a SERVICE_ERROR

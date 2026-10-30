@@ -213,6 +213,17 @@ private fun PositionSlider(
     val onSeekState = androidx.compose.runtime.rememberUpdatedState(onSeek)
     val onScrubState = androidx.compose.runtime.rememberUpdatedState(onScrub)
     val onScrubEndState = androidx.compose.runtime.rememberUpdatedState(onScrubEnd)
+    // SCRUB-FLIP (2026-10-30, phone log): Spotify's trackSlider `enabled` drops to false for
+    // 0.5–1.6 s on every track change / poll gap (`dur=0`). The gesture used to be keyed on
+    // `enabled`, so each flip restarted pointerInput and cancelled a drag in flight — the thumb
+    // stopped following the finger until the next press. The gesture is now keyed on Unit and
+    // reads `enabled` per gesture; a flip mid-drag no longer touches it.
+    val enabledState = androidx.compose.runtime.rememberUpdatedState(enabled)
+    // SCRUB diag (2026-10-30, user: thumb trails the finger on Spotify only): a flip of `enabled`
+    // restarts pointerInput(enabled) and cancels a drag in flight — log every flip + cancellation.
+    androidx.compose.runtime.LaunchedEffect(enabled) {
+        com.powermediaplayer.diag.DiagLog.event("SCRUB", "slider enabled=$enabled")
+    }
     // Leaving composition mid-drag (tab switch from a notification, player layout swap):
     // release the preview so the labels and chip go back to live playback.
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -224,8 +235,7 @@ private fun PositionSlider(
             modifier = Modifier
                 .fillMaxWidth()
                 .onSizeChanged { widthPx = it.width.toFloat() }
-                .pointerInput(enabled) {
-                    if (!enabled) return@pointerInput
+                .pointerInput(Unit) {
                     awaitEachGesture {
                         // Initial pass + consume: the Material slider below never sees the
                         // touch, so it cannot snap the thumb under the finger.
@@ -233,6 +243,7 @@ private fun PositionSlider(
                             requireUnconsumed = false,
                             pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
                         )
+                        if (!enabledState.value) return@awaitEachGesture   // disabled: ignore, do not consume
                         down.consume()
                         val startX = down.position.x
                         val startY = down.position.y
@@ -298,6 +309,9 @@ private fun PositionSlider(
                             completed = true
                         } finally {
                             val wasDragging = isDragging
+                            if (moved && !completed && !abandoned) {
+                                com.powermediaplayer.diag.DiagLog.event("SCRUB", "gesture CANCELLED mid-drag (pointerInput restart / disposal) value=$dragValue")
+                            }
                             isDragging = false
                             // seeked = the drag completed normally (seek issued above); a
                             // cancelled drag (pointerInput restart / disposal) releases the

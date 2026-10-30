@@ -634,6 +634,8 @@ class PlayerViewModel @Inject constructor(
     /** 2026-10-30: while a bar is dragged the slider reports the fraction here; the labels,
      *  time bubble and chapter chip follow it (see applyScrubPreview). Seek still fires on
      *  release through the existing seekTo paths. */
+    private var lastSpotifyTrackSliderEnabled: Boolean? = null
+    private var spotifyLastRealDurationAt: Long = Long.MIN_VALUE / 2
     private val _scrubPreview = MutableStateFlow<Pair<ScrubBar, Float>?>(null)
     private var scrubReleaseJob: kotlinx.coroutines.Job? = null
     fun setScrubPreview(bar: ScrubBar, fraction: Float) {
@@ -1879,7 +1881,14 @@ class PlayerViewModel @Inject constructor(
                 brightness = true,
                 volume = true,
                 sleepTimer = true,
-                trackSlider = dur > 0,
+                trackSlider = SpotifySliderGate.enabled(dur, android.os.SystemClock.uptimeMillis(), spotifyLastRealDurationAt)
+                    .let { (en, at) -> spotifyLastRealDurationAt = at; en }
+                    .also { en ->
+                        if (en != lastSpotifyTrackSliderEnabled) {
+                            lastSpotifyTrackSliderEnabled = en
+                            com.powermediaplayer.diag.DiagLog.event("SCRUB", "spotify trackSlider enabled=$en dur=$dur pos=${s.positionMs}")
+                        }
+                    },
                 playlistSlider = false
             )
         )
