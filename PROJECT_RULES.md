@@ -220,7 +220,10 @@ episode → show → global) via the Tune popup; see §4.
   one adopted the shared MediaController — `PlaybackConnection.disconnect()` killed it and every
   Library tap parked as "setMediaItems deferred: controller not bound" until the app was
   backgrounded (phone-proven). Guard = `OwnerEpoch`: `connect(): Int` claims an epoch, MainActivity
-  stores it, `disconnect(epoch)` is ignored for a superseded owner. Without any flags the OS only
+  stores it, `disconnect(epoch)` is ignored for a superseded owner. ONLY MainActivity calls
+  `connect()`; the service's external-controller path calls `ensureConnected()` (no claim) — a
+  claiming caller there would make the Activity's exit disconnect look superseded and leak the
+  controller. Without any flags the OS only
   brings the task forward and DROPS the extra (the media notification did this). Tab vocabulary:
   `TAB_PLAYER` / `TAB_LIBRARY` / `TAB_CLOUD` (+ `EXTRA_PODCAST_FEED` via `DeepLinkBus`). Targets:
   Saved offline → Library/Audio (Downloaded); Saving/failed + new episodes → Cloud (show expanded);

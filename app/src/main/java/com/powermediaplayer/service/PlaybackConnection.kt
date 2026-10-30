@@ -271,14 +271,30 @@ class PlaybackConnection @Inject constructor(
      *
      * @return the caller's ownership epoch — pass it to [disconnect] so a superseded Activity
      *   instance (CLEAR_TOP replacement) cannot tear down the connection its successor adopted.
+     *   ONLY an Activity instance may call this: it claims ownership. Non-owners (the service's
+     *   external-controller path) use [ensureConnected], which never moves the epoch — otherwise
+     *   a Bluetooth / system-UI / car controller connecting after the Activity would make the
+     *   Activity's own final disconnect() look superseded and the controller would leak.
      */
     fun connect(): Int {
         val epoch = owner.claim()
+        connectInternal(epoch)
+        return epoch
+    }
+
+    /**
+     * Make sure a controller exists without claiming ownership (PlaybackService, when a car /
+     * Bluetooth / Assistant controller is the only client of the process). Idempotent.
+     */
+    fun ensureConnected() = connectInternal(epoch = null)
+
+    private fun connectInternal(epoch: Int?) {
         if (controllerFuture != null) {
             com.powermediaplayer.diag.DiagLog.lifecycle(
-                "PlaybackConnection.connect() skipped, future already in flight (owner epoch=$epoch)"
+                "PlaybackConnection.connect() skipped, future already in flight" +
+                    (epoch?.let { " (owner epoch=$it)" } ?: " (no claim)")
             )
-            return epoch
+            return
         }
         com.powermediaplayer.diag.DiagLog.lifecycle("PlaybackConnection.connect() START")
 
@@ -343,7 +359,6 @@ class PlaybackConnection @Inject constructor(
                 )
             }
         }, MoreExecutors.directExecutor())
-        return epoch
     }
 
     /**

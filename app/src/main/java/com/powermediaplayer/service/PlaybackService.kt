@@ -4548,7 +4548,7 @@ class PlaybackService : MediaLibraryService() {
      */
     private fun ensureSessionSideEffects() {
         runCatching {
-            playbackConnectionLazy.get().connect()
+            playbackConnectionLazy.get().ensureConnected()   // no ownership claim (see OwnerEpoch)
             sessionCoordinatorLazy.get().start()
             com.powermediaplayer.diag.DiagLog.event("AABROWSE", "session side effects ignited for an external controller")
         }.onFailure {
